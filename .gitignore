@@ -31,7 +31,17 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+
+# local tooling and editor state
+.agents/
+.vs/
+
+# local diagnostics and generated artifacts
+skills-lock.json
+ts_errors.txt
+com.facebook.react.devsupport.BundleDownloader
 
 # typescript
 *.tsbuildinfo
