@@ -32,6 +32,7 @@ export default function ProductDetailScreen() {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const { user } = useAuth();
   const [recommendedSize, setRecommendedSize] = useState<string | null>(null);
+  const [addedToBag, setAddedToBag] = useState(false);
 
   const router = useRouter();
   const theme = useColorScheme() ?? "light";
@@ -143,6 +144,9 @@ export default function ProductDetailScreen() {
           <TouchableOpacity
             style={[styles.backButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
             onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Returns to the previous screen"
           >
             <IconSymbol name="chevron.left" size={24} color="#FFF" />
           </TouchableOpacity>
@@ -153,6 +157,10 @@ export default function ProductDetailScreen() {
             ]}
             onPress={() => toggleWishlist(product.id)}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={isInWishlist(product.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+            accessibilityHint={isInWishlist(product.id) ? 'Removes this product from your saved items' : 'Saves this product to your wishlist'}
+            accessibilityState={{ selected: isInWishlist(product.id) }}
           >
             <IconSymbol
               name={isInWishlist(product.id) ? "heart.fill" : "heart"}
@@ -166,6 +174,9 @@ export default function ProductDetailScreen() {
               { backgroundColor: "rgba(201,169,110,0.9)" },
             ]}
             onPress={() => router.push(`/ar-tryon/${product.id}`)}
+            accessibilityRole="button"
+            accessibilityLabel="Try in AR"
+            accessibilityHint="Opens the augmented reality try-on experience"
           >
             <IconSymbol name="cube.transparent" size={24} color="#0D0D0D" />
             <Text style={styles.arButtonText}>Try in AR</Text>
@@ -330,11 +341,20 @@ export default function ProductDetailScreen() {
                   selectedSize || undefined,
                   selectedColor || undefined,
                 );
+                setAddedToBag(true);
+                setTimeout(() => setAddedToBag(false), 2000);
               }
             }}
           >
             <IconSymbol name="bag.badge.plus" size={24} color={colors.text} />
           </TouchableOpacity>
+
+          {addedToBag && (
+            <View style={[styles.addedToast, { backgroundColor: colors.tint }]}>
+              <IconSymbol name="checkmark" size={14} color="#0D0D0D" />
+              <Text style={styles.addedToastText}>Added to Bag!</Text>
+            </View>
+          )}
 
           {/** Primary action gating: require size + color if available **/}
           {(() => {
@@ -560,5 +580,22 @@ const styles = StyleSheet.create({
     color: "#0D0D0D", // Dark text on gold
     fontSize: 18,
     fontWeight: "700",
+  },
+  addedToast: {
+    position: 'absolute',
+    top: -40,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  addedToastText: {
+    color: '#0D0D0D',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });
