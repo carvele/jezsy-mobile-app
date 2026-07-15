@@ -53,6 +53,9 @@ export default function AddWardrobeItemScreen() {
   const { session } = useAuth();
 
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [processedImageUri, setProcessedImageUri] = useState<string | null>(null);
+  const [isProcessingBg, setIsProcessingBg] = useState<boolean>(false);
+  
   const [category, setCategory] = useState<string>('Evening Wear');
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [subCategory, setSubCategory] = useState<string>('');
@@ -60,6 +63,53 @@ export default function AddWardrobeItemScreen() {
   
   const [saving, setSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    const processImage = async () => {
+      if (!imageUri) {
+        setProcessedImageUri(null);
+        return;
+      }
+      
+      if (!removeBg) {
+        setProcessedImageUri(null);
+        return;
+      }
+
+      setIsProcessingBg(true);
+      try {
+        // Attempting native background removal (Phase 2: On-Device ML)
+        // Verified to work with Fabric/TurboModules where supported.
+        const bgRemovedUri = await removeBackground(imageUri);
+        if (isMounted && bgRemovedUri) {
+          setProcessedImageUri(bgRemovedUri);
+        }
+      } catch (e) {
+        console.warn('Native background removal failed, falling back to original image:', e);
+        if (isMounted) {
+          setProcessedImageUri(null);
+          // If native module fails (e.g., missing dependencies or unsupported device),
+          // fallback to manual/original image. 
+          Alert.alert(
+            'Background Removal Failed',
+            'On-device background removal is not supported on this device. Using original image instead.',
+            [{ text: 'OK' }]
+          );
+          setRemoveBg(false);
+        }
+      } finally {
+        if (isMounted) setIsProcessingBg(false);
+      }
+    };
+
+    processImage();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [imageUri, removeBg]);
 
   const pickImage = async (useCamera: boolean) => {
     try {
@@ -119,27 +169,8 @@ export default function AddWardrobeItemScreen() {
 
     setSaving(true);
     try {
-      let finalUri = imageUri;
-
-      // On-Device Background Removal (Phase 2)
-      if (removeBg) {
-        setStatusMessage('Removing background...');
-        try {
-          // Attempting native background removal
-          const bgRemovedUri = await removeBackground(imageUri);
-          if (bgRemovedUri) {
-            finalUri = bgRemovedUri;
-          }
-        } catch (e) {
-          console.warn('Native background removal failed, falling back to original image:', e);
-          // If on-device inference fails/throws, we fall back to manual/original image as requested by Phase 2.
-          Alert.alert(
-            'Background Removal Failed',
-            'On-device background removal is not supported in this environment. Proceeding with original image.',
-            [{ text: 'OK' }]
-          );
-        }
-      }
+      // Use processed image if background removal was enabled and successful
+      let finalUri = (removeBg && processedImageUri) ? processedImageUri : imageUri;
 
       setStatusMessage('Uploading to storage...');
       const response = await fetch(finalUri);
@@ -202,7 +233,17 @@ export default function AddWardrobeItemScreen() {
         <View style={[styles.imageContainer, { borderColor: colors.border, backgroundColor: colors.card }]}>
           {imageUri ? (
             <View style={styles.previewContainer}>
-              <Image source={{ uri: imageUri }} style={styles.previewImage} contentFit="contain" />
+              <Image 
+                source={{ uri: (removeBg && processedImageUri) ? processedImageUri : imageUri }} 
+                style={[styles.previewImage, isProcessingBg && { opacity: 0.5 }]} 
+                contentFit="contain" 
+              />
+              {isProcessingBg && (
+                <View style={styles.processingOverlay}>
+                  <ActivityIndicator size="large" color={colors.tint} />
+                  <Text style={[styles.processingText, { color: colors.tint }]}>Extracting Item...</Text>
+                </View>
+              )}
               <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImageUri(null)}>
                 <IconSymbol name="trash.fill" size={20} color="#FF453A" />
               </TouchableOpacity>
@@ -382,10 +423,23 @@ const styles = StyleSheet.create({
     right: 16,
     width: 40,
     height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 16,
+  },
+  processingText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '600',
   },
   pickerButtons: {
     flexDirection: 'row',
