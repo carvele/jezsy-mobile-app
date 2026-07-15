@@ -35,6 +35,15 @@ npm run reset-project
 
 This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
+## Environment setup
+
+This project uses environment variables for Supabase configuration. Copy `.env.example` to `.env` and fill in the values before starting the app.
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+
+Do not commit `.env`; it is ignored by `.gitignore`.
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:
