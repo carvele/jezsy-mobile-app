@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -108,6 +108,27 @@ export default function OutfitBuilderScreen() {
       setPickerLoading(false);
     }
   }, []);
+
+  // Derive sorted items based on color harmony with already selected slots
+  const sortedWardrobeItems = useMemo(() => {
+    if (filledCount === 0) return wardrobeItems;
+    const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
+    return [...wardrobeItems].sort((a, b) => {
+      const scoreA = evaluateColors([...currentColors, ...(a.color_tags || [])]).score;
+      const scoreB = evaluateColors([...currentColors, ...(b.color_tags || [])]).score;
+      return scoreB - scoreA;
+    });
+  }, [wardrobeItems, slots, filledCount]);
+
+  const sortedCatalogItems = useMemo(() => {
+    if (filledCount === 0) return catalogItems;
+    const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
+    return [...catalogItems].sort((a, b) => {
+      const scoreA = evaluateColors([...currentColors, ...(a.color ? [a.color] : [])]).score;
+      const scoreB = evaluateColors([...currentColors, ...(b.color ? [b.color] : [])]).score;
+      return scoreB - scoreA;
+    });
+  }, [catalogItems, slots, filledCount]);
 
   const openPicker = useCallback((slot: SlotKey) => {
     setActiveSlot(slot);
@@ -350,7 +371,7 @@ export default function OutfitBuilderScreen() {
               </View>
             ) : (
               <FlatList
-                data={wardrobeItems}
+                data={sortedWardrobeItems}
                 keyExtractor={(i) => i.id}
                 numColumns={2}
                 contentContainerStyle={styles.pickerGrid}
@@ -375,7 +396,7 @@ export default function OutfitBuilderScreen() {
             )
           ) : (
             <FlatList
-              data={catalogItems}
+              data={sortedCatalogItems}
               keyExtractor={(i) => i.id}
               numColumns={2}
               contentContainerStyle={styles.pickerGrid}
