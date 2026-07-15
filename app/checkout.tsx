@@ -162,6 +162,9 @@ export default function CheckoutScreen() {
             onChangeText={(text) =>
               setAddress((prev) => ({ ...prev, street: text }))
             }
+            accessibilityRole="text"
+            accessibilityLabel="Street Address"
+            accessibilityHint="Enter your delivery street name and house number"
           />
           <TextInput
             style={[
@@ -178,6 +181,9 @@ export default function CheckoutScreen() {
             onChangeText={(text) =>
               setAddress((prev) => ({ ...prev, city: text }))
             }
+            accessibilityRole="text"
+            accessibilityLabel="City"
+            accessibilityHint="Enter your delivery city"
           />
           <View style={styles.row}>
             <TextInput
@@ -196,6 +202,9 @@ export default function CheckoutScreen() {
               onChangeText={(text) =>
                 setAddress((prev) => ({ ...prev, province: text }))
               }
+              accessibilityRole="text"
+              accessibilityLabel="Province"
+              accessibilityHint="Enter your delivery province"
             />
             <TextInput
               style={[
@@ -214,6 +223,9 @@ export default function CheckoutScreen() {
               onChangeText={(text) =>
                 setAddress((prev) => ({ ...prev, zip: text }))
               }
+              accessibilityRole="text"
+              accessibilityLabel="ZIP Code"
+              accessibilityHint="Enter your 4-digit postal code"
             />
           </View>
         </View>

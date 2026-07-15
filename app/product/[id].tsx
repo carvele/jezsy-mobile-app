@@ -195,18 +195,30 @@ export default function ProductDetailScreen() {
           )}
 
           {/* Top Floating Buttons */}
-          <TouchableOpacity style={[styles.backButton, { backgroundColor: "rgba(0,0,0,0.5)" }]} onPress={handleBack}>
+          <TouchableOpacity 
+            style={[styles.backButton, { backgroundColor: "rgba(0,0,0,0.5)" }]} 
+            onPress={handleBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Returns to the previous screen"
+          >
             <IconSymbol name="chevron.left" size={24} color="#FFF" />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.favoriteButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
             onPress={() => toggleWishlist(product.id)}
+            accessibilityRole="button"
+            accessibilityLabel={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+            accessibilityHint={isInWishlist(product.id) ? "Removes this item from your favorites list" : "Saves this item to your favorites list"}
           >
             <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? "#E05C5C" : "#FFF"} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.arButton, { backgroundColor: "rgba(201,169,110,0.9)" }]}
             onPress={() => router.push(`/ar-tryon/${product.id}`)}
+            accessibilityRole="button"
+            accessibilityLabel="Try on in Augmented Reality"
+            accessibilityHint="Launches the AR viewer to see this clothing item on your camera feed"
           >
             <IconSymbol name="cube.transparent" size={24} color="#0D0D0D" />
             <Text style={styles.arButtonText}>Try in AR</Text>
@@ -269,6 +281,10 @@ export default function ProductDetailScreen() {
                         isSelected && { backgroundColor: colors.card },
                       ]}
                       onPress={() => setSelectedColor(c)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select color ${c}`}
+                      accessibilityHint={`Selects ${c} as the color option`}
+                      accessibilityState={{ selected: isSelected }}
                     >
                       <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{c}</Text>
                     </TouchableOpacity>
@@ -307,6 +323,10 @@ export default function ProductDetailScreen() {
                         ]}
                         onPress={() => !isOutOfStock && setSelectedSize(s)}
                         disabled={isOutOfStock}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Select size ${s}`}
+                        accessibilityHint={isOutOfStock ? `Size ${s} is out of stock` : `Selects ${s} as the size option`}
+                        accessibilityState={{ selected: isSelected, disabled: isOutOfStock }}
                       >
                         <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{s}</Text>
                       </TouchableOpacity>
@@ -381,6 +401,9 @@ export default function ProductDetailScreen() {
                 setTimeout(() => setAddedToBag(false), 2000);
               }
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Add to shopping bag"
+            accessibilityHint="Adds the selected size and color of this item to your cart"
           >
             <IconSymbol name="bag.badge.plus" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -412,6 +435,10 @@ export default function ProductDetailScreen() {
                   }
                 }}
                 disabled={!canReserve}
+                accessibilityRole="button"
+                accessibilityLabel="Reserve Now"
+                accessibilityHint={canReserve ? "Starts the reservation process for this item" : "Choose a size and color to enable reservation"}
+                accessibilityState={{ disabled: !canReserve }}
               >
                 <Text style={styles.primaryActionText}>Reserve Now</Text>
               </TouchableOpacity>

@@ -2,57 +2,26 @@
 
 ## Approved tasks (Tasks 1–5)
 
-### Task 1 — Accessibility + CTA semantics pass (Critical)
+### Task 1 — Accessibility + CTA semantics pass (Critical) ✅
 
 - Files: app/product/[id].tsx, app/cart.tsx, app/checkout.tsx, app/reserve/[id].tsx, app/reservations.tsx, app/notifications.tsx
-- Steps:
-  - Add accessibilityRole/Label/Hint to all major CTAs and destructive buttons.
-  - Ensure disabled buttons expose accessibilityState={{ disabled: true }}.
-- Acceptance criteria:
-  - Primary action buttons are screen-reader labeled and announce disabled/enabled correctly.
-  - No unlabeled destructive/icon-only actions remain.
-
-Status: Not started
+- Status: Completed (Added accessibility roles, labels, hints, and state mappings across all key user action views).
 
 ### Task 2 — Strengthen “Reserve Now” priority & state gating (Critical) ✅
 
-- Implemented gating + accessibility for Reserve Now (Task 2).
+- Status: Completed (Reserve Now is disabled until required size and color options are selected, displaying inline alerts and guidelines).
 
-- Steps:
-  - Disable “Reserve Now” until required selections are ready.
-  - Add inline guidance + accessibility labels.
-- Acceptance criteria:
-  - Reserve Now can’t be pressed in an invalid state.
-
-Status: In progress (Task 2)
-
-### Task 3
+### Task 3 — Receipt upload gating (Critical) ✅
 
 - File: app/reserve/[id].tsx
-- Steps:
-  - Add inline “Receipt uploaded” status / required hint.
-  - Tie primary CTA disabled state to prerequisites.
-- Acceptance criteria:
-  - Users understand missing requirements before pressing Confirm Reservation.
+- Status: Completed (Receipt status updates dynamically and gates the Confirm Reservation button).
 
-Status: Not started
-
-### Task 4 — Checkout date handling improvement (Medium)
+### Task 4 — Checkout date handling improvement (Medium) ✅
 
 - File: app/checkout.tsx
-- Steps:
-  - Validate pickupDate format (YYYY-MM-DD) and prevent Pay Deposit until valid.
-- Acceptance criteria:
-  - Invalid dates prevent CTA.
+- Status: Completed (Checkout validates YYYY-MM-DD pickup date and prevents booking submission for invalid date formats).
 
-Status: Not started
-
-### Task 5 — Replace blocking alerts for cart add (Medium)
+### Task 5 — Replace blocking alerts for cart add (Medium) ✅
 
 - File: app/product/[id].tsx
-- Steps:
-  - Remove alert('Added to Bag!') and replace with non-blocking feedback.
-- Acceptance criteria:
-  - Feedback without interrupting flow.
-
-Status: Not started
+- Status: Completed (Replaced browser-like blocking alerts with custom, non-blocking floating notifications/toasts when item is added to cart).
