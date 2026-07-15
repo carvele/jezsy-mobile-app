@@ -724,6 +724,7 @@ export type Database = {
       wardrobe_items: {
         Row: {
           category: string | null;
+          color_tags: string[] | null;
           created_at: string;
           deleted: boolean | null;
           id: string;
@@ -734,6 +735,7 @@ export type Database = {
         };
         Insert: {
           category?: string | null;
+          color_tags?: string[] | null;
           created_at?: string;
           deleted?: boolean | null;
           id?: string;
@@ -744,6 +746,7 @@ export type Database = {
         };
         Update: {
           category?: string | null;
+          color_tags?: string[] | null;
           created_at?: string;
           deleted?: boolean | null;
           id?: string;
