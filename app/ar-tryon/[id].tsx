@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Image } from 'expo-image';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
@@ -15,6 +17,8 @@ export default function ARTryOnScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<'3d' | '2d'>('3d');
+  const [permission, requestPermission] = useCameraPermissions();
   
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
@@ -60,6 +64,21 @@ export default function ARTryOnScreen() {
       </View>
     );
   }
+
+  const toggleMode = async () => {
+    if (mode === '3d') {
+      if (!permission?.granted) {
+        const { granted } = await requestPermission();
+        if (!granted) {
+          Alert.alert("Camera Required", "Camera access is needed for the 2D overlay.");
+          return;
+        }
+      }
+      setMode('2d');
+    } else {
+      setMode('3d');
+    }
+  };
 
   // Fallback 3D model if product doesn't have one
   const modelUrl = product.model_3d_url || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
@@ -126,11 +145,15 @@ export default function ARTryOnScreen() {
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>AR Try-On</Text>
-        <View style={{ width: 24 }} />
+        
+        <TouchableOpacity onPress={toggleMode} style={styles.modeToggle}>
+          <Text style={styles.modeToggleText}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
+        </TouchableOpacity>
       </View>
 
-      <View style={styles.webviewContainer}>
-        <WebView
+      {mode === '3d' ? (
+        <View style={styles.webviewContainer}>
+          <WebView
           originWhitelist={['*']}
           source={{ html: htmlContent }}
           style={styles.webview}
@@ -146,7 +169,23 @@ export default function ARTryOnScreen() {
             <Text style={styles.demoWarningText}>Showing Demo Model</Text>
           </View>
         )}
-      </View>
+        </View>
+      ) : (
+        <View style={styles.webviewContainer}>
+          <CameraView style={styles.camera} facing="front">
+            <View style={styles.overlayContainer} pointerEvents="none">
+              <Image 
+                source={{ uri: product.image_url || '' }} 
+                style={styles.overlayImage} 
+                contentFit="contain" 
+              />
+              <View style={styles.overlayGuide}>
+                <Text style={styles.overlayGuideText}>Align your body with the item</Text>
+              </View>
+            </View>
+          </CameraView>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -199,4 +238,41 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
   },
+  modeToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#C9A96E',
+    borderRadius: 12,
+  },
+  modeToggleText: {
+    color: '#0D0D0D',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  camera: {
+    flex: 1,
+  },
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  overlayImage: {
+    width: '80%',
+    height: '60%',
+    opacity: 0.85,
+  },
+  overlayGuide: {
+    position: 'absolute',
+    bottom: 40,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  overlayGuideText: {
+    color: '#FFF',
+    fontWeight: '600',
+  }
 });
