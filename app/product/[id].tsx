@@ -40,6 +40,14 @@ export default function ProductDetailScreen() {
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { addToCart } = useCart();
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
+
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -114,7 +122,7 @@ export default function ProductDetailScreen() {
       >
         <Text style={{ color: colors.text }}>Product not found.</Text>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={{ marginTop: 20 }}
         >
           <Text style={{ color: colors.tint }}>Go Back</Text>
@@ -143,7 +151,7 @@ export default function ProductDetailScreen() {
           />
           <TouchableOpacity
             style={[styles.backButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
-            onPress={() => router.back()}
+            onPress={handleBack}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             accessibilityHint="Returns to the previous screen"

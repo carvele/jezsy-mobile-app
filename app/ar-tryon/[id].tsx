@@ -24,6 +24,14 @@ export default function ARTryOnScreen() {
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
+
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -58,7 +66,7 @@ export default function ARTryOnScreen() {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>Product not found.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+        <TouchableOpacity onPress={handleBack} style={{ marginTop: 20 }}>
           <Text style={{ color: colors.tint }}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -141,7 +149,7 @@ export default function ARTryOnScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>AR Try-On</Text>
@@ -172,18 +180,17 @@ export default function ARTryOnScreen() {
         </View>
       ) : (
         <View style={styles.webviewContainer}>
-          <CameraView style={styles.camera} facing="front">
-            <View style={styles.overlayContainer} pointerEvents="none">
-              <Image 
-                source={{ uri: product.image_url || '' }} 
-                style={styles.overlayImage} 
-                contentFit="contain" 
-              />
-              <View style={styles.overlayGuide}>
-                <Text style={styles.overlayGuideText}>Align your body with the item</Text>
-              </View>
+          <CameraView style={styles.camera} facing="front" />
+          <View style={styles.overlayContainer} pointerEvents="none">
+            <Image 
+              source={{ uri: product.image_url || '' }} 
+              style={styles.overlayImage} 
+              contentFit="contain" 
+            />
+            <View style={styles.overlayGuide}>
+              <Text style={styles.overlayGuideText}>Align your body with the item</Text>
             </View>
-          </CameraView>
+          </View>
         </View>
       )}
     </SafeAreaView>

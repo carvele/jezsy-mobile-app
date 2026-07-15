@@ -99,12 +99,16 @@ export default function ReservationScreen() {
       : "jpg";
     const fileName = `${userId}/${Date.now()}.${ext}`;
 
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    const formData = new FormData();
+    formData.append('file', {
+      uri: uri,
+      name: fileName.split('/').pop() || `photo.${ext}`,
+      type: `image/${ext}`,
+    } as any);
 
     const { data, error } = await supabase.storage
       .from("payment_receipts")
-      .upload(fileName, blob, { upsert: false });
+      .upload(fileName, formData, { upsert: false, contentType: `image/${ext}` });
 
     if (error) throw error;
 

@@ -173,18 +173,22 @@ export default function AddWardrobeItemScreen() {
       let finalUri = (removeBg && processedImageUri) ? processedImageUri : imageUri;
 
       setStatusMessage('Uploading to storage...');
-      const response = await fetch(finalUri);
-      const blob = await response.blob();
-
       const ext = finalUri.includes('.')
         ? finalUri.substring(finalUri.lastIndexOf('.') + 1).split('?')[0]
         : 'jpg';
       const fileName = `${session.user.id}/${Date.now()}.${ext}`;
 
+      const formData = new FormData();
+      formData.append('file', {
+        uri: finalUri,
+        name: fileName.split('/').pop() || `photo.${ext}`,
+        type: `image/${ext}`,
+      } as any);
+
       // Upload to supabase storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('wardrobe-images')
-        .upload(fileName, blob, { upsert: false, contentType: `image/${ext}` });
+        .upload(fileName, formData, { upsert: false, contentType: `image/${ext}` });
 
       if (uploadError) throw uploadError;
 

@@ -100,54 +100,53 @@ export default function BodyScanScreen() {
 
   return (
     <View style={styles.container}>
-      <CameraView style={styles.camera} ref={cameraRef} facing="front">
-        <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-              <IconSymbol name="chevron.left" size={24} color="#fff" />
+      <CameraView style={styles.camera} ref={cameraRef} facing="front" />
+      <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+            <IconSymbol name="chevron.left" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Position Your Body</Text>
+          <TouchableOpacity onPress={() => router.replace({ pathname: "/profile/measurements", params: { height, weight } })} style={styles.iconBtnText}>
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Device Orientation Guide */}
+        <TiltGuide onTiltValid={setIsTiltValid} />
+
+        {/* Silhouette Overlay */}
+        <View style={styles.silhouetteContainer} pointerEvents="none">
+          <View style={styles.headOutline} />
+          <View style={styles.shouldersOutline} />
+          <View style={styles.torsoOutline} />
+        </View>
+
+        {/* Capture Controls */}
+        <View style={styles.controls}>
+          {isProcessing ? (
+            <View style={styles.processingBadge}>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.processingText}>Processing Scan...</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.captureButton,
+                !isTiltValid && styles.captureButtonDisabled
+              ]}
+              onPress={takePicture}
+              disabled={!isTiltValid}
+            >
+              <View style={[styles.captureInner, !isTiltValid && styles.captureInnerDisabled]} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Position Your Body</Text>
-            <TouchableOpacity onPress={() => router.replace({ pathname: "/profile/measurements", params: { height, weight } })} style={styles.iconBtnText}>
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Device Orientation Guide */}
-          <TiltGuide onTiltValid={setIsTiltValid} />
-
-          {/* Silhouette Overlay */}
-          <View style={styles.silhouetteContainer} pointerEvents="none">
-            <View style={styles.headOutline} />
-            <View style={styles.shouldersOutline} />
-            <View style={styles.torsoOutline} />
-          </View>
-
-          {/* Capture Controls */}
-          <View style={styles.controls}>
-            {isProcessing ? (
-              <View style={styles.processingBadge}>
-                <ActivityIndicator color="#fff" />
-                <Text style={styles.processingText}>Processing Scan...</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={[
-                  styles.captureButton,
-                  !isTiltValid && styles.captureButtonDisabled
-                ]}
-                onPress={takePicture}
-                disabled={!isTiltValid}
-              >
-                <View style={[styles.captureInner, !isTiltValid && styles.captureInnerDisabled]} />
-              </TouchableOpacity>
-            )}
-            {!isTiltValid && !isProcessing && (
-              <Text style={styles.warningText}>Hold phone vertically straight to scan</Text>
-            )}
-          </View>
-        </SafeAreaView>
-      </CameraView>
+          )}
+          {!isTiltValid && !isProcessing && (
+            <Text style={styles.warningText}>Hold phone vertically straight to scan</Text>
+          )}
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -155,7 +154,7 @@ export default function BodyScanScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
   camera: { flex: 1 },
-  safeArea: { flex: 1, justifyContent: 'space-between' },
+  safeArea: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between' },
   header: {
     flexDirection: "row",
     alignItems: "center",
