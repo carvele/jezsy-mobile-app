@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Speech from 'expo-speech';
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
@@ -24,7 +25,11 @@ export default function BodyScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [isTiltValid, setIsTiltValid] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  
   const cameraRef = useRef<CameraView>(null);
+  const countdownTimerRef = useRef<any>(null);
+  const lastSpokenRef = useRef<string>("");
 
   useEffect(() => {
     if (!height || !weight) {
@@ -32,6 +37,71 @@ export default function BodyScanScreen() {
       router.back();
     }
   }, [height, weight, router]);
+
+  useEffect(() => {
+    if (consentGranted && permission?.granted) {
+      Speech.speak("Please stand about 2 meters from your device.", {
+        onDone: () => {
+          lastSpokenRef.current = "intro";
+        }
+      });
+    }
+    
+    return () => {
+      Speech.stop();
+      if (countdownTimerRef.current) clearTimeout(countdownTimerRef.current);
+    };
+  }, [consentGranted, permission]);
+
+  const speakIfNotActive = (text: string) => {
+    if (lastSpokenRef.current === text || countdown !== null) return;
+    Speech.speak(text);
+    lastSpokenRef.current = text;
+  };
+
+  const startCountdown = () => {
+    Speech.stop();
+    Speech.speak("Perfect, scanning in 3... 2... 1...");
+    setCountdown(3);
+    
+    let counter = 3;
+    countdownTimerRef.current = setInterval(() => {
+      counter -= 1;
+      setCountdown(counter);
+      if (counter <= 0) {
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+        takePicture();
+      }
+    }, 1000);
+  };
+
+  const stopCountdown = () => {
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    if (countdown !== null) {
+      Speech.stop();
+      setCountdown(null);
+      lastSpokenRef.current = "";
+    }
+  };
+
+  const handleGuideState = (state: 'tilt_down' | 'tilt_up' | 'hold_steady') => {
+    if (isProcessing) return;
+
+    if (state === 'tilt_down') {
+      stopCountdown();
+      speakIfNotActive("Tilt phone down");
+    } else if (state === 'tilt_up') {
+      stopCountdown();
+      speakIfNotActive("Tilt phone up");
+    } else if (state === 'hold_steady') {
+      if (countdown === null) {
+        startCountdown();
+      }
+    }
+  };
 
   const handleConsentAccept = async () => {
     setShowConsent(false);
@@ -47,12 +117,12 @@ export default function BodyScanScreen() {
   };
 
   const takePicture = async () => {
-    if (!cameraRef.current || !isTiltValid) return;
+    if (!cameraRef.current || isProcessing) return;
     setIsProcessing(true);
+    Speech.speak("Got it! Processing your measurements...");
+    
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.5 });
-      // In a real app with BlazePose TFLite, we'd pass this photo to the ML model here.
-      // For now, we simulate processing and pass the image URI to the manual measurements page.
       setTimeout(() => {
         setIsProcessing(false);
         router.replace({
@@ -63,6 +133,8 @@ export default function BodyScanScreen() {
     } catch (e) {
       console.warn("Failed to take picture", e);
       setIsProcessing(false);
+      Speech.speak("Oops, something went wrong. Please try again.");
+      setCountdown(null);
     }
   };
 
@@ -98,53 +170,57 @@ export default function BodyScanScreen() {
     );
   }
 
+  // Determine outline color based on state
+  let outlineColor = 'rgba(255,255,255,0.4)';
+  if (isProcessing) {
+    outlineColor = '#00FF00';
+  } else if (countdown !== null) {
+    outlineColor = '#00FF00';
+  } else if (!isTiltValid) {
+    outlineColor = '#FF3B30'; // Red when invalid
+  } else {
+    outlineColor = '#FFCC00'; // Yellow when valid but not yet countdown (should be brief)
+  }
+
   return (
     <View style={styles.container}>
       <CameraView style={styles.camera} ref={cameraRef} facing="front" />
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+          <TouchableOpacity onPress={() => { Speech.stop(); router.back(); }} style={styles.iconBtn}>
             <IconSymbol name="chevron.left" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Position Your Body</Text>
-          <TouchableOpacity onPress={() => router.replace({ pathname: "/profile/measurements", params: { height, weight } })} style={styles.iconBtnText}>
+          <TouchableOpacity onPress={() => { Speech.stop(); router.replace({ pathname: "/profile/measurements", params: { height, weight } }); }} style={styles.iconBtnText}>
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
         </View>
 
         {/* Device Orientation Guide */}
-        <TiltGuide onTiltValid={setIsTiltValid} />
+        <TiltGuide onTiltValid={setIsTiltValid} onGuideState={handleGuideState} />
 
         {/* Silhouette Overlay */}
         <View style={styles.silhouetteContainer} pointerEvents="none">
-          <View style={styles.headOutline} />
-          <View style={styles.shouldersOutline} />
-          <View style={styles.torsoOutline} />
+          <View style={[styles.headOutline, { borderColor: outlineColor }]} />
+          <View style={[styles.shouldersOutline, { borderColor: outlineColor }]} />
+          <View style={[styles.torsoOutline, { borderColor: outlineColor }]} />
         </View>
 
-        {/* Capture Controls */}
+        {/* Status/Guidance Text */}
         <View style={styles.controls}>
           {isProcessing ? (
             <View style={styles.processingBadge}>
               <ActivityIndicator color="#fff" />
               <Text style={styles.processingText}>Processing Scan...</Text>
             </View>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.captureButton,
-                !isTiltValid && styles.captureButtonDisabled
-              ]}
-              onPress={takePicture}
-              disabled={!isTiltValid}
-            >
-              <View style={[styles.captureInner, !isTiltValid && styles.captureInnerDisabled]} />
-            </TouchableOpacity>
-          )}
-          {!isTiltValid && !isProcessing && (
-            <Text style={styles.warningText}>Hold phone vertically straight to scan</Text>
-          )}
+          ) : countdown !== null ? (
+            <View style={styles.countdownBadge}>
+              <Text style={styles.countdownText}>Scanning in {countdown}...</Text>
+            </View>
+          ) : !isTiltValid ? (
+            <Text style={styles.warningText}>Please follow voice instructions</Text>
+          ) : null}
         </View>
       </SafeAreaView>
     </View>
@@ -190,45 +266,38 @@ const styles = StyleSheet.create({
   },
   headOutline: {
     width: 80, height: 100,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)', borderRadius: 50,
+    borderWidth: 2, borderRadius: 50,
     borderStyle: 'dashed', marginBottom: 10,
   },
   shouldersOutline: {
     width: 220, height: 60,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)', borderRadius: 30,
+    borderWidth: 2, borderRadius: 30,
     borderStyle: 'dashed', borderBottomWidth: 0,
   },
   torsoOutline: {
     width: 180, height: 250,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)', borderRadius: 20,
+    borderWidth: 2, borderRadius: 20,
     borderStyle: 'dashed', borderTopWidth: 0,
   },
   controls: {
     alignItems: 'center',
-    paddingBottom: 40,
+    paddingBottom: 60,
     zIndex: 20,
   },
-  captureButton: {
-    width: 72, height: 72,
-    borderRadius: 36,
-    borderWidth: 4, borderColor: '#fff',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  captureButtonDisabled: { borderColor: 'rgba(255,255,255,0.3)' },
-  captureInner: {
-    width: 56, height: 56,
-    borderRadius: 28,
-    backgroundColor: '#fff',
-  },
-  captureInnerDisabled: { backgroundColor: 'rgba(255,255,255,0.3)' },
   warningText: {
     color: '#FFCC00',
-    marginTop: 12,
     fontWeight: '600',
     backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 12, paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: 16,
+    fontSize: 16,
   },
+  countdownBadge: {
+    backgroundColor: 'rgba(0,255,0,0.8)',
+    paddingHorizontal: 24, paddingVertical: 12,
+    borderRadius: 24,
+  },
+  countdownText: { color: '#000', fontSize: 20, fontWeight: '700' },
   processingBadge: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.8)',

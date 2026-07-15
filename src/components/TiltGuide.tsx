@@ -5,14 +5,17 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 
 interface Props {
   onTiltValid: (isValid: boolean) => void;
+  onGuideState?: (state: 'tilt_down' | 'tilt_up' | 'hold_steady') => void;
 }
 
-export function TiltGuide({ onTiltValid }: Props) {
+export function TiltGuide({ onTiltValid, onGuideState }: Props) {
   const [pitch, setPitch] = useState<number>(0);
 
   useEffect(() => {
     // Set update interval to ~60fps
     Accelerometer.setUpdateInterval(16);
+
+    let lastReportedState = 'hold_steady';
 
     const subscription = Accelerometer.addListener(({ y, z }) => {
       // Calculate pitch angle in degrees from gravity vector
@@ -28,10 +31,22 @@ export function TiltGuide({ onTiltValid }: Props) {
       // Valid if phone is within ±15 degrees of vertical
       const isValid = Math.abs(normalizedPitch) <= 15;
       onTiltValid(isValid);
+
+      let currentState: 'tilt_down' | 'tilt_up' | 'hold_steady' = 'hold_steady';
+      if (normalizedPitch > 15) {
+        currentState = 'tilt_down';
+      } else if (normalizedPitch < -15) {
+        currentState = 'tilt_up';
+      }
+
+      if (currentState !== lastReportedState) {
+        lastReportedState = currentState;
+        onGuideState?.(currentState);
+      }
     });
 
     return () => subscription.remove();
-  }, [onTiltValid]);
+  }, [onTiltValid, onGuideState]);
 
   const isTiltingUp = pitch > 15;
   const isTiltingDown = pitch < -15;

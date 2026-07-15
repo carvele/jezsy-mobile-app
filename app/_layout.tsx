@@ -8,6 +8,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { WishlistProvider } from '@/src/context/WishlistContext';
 import { CartProvider } from '@/src/context/CartContext';
+import { MessagesProvider } from '@/src/context/MessagesContext';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -57,7 +58,9 @@ export default function RootLayout() {
     <AuthProvider>
       <WishlistProvider>
         <CartProvider>
-          <InitialLayout />
+          <MessagesProvider>
+            <InitialLayout />
+          </MessagesProvider>
         </CartProvider>
       </WishlistProvider>
     </AuthProvider>
