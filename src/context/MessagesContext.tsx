@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useAuth } from './AuthContext';
@@ -25,7 +25,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
   const unreadCount = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
 
-  const refreshConversations = async () => {
+  const refreshConversations = useCallback(async () => {
     if (!session?.user.id) return;
     
     try {
@@ -41,7 +41,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [session?.user.id]);
 
   useEffect(() => {
     refreshConversations();
@@ -63,7 +63,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       conversationSubscription.unsubscribe();
     };
-  }, [session]);
+  }, [session, refreshConversations]);
 
   const sendMessage = async (conversationId: string, text: string, imageUrl?: string) => {
     if (!session?.user.id) return null;
@@ -127,7 +127,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       // Check if conversation already exists for this customer
-      const { data: existing, error: fetchError } = await supabase
+      const { data: existing } = await supabase
         .from('conversations')
         .select('*')
         .eq('customer_id', session.user.id)

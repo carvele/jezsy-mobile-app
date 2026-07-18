@@ -72,21 +72,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="scanner"
-        options={{
-          title: 'Scanner',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="qrcode.viewfinder" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="envelope.fill" color={color} />,
-          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
-        }}
-      />
-      <Tabs.Screen
         name="wardrobe"
         options={{
           title: 'Wardrobe',
@@ -94,10 +79,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="messages"
+        options={{
+          title: 'Inbox',
+          tabBarIcon: ({ color }) => <IconSymbol size={24} name="envelope.fill" color={color} />,
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="person.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="scanner"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

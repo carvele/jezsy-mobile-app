@@ -14,7 +14,7 @@ import { StreakBadge } from '@/src/components/StreakBadge';
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
 export default function ProfileScreen() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const router = useRouter();
   const { wishlistIds } = useWishlist();
@@ -41,8 +41,9 @@ export default function ProfileScreen() {
   }, [user]);
 
   const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
+    try {
+      await signOut();
+    } catch (error: any) {
       Alert.alert('Sign Out Failed', error.message);
     }
   };
@@ -83,7 +84,7 @@ export default function ProfileScreen() {
               {user?.email || 'user@example.com'}
             </Text>
           </View>
-          <TouchableOpacity style={[styles.editButton, { borderColor: colors.border }]}>
+          <TouchableOpacity style={[styles.editButton, { borderColor: colors.border }]} onPress={() => router.push('/(auth)/profile-setup')}>
             <Text style={[styles.editButtonText, { color: colors.text }]}>Edit</Text>
           </TouchableOpacity>
         </View>
@@ -130,16 +131,22 @@ export default function ProfileScreen() {
               'Height, Weight, Fit preferences',
               () => router.push('/profile/measurements'),
             )}
-            {renderSettingItem('gear', 'Account Settings', 'Privacy, Security, Address')}
-            {renderSettingItem('bell', 'Notifications', 'Push alerts, Emails', () => router.push('/notifications'))}
-            {renderSettingItem('questionmark.circle', 'Help Center', 'FAQ, Contact Us')}
+            {renderSettingItem('gear', 'Account Settings', 'Privacy, Security, Address', () =>
+              Alert.alert('Account Settings', 'Account settings screen coming soon.'))}
+            {renderSettingItem('bell', 'Notifications', 'Push alerts, Emails', () => router.push('/(tabs)/messages'))}
+            {renderSettingItem('questionmark.circle', 'Help Center', 'FAQ, Contact Us', () => {
+              router.push('/(tabs)/messages');
+            })}
           </View>
         </View>
 
         <TouchableOpacity 
           style={[styles.signOutButton, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={handleSignOut}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out of your account"
         >
+          <IconSymbol name="arrow.left" size={18} color="#F72585" style={{ marginRight: 8 }} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -153,7 +160,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   header: {
     marginBottom: 24,
@@ -261,6 +268,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     height: 56,
     borderRadius: 16,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,

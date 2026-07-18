@@ -1,23 +1,25 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TextInput, 
-  TouchableOpacity, KeyboardAvoidingView, Platform, SafeAreaView 
+  TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { useLocalSearchParams, Stack } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useMessages } from '@/src/context/MessagesContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
 
 export default function ChatScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
-  const router = useRouter();
   const { session } = useAuth();
   const { sendMessage, markAsRead } = useMessages();
   
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
-  const [loading, setLoading] = useState(true);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -33,7 +35,6 @@ export default function ChatScreen() {
       if (!error && data) {
         setMessages(data);
       }
-      setLoading(false);
       markAsRead(conversationId);
     };
 
@@ -50,10 +51,25 @@ export default function ChatScreen() {
           filter: `conversation_id=eq.${conversationId}`
         },
         (payload: any) => {
-          setMessages(prev => [...prev, payload.new]);
+          setMessages(prev => {
+            if (prev.find(m => m.id === payload.new.id)) return prev;
+            return [...prev, payload.new];
+          });
           if (payload.new.sender_id !== session?.user.id) {
             markAsRead(conversationId);
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`
+        },
+        (payload: any) => {
+          setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
         }
       )
       .subscribe();
@@ -61,7 +77,7 @@ export default function ChatScreen() {
     return () => {
       messageSubscription.unsubscribe();
     };
-  }, [conversationId]);
+  }, [conversationId, markAsRead, session?.user.id]);
 
   const handleSend = async () => {
     if (!inputText.trim() || !conversationId) return;
@@ -73,7 +89,9 @@ export default function ChatScreen() {
       id: 'temp-' + Date.now(),
       text: textToSend,
       sender_id: session?.user.id,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      read_at: null,
+      image_url: null
     };
     setMessages(prev => [...prev, tempMsg]);
 
@@ -88,14 +106,87 @@ export default function ChatScreen() {
     }
   };
 
+  const handlePickImage = async () => {
+    if (!conversationId) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        const asset = result.assets[0];
+        
+        // Optimistic Image UI
+        const tempMsg = {
+          id: 'temp-' + Date.now(),
+          text: '',
+          sender_id: session?.user.id,
+          created_at: new Date().toISOString(),
+          read_at: null,
+          image_url: asset.uri // temporary local uri
+        };
+        setMessages(prev => [...prev, tempMsg]);
+
+        const ext = asset.uri.split('.').pop() || 'jpg';
+        const fileName = `${Date.now()}.${ext}`;
+        const filePath = `${session?.user.id}/${fileName}`;
+        
+        // Try to upload to 'products' bucket since it is confirmed to be public and functional
+        // Alternatively we use 'messages' or 'chat_images' but they might not exist/be public
+        let publicUrl = '';
+        const { error } = await supabase.storage.from('products').upload(filePath, decode(asset.base64), { contentType: `image/${ext}` });
+        
+        if (!error) {
+          const { data } = supabase.storage.from('products').getPublicUrl(filePath);
+          publicUrl = data.publicUrl;
+        }
+
+        if (publicUrl) {
+          const realMsg = await sendMessage(conversationId, '', publicUrl);
+          if (realMsg) {
+             setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
+          } else {
+             setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+             Alert.alert("Error", "Failed to send image message.");
+          }
+        } else {
+          setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+          Alert.alert("Upload Failed", "Could not upload the image to storage.");
+        }
+      }
+    } catch (e) {
+      console.error('Error picking/uploading image:', e);
+      Alert.alert("Error", "An unexpected error occurred while picking the image.");
+    }
+  };
+
   const renderMessage = ({ item }: { item: any }) => {
     const isMe = item.sender_id === session?.user.id;
+    const timeString = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     return (
       <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
-        <View style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubbleThem]}>
-          <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextThem]}>
-            {item.text}
-          </Text>
+        <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
+          <View style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubbleThem]}>
+            {item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.messageImage} resizeMode="cover" />
+            ) : null}
+            {item.text ? (
+              <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextThem]}>
+                {item.text}
+              </Text>
+            ) : null}
+          </View>
+          <View style={styles.metaContainer}>
+            {isMe && item.read_at && (
+               <Text style={styles.readReceiptText}>Read • </Text>
+            )}
+            <Text style={styles.timestampText}>{timeString}</Text>
+          </View>
         </View>
       </View>
     );
@@ -126,6 +217,14 @@ export default function ChatScreen() {
         />
         
         <View style={styles.inputContainer}>
+          <TouchableOpacity 
+            style={styles.attachButton} 
+            onPress={handlePickImage}
+            accessibilityRole="button"
+            accessibilityLabel="Attach image"
+          >
+            <IconSymbol name="camera.fill" size={24} color="#666" />
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
             placeholder="Type a message..."
@@ -133,13 +232,18 @@ export default function ChatScreen() {
             onChangeText={setInputText}
             multiline
             maxLength={500}
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={handleSend}
           />
           <TouchableOpacity 
             style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]} 
             onPress={handleSend}
             disabled={!inputText.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
           >
-            <IconSymbol name="arrow.up.circle.fill" size={32} color={inputText.trim() ? '#000' : '#ccc'} />
+            <IconSymbol name="arrow.up.circle.fill" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -162,7 +266,7 @@ const styles = StyleSheet.create({
   },
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   messageRowMe: {
     justifyContent: 'flex-end',
@@ -170,11 +274,19 @@ const styles = StyleSheet.create({
   messageRowThem: {
     justifyContent: 'flex-start',
   },
-  messageBubble: {
+  messageContentMe: {
+    alignItems: 'flex-end',
     maxWidth: '80%',
+  },
+  messageContentThem: {
+    alignItems: 'flex-start',
+    maxWidth: '80%',
+  },
+  messageBubble: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
+    overflow: 'hidden',
   },
   messageBubbleMe: {
     backgroundColor: '#000',
@@ -183,6 +295,14 @@ const styles = StyleSheet.create({
   messageBubbleThem: {
     backgroundColor: '#e5e5ea',
     borderBottomLeftRadius: 4,
+  },
+  messageImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 8,
+    marginTop: -4,
+    marginHorizontal: -8,
   },
   messageText: {
     fontSize: 16,
@@ -194,6 +314,21 @@ const styles = StyleSheet.create({
   messageTextThem: {
     color: '#000',
   },
+  metaContainer: {
+    flexDirection: 'row',
+    marginTop: 4,
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  timestampText: {
+    fontSize: 11,
+    color: '#8e8e93',
+  },
+  readReceiptText: {
+    fontSize: 11,
+    color: '#0a7ea4',
+    fontWeight: '600',
+  },
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
@@ -202,6 +337,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
     alignItems: 'flex-end',
+  },
+  attachButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: 40,
+    width: 40,
+    marginRight: 8,
   },
   input: {
     flex: 1,
@@ -220,8 +362,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 40,
     width: 40,
+    borderRadius: 20,
+    backgroundColor: '#000',
   },
   sendButtonDisabled: {
-    opacity: 0.5,
+    backgroundColor: '#ccc',
   },
 });

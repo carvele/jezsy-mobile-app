@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -89,9 +89,11 @@ export default function ARTryOnScreen() {
   };
 
   // Fallback 3D model if product doesn't have one
-  const modelUrl = product.model_3d_url || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
-  // Attempt to map to USDZ for iOS QuickLook if it's our fallback or if we have a simple mapping rule
-  const iosModelUrl = modelUrl.replace('.glb', '.usdz');
+  const rawModelUrl = product.model_3d_url || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+  // Sanitize URL for safe HTML injection — only allow http/https URLs
+  const modelUrl = /^https?:\/\//.test(rawModelUrl) ? rawModelUrl : 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+  // Attempt to map to USDZ for iOS QuickLook — only if not the fallback
+  const iosModelUrl = product.model_3d_url ? modelUrl.replace(/\.glb$/i, '.usdz') : '';
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -162,7 +164,7 @@ export default function ARTryOnScreen() {
       {mode === '3d' ? (
         <View style={styles.webviewContainer}>
           <WebView
-          originWhitelist={['*']}
+          originWhitelist={['https://*', 'http://*']}
           source={{ html: htmlContent }}
           style={styles.webview}
           scrollEnabled={false}
@@ -170,6 +172,31 @@ export default function ARTryOnScreen() {
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
           allowsInlineMediaPlayback={true}
+          allowsFullscreenVideo={true}
+          mediaPlaybackRequiresUserAction={false}
+          onShouldStartLoadWithRequest={(request) => {
+            const { url } = request;
+            // Pass through normal http/https/blob/data URLs
+            if (
+              url.startsWith('http://') ||
+              url.startsWith('https://') ||
+              url.startsWith('blob:') ||
+              url.startsWith('data:') ||
+              url === 'about:blank'
+            ) {
+              return true;
+            }
+            // For intent:// and other native scheme URLs (Google Scene Viewer AR),
+            // hand off to the OS via Linking so the native handler can open it.
+            Linking.openURL(url).catch(() => {
+              Alert.alert(
+                'AR Not Supported',
+                'AR is not available on this device. Make sure Google Play Services for AR is installed.',
+                [{ text: 'OK' }]
+              );
+            });
+            return false; // Prevent WebView from loading it (it can't handle intent://)
+          }}
         />
         
         {!product.model_3d_url && (

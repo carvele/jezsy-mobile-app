@@ -61,11 +61,13 @@ export default function ReservationsScreen() {
     const dateStr = item.date ? new Date(item.date).toLocaleDateString() : 'N/A';
     
     return (
-      <View
+      <TouchableOpacity
         style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         accessible={true}
-        accessibilityRole="summary"
+        accessibilityRole="button"
         accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${item.status || 'Pending'}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
+        accessibilityHint="View reservation details"
+        onPress={() => { /* Detail view route pending */ }}
       >
         <View style={styles.cardHeader}>
           <Text style={[styles.reservationId, { color: colors.secondaryText }]}>ID: {item.display_id || item.id.substring(0,8)}</Text>
@@ -91,7 +93,7 @@ export default function ReservationsScreen() {
             <Text style={[styles.price, { color: colors.tint }]}>₱{(item.rental_price || 0).toFixed(2)}</Text>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 

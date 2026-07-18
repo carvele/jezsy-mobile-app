@@ -28,55 +28,13 @@ type Product = Database['public']['Tables']['products']['Row'];
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Curated Top-Level Categories (Level 0) with beautiful Unsplash background images for a women's brand
-const TOP_CATEGORIES = [
-  { id: 'Tops', name: 'Tops', image: 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=600' },
-  { id: 'Bottoms', name: 'Bottoms', image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600' },
-  { id: 'Outerwear', name: 'Outerwear', image: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=600' },
-  { id: 'Dresses', name: 'Dresses', image: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600' },
-  { id: 'Innerwear & Lounge', name: 'Innerwear & Lounge', image: 'https://images.unsplash.com/photo-1508609312543-70e1766f153f?w=600' },
-  { id: 'Accessories', name: 'Accessories', image: 'https://images.unsplash.com/photo-1576053139778-7e32f2ae3cf4?w=600' },
-];
-
-// Curated Sub-Category (Level 1) Background Images
-const SUB_CATEGORY_IMAGES: Record<string, string> = {
-  // Tops
-  'T-Shirts': 'https://images.unsplash.com/photo-1554568218-0f1715e72254?w=500',
-  'Blouses': 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=500',
-  'Knits & Sweaters': 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=500',
-  'Hoodies': 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=500',
-  // Bottoms
-  'Jeans': 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=500',
-  'Pants': 'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=500',
-  'Skirts': 'https://images.unsplash.com/photo-1583496661160-fb488653d5d1?w=500',
-  'Shorts': 'https://images.unsplash.com/photo-1591195853828-11db59a44f6b?w=500',
-  // Outerwear
-  'Jackets': 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500',
-  'Coats': 'https://images.unsplash.com/photo-1525450824786-227cbef70703?w=500',
-  'Cardigans': 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=500',
-  // Dresses
-  'Dresses': 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=500',
-  'Jumpsuits': 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=500',
-  // Innerwear & Lounge
-  'Socks': 'https://images.unsplash.com/photo-1582966772680-860e372bb558?w=500',
-  'Underwear': 'https://images.unsplash.com/photo-1573612244737-144d183f3e1a?w=500',
-  'Loungewear': 'https://images.unsplash.com/photo-1508609312543-70e1766f153f?w=500',
-  'Pajamas': 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=500',
-  // Accessories
-  'Bags': 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=500',
-  'Belts': 'https://images.unsplash.com/photo-1624222247344-550fb80f02d6?w=500',
-  'Jewelry': 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=500',
-  'Hats': 'https://images.unsplash.com/photo-1534215754734-18e55d13ce3a?w=500',
-};
-
-// Standard Static Hierarchy Mapping (Level 0 to Level 1)
-const CATEGORY_HIERARCHY: Record<string, string[]> = {
-  Tops: ['T-Shirts', 'Blouses', 'Knits & Sweaters', 'Hoodies'],
-  Bottoms: ['Jeans', 'Pants', 'Skirts', 'Shorts'],
-  Outerwear: ['Jackets', 'Coats', 'Cardigans'],
-  Dresses: ['Dresses', 'Jumpsuits'],
-  'Innerwear & Lounge': ['Socks', 'Underwear', 'Loungewear', 'Pajamas'],
-  Accessories: ['Bags', 'Belts', 'Jewelry', 'Hats'],
+type Category = {
+  id: string;
+  name: string;
+  slug: string;
+  parent_id: string | null;
+  image_url: string | null;
+  sort_order: number | null;
 };
 
 const FILTER_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
@@ -114,9 +72,32 @@ export default function ExploreScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
 
+  // Category States
+  const [topCategories, setTopCategories] = useState<Category[]>([]);
+  const [subCategoriesByParent, setSubCategoriesByParent] = useState<Record<string, Category[]>>({});
+
   // Products Loading State
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (data && !error) {
+        const tops = data.filter(c => !c.parent_id);
+        setTopCategories(tops);
+        const hierarchy: Record<string, Category[]> = {};
+        tops.forEach(top => {
+          hierarchy[top.name] = data.filter(c => c.parent_id === top.id);
+        });
+        setSubCategoriesByParent(hierarchy);
+      }
+    };
+    fetchCategories();
+  }, []);
 
   // Filter States (Applied)
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
@@ -126,6 +107,7 @@ export default function ExploreScreen() {
   const [customMaxPrice, setCustomMaxPrice] = useState('');
   const [selectedNewArrivalsOnly, setSelectedNewArrivalsOnly] = useState(false);
   const [selectedSaleOnly, setSelectedSaleOnly] = useState(false);
+  const [selectedArOnly, setSelectedArOnly] = useState(false);
   const [selectedFits, setSelectedFits] = useState<string[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
 
@@ -142,6 +124,7 @@ export default function ExploreScreen() {
   const [tempMaxPrice, setTempMaxPrice] = useState('');
   const [tempNewArrivalsOnly, setTempNewArrivalsOnly] = useState(false);
   const [tempSaleOnly, setTempSaleOnly] = useState(false);
+  const [tempArOnly, setTempArOnly] = useState(false);
   const [tempFits, setTempFits] = useState<string[]>([]);
   const [tempMaterials, setTempMaterials] = useState<string[]>([]);
 
@@ -282,6 +265,11 @@ export default function ExploreScreen() {
         return false;
       }
 
+      // 5.5 AR Filter
+      if (selectedArOnly && !product.model_3d_url) {
+        return false;
+      }
+
       // 6. Fit / Cut Filter
       if (selectedFits.length > 0) {
         const productFit = (product.fit_and_sizing || '').trim().toLowerCase();
@@ -309,6 +297,7 @@ export default function ExploreScreen() {
     customMaxPrice,
     selectedNewArrivalsOnly,
     selectedSaleOnly,
+    selectedArOnly,
     selectedFits,
     selectedMaterials,
   ]);
@@ -343,6 +332,7 @@ export default function ExploreScreen() {
     setTempMaxPrice(customMaxPrice);
     setTempNewArrivalsOnly(selectedNewArrivalsOnly);
     setTempSaleOnly(selectedSaleOnly);
+    setTempArOnly(selectedArOnly);
     setTempFits(selectedFits);
     setTempMaterials(selectedMaterials);
     setIsFilterModalOpen(true);
@@ -356,6 +346,7 @@ export default function ExploreScreen() {
     setCustomMaxPrice(tempMaxPrice);
     setSelectedNewArrivalsOnly(tempNewArrivalsOnly);
     setSelectedSaleOnly(tempSaleOnly);
+    setSelectedArOnly(tempArOnly);
     setSelectedFits(tempFits);
     setSelectedMaterials(tempMaterials);
     setIsFilterModalOpen(false);
@@ -369,6 +360,7 @@ export default function ExploreScreen() {
     setTempMaxPrice('');
     setTempNewArrivalsOnly(false);
     setTempSaleOnly(false);
+    setTempArOnly(false);
     setTempFits([]);
     setTempMaterials([]);
   };
@@ -381,6 +373,7 @@ export default function ExploreScreen() {
     setCustomMaxPrice('');
     setSelectedNewArrivalsOnly(false);
     setSelectedSaleOnly(false);
+    setSelectedArOnly(false);
     setSelectedFits([]);
     setSelectedMaterials([]);
   };
@@ -477,6 +470,12 @@ export default function ExploreScreen() {
               <Text style={styles.productBadgeText}>NEW</Text>
             </View>
           )}
+          {item.model_3d_url && (
+            <View style={[styles.productBadge, { backgroundColor: 'rgba(201,169,110,0.9)', left: 8, top: item.is_new_arrival ? 32 : 8, flexDirection: 'row', alignItems: 'center', gap: 2 }]}>
+              <IconSymbol name="cube.transparent" size={10} color="#0D0D0D" />
+              <Text style={styles.productBadgeText}>AR</Text>
+            </View>
+          )}
           {item.on_sale && (
             <View style={[styles.productBadge, { backgroundColor: colors.notification, right: 8, top: 8 }]}>
               <Text style={styles.productBadgeText}>SALE</Text>
@@ -516,6 +515,7 @@ export default function ExploreScreen() {
     (customMinPrice || customMaxPrice ? 1 : 0) +
     (selectedNewArrivalsOnly ? 1 : 0) +
     (selectedSaleOnly ? 1 : 0) +
+    (selectedArOnly ? 1 : 0) +
     selectedFits.length +
     selectedMaterials.length;
 
@@ -651,6 +651,14 @@ export default function ExploreScreen() {
                               </TouchableOpacity>
                             </View>
                           )}
+                          {selectedArOnly && (
+                            <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                              <Text style={[styles.filterTagText, { color: colors.text }]}>Try in AR</Text>
+                              <TouchableOpacity onPress={() => setSelectedArOnly(false)}>
+                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
+                              </TouchableOpacity>
+                            </View>
+                          )}
                           {selectedSizes.map(size => (
                             <View key={`size-${size}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>Size: {size}</Text>
@@ -729,13 +737,13 @@ export default function ExploreScreen() {
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories</Text>
               <View style={styles.categoriesGrid}>
-                {TOP_CATEGORIES.map((cat) => (
+                {topCategories.map((cat) => (
                   <TouchableOpacity
                     key={cat.id}
                     style={[styles.categoryCard, { backgroundColor: colors.card }]}
-                    onPress={() => setSelectedCategory(cat.id)}
+                    onPress={() => setSelectedCategory(cat.name)}
                   >
-                    <Image source={{ uri: cat.image }} style={styles.categoryImage} contentFit="cover" />
+                    <Image source={{ uri: cat.image_url ?? undefined }} style={styles.categoryImage} contentFit="cover" />
                     <View style={[styles.categoryOverlay, { backgroundColor: 'rgba(0,0,0,0.35)' }]}>
                       <Text style={[styles.categoryName, { color: '#E8D5B7' }]}>{cat.name}</Text>
                     </View>
@@ -756,7 +764,7 @@ export default function ExploreScreen() {
                   onPress={() => setSelectedSubCategory('View All')}
                 >
                   <Image
-                    source={{ uri: TOP_CATEGORIES.find(c => c.id === selectedCategory)?.image }}
+                    source={{ uri: topCategories.find(c => c.name === selectedCategory)?.image_url ?? undefined }}
                     style={styles.categoryImage}
                     contentFit="cover"
                   />
@@ -766,19 +774,19 @@ export default function ExploreScreen() {
                 </TouchableOpacity>
 
                 {/* Specific Subcategories */}
-                {(CATEGORY_HIERARCHY[selectedCategory] || []).map((subcat) => (
+                {(subCategoriesByParent[selectedCategory] || []).map((subcat) => (
                   <TouchableOpacity
-                    key={subcat}
+                    key={subcat.id}
                     style={[styles.categoryCard, { backgroundColor: colors.card }]}
-                    onPress={() => setSelectedSubCategory(subcat)}
+                    onPress={() => setSelectedSubCategory(subcat.name)}
                   >
                     <Image
-                      source={{ uri: SUB_CATEGORY_IMAGES[subcat] || 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=500' }}
+                      source={{ uri: subcat.image_url || 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=500' }}
                       style={styles.categoryImage}
                       contentFit="cover"
                     />
                     <View style={[styles.categoryOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
-                      <Text style={[styles.categoryName, { color: '#E8D5B7', fontSize: 14, textAlign: 'center', paddingHorizontal: 8 }]}>{subcat}</Text>
+                      <Text style={[styles.categoryName, { color: '#E8D5B7', fontSize: 14, textAlign: 'center', paddingHorizontal: 8 }]}>{subcat.name}</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -860,6 +868,14 @@ export default function ExploreScreen() {
                                 </TouchableOpacity>
                               </View>
                             )}
+                            {selectedArOnly && (
+                              <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Text style={[styles.filterTagText, { color: colors.text }]}>Try in AR</Text>
+                                <TouchableOpacity onPress={() => setSelectedArOnly(false)}>
+                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
+                                </TouchableOpacity>
+                              </View>
+                            )}
                             {selectedSizes.map(size => (
                               <View key={`size-${size}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>Size: {size}</Text>
@@ -931,6 +947,14 @@ export default function ExploreScreen() {
         </View>
       )}
 
+      {/* Floating Action Button for Scanner */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.tint }]}
+        onPress={() => router.push('/(tabs)/scanner')}
+      >
+        <IconSymbol name="qrcode.viewfinder" size={24} color="#0D0D0D" />
+      </TouchableOpacity>
+
       {/* FILTER BOTTOM SHEET MODAL */}
       <Modal
         visible={isFilterModalOpen}
@@ -986,6 +1010,20 @@ export default function ExploreScreen() {
                     >
                       <IconSymbol name="tag.fill" size={14} color={tempSaleOnly ? '#0D0D0D' : colors.notification} style={{ marginRight: 6 }} />
                       <Text style={[styles.chipButtonText, { color: tempSaleOnly ? '#0D0D0D' : colors.text }]}>On Sale</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.chipButton,
+                        {
+                          backgroundColor: tempArOnly ? colors.tint : colors.card,
+                          borderColor: tempArOnly ? colors.tint : colors.border,
+                        },
+                      ]}
+                      onPress={() => setTempArOnly(!tempArOnly)}
+                    >
+                      <IconSymbol name="cube.transparent" size={14} color={tempArOnly ? '#0D0D0D' : colors.tint} style={{ marginRight: 6 }} />
+                      <Text style={[styles.chipButtonText, { color: tempArOnly ? '#0D0D0D' : colors.text }]}>Try in AR</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1318,7 +1356,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
   welcomeTitle: {
     fontSize: 22,
@@ -1474,7 +1512,7 @@ const styles = StyleSheet.create({
   },
   productList: {
     paddingHorizontal: 12,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
   productRow: {
     flexDirection: 'row',
@@ -1709,5 +1747,21 @@ const styles = StyleSheet.create({
   },
   sortOptionLabel: {
     fontSize: 15,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 100 : 90,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+    zIndex: 10,
   },
 });

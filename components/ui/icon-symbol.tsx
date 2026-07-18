@@ -14,10 +14,80 @@ type IconSymbolName = keyof typeof MAPPING;
  * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
  */
 const MAPPING = {
+  // Navigation
   'house.fill': 'home',
-  'paperplane.fill': 'send',
-  'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.left': 'chevron-left',
+  'chevron.left.forwardslash.chevron.right': 'code',
+  'arrow.left': 'arrow-back',
+  'arrow.up.arrow.down': 'swap-vert',
+  'xmark': 'close',
+
+  // Messaging & Communication
+  'paperplane.fill': 'send',
+  'arrow.up.circle.fill': 'send',
+  'envelope.fill': 'email',
+
+  // Commerce & Shopping
+  'bag': 'shopping-bag',
+  'bag.fill': 'shopping-bag',
+  'bag.badge.plus': 'add-shopping-cart',
+  'tag.fill': 'local-offer',
+
+  // Media & Camera
+  'camera': 'camera-alt',
+  'camera.fill': 'camera-alt',
+  'camera.viewfinder': 'center-focus-strong',
+  'qrcode.viewfinder': 'qr-code-scanner',
+  'photo.fill': 'photo',
+  'cube.transparent': 'view-in-ar',
+
+  // Actions
+  'plus': 'add',
+  'checkmark': 'check',
+  'checkmark.circle': 'check-circle-outline',
+  'checkmark.circle.fill': 'check-circle',
+  'trash.fill': 'delete',
+  'delete.left': 'backspace',
+
+  // Status & Alerts
+  'bell': 'notifications-none',
+  'bell.fill': 'notifications',
+  'bell.slash': 'notifications-off',
+  'exclamationmark.circle': 'error-outline',
+  'exclamationmark.triangle.fill': 'warning',
+  'info.circle.fill': 'info',
+
+  // User & Profile
+  'person.fill': 'person',
+  'lock.fill': 'lock',
+  'eye.slash.fill': 'visibility-off',
+  'gear': 'settings',
+  'questionmark.circle': 'help-outline',
+
+  // Wardrobe & Fashion
+  'tshirt': 'checkroom',
+  'hanger': 'checkroom',
+  'sparkles': 'auto-awesome',
+  'ruler.fill': 'straighten',
+
+  // Calendar & Time
+  'calendar': 'calendar-today',
+  'clock.arrow.circlepath': 'history',
+
+  // Charts & Data
+  'chart.bar.fill': 'bar-chart',
+  'slider.horizontal.3': 'tune',
+
+  // Misc
+  'heart': 'favorite-border',
+  'heart.fill': 'favorite',
+  'star': 'star-outline',
+  'star.fill': 'star',
+  'magnifyingglass': 'search',
+  'archivebox': 'archive',
+  'cloud.fill': 'cloud',
+  'flame.fill': 'local-fire-department',
 } as IconMapping;
 
 /**

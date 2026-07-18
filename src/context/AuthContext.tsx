@@ -9,6 +9,7 @@ import React, {
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database.types";
 import { savePushTokenToProfile } from "../utils/pushNotifications";
+import * as SecureStore from 'expo-secure-store';
 
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
@@ -20,6 +21,12 @@ type AuthContextType = {
   profile: Profile | null;
   /** Call this after saving profile data so routing re-evaluates immediately. */
   refreshProfile: () => Promise<void>;
+  signOut: () => Promise<void>;
+  hasPinSetup: boolean;
+  isPinAuthenticated: boolean;
+  requireFullLogin: boolean;
+  setHasPinSetup: (val: boolean) => void;
+  setIsPinAuthenticated: (val: boolean) => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -29,6 +36,12 @@ const AuthContext = createContext<AuthContextType>({
   isProfileLoading: false,
   profile: null,
   refreshProfile: async () => {},
+  signOut: async () => {},
+  hasPinSetup: false,
+  isPinAuthenticated: false,
+  requireFullLogin: false,
+  setHasPinSetup: () => {},
+  setIsPinAuthenticated: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -38,6 +51,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
 
+  const [hasPinSetup, setHasPinSetup] = useState(false);
+  const [isPinAuthenticated, setIsPinAuthenticated] = useState(false);
+  const [requireFullLogin, setRequireFullLogin] = useState(false);
   const fetchProfile = useCallback(async (userId: string) => {
     setIsProfileLoading(true);
     try {
@@ -102,7 +118,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (user?.id) await fetchProfile(user.id);
   }, [user, fetchProfile]);
 
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    await SecureStore.deleteItemAsync('jezsy_user_pin');
+    await SecureStore.deleteItemAsync('jezsy_last_full_login');
+    setHasPinSetup(false);
+    setIsPinAuthenticated(false);
+    setRequireFullLogin(false);
+  }, []);
+
   useEffect(() => {
+    const checkInitialState = async () => {
+      try {
+        const lastLoginStr = await SecureStore.getItemAsync('jezsy_last_full_login');
+        if (lastLoginStr) {
+          // 30-day forced logout removed per policy change. 
+          // Sessions are kept alive indefinitely.
+        } else {
+          // No record of login means they need one
+          setRequireFullLogin(true);
+        }
+
+        const storedPin = await SecureStore.getItemAsync('jezsy_user_pin');
+        setHasPinSetup(!!storedPin);
+      } catch (err) {
+        console.error('Error checking secure store:', err);
+      }
+    };
+
+    checkInitialState();
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -127,7 +172,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     );
 
     return () => authListener.subscription.unsubscribe();
-  }, [syncProfile]);
+  }, [signOut, syncProfile]);
+
 
   return (
     <AuthContext.Provider
@@ -138,6 +184,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         isProfileLoading,
         profile,
         refreshProfile,
+        signOut,
+        hasPinSetup,
+        isPinAuthenticated,
+        requireFullLogin,
+        setHasPinSetup,
+        setIsPinAuthenticated,
       }}
     >
       {children}

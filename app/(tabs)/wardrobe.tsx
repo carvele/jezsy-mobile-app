@@ -170,7 +170,7 @@ export default function WardrobeScreen() {
           <ActivityIndicator size="large" color={colors.tint} />
         </View>
       ) : activeTab === 'items' ? (
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
           <GapAnalysis items={items} />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 16 }}>
             {items.length > 0 ? items.map(item => renderItem({item})) : (
@@ -200,7 +200,7 @@ export default function WardrobeScreen() {
             }
           />
         ) : (
-          <ScrollView contentContainerStyle={styles.content}>
+          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 100 }]}>
             <View style={styles.emptyState}>
               <View style={[styles.iconContainer, { backgroundColor: colors.card }]}>
                 <IconSymbol name="sparkles" size={56} color={colors.icon} />
@@ -220,7 +220,7 @@ export default function WardrobeScreen() {
           </ScrollView>
         )
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
           {capsules.length > 0 ? (
             capsules.map(capsule => (
               <CapsuleCard key={capsule.id} capsule={capsule} onPress={() => {}} />

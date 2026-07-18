@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -213,16 +213,18 @@ export default function ProductDetailScreen() {
           >
             <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? "#E05C5C" : "#FFF"} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.arButton, { backgroundColor: "rgba(201,169,110,0.9)" }]}
-            onPress={() => router.push(`/ar-tryon/${product.id}`)}
-            accessibilityRole="button"
-            accessibilityLabel="Try on in Augmented Reality"
-            accessibilityHint="Launches the AR viewer to see this clothing item on your camera feed"
-          >
-            <IconSymbol name="cube.transparent" size={24} color="#0D0D0D" />
-            <Text style={styles.arButtonText}>Try in AR</Text>
-          </TouchableOpacity>
+          {product.model_3d_url && (
+            <TouchableOpacity
+              style={[styles.arButton, { backgroundColor: "rgba(201,169,110,0.9)" }]}
+              onPress={() => router.push(`/ar-tryon/${product.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel="Try on in Augmented Reality"
+              accessibilityHint="Launches the AR viewer to see this clothing item on your camera feed"
+            >
+              <IconSymbol name="cube.transparent" size={24} color="#0D0D0D" />
+              <Text style={styles.arButtonText}>Try in AR</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.contentContainer}>

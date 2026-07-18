@@ -182,6 +182,12 @@ export default function HomeScreen() {
                         <Text style={styles.gridBadgeText}>NEW</Text>
                       </View>
                     )}
+                    {item.model_3d_url && (
+                      <View style={[styles.gridBadge, { backgroundColor: 'rgba(201,169,110,0.9)', top: item.is_new_arrival ? 32 : 8, flexDirection: 'row', alignItems: 'center', gap: 2 }]}>
+                        <IconSymbol name="cube.transparent" size={10} color="#0D0D0D" />
+                        <Text style={styles.gridBadgeText}>AR</Text>
+                      </View>
+                    )}
                   </View>
                   <View style={styles.gridInfo}>
                     <Text style={[styles.gridBrand, { color: colors.secondaryText }]}>
@@ -201,7 +207,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Footer padding to not overlap with bottom tabs */}
-        <View style={{ height: 60 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -217,7 +223,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 0,
   },
   header: {
     paddingHorizontal: 20,

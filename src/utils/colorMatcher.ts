@@ -10,18 +10,6 @@ export interface ColorMatchResult {
   feedback: string;
 }
 
-// Color definitions with hex
-const COLOR_HEX: Record<string, string> = {
-  Black: '#000000',
-  White: '#FFFFFF',
-  Red: '#DC2626',
-  Blue: '#2563EB',
-  Gold: '#D4AF37',
-  Silver: '#C0C0C0',
-  Pink: '#EC4899',
-  Emerald: '#047857',
-};
-
 // Harmony evaluation function
 export function evaluateColors(colors: string[]): ColorMatchResult {
   const uniqueColors = Array.from(new Set(colors)).filter(Boolean);
@@ -36,7 +24,6 @@ export function evaluateColors(colors: string[]): ColorMatchResult {
 
   // Count types
   const neutrals = uniqueColors.filter(c => c === 'Black' || c === 'White');
-  const metallics = uniqueColors.filter(c => c === 'Gold' || c === 'Silver');
   const brights = uniqueColors.filter(c => c !== 'Black' && c !== 'White' && c !== 'Gold' && c !== 'Silver');
 
   // Rule 1: Gold and Silver together is generally a clash in classic styling

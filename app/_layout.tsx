@@ -15,7 +15,7 @@ export const unstable_settings = {
 };
 
 function InitialLayout() {
-  const { session, isLoading, isProfileLoading, profile } = useAuth();
+  const { session, isLoading, isProfileLoading, profile, hasPinSetup, isPinAuthenticated, requireFullLogin } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -25,21 +25,29 @@ function InitialLayout() {
 
     const inAuthGroup = segments[0] === '(auth)';
     const onProfileSetup = segments[1] === 'profile-setup';
+    const onPinSetup = segments[1] === 'pin-setup';
+    const onPinEntry = segments[1] === 'pin-entry';
 
-    if (!session && !inAuthGroup) {
-      router.replace('/(auth)');
-    } else if (session && inAuthGroup && !onProfileSetup) {
-      if (!profile || !profile.first_name) {
-        router.replace('/(auth)/profile-setup');
-      } else {
-        router.replace('/(tabs)');
+    if (!session || requireFullLogin) {
+      if (!inAuthGroup) {
+        router.replace('/(auth)');
       }
-    } else if (session && !inAuthGroup) {
+    } else {
+      // User is logged in
       if (!profile || !profile.first_name) {
-        router.replace('/(auth)/profile-setup');
+        if (!onProfileSetup) router.replace('/(auth)/profile-setup');
+      } else if (!hasPinSetup) {
+        if (!onPinSetup) router.replace('/(auth)/pin-setup');
+      } else if (!isPinAuthenticated) {
+        if (!onPinEntry) router.replace('/(auth)/pin-entry');
+      } else {
+        // Fully authenticated and set up
+        if (inAuthGroup) {
+          router.replace('/(tabs)');
+        }
       }
     }
-  }, [session, isLoading, isProfileLoading, segments, profile, router]);
+  }, [session, isLoading, isProfileLoading, segments, profile, router, hasPinSetup, isPinAuthenticated, requireFullLogin]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

@@ -42,7 +42,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withMlkitManifestFix"
     ],
     "experiments": {
       "typedRoutes": true,
