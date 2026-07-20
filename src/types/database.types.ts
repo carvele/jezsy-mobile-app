@@ -268,7 +268,7 @@ export type Database = {
           {
             foreignKeyName: "conversations_customer_id_fkey"
             columns: ["customer_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -465,30 +465,33 @@ export type Database = {
       }
       messages: {
         Row: {
-          conversation_id: string | null
+          conversation_id: string
           created_at: string | null
           id: string
           image_url: string | null
+          reactions: Json
           read_at: string | null
           sender_id: string | null
           sender_name: string | null
           text: string | null
         }
         Insert: {
-          conversation_id?: string | null
+          conversation_id: string
           created_at?: string | null
           id?: string
           image_url?: string | null
+          reactions?: Json
           read_at?: string | null
           sender_id?: string | null
           sender_name?: string | null
           text?: string | null
         }
         Update: {
-          conversation_id?: string | null
+          conversation_id?: string
           created_at?: string | null
           id?: string
           image_url?: string | null
+          reactions?: Json
           read_at?: string | null
           sender_id?: string | null
           sender_name?: string | null
@@ -691,6 +694,7 @@ export type Database = {
           base_color: string | null
           care_instructions: string | null
           category: string | null
+          category_id: string | null
           color: string | null
           created_at: string
           created_by: string | null
@@ -734,6 +738,7 @@ export type Database = {
           base_color?: string | null
           care_instructions?: string | null
           category?: string | null
+          category_id?: string | null
           color?: string | null
           created_at?: string
           created_by?: string | null
@@ -777,6 +782,7 @@ export type Database = {
           base_color?: string | null
           care_instructions?: string | null
           category?: string | null
+          category_id?: string | null
           color?: string | null
           created_at?: string
           created_by?: string | null
@@ -816,7 +822,15 @@ export type Database = {
           updated_by?: string | null
           visibility?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -837,7 +851,7 @@ export type Database = {
           last_name: string | null
           phone: string | null
           province: string | null
-          role: string | null
+          role: string
           updated_at: string
           zip_code: string | null
         }
@@ -859,7 +873,7 @@ export type Database = {
           last_name?: string | null
           phone?: string | null
           province?: string | null
-          role?: string | null
+          role?: string
           updated_at?: string
           zip_code?: string | null
         }
@@ -881,7 +895,7 @@ export type Database = {
           last_name?: string | null
           phone?: string | null
           province?: string | null
-          role?: string | null
+          role?: string
           updated_at?: string
           zip_code?: string | null
         }
@@ -1431,6 +1445,11 @@ export type Database = {
       }
       is_admin_or_owner: { Args: never; Returns: boolean }
       is_staff_or_admin: { Args: never; Returns: boolean }
+      merge_message_reaction: {
+        Args: { p_emoji: string; p_message_id: string; p_user_id: string }
+        Returns: Json
+      }
+      sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
       update_staff_status: {
         Args: {
           change_note: string
@@ -1440,7 +1459,7 @@ export type Database = {
         }
         Returns: undefined
       }
-      update_user_streak: { Args: { p_user_id: string }; Returns: undefined }
+      update_user_streak: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

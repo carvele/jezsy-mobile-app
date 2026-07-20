@@ -23,8 +23,10 @@ import { Link, useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
+import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 
-type Product = Database['public']['Tables']['products']['Row'];
+type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
+const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -99,6 +101,30 @@ export default function ExploreScreen() {
     fetchCategories();
   }, []);
 
+  // products.category_id references a subcategory row directly; these maps
+  // resolve the display names this screen navigates by (set from tile
+  // presses below) back to the ids actually needed to query/search.
+  const subCategoryIdByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    Object.values(subCategoriesByParent).forEach((subs) => {
+      subs.forEach((s) => { map[s.name] = s.id; });
+    });
+    return map;
+  }, [subCategoriesByParent]);
+
+  const subCategoryIdsMatching = useCallback((text: string) => {
+    const lower = text.toLowerCase();
+    const ids = new Set<string>();
+    topCategories
+      .filter((c) => c.name.toLowerCase().includes(lower))
+      .forEach((top) => (subCategoriesByParent[top.name] || []).forEach((s) => ids.add(s.id)));
+    Object.values(subCategoriesByParent)
+      .flat()
+      .filter((s) => s.name.toLowerCase().includes(lower))
+      .forEach((s) => ids.add(s.id));
+    return Array.from(ids);
+  }, [topCategories, subCategoriesByParent]);
+
   // Filter States (Applied)
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
@@ -158,12 +184,23 @@ export default function ExploreScreen() {
       return;
     }
     try {
+      // Matches by product name directly, or by category/subcategory name
+      // via the FK (a match on a main category, e.g. "dress", expands to
+      // every subcategory under it — broader and more useful than the old
+      // text-column match, which only ever compared against products'
+      // own denormalized copy of the category name).
+      const matchingCategoryIds = subCategoryIdsMatching(text);
+      let orClause = `name.ilike.%${text}%`;
+      if (matchingCategoryIds.length > 0) {
+        orClause += `,category_id.in.(${matchingCategoryIds.join(',')})`;
+      }
+
       const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select(PRODUCT_SELECT)
         .eq('deleted', false)
         .eq('visibility', 'public')
-        .or(`name.ilike.%${text}%,category.ilike.%${text}%,sub_category.ilike.%${text}%`);
+        .or(orClause);
 
       if (error) {
         console.error('Error fetching search results:', error);
@@ -190,13 +227,19 @@ export default function ExploreScreen() {
       try {
         let query = supabase
           .from('products')
-          .select('*')
+          .select(PRODUCT_SELECT)
           .eq('deleted', false)
-          .eq('visibility', 'public')
-          .eq('category', selectedCategory);
+          .eq('visibility', 'public');
 
-        if (selectedSubCategory !== 'View All') {
-          query = query.eq('sub_category', selectedSubCategory);
+        if (selectedSubCategory === 'View All') {
+          // category_id always points at a subcategory row, so "every
+          // product in this main category" means "in any of its subs".
+          const subIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
+          query = query.in('category_id', subIds);
+        } else {
+          const subId = subCategoryIdByName[selectedSubCategory];
+          if (!subId) { setProducts([]); setLoading(false); return; }
+          query = query.eq('category_id', subId);
         }
 
         const { data, error } = await query;
@@ -484,7 +527,7 @@ export default function ExploreScreen() {
         </View>
         <View style={styles.productInfo}>
           <Text style={[styles.productCategory, { color: colors.secondaryText }]}>
-            {item.sub_category?.toUpperCase() || item.category?.toUpperCase() || 'COLLECTION'}
+            {getCategoryLabel(item, 'COLLECTION').toUpperCase()}
           </Text>
           <Text style={[styles.productName, { color: colors.text }]} numberOfLines={1}>
             {item.name}
