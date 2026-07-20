@@ -44,7 +44,7 @@ export default function ReservationScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? "dark";
   const colors = Colors[theme];
-  const { session, profile } = useAuth();
+  const { session } = useAuth();
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -140,37 +140,16 @@ export default function ReservationScreen() {
       const receiptPath = await uploadReceipt(receiptUri);
       const reservationDate = formatLocalDate(selectedDate);
 
-      const returnDate = new Date(selectedDate);
-      returnDate.setDate(returnDate.getDate() + 4);
-
-      const rentalPrice = product.price || 0;
-      const deposit = rentalPrice * 0.5; // Example 50% deposit
-
-      const displayId = `RES-${Date.now().toString(36).toUpperCase()}-${Math.floor(
-        Math.random() * 1000,
-      )
-        .toString()
-        .padStart(3, "0")}`;
-
-      const { error } = await supabase.from("reservations").insert({
-        display_id: displayId,
-        customer_id: session.user.id,
-        customer_name: profile?.first_name
-          ? `${profile.first_name} ${profile.last_name || ""}`
-          : "Customer",
-        product_id: product.id,
-        product_name: product.name,
-        image_url: product.image_url,
-        size: size,
-        color: color,
-        quantity: 1,
-        rental_price: rentalPrice,
-        deposit: deposit,
-        date: reservationDate,
-        return_date: formatLocalDate(returnDate),
-        appointment_time: appointmentTime,
-        receipt_url: receiptPath,
-        status: "Pending",
+      // Price and deposit are computed server-side by create_reservation
+      // from the current product price, not trusted from the client.
+      const { data, error } = await supabase.rpc("create_reservation", {
+        _product_id: product.id,
+        _size: size,
+        _color: color,
+        _quantity: 1,
+        _date: reservationDate,
+        _appointment_time: appointmentTime,
+        _receipt_path: receiptPath,
       });
 
       if (error) {
@@ -182,6 +161,8 @@ export default function ReservationScreen() {
         }
         throw error;
       }
+
+      const displayId = (data as any)?.display_id;
 
       await scheduleReservationReminder(
         displayId,
