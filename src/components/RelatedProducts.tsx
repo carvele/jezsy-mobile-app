@@ -4,28 +4,40 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 
-export function RelatedProducts({ category, currentProductId }: { category: string; currentProductId: string }) {
+// mainCategoryId is the *top-level* category's id (a product's own
+// category_id points at its subcategory, one level down) — "related" means
+// "anything else under the same main category", matching the old behavior
+// of comparing on the main category text, just via the FK now.
+export function RelatedProducts({ mainCategoryId, currentProductId }: { mainCategoryId: string | null; currentProductId: string }) {
   const [products, setProducts] = useState<any[]>([]);
   const router = useRouter();
 
   useEffect(() => {
-    if (!category) return;
-    
+    if (!mainCategoryId) return;
+
     const fetchRelated = async () => {
+      const { data: subs } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('parent_id', mainCategoryId);
+
+      const subIds = (subs || []).map((s) => s.id);
+      if (subIds.length === 0) return;
+
       const { data } = await supabase
         .from('products')
         .select('*')
-        .eq('category', category)
+        .in('category_id', subIds)
         .neq('id', currentProductId)
         .limit(6);
-        
+
       if (data) {
         setProducts(data);
       }
     };
-    
+
     fetchRelated();
-  }, [category, currentProductId]);
+  }, [mainCategoryId, currentProductId]);
 
   if (products.length === 0) return null;
 

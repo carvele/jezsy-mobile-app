@@ -16,8 +16,9 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { CATEGORY_SELECT, getCategoryLabel, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 
-type Product = Database['public']['Tables']['products']['Row'];
+type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -43,7 +44,7 @@ export default function HomeScreen() {
     try {
       const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select(`*, ${CATEGORY_SELECT}`)
         .eq('visibility', 'public')
         .eq('deleted', false)
         .order('created_at', { ascending: false });
@@ -110,7 +111,7 @@ export default function HomeScreen() {
                 />
                 <View style={styles.mainFeatureTextContainer}>
                   <Text style={[styles.featureBrand, { color: colors.text }]}>
-                    {mainFeature.category?.toUpperCase() || 'EDITORIAL'}
+                    {(getMainCategoryName(mainFeature) ?? 'EDITORIAL').toUpperCase()}
                   </Text>
                   <Text style={[styles.featureName, { color: colors.text }]} numberOfLines={2}>
                     {mainFeature.name}
@@ -191,7 +192,7 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.gridInfo}>
                     <Text style={[styles.gridBrand, { color: colors.secondaryText }]}>
-                      {item.sub_category?.toUpperCase() || item.category?.toUpperCase() || 'BRAND'}
+                      {getCategoryLabel(item, 'BRAND').toUpperCase()}
                     </Text>
                     <Text style={[styles.gridName, { color: colors.text }]} numberOfLines={1}>
                       {item.name}

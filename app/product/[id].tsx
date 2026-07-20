@@ -25,9 +25,10 @@ import { useWishlist } from "@/src/context/WishlistContext";
 import { useMessages } from "@/src/context/MessagesContext";
 import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
+import { CATEGORY_SELECT, getMainCategoryId, getMainCategoryName, WithCategoryEmbed } from "@/src/utils/categoryDisplay";
 import { recommendSize } from "@/src/utils/sizeRecommender";
 
-type Product = Database["public"]["Tables"]["products"]["Row"];
+type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
 type Inventory = Database["public"]["Tables"]["inventory"]["Row"];
 
 const { width } = Dimensions.get("window");
@@ -64,7 +65,7 @@ export default function ProductDetailScreen() {
     const fetchProductAndInventory = async () => {
       try {
         const [productRes, invRes] = await Promise.all([
-          supabase.from("products").select("*").eq("id", id).single(),
+          supabase.from("products").select(`*, ${CATEGORY_SELECT}`).eq("id", id).single(),
           supabase.from("inventory").select("*").eq("product_doc_id", id)
         ]);
 
@@ -248,7 +249,7 @@ export default function ProductDetailScreen() {
           </View>
 
           <Text style={[styles.category, { color: colors.secondaryText }]}>
-            {product.category?.toUpperCase()}
+            {getMainCategoryName(product)?.toUpperCase()}
           </Text>
 
           {/* Description */}
@@ -382,8 +383,8 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
 
           {/* Related Products */}
-          {product.category && (
-            <RelatedProducts category={product.category} currentProductId={product.id} />
+          {getMainCategoryId(product) && (
+            <RelatedProducts mainCategoryId={getMainCategoryId(product)} currentProductId={product.id} />
           )}
 
           {/* Spacer for sticky bottom bar */}

@@ -18,8 +18,9 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { Database } from '@/src/types/database.types';
+import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 
-type Product = Database['public']['Tables']['products']['Row'];
+type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -45,7 +46,7 @@ export default function WishlistScreen() {
       const ids = Array.from(wishlistIds);
       const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select(`*, ${CATEGORY_SELECT}`)
         .in('id', ids)
         .eq('deleted', false);
       if (!error && data) setItems(data);
@@ -88,7 +89,7 @@ export default function WishlistScreen() {
       </View>
       <View style={styles.info}>
         <Text style={[styles.category, { color: colors.secondaryText }]} numberOfLines={1}>
-          {item.sub_category?.toUpperCase() || item.category?.toUpperCase() || 'ITEM'}
+          {getCategoryLabel(item, 'ITEM').toUpperCase()}
         </Text>
         <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
           {item.name}
