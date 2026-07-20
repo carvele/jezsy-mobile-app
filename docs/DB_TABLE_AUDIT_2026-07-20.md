@@ -12,7 +12,7 @@ Row counts at audit time: inventory 78, logs 43, categories 29, stock_movements 
 - **Structure:** 42 columns — the widest table, carrying catalog data, denormalized rating (`rating`, `review_count`), stock (`stock`, `stockbaseline`), soft-delete (`deleted` + `deleted_at`), and dual categorization (`category`/`sub_category` text **and** `category_id` FK).
 - **Issues:**
   - **Dual categorization drift (live hit):** product "Brown Dress" has `category = 'Cocktail & Party'` but `category_id = NULL`. The text columns and the FK can disagree; nothing keeps them in sync. Only 1 row today, but every code path that filters by one or the other will diverge.
-  - **Stock drift (live hit):** "White Dress" has `products.stock = 32` while its `inventory` rows sum to 40. Concrete proof of the dual-stock-source problem (system finding 7).
+  - **Stock drift — CORRECTED 2026-07-20, this was a false positive:** this section originally claimed `products.stock = 32` vs. `inventory` sum `= 40` as a live drift hit. That compared against the wrong inventory field. admin-dashboard's own `syncProductStock()` defines `products.stock` as `sum(inventory.available)`, not `sum(inventory.total)`; White Dress's single inventory row is `total=40, reserved=8, available=32`, so `products.stock=32` was correct all along. No drift existed. A DB trigger (`sync_product_stock`, added in `20260720180000_stock_reconciliation.sql`) now derives `products.stock`/`status` from inventory the same way, so this can no longer drift regardless of which client mutates inventory -- but there was never a bad value to fix. The dual-stock-source *design* (two tables that must stay in sync) was and is a real structural issue; the specific number was not.
   - `price` is nullable with no `CHECK (price >= 0)`; `create_reservation` compensates at runtime by rejecting `price <= 0`, but the constraint belongs on the column.
   - Naming inconsistency within one table: `stockbaseline`, `dateadded` (no underscores) vs `snake_case` everywhere else — Firestore-era imports.
   - `visibility` and `status` are free text (`'public'`, `'Draft'` observed — note the casing mix even here).
@@ -116,7 +116,7 @@ Row counts at audit time: inventory 78, logs 43, categories 29, stock_movements 
 
 ### `stock_movements` (23 rows)
 - **Good:** immutability enforced twice (CHECK `updated_at = created_at` + `prevent_stock_movement_updates` trigger) — the best-hardened table in the schema; fully indexed.
-- **Issue:** `change_type` CHECK allows only `manual_adjustment | restock | correction` — **sales and reservations cannot be recorded**, so the movement ledger can never explain all stock changes (walk-in sales change stock with no movement row). This is why stock drift (White Dress) is undetectable from the ledger.
+- **Issue:** `change_type` CHECK allowed only `manual_adjustment | restock | correction` — sales and reservations could not be recorded, so the movement ledger could never fully explain stock changes (walk-in sales change stock with no movement row). `20260720180000_stock_reconciliation.sql` extended the CHECK to permit `sale`/`reservation`; actually emitting those rows from the sale/reservation code paths is still open (DB_IMPLEMENTATION_PLAN.md Batch 4).
 
 ---
 
@@ -133,7 +133,7 @@ Row counts at audit time: inventory 78, logs 43, categories 29, stock_movements 
 1. `reservations.display_id` UNIQUE (race window, financial document)
 2. `profiles.role` CHECK + NOT NULL DEFAULT (RLS foundation)
 3. Status-value CHECK constraints + one-time casing normalization on `reservations`/`orders` (needs both-app coordination on canonical casing)
-4. `inventory` UNIQUE `(product_doc_id, size)` + non-negative CHECKs; decide the stock source of truth and reconcile "White Dress" (32 vs 40)
+4. `inventory` UNIQUE `(product_doc_id, size)` + non-negative CHECKs; done 2026-07-20. Stock-source-of-truth resolved via a DB trigger deriving `products.stock` from `inventory` (see correction note above -- "White Dress 32 vs 40" was a false positive, not a real drift).
 5. `messages.conversation_id` NOT NULL + index; `conversations.customer_id` unique index if one-thread-per-customer is the model
 6. `reviews` UNIQUE `(product_id, user_id)`
 7. Drop duplicate indexes (`orders`, `wishlists`)
