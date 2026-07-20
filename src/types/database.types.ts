@@ -1408,6 +1408,18 @@ export type Database = {
         Args: { _items: Json; _shipping_address: Json }
         Returns: Json
       }
+      create_reservation: {
+        Args: {
+          _appointment_time: string
+          _color: string
+          _date: string
+          _product_id: string
+          _quantity: number
+          _receipt_path: string
+          _size: string
+        }
+        Returns: Json
+      }
       create_reservations_from_cart: {
         Args: {
           _display_id: string

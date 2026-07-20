@@ -135,13 +135,11 @@ export default function ChatScreen() {
         const fileName = `${Date.now()}.${ext}`;
         const filePath = `${session?.user.id}/${fileName}`;
         
-        // Try to upload to 'products' bucket since it is confirmed to be public and functional
-        // Alternatively we use 'messages' or 'chat_images' but they might not exist/be public
         let publicUrl = '';
-        const { error } = await supabase.storage.from('products').upload(filePath, decode(asset.base64), { contentType: `image/${ext}` });
-        
+        const { error } = await supabase.storage.from('chat-images').upload(filePath, decode(asset.base64), { contentType: `image/${ext}` });
+
         if (!error) {
-          const { data } = supabase.storage.from('products').getPublicUrl(filePath);
+          const { data } = supabase.storage.from('chat-images').getPublicUrl(filePath);
           publicUrl = data.publicUrl;
         }
 
