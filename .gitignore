@@ -33,6 +33,7 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+.mcp.json
 
 # local tooling and editor state
 .agents/

@@ -1,21 +1,23 @@
--- RECONSTRUCTED MIGRATION -- migration-ledger repair, 2026-07-20
+-- ============================================================================
+-- DROP THE INSECURE PROFILE SELF-INSERT POLICY
+-- ============================================================================
+-- Context: 20260719000000 added a policy letting an invited user insert their
+-- own profiles row where role = user_metadata.role. That is unsafe:
+-- user_metadata is writable by the user themselves via auth.updateUser({data}),
+-- so a logged-in customer could set user_metadata.role = 'admin' and self-insert
+-- an admin profile.
 --
--- Exists live (ledger version 20260719010000, name
--- drop_insecure_profile_self_insert) with no file in this repo and no
--- retrievable original SQL. Given the name and its position immediately
--- after add_profile_self_insert_policy, this almost certainly dropped an
--- earlier, more permissive self-insert policy on profiles (e.g. one with no
--- WITH CHECK, or one granted to anon) that predates both the current
--- "Enable insert for authenticated users only" policy and this repo's
--- migration history. Its exact original name/definition could not be
--- recovered -- it is absent from the live database today, which is the
--- effect being preserved here.
+-- Activation now happens in the activate-staff-account edge function under the
+-- service role, reading the role from app_metadata.staff_role (service-role-only,
+-- not user-writable). No client-side profile INSERT is needed anymore, so this
+-- policy is removed entirely.
 --
--- This file is a placeholder documenting that a self-insert policy tighter
--- than "insert for any authenticated user with no id check" was intended,
--- and is idempotent/inert (DROP POLICY IF EXISTS) so it is a safe no-op.
--- No corrective action is taken here.
+-- IDEMPOTENT: DROP ... IF EXISTS
+-- ============================================================================
 
-DROP POLICY IF EXISTS "Enable insert for own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Enable insert for users based on id" ON public.profiles;
+BEGIN;
+
+DROP POLICY IF EXISTS "Invited staff can create their own profile"
+ON public.profiles;
+
+COMMIT;

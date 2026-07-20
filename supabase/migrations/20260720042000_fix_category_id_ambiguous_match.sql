@@ -1,18 +1,31 @@
--- RECONSTRUCTED MIGRATION -- migration-ledger repair, 2026-07-20
+-- ============================================================================
+-- FIX: category_id backfill matched a TOP-LEVEL category instead of its subcategory
+-- ============================================================================
+-- Context: the "Dresses" top-level category has a subcategory also named
+-- "Dresses" (top-level "Dresses" > subcategory "Dresses"). The backfill in
+-- 20260720040000 matched products.sub_category to categories.name without
+-- requiring parent_id IS NOT NULL, so "Little Black Ribbed Dress" and
+-- "Floral Summer Midi Dress" (sub_category = 'Dresses') got category_id set
+-- to the TOP-LEVEL row instead of the subcategory row. Since the inventory
+-- hierarchy UI groups by matching category_id against subcategory ids only,
+-- these 2 products (7 inventory rows) silently vanished from every group.
 --
--- Exists live (ledger version 20260720042000, name
--- fix_category_id_ambiguous_match) with no file in this repo and no
--- retrievable original SQL. Likely a follow-up to
--- 20260720040000_add_products_category_fk.sql / 20260720041000, fixing a
--- backfill that matched products.category (text) to categories.name
--- ambiguously where multiple categories shared a name across different
--- parents.
+-- This repoints category_id to the correct subcategory (parent_id IS NOT NULL)
+-- for any product where it was set to a top-level category by mistake.
 --
--- This is a data-backfill migration and is not reproducible exactly. It is
--- a no-op placeholder for historical completeness: DB_TABLE_AUDIT_2026-07-20
--- found one active product ("Brown Dress") still has category_id NULL
--- despite a non-null category text, so whatever ambiguity this migration
--- fixed did not (or could not) resolve every row -- that gap is tracked as
--- DB_IMPLEMENTATION_PLAN.md Batch 4 item 4c, not fixed here.
+-- IDEMPOTENT: only touches rows where category_id currently points at a
+-- top-level (parent_id IS NULL) category.
+-- ============================================================================
 
-SELECT 1; -- intentional no-op placeholder; see header
+BEGIN;
+
+UPDATE public.products p
+SET category_id = sub.id
+FROM public.categories wrong, public.categories sub
+WHERE p.category_id = wrong.id
+  AND wrong.parent_id IS NULL          -- currently pointing at a top-level row
+  AND sub.parent_id IS NOT NULL        -- the correct target is a subcategory
+  AND sub.name = p.sub_category
+  AND sub.parent_id = wrong.id;        -- under the same top-level category
+
+COMMIT;

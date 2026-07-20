@@ -1,34 +1,39 @@
--- RECONSTRUCTED MIGRATION -- migration-ledger repair, 2026-07-20
+-- ============================================================================
+-- ALLOW INVITED STAFF TO CREATE THEIR OWN PROFILE ROW ON SET-PASSWORD
+-- ============================================================================
+-- Context: The invite flow no longer creates a profiles row when the invite
+-- is sent (create-staff-account only calls auth.admin.inviteUserByEmail).
+-- The row is created client-side, once, on the SetPassword page — the moment
+-- the invited user finishes verifying their email (via the invite link) and
+-- chooses a password. Until then they have a Supabase Auth session but no
+-- profiles row, so they don't appear in Team Management and can't log in.
 --
--- This migration exists live (ledger version 20260719000000, name
--- add_profile_self_insert_policy) but was never committed to this repo.
--- No original SQL text is retrievable from Supabase's migration ledger (it
--- records version/name, not source). This file reconstructs the migration's
--- effect from the LIVE policy definition it is believed to have created,
--- confirmed still present and unchanged today:
---   "Enable insert for authenticated users only" FOR INSERT
---   WITH CHECK (auth.role() = 'authenticated')
+-- Security: role is NOT trusted from the client payload. It must match the
+-- role embedded in user_metadata, which was set server-side (service role)
+-- by create-staff-account at invite time and cannot be forged by the client.
+-- This also blocks self-inserting as 'owner' or 'customer'.
 --
--- This is a best-effort reconstruction for historical/documentation
--- completeness, not a verified copy of the original statements. It is
--- written idempotently (IF NOT EXISTS) so it is a safe no-op if ever
--- re-run; it should not be re-applied to a database where it (or its
--- current live equivalent) already exists.
---
--- NOTE: this policy's WITH CHECK does not verify id = auth.uid(), so any
--- authenticated user can currently INSERT a profiles row for an arbitrary
--- id. Flagged separately as a live finding, not fixed here -- this file's
--- only purpose is to give the live schema state a matching file in git.
+-- IDEMPOTENT: DROP ... IF EXISTS before CREATE
+-- ============================================================================
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policy
-    WHERE polrelid = 'public.profiles'::regclass
-      AND polname = 'Enable insert for authenticated users only'
-  ) THEN
-    CREATE POLICY "Enable insert for authenticated users only"
-      ON public.profiles FOR INSERT
-      WITH CHECK (auth.role() = 'authenticated');
-  END IF;
-END $$;
+BEGIN;
+
+DROP POLICY IF EXISTS "Invited staff can create their own profile"
+ON public.profiles;
+
+CREATE POLICY "Invited staff can create their own profile"
+ON public.profiles FOR INSERT
+TO authenticated
+WITH CHECK (
+  auth.uid() = id
+  AND role IN ('staff', 'admin')
+  AND role = (auth.jwt() -> 'user_metadata' ->> 'role')
+);
+
+COMMIT;
+
+-- ═════════════════════════════════════════════════════════════════════════
+-- ROLLBACK (if needed):
+--
+-- DROP POLICY IF EXISTS "Invited staff can create their own profile" ON public.profiles;
+-- ═════════════════════════════════════════════════════════════════════════

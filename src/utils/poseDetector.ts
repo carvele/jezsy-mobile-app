@@ -2,7 +2,21 @@
  * BlazePose Lite TFLite pose detector wrapper.
  *
  * Wraps react-native-fast-tflite for on-device inference of the
- * BlazePose Lite model. Returns 33 landmarks per frame with confidence.
+ * BlazePose Lite model. The model's raw output is [1, 195] = 39 landmarks
+ * x 5 values (x, y, z, visibility, presence) -- verified directly against
+ * the downloaded assets/models/blazepose_lite.tflite via its FlatBuffer
+ * tensor metadata, not assumed. Landmarks 0-32 are the public pose
+ * landmarks; 33-34 are auxiliary "alignment points" (center + scale/
+ * rotation reference) used only to compute the next frame's tracking ROI
+ * -- see computeRoiFromAlignmentPoints below. Landmarks 35-38 are unused.
+ *
+ * All x/y/z here are in ROI-local normalized [0,1] space, i.e. relative to
+ * whichever square crop was fed into the model that frame -- NOT relative
+ * to the full camera frame. Ratio-based math (extractBodyRatios) is valid
+ * in this space since every landmark in a given inference call shares the
+ * same reference frame. Mapping to full-camera-frame coordinates (needed
+ * only for the debug overlay and for locating the next crop) is handled
+ * by the caller, which knows the ROI's placement in the frame.
  *
  * NOTE: Requires a development build — not available in Expo Go.
  * Place the model file at: assets/models/blazepose_lite.tflite
@@ -16,11 +30,22 @@
  */
 
 export interface Landmark {
-  x: number;      // normalized [0, 1] horizontal position
-  y: number;      // normalized [0, 1] vertical position
+  x: number;      // normalized [0, 1] horizontal position, ROI-local
+  y: number;      // normalized [0, 1] vertical position, ROI-local
   z: number;      // depth (relative, less reliable from single camera)
   visibility: number; // confidence [0, 1]
 }
+
+// Indices of the two auxiliary alignment landmarks within the 39-landmark
+// raw output (verified against mediapipe/modules/pose_landmark's
+// tensors_to_pose_landmarks_and_segmentation.pbtxt SplitNormalizedLandmarkListCalculator
+// config: ranges [0,33) = public landmarks, [33,35) = auxiliary landmarks).
+const AUXILIARY_CENTER_INDEX = 33;
+const AUXILIARY_SCALE_INDEX = 34;
+const TOTAL_RAW_LANDMARKS = 39;
+// RectTransformationCalculator's scale_x/scale_y training margin (same
+// value used by the detector stage in blazePoseAnchors.ts).
+const ROI_MARGIN_SCALE = 1.25;
 
 export interface PoseResult {
   landmarks: Landmark[];   // 33 landmarks
@@ -58,23 +83,77 @@ const REQUIRED_JOINTS = [
   L.leftAnkle, L.rightAnkle,
 ];
 
+function sigmoid(x: number): number {
+  'worklet';
+  return 1 / (1 + Math.exp(-x));
+}
+
 /**
  * Parses raw TFLite output tensor into structured landmarks.
- * BlazePose Lite output: flat float32 array of shape [1, 33, 5]
- * Each landmark: [x, y, z, visibility, presence]
+ * BlazePose Lite output: flat float32 array of shape [1, 39, 5]
+ * Each landmark: [x, y, z, visibility, presence] where x/y are in
+ * 256px ROI-pixel space and visibility/presence are raw logits
+ * (visibility_activation/presence_activation: SIGMOID per the reference
+ * graph -- NOT already-normalized probabilities).
+ *
+ * Returns all 39 raw landmarks (33 public + 6 raw slots, of which only
+ * 33-34 are meaningful auxiliary points); callers needing just the public
+ * pose should slice landmarks.slice(0, 33).
  */
 export function parseLandmarks(outputData: Float32Array): Landmark[] {
+  'worklet';
   const landmarks: Landmark[] = [];
-  for (let i = 0; i < 33; i++) {
+  for (let i = 0; i < TOTAL_RAW_LANDMARKS; i++) {
     const base = i * 5;
     landmarks.push({
-      x: outputData[base],
-      y: outputData[base + 1],
-      z: outputData[base + 2],
-      visibility: Math.min(1, Math.max(0, outputData[base + 3])),
+      x: outputData[base] / 256,
+      y: outputData[base + 1] / 256,
+      z: outputData[base + 2] / 256,
+      visibility: sigmoid(outputData[base + 3]),
     });
   }
   return landmarks;
+}
+
+export interface RoiCircle {
+  centerX: number;
+  centerY: number;
+  size: number; // square side length, same units as the input coordinates
+}
+
+/**
+ * Derives the ROI to use for the *next* frame directly from this frame's
+ * auxiliary alignment landmarks (indices 33/34), avoiding a re-run of the
+ * detector model on every frame -- matching the reference pipeline's
+ * PoseLandmarksToRoi graph (AlignmentPointsRectsCalculator): center = the
+ * first alignment point, size = 2x the distance between the two alignment
+ * points, expanded by the same 1.25x training margin as the detector
+ * stage. Rotation is intentionally not computed (see file header).
+ *
+ * Input landmarks must be in the same coordinate space the caller wants
+ * the returned ROI expressed in. Callers should pass frame-PIXEL-space
+ * landmarks (see frameCropping.roiLocalLandmarksToFramePixels), not
+ * ROI-local or per-axis-normalized coordinates -- mixing x/y deltas from
+ * values normalized independently by frameWidth/frameHeight would distort
+ * this distance calculation whenever the frame isn't square.
+ */
+export function computeRoiFromAlignmentPoints(landmarks: Landmark[]): RoiCircle | null {
+  'worklet';
+  if (landmarks.length <= AUXILIARY_SCALE_INDEX) return null;
+
+  const center = landmarks[AUXILIARY_CENTER_INDEX];
+  const scale = landmarks[AUXILIARY_SCALE_INDEX];
+
+  const dx = scale.x - center.x;
+  const dy = scale.y - center.y;
+  const rawSize = 2 * Math.sqrt(dx * dx + dy * dy);
+  if (rawSize <= 1e-4) return null;
+
+  return {
+    centerX: center.x,
+    centerY: center.y,
+    size: rawSize * ROI_MARGIN_SCALE,
+  };
 }
 
 /**
@@ -84,6 +163,7 @@ export function parseLandmarks(outputData: Float32Array): Landmark[] {
  * - Person occupies at least 50% of frame height
  */
 export function isPoseValid(landmarks: Landmark[]): boolean {
+  'worklet';
   if (landmarks.length < 33) return false;
 
   const allKeyJointsVisible = REQUIRED_JOINTS.every(
@@ -109,6 +189,7 @@ export function isPoseValid(landmarks: Landmark[]): boolean {
  * Computes the overall pose confidence score (0–1).
  */
 export function getPoseConfidence(landmarks: Landmark[]): number {
+  'worklet';
   if (landmarks.length < 33) return 0;
   return (
     REQUIRED_JOINTS.reduce((sum: number, idx: number) => sum + landmarks[idx].visibility, 0) /
@@ -122,6 +203,7 @@ export function getPoseConfidence(landmarks: Landmark[]): number {
  * making them resolution-independent.
  */
 export function extractBodyRatios(landmarks: Landmark[]): BodyRatios {
+  'worklet';
   const lm = landmarks;
 
   // Reference span: nose to avg ankle (in normalized coords)

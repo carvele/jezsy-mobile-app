@@ -84,17 +84,10 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
       if (messageError) throw messageError;
 
-      // 2. Update conversation last message
-      await supabase
-        .from('conversations')
-        .update({
-          last_message: text || (imageUrl ? 'Sent an image' : ''),
-          last_message_time: new Date().toISOString(),
-          // We don't increment unread_count here because we are the sender.
-          // In a real app, a DB trigger would handle unread counts based on recipient.
-        })
-        .eq('id', conversationId);
-
+      // The parent conversation's last_message / last_message_time are updated
+      // atomically by the sync_conversation_on_message DB trigger (see
+      // supabase/migrations/20260720100000_conversation_last_message_trigger.sql),
+      // so no separate client-side conversation update is needed here.
       return message;
     } catch (error) {
       console.error('Error sending message:', error);

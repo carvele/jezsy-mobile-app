@@ -79,6 +79,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return null;
     }
 
+    // The handle_new_user DB trigger already creates a bare profile row
+    // (id/email/role) on signup, so a row normally exists by the time this
+    // runs. Fetch it first: this callback fires on every auth-state change
+    // (including silent token refreshes), and re-seeding names from OAuth
+    // metadata each time would clobber a name the user edited in
+    // profile-setup. Only seed names when they are still empty.
+    const { data: existing } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (existing?.first_name) {
+      setProfile(existing);
+      savePushTokenToProfile(authUser.id);
+      return existing;
+    }
+
     const metadata = authUser.user_metadata ?? {};
     const fullName = (metadata.full_name ?? metadata.name ?? "")
       .toString()
@@ -104,11 +122,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     if (error) {
       console.error("Failed to sync profile", error);
-      setProfile(null);
-      return null;
+      // Fall back to whatever row already existed rather than nulling it out.
+      setProfile(existing ?? null);
+      return existing ?? null;
     }
 
-    const nextProfile = data ?? null;
+    const nextProfile = data ?? existing ?? null;
     setProfile(nextProfile);
     savePushTokenToProfile(authUser.id);
     return nextProfile;

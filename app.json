@@ -43,7 +43,14 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "./plugins/withMlkitManifestFix"
+      "./plugins/withMlkitManifestFix",
+      [
+        "react-native-fast-tflite",
+        {
+          "enableCoreMLDelegate": true,
+          "enableAndroidGpuLibraries": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
