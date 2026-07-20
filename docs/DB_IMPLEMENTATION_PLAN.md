@@ -1,5 +1,36 @@
 # Implementation Plan — Database Reconstruction
 
+> ## STATUS as of 2026-07-20 (end of execution)
+>
+> **Batches 0–5 are complete and applied live**, except the items listed as blocked below. The migration ledger is 1:1 with `supabase/migrations/` (47 files ↔ 47 rows, verified). Every migration has a paired `.rollback.sql`.
+>
+> | Batch | Status |
+> |---|---|
+> | 0 — repo hygiene | Done. PRs #2–#5 were merged by a co-worker mid-execution; audit docs committed. |
+> | 1 — critical security | Done. `devices` true/true policy removed, price-manipulation vector closed, RPC execution locked down. |
+> | 2 — ledger repair | Done, then superseded/merged with a co-worker's parallel consolidation. Ledger now clean. |
+> | 3 — integrity constraints | Done, incl. stock reconciliation via trigger. |
+> | 4 — cross-app repairs | 4a reactions ✅, 4b unread badge ✅, 4c category backfill ✅ (done by co-worker's taxonomy migrations). **4d rental rename — BLOCKED, see below.** |
+> | 5 — hygiene | 5a policy consolidation ✅, 5b FK indexes ✅, 5c storage listing ✅, 5d `updated_at` triggers ✅. **5e, 5f blocked/deferred, see below.** |
+>
+> ### Additional issues found *during* execution and fixed (not in the original audit)
+> - **`profiles` INSERT had no ownership check** (`WITH CHECK auth.role() = 'authenticated'`) — any authenticated user could create a profile row for an arbitrary id. Fixed in `20260720170000`.
+> - **`messages` INSERT allowed cross-conversation injection** — the policy's `sender_id = auth.uid()` disjunct stood alone, letting any user post into a stranger's private conversation. Fixed in `20260720270000`, verified by impersonation test.
+>
+> ### Corrections to the audit reports (findings that turned out to be wrong)
+> - **"White Dress stock drift 32 vs 40" was a false positive** — compared `products.stock` against `sum(inventory.total)` when the app defines it as `sum(available)`. No drift existed.
+> - **"`messages.read_at` is written by nothing" was a false positive** — `markAsRead()` stamps it and the chat screen renders read receipts from it.
+>
+> ### Still open — requires a human
+> 1. **This branch is not merged.** Its original PR (#3) was merged early, so GitHub will not pick up the ~14 commits pushed since. A **new PR against current `main` is required**; `gh pr create` is blocked by the tool-permission classifier in this environment.
+> 2. **4d — `rental_price` → `reservation_price` rename: BLOCKED.** Requires a lockstep change in `admin-dashboard`, which I cannot push to. Renaming unilaterally would break the admin app immediately.
+> 3. **5e — leaked-password protection** is a Supabase *dashboard* setting, not SQL. Must be toggled in Auth settings by hand.
+> 4. **5f — dead-object removal** (`color_options`, `pose_guides`, `suggested_outfits`, `ar_assets`, `create_reservations_from_cart`, `rls_auto_enable`) is destructive and deliberately not executed. Needs an archive export + explicit confirmation.
+> 5. **Two bugs found in `admin-dashboard`** that need fixing in that repo: `uploadChatImage()` still writes to the `avatars` bucket despite its own docstring saying `chat-images` (`communicationService.js:44-48`), and `syncProductStock()` is now redundant (superseded by the `sync_product_stock` DB trigger) though harmless.
+> 6. **Coordinate migrations with your co-worker.** We both independently reconstructed the same phantom migrations on the same day. Agree on a single owner for `supabase/migrations` before the next change.
+
+---
+
 Date: 2026-07-20. Executes the findings in `DB_AUDIT_2026-07-20.md` (system) and `DB_TABLE_AUDIT_2026-07-20.md` (per-table). Ground rules carried over from the audit brief:
 
 - Every change is a **new, additive migration file** with a paired rollback. No existing migration is edited.
