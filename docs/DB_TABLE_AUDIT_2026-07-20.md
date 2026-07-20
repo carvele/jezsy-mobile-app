@@ -71,8 +71,8 @@ Row counts at audit time: inventory 78, logs 43, categories 29, stock_movements 
 
 ### `conversations` (1 row) / `messages` (0 rows)
 - **Issues:**
-  - **`conversations.unread_count` is written by nothing** in either repo; mobile sums it for the Inbox badge → badge is permanently 0. Known issue awaiting admin-app coordination.
-  - **`messages.read_at` is written by nothing** in either repo — dead column, or an unbuilt read-receipts feature.
+  - **`conversations.unread_count` never incremented — FIXED 2026-07-20.** Originally reported as "written by nothing," which was imprecise: mobile *resets* it to 0 in `markAsRead()`, and admin *sets* it to 1 on conversation creation, but nothing ever incremented it, so the Inbox badge was effectively always 0. The "awaiting admin-app coordination" caveat is resolved: admin never *reads* the column (verified by repo search — only two write sites), so it unambiguously means "unread by the customer." `20260720230000_unread_count_trigger.sql` now increments it server-side when the sender is not the conversation's customer, with a BEFORE INSERT guard forcing new conversations to 0 so admin's explicit `unread_count: 1` can't double-count. Verified by a transactional self-test (staff message +1, customer message +0), rolled back with zero side effects.
+  - **`messages.read_at` — CORRECTED 2026-07-20, this was a false positive.** The original claim that it "is written by nothing" was wrong. `MessagesContext.markAsRead()` stamps it (`src/context/MessagesContext.tsx:106-111`) on every message in the conversation not sent by the current user, and `app/messages/[conversationId].tsx:183` renders a read receipt from it. The column is live and in use; it is not dead.
   - **`messages.conversation_id` and `sender_id` are nullable and unindexed** — the chat's primary access path. A message with NULL conversation_id is unreachable garbage; nothing prevents it.
   - `sender_name` denormalized with no sync — stale after profile rename (minor).
   - Admin's reaction feature calls the nonexistent `merge_message_reaction` RPC, and `messages` has **no reactions column** — the feature has no storage (system finding 8).
@@ -138,7 +138,7 @@ Row counts at audit time: inventory 78, logs 43, categories 29, stock_movements 
 6. `reviews` UNIQUE `(product_id, user_id)`
 7. Drop duplicate indexes (`orders`, `wishlists`)
 8. Products: backfill `category_id` (1 row), then deprecate text `category`/`sub_category`
-9. Drop/archive dead tables after confirmation: `color_options`, `pose_guides`, `suggested_outfits`, `ar_assets` (and dead columns `messages.read_at`, `conversations.unread_count` — or build the features)
+9. Drop/archive dead tables after confirmation: `color_options`, `pose_guides`, `suggested_outfits`, `ar_assets`. (`messages.read_at` and `conversations.unread_count` are **not** dead — see the corrections above; both are live and now fully wired.)
 10. FK indexes batch (messages, conversations, inventory, reservations, reviews first)
 
 All of the above are Phase-2 candidates: additive migrations with rollbacks, no live execution without sign-off.
