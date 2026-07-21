@@ -1,3 +1,28 @@
+-- Migration: Add storage and RPC for message reactions
+--
+-- admin-dashboard's Messages.jsx has a working, wired-up emoji-reaction UI
+-- (addReaction() in communicationService.js, called from a real reaction
+-- button) that calls supabase.rpc('merge_message_reaction', ...). That
+-- function has never existed; every reaction click today silently no-ops
+-- (a console.warn, per addReaction's own fallback comment which was never
+-- implemented). messages also has no reactions column, so the feature has
+-- no storage.
+--
+-- Decision: build the missing piece rather than remove the UI. The feature
+-- is already built and staff-facing, not dead code; mobile has no reaction
+-- UI (verified by repo search), so this is purely additive for admin.
+--
+-- Authorization: no bespoke check is added here. messages already has an
+-- UPDATE policy ("Users can update their messages or mark as read") scoped
+-- to conversation participants (customer or admin/owner), which is exactly
+-- the right scope for "can react to a message in this conversation" --
+-- SECURITY INVOKER rides on that existing policy instead of duplicating it.
+--
+-- p_user_id is text, not auth.uid(), to match admin's actual call site
+-- (user?.uid || 'admin') -- it is a display label into the reactions map,
+-- not a permission check; permission is enforced by the UPDATE policy on
+-- the table itself.
+
 ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS reactions jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE OR REPLACE FUNCTION public.merge_message_reaction(

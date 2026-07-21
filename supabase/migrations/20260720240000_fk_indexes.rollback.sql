@@ -1,0 +1,15 @@
+DROP INDEX IF EXISTS public.idx_ar_assets_product_id;
+DROP INDEX IF EXISTS public.idx_ar_sessions_product_id;
+DROP INDEX IF EXISTS public.idx_ar_sessions_user_id;
+DROP INDEX IF EXISTS public.idx_capsule_items_wardrobe_item_id;
+DROP INDEX IF EXISTS public.idx_capsules_user_id;
+DROP INDEX IF EXISTS public.idx_feedback_user_id;
+DROP INDEX IF EXISTS public.idx_logs_user_id;
+DROP INDEX IF EXISTS public.idx_products_created_by;
+DROP INDEX IF EXISTS public.idx_products_updated_by;
+DROP INDEX IF EXISTS public.idx_reservations_assigned_staff_id;
+DROP INDEX IF EXISTS public.idx_reservations_staff_id;
+DROP INDEX IF EXISTS public.idx_reservations_product_id;
+DROP INDEX IF EXISTS public.idx_staff_status_history_staff_id;
+DROP INDEX IF EXISTS public.idx_staff_status_history_changed_by;
+DROP INDEX IF EXISTS public.idx_wardrobe_items_product_id;

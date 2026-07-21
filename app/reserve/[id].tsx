@@ -129,7 +129,7 @@ export default function ReservationScreen() {
     if (!receiptUri) {
       Alert.alert(
         "Incomplete",
-        "Please upload proof of downpayment (at least 50% of the rental fee).",
+        "Please upload proof of downpayment (at least 50% of the reservation fee).",
       );
       return;
     }
@@ -354,7 +354,7 @@ export default function ReservationScreen() {
 
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              Rental Fee
+              Reservation Fee
             </Text>
             <Text style={[styles.rowValue, { color: colors.text }]}>
               ₱{(product.price || 0).toFixed(2)}

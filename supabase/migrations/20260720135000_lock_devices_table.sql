@@ -16,11 +16,14 @@
 --
 -- is_staff_or_admin() already exists (used elsewhere) and includes staff,
 -- unlike is_admin_or_owner().
+--
+-- Discovered while applying this migration: a correctly-scoped policy
+-- ("Enable all access for admin/staff", TO authenticated, USING/WITH CHECK
+-- is_staff_or_admin()) already existed on this table, from one of the
+-- untracked live migrations identified in DB_AUDIT_2026-07-20.md finding 3d.
+-- RLS policies OR together, so the true/true policy silently made that
+-- correct policy meaningless. No new policy is created here -- the fix is
+-- simply removing the permissive one and letting the pre-existing correct
+-- policy govern access.
 
 DROP POLICY IF EXISTS "Enable upsert for authenticated users" ON public.devices;
-
-CREATE POLICY "Enable all access for staff or admin"
-  ON public.devices
-  FOR ALL
-  USING (is_staff_or_admin())
-  WITH CHECK (is_staff_or_admin());
