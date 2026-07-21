@@ -97,21 +97,41 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
           <View style={[styles.ordersContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <TouchableOpacity style={styles.orderStatus} onPress={() => router.push('/reservations')}>
-              <IconSymbol name="calendar" size={24} color={colors.icon} />
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=pending')}
+              accessibilityRole="button"
+              accessibilityLabel="View pending reservations"
+            >
+              <IconSymbol name="clock.arrow.circlepath" size={24} color={colors.icon} />
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Pending</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.orderStatus} onPress={() => router.push('/reservations')}>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=confirmed')}
+              accessibilityRole="button"
+              accessibilityLabel="View confirmed reservations"
+            >
               <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Confirmed</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.orderStatus} onPress={() => router.push('/reservations')}>
-              <IconSymbol name="clock.arrow.circlepath" size={24} color={colors.icon} />
-              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Active</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.orderStatus} onPress={() => router.push('/reservations')}>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=completed')}
+              accessibilityRole="button"
+              accessibilityLabel="View completed reservations"
+            >
               <IconSymbol name="star" size={24} color={colors.icon} />
-              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>To Rate</Text>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Completed</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=cancelled')}
+              accessibilityRole="button"
+              accessibilityLabel="View cancelled reservations"
+            >
+              <IconSymbol name="xmark.circle" size={24} color={colors.icon} />
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Cancelled</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -131,12 +151,11 @@ export default function ProfileScreen() {
               'Height, Weight, Fit preferences',
               () => router.push('/profile/measurements'),
             )}
-            {renderSettingItem('gear', 'Account Settings', 'Privacy, Security, Address', () =>
-              Alert.alert('Account Settings', 'Account settings screen coming soon.'))}
-            {renderSettingItem('bell', 'Notifications', 'Push alerts, Emails', () => router.push('/(tabs)/messages'))}
-            {renderSettingItem('questionmark.circle', 'Help Center', 'FAQ, Contact Us', () => {
-              router.push('/(tabs)/messages');
-            })}
+            {renderSettingItem('gear', 'Account Settings', 'Coming soon', () =>
+              Alert.alert('Account Settings', 'Account settings are coming in a future update.'))}
+            {renderSettingItem('bell', 'Notifications', 'Coming soon', () =>
+              Alert.alert('Notifications', 'Notification preferences are coming in a future update.'))}
+            {renderSettingItem('questionmark.circle', 'Help Center', 'Message us in your Inbox', () => router.push('/(tabs)/messages'))}
           </View>
         </View>
 

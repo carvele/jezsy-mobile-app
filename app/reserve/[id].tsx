@@ -250,10 +250,12 @@ export default function ReservationScreen() {
           ]}
         >
           <Image
-            source={{
-              uri: product.image_url || "https://via.placeholder.com/150",
-            }}
-            style={styles.productImage}
+            source={
+              product.image_url
+                ? { uri: product.image_url }
+                : require("@/assets/images/partial-react-logo.png")
+            }
+            style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]}
             contentFit="cover"
           />
           <View style={styles.productInfo}>
@@ -403,13 +405,13 @@ export default function ReservationScreen() {
           </TouchableOpacity>
           {receiptUri ? (
             <View style={styles.receiptStatus}>
-              <IconSymbol name="checkmark.circle.fill" size={16} color="#06D6A0" />
-              <Text style={[styles.receiptStatusText, { color: '#06D6A0' }]}>Receipt uploaded</Text>
+              <IconSymbol name="checkmark.circle.fill" size={16} color={colors.success} />
+              <Text style={[styles.receiptStatusText, { color: colors.success }]}>Receipt uploaded</Text>
             </View>
           ) : (
             <View style={styles.receiptStatus}>
-              <IconSymbol name="exclamationmark.circle" size={16} color="#FFB703" />
-              <Text style={[styles.receiptStatusText, { color: '#FFB703' }]}>Receipt required to confirm reservation</Text>
+              <IconSymbol name="exclamationmark.circle" size={16} color={colors.warning} />
+              <Text style={[styles.receiptStatusText, { color: colors.warning }]}>Receipt required to confirm reservation</Text>
             </View>
           )}
         </View>
@@ -477,7 +479,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 32,
   },
-  productImage: { width: 100, height: 120, backgroundColor: "#2A2A2A" },
+  productImage: { width: 100, height: 120 },
   productInfo: { flex: 1, padding: 16, justifyContent: "center" },
   productName: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
   productDetails: { fontSize: 14, marginBottom: 8 },
