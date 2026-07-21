@@ -34,6 +34,12 @@ const CATEGORIES = [
   'Sequin & Sparkle', 'Suits & Tuxedos', 'Tuxedos', 'Veils & Tiaras', 'Wedding Gowns'
 ];
 
+// Basic garment bucket, distinct from the boutique Category above -- powers
+// gap analysis and outfit-slot filtering, which need a small fixed vocabulary
+// rather than the long boutique category list.
+const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'] as const;
+type GarmentType = (typeof GARMENT_TYPES)[number];
+
 // Colors fetched from DB
 const COLORS = [
   { name: 'Black', hex: '#000000' },
@@ -57,6 +63,7 @@ export default function AddWardrobeItemScreen() {
   const [isProcessingBg, setIsProcessingBg] = useState<boolean>(false);
   
   const [category, setCategory] = useState<string>('Evening Wear');
+  const [garmentType, setGarmentType] = useState<GarmentType | null>(null);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [subCategory, setSubCategory] = useState<string>('');
   const [removeBg, setRemoveBg] = useState<boolean>(true);
@@ -166,6 +173,10 @@ export default function AddWardrobeItemScreen() {
       Alert.alert('No Image', 'Please select or capture a photo first.');
       return;
     }
+    if (!garmentType) {
+      Alert.alert('Missing Type', 'Please choose a garment type (Top, Bottom, etc.) so it can be included in wardrobe insights.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -202,6 +213,7 @@ export default function AddWardrobeItemScreen() {
       const { error: dbError } = await supabase.from('wardrobe_items').insert({
         user_id: session.user.id,
         category,
+        garment_type: garmentType,
         sub_category: subCategory.trim() || null,
         image_url: publicUrl,
         color_tags: selectedColors,
@@ -284,6 +296,32 @@ export default function AddWardrobeItemScreen() {
             />
           </View>
 
+          {/* Garment Type -- basic bucket used for wardrobe insights/gap analysis */}
+          <View style={styles.formRow}>
+            <Text style={[styles.label, { color: colors.text }]}>Type</Text>
+            <View style={styles.chipWrapRow}>
+              {GARMENT_TYPES.map((type) => {
+                const isSelected = garmentType === type;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.chip,
+                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
+                    ]}
+                    onPress={() => setGarmentType(type)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                  >
+                    <Text style={[styles.chipText, { color: isSelected ? '#0D0D0D' : colors.text }]}>
+                      {type}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Category Dropdown/Selector */}
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Category</Text>
@@ -360,9 +398,9 @@ export default function AddWardrobeItemScreen() {
 
         {/* Action Button */}
         <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: colors.tint, opacity: imageUri && !saving ? 1 : 0.6 }]}
+          style={[styles.saveButton, { backgroundColor: colors.tint, opacity: imageUri && garmentType && !saving ? 1 : 0.6 }]}
           onPress={handleSave}
-          disabled={!imageUri || saving}
+          disabled={!imageUri || !garmentType || saving}
         >
           {saving ? (
             <View style={styles.loadingRow}>
@@ -496,6 +534,12 @@ const styles = StyleSheet.create({
   chipRow: {
     paddingVertical: 4,
     gap: 8,
+  },
+  chipWrapRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
   },
   chip: {
     paddingHorizontal: 16,

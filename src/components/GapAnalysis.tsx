@@ -18,27 +18,39 @@ export function GapAnalysis({ items }: GapAnalysisProps) {
   const router = useRouter();
 
   const analysis = useMemo(() => {
+    // Bucket by garment_type (Top/Bottom/Dress/Outerwear/Shoes/Accessory),
+    // not the free-text boutique `category` -- those are two different
+    // fields (e.g. category might be "Evening Wear", garment_type "Dress").
+    // Items added before garment_type existed fall into 'Uncategorized'.
     const counts: Record<string, number> = {
       'Top': 0,
       'Bottom': 0,
+      'Dress': 0,
       'Outerwear': 0,
       'Shoes': 0,
       'Accessory': 0,
+      'Uncategorized': 0,
     };
 
     items.forEach(item => {
-      const cat = item.category || 'Other';
-      if (counts[cat] !== undefined) {
-        counts[cat]++;
+      const type = item.garment_type || 'Uncategorized';
+      if (counts[type] !== undefined) {
+        counts[type]++;
+      } else {
+        counts['Uncategorized']++;
       }
     });
 
+    // A dress covers "top+bottom" for outfit-completeness purposes.
+    const hasTopHalf = counts['Top'] > 0 || counts['Dress'] > 0;
+    const hasBottomHalf = counts['Bottom'] > 0 || counts['Dress'] > 0;
+
     const gaps = [];
-    if (counts['Top'] > 0 && counts['Bottom'] === 0) {
-      gaps.push({ message: "You have tops but no bottoms.", suggest: "Bottom" });
+    if (hasTopHalf && counts['Bottom'] === 0 && counts['Dress'] === 0) {
+      gaps.push({ message: "You have tops but no bottoms or dresses.", suggest: "Bottom" });
     }
-    if (counts['Bottom'] > 0 && counts['Top'] === 0) {
-      gaps.push({ message: "You have bottoms but no tops.", suggest: "Top" });
+    if (hasBottomHalf && counts['Top'] === 0 && counts['Dress'] === 0) {
+      gaps.push({ message: "You have bottoms but no tops or dresses.", suggest: "Top" });
     }
     if (items.length > 5 && counts['Outerwear'] === 0) {
       gaps.push({ message: "Missing outerwear for layering.", suggest: "Outerwear" });
@@ -68,13 +80,21 @@ export function GapAnalysis({ items }: GapAnalysisProps) {
       </View>
 
       <View style={styles.statsRow}>
-        {Object.entries(analysis.counts).filter(([_, count]) => count > 0).map(([cat, count]) => (
-          <View key={cat} style={styles.statChip}>
-            <Text style={[styles.statValue, { color: colors.tint }]}>{count}</Text>
-            <Text style={[styles.statLabel, { color: colors.secondaryText }]}>{cat}s</Text>
-          </View>
-        ))}
+        {Object.entries(analysis.counts)
+          .filter(([cat, count]) => count > 0 && cat !== 'Uncategorized')
+          .map(([cat, count]) => (
+            <View key={cat} style={styles.statChip}>
+              <Text style={[styles.statValue, { color: colors.tint }]}>{count}</Text>
+              <Text style={[styles.statLabel, { color: colors.secondaryText }]}>{cat}s</Text>
+            </View>
+          ))}
       </View>
+
+      {analysis.counts['Uncategorized'] > 0 && (
+        <Text style={[styles.uncategorizedNote, { color: colors.secondaryText }]}>
+          {analysis.counts['Uncategorized']} item{analysis.counts['Uncategorized'] !== 1 ? 's' : ''} missing a type and left out of insights above -- edit them to add one.
+        </Text>
+      )}
 
       {analysis.gaps.length > 0 && (
         <View style={styles.gapsContainer}>
@@ -139,6 +159,11 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     marginTop: 4,
+  },
+  uncategorizedNote: {
+    fontSize: 12,
+    marginBottom: 16,
+    fontStyle: 'italic',
   },
   gapsContainer: {
     borderTopWidth: 1,

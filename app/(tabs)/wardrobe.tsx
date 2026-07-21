@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -79,29 +80,39 @@ export default function WardrobeScreen() {
     }
   }, [session?.user?.id]);
 
-  useEffect(() => {
-    fetchWardrobeData();
-  }, [fetchWardrobeData]);
-
-  // Re-fetch when focusing screen to pick up new outfits
-  // Since we don't have useFocusEffect readily imported, we can add a listener or just rely on navigating back, but router.back() might not trigger useEffect.
-  // Actually, we can just rely on the effect and manual refresh.
+  // useFocusEffect covers both the initial mount and re-focusing after
+  // returning from item/outfit/capsule detail screens, so changes there
+  // (log a wear, delete an item, add a capsule) show up immediately.
+  useFocusEffect(
+    useCallback(() => {
+      fetchWardrobeData();
+    }, [fetchWardrobeData])
+  );
 
   const renderItem = useCallback(({ item }: { item: WardrobeItem }) => {
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => item.product_id ? router.push(`/product/${item.product_id}`) : null}
+        onPress={() => router.push(`/wardrobe/item/${item.id}` as any)}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.garment_type || item.category || 'Item'}, ${item.wear_count > 0 ? `worn ${item.wear_count} times` : 'never worn'}`}
       >
-        <Image 
-          source={{ uri: item.image_url || 'https://via.placeholder.com/300' }} 
-          style={styles.itemImage} 
-          contentFit="cover"
-        />
+        <View>
+          <Image
+            source={{ uri: item.image_url || undefined }}
+            style={[styles.itemImage, { backgroundColor: colors.surface }]}
+            contentFit="cover"
+          />
+          <View style={[styles.wearBadge, { backgroundColor: item.wear_count > 0 ? 'rgba(0,0,0,0.6)' : colors.tint }]}>
+            <Text style={[styles.wearBadgeText, { color: item.wear_count > 0 ? '#fff' : '#0D0D0D' }]}>
+              {item.wear_count > 0 ? `Worn ${item.wear_count}x` : 'Never worn'}
+            </Text>
+          </View>
+        </View>
         <View style={styles.itemInfo}>
           <Text style={[styles.itemCategory, { color: colors.secondaryText }]}>
-            {item.category || 'Clothing'}
+            {item.garment_type || item.category || 'Clothing'}
           </Text>
         </View>
       </TouchableOpacity>
@@ -113,9 +124,12 @@ export default function WardrobeScreen() {
     const outfitItems: any[] = Array.isArray(item.items) ? item.items : [];
     
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.outfitCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         activeOpacity={0.8}
+        onPress={() => router.push(`/wardrobe/outfit/${item.id}` as any)}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name || 'Outfit'}, ${outfitItems.length} items`}
       >
         <View style={styles.outfitHeader}>
           <Text style={[styles.outfitName, { color: colors.text }]}>{item.name}</Text>
@@ -135,17 +149,25 @@ export default function WardrobeScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, [colors]);
+  }, [colors, router]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.tint }]}>Digital Wardrobe</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.addButton, { backgroundColor: colors.tint }]}
-          onPress={() => router.push('/wardrobe/add-item')}
+          onPress={() =>
+            activeTab === 'capsules'
+              ? router.push('/wardrobe/create-capsule' as any)
+              : activeTab === 'outfits'
+                ? router.push('/outfit-builder')
+                : router.push('/wardrobe/add-item')
+          }
           accessibilityRole="button"
-          accessibilityLabel="Add wardrobe item"
+          accessibilityLabel={
+            activeTab === 'capsules' ? 'Create capsule' : activeTab === 'outfits' ? 'Create outfit' : 'Add wardrobe item'
+          }
         >
           <IconSymbol name="plus" size={20} color="#0D0D0D" />
         </TouchableOpacity>
@@ -222,13 +244,37 @@ export default function WardrobeScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
           {capsules.length > 0 ? (
-            capsules.map(capsule => (
-              <CapsuleCard key={capsule.id} capsule={capsule} onPress={() => {}} />
-            ))
+            <>
+              {capsules.map(capsule => (
+                <CapsuleCard
+                  key={capsule.id}
+                  capsule={capsule}
+                  onPress={() => router.push(`/wardrobe/capsule/${capsule.id}` as any)}
+                />
+              ))}
+              <TouchableOpacity
+                style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
+                onPress={() => router.push('/wardrobe/create-capsule' as any)}
+              >
+                <IconSymbol name="plus" size={20} color="#0D0D0D" />
+                <Text style={styles.createOutfitBtnText}>Create New Capsule</Text>
+              </TouchableOpacity>
+            </>
           ) : (
             <View style={styles.emptyState}>
-              <IconSymbol name="archivebox" size={48} color={colors.secondaryText} />
-              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No capsules yet.</Text>
+              <View style={[styles.iconContainer, { backgroundColor: colors.card }]}>
+                <IconSymbol name="archivebox" size={56} color={colors.icon} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Capsules Yet</Text>
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                Build a focused capsule collection for a season, trip, or purpose from your wardrobe items.
+              </Text>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: colors.tint }]}
+                onPress={() => router.push('/wardrobe/create-capsule' as any)}
+              >
+                <Text style={styles.actionButtonText}>Create First Capsule</Text>
+              </TouchableOpacity>
             </View>
           )}
         </ScrollView>
@@ -306,7 +352,18 @@ const styles = StyleSheet.create({
   itemImage: {
     width: '100%',
     height: 180,
-    backgroundColor: '#2A2A2A',
+  },
+  wearBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  wearBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   itemInfo: {
     padding: 12,
