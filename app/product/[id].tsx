@@ -252,6 +252,17 @@ export default function ProductDetailScreen() {
             {getMainCategoryName(product)?.toUpperCase()}
           </Text>
 
+          {/* Message Seller Button */}
+          <TouchableOpacity
+            style={[styles.messageButton, { borderColor: colors.tint }]}
+            onPress={handleMessageSeller}
+            accessibilityRole="button"
+            accessibilityLabel="Ask the shop owner a question about this item"
+          >
+            <IconSymbol name="envelope.fill" size={20} color={colors.tint} />
+            <Text style={[styles.messageButtonText, { color: colors.tint }]}>Ask a Question about this item</Text>
+          </TouchableOpacity>
+
           {/* Description */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Description</Text>
@@ -372,15 +383,6 @@ export default function ProductDetailScreen() {
 
           {/* Customer Reviews & Ratings */}
           <ReviewsList productId={product.id} />
-
-          {/* Message Seller Button */}
-          <TouchableOpacity 
-            style={[styles.messageButton, { borderColor: colors.tint }]} 
-            onPress={handleMessageSeller}
-          >
-            <IconSymbol name="envelope.fill" size={20} color={colors.tint} />
-            <Text style={[styles.messageButtonText, { color: colors.tint }]}>Ask a Question about this item</Text>
-          </TouchableOpacity>
 
           {/* Related Products */}
           {getMainCategoryId(product) && (
