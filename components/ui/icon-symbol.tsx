@@ -62,6 +62,7 @@ const MAPPING = {
   // User & Profile
   'person.fill': 'person',
   'lock.fill': 'lock',
+  'eye.fill': 'visibility',
   'eye.slash.fill': 'visibility-off',
   'gear': 'settings',
   'questionmark.circle': 'help-outline',

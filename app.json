@@ -43,6 +43,7 @@
       ],
       "expo-font",
       "expo-web-browser",
+      "expo-notifications",
       "./plugins/withMlkitManifestFix",
       [
         "react-native-mediapipe-posedetection",

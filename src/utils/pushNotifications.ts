@@ -17,58 +17,56 @@ export async function registerForPushNotificationsAsync(): Promise<
   let Notifications: any;
   let Platform: any;
 
-  // Lazily import native modules so they never load in Expo Go.
-  // Wrapped in try/catch so a failed dynamic import doesn't crash the whole function.
+  // Everything below touches native modules (notification channels, device
+  // info, permissions). None of it may ever be allowed to throw out of this
+  // function: it runs fire-and-forget from the login/session-sync path, and
+  // an uncaught rejection there must never be able to block or degrade login.
   try {
+    // Lazily import native modules so they never load in Expo Go.
     const deviceModule = await import("expo-device");
     Device = deviceModule.default;
     Notifications = await import("expo-notifications");
     const rnModule = await import("react-native");
     Platform = rnModule.Platform;
-  } catch (importErr) {
-    console.error("Push notification module import failed:", importErr);
-    return null;
-  }
 
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
-
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#C9A96E",
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
     });
-  }
 
-  // Guard: Device module may be undefined if import failed unexpectedly
-  if (!Device || !Device.isDevice) {
-    console.log("Must use physical device for Push Notifications");
-    return null;
-  }
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "default",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#C9A96E",
+      });
+    }
 
-  const permission = (await Notifications.getPermissionsAsync()) as any;
-  let finalStatus = permission.status;
+    // Guard: Device module may be undefined if import failed unexpectedly
+    if (!Device || !Device.isDevice) {
+      console.log("Must use physical device for Push Notifications");
+      return null;
+    }
 
-  if (finalStatus !== "granted") {
-    const request = (await Notifications.requestPermissionsAsync()) as any;
-    finalStatus = request.status;
-  }
+    const permission = (await Notifications.getPermissionsAsync()) as any;
+    let finalStatus = permission.status;
 
-  if (finalStatus !== "granted") {
-    console.log("Failed to get push token for push notification!");
-    return null;
-  }
+    if (finalStatus !== "granted") {
+      const request = (await Notifications.requestPermissionsAsync()) as any;
+      finalStatus = request.status;
+    }
 
-  try {
+    if (finalStatus !== "granted") {
+      console.log("Failed to get push token for push notification!");
+      return null;
+    }
+
     const projectId =
       Constants?.expoConfig?.extra?.eas?.projectId ??
       (Constants as any)?.easConfig?.projectId;
@@ -77,7 +75,7 @@ export async function registerForPushNotificationsAsync(): Promise<
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
     return data;
   } catch (e) {
-    console.log("Error getting push token: ", e);
+    console.log("Push notification registration failed (non-fatal):", e);
     return null;
   }
 }

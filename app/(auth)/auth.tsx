@@ -18,6 +18,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
 import { Colors } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
@@ -326,7 +327,9 @@ export default function AuthScreen() {
         return;
       }
 
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail);
+      const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: Linking.createURL('reset-password'),
+      });
 
       if (error) throw error;
 
