@@ -1,16 +1,18 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Camera,
   useCameraDevice,
   useCameraPermission,
-  useFrameProcessor,
 } from "react-native-vision-camera";
-import { useResizePlugin } from "vision-camera-resize-plugin";
-import { useSharedValue, useRunOnJS } from "react-native-worklets-core";
-import { useTensorflowModel } from "react-native-fast-tflite";
+import {
+  usePoseDetection,
+  RunningMode,
+  Delegate,
+  type PoseDetectionResultBundle,
+} from "react-native-mediapipe-posedetection";
 import * as Speech from "expo-speech";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -23,34 +25,16 @@ import {
   isPoseValid,
   getPoseConfidence,
   extractBodyRatios,
-  computeRoiFromAlignmentPoints,
   type Landmark,
 } from "@/src/utils/poseDetector";
-import {
-  computeCenterSquareCrop,
-  roiLocalLandmarksToFramePixels,
-  pixelRoiToClampedCropRect,
-  type CropRect,
-} from "@/src/utils/frameCropping";
-import {
-  runDetector,
-  runLandmarks,
-  generateBlazePoseAnchors,
-} from "@/src/utils/poseInference";
 import { computeMeasurements, type Gender } from "@/src/utils/measurementCalculator";
 import { BurstCollector } from "@/src/utils/burstAverager";
 
-const DETECTOR_INPUT = 224;
-const LANDMARK_INPUT = 256;
-// Throttle inference to protect against thermal throttling on mid-range devices;
-// the burst collector only needs a handful of good frames.
-const MIN_FRAME_INTERVAL_MS = 120;
-
-// CPU (default) delegate. GPU delegates (core-ml on iOS, android-gpu on
-// Android) are a device-tuning follow-up: an unsupported delegate fails the
-// whole model load, so correctness-first we run on CPU and only opt into GPU
-// once validated per-platform on real hardware.
-const modelDelegates: never[] = [];
+// CPU (default) delegate. GPU delegate is a device-tuning follow-up: an
+// unsupported delegate fails the whole model load, so correctness-first we
+// run on CPU and only opt into GPU once validated per-platform on real
+// hardware (same rationale as the original tflite pipeline this replaced).
+const POSE_DELEGATE = Delegate.CPU;
 
 export default function BodyScanScreen() {
   const theme = useColorScheme() ?? "dark";
@@ -72,31 +56,16 @@ export default function BodyScanScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [overlayLandmarks, setOverlayLandmarks] = useState<Landmark[]>([]);
   const [progress, setProgress] = useState(0);
+  const [modelError, setModelError] = useState(false);
 
   const lastSpokenRef = useRef<string>("");
-  const isTiltValidShared = useSharedValue(false);
-  const isCapturingShared = useSharedValue(false);
+  // Mirrors isTiltValid/isCapturing into refs so the onResults callback
+  // (fired per-frame, outside React's render cycle) always reads the latest
+  // value without needing to be recreated every render.
+  const isTiltValidRef = useRef(false);
+  const isCapturingRef = useRef(false);
 
-  // ML models (loaded lazily; require() paths resolved by metro's tflite asset ext)
-  const detector = useTensorflowModel(
-    require("../../assets/models/pose_detection.tflite"),
-    modelDelegates
-  );
-  const landmarkModel = useTensorflowModel(
-    require("../../assets/models/blazepose_lite.tflite"),
-    modelDelegates
-  );
-
-  const { resize } = useResizePlugin();
-
-  // Anchor set is static; build once on JS thread and share into the worklet.
-  const anchors = useMemo(() => generateBlazePoseAnchors(), []);
-
-  // Tracking ROI (frame-pixel crop) carried between frames. null => run detector.
-  const trackingRoi = useSharedValue<CropRect | null>(null);
-  const lastInferenceTs = useSharedValue(0);
-
-  // Burst collector persists across frames on the JS thread.
+  // Burst collector persists across frames.
   const burstRef = useRef(new BurstCollector());
 
   useEffect(() => {
@@ -117,8 +86,8 @@ export default function BodyScanScreen() {
   }, [consentGranted, hasPermission]);
 
   useEffect(() => {
-    isTiltValidShared.value = isTiltValid;
-  }, [isTiltValid, isTiltValidShared]);
+    isTiltValidRef.current = isTiltValid;
+  }, [isTiltValid]);
 
   const speakIfNew = useCallback((text: string) => {
     if (lastSpokenRef.current === text) return;
@@ -132,7 +101,7 @@ export default function BodyScanScreen() {
       // Not enough valid frames; reset and let the user retry.
       burstRef.current.reset();
       setIsCapturing(false);
-      isCapturingShared.value = false;
+      isCapturingRef.current = false;
       setProgress(0);
       speakIfNew("Could not read your measurements clearly. Please reposition and try again.");
       lastSpokenRef.current = "";
@@ -146,27 +115,41 @@ export default function BodyScanScreen() {
       pathname: "/profile/measurements",
       params: { scanned: "true", scanData: JSON.stringify(result), height, weight, gender },
     });
-  }, [router, height, weight, gender, isCapturingShared, speakIfNew]);
+  }, [router, height, weight, gender, speakIfNew]);
 
-  // Called from the frame-processor worklet (via useRunOnJS) once per processed frame.
-  const onFrameResult = useRunOnJS(
-    (landmarks: Landmark[], valid: boolean, confidence: number) => {
-      // Only draw the 33 public landmarks in the overlay.
+  const handleResults = useCallback(
+    (result: PoseDetectionResultBundle) => {
+      const pose = result.results[0]?.landmarks?.[0];
+      if (!pose || pose.length < 33) {
+        setOverlayLandmarks([]);
+        return;
+      }
+
+      // Normalize the library's optional visibility/presence into our
+      // required-visibility Landmark shape; fall back to presence, then 0.
+      const landmarks: Landmark[] = pose.map((p) => ({
+        x: p.x,
+        y: p.y,
+        z: p.z,
+        visibility: p.visibility ?? p.presence ?? 0,
+      }));
+
       setOverlayLandmarks(landmarks.slice(0, 33));
 
-      if (!isTiltValidShared.value) {
+      if (!isTiltValidRef.current) {
         // Keep the tilt guidance loop in charge until the phone is upright.
         return;
       }
 
+      const valid = isPoseValid(landmarks);
       if (!valid) {
-        if (!isCapturingShared.value) speakIfNew("Make sure your whole body is in frame.");
+        if (!isCapturingRef.current) speakIfNew("Make sure your whole body is in frame.");
         return;
       }
 
       // Pose is valid: enter/continue the capture burst.
-      if (!isCapturingShared.value) {
-        isCapturingShared.value = true;
+      if (!isCapturingRef.current) {
+        isCapturingRef.current = true;
         setIsCapturing(true);
         speakIfNew("Hold still, scanning now.");
       }
@@ -186,102 +169,26 @@ export default function BodyScanScreen() {
         finishScan();
       }
     },
-    [height, weight, gender, isTiltValidShared, isCapturingShared, speakIfNew, finishScan]
+    [height, weight, gender, speakIfNew, finishScan]
   );
 
-  const frameProcessor = useFrameProcessor(
-    (frame) => {
-      "worklet";
-      if (isCapturingShared.value === false && isTiltValidShared.value === false) {
-        // Don't burn cycles on inference while the user is still leveling the phone.
-        return;
-      }
-
-      const now = Date.now();
-      if (now - lastInferenceTs.value < MIN_FRAME_INTERVAL_MS) return;
-      lastInferenceTs.value = now;
-
-      if (detector.state !== "loaded" || landmarkModel.state !== "loaded") return;
-
-      const frameW = frame.width;
-      const frameH = frame.height;
-
-      // Resolve the ROI to feed the landmark model. If we don't have a
-      // tracking ROI yet, run the detector on a center-square crop first.
-      let roiCrop = trackingRoi.value;
-      if (roiCrop == null) {
-        const squareCrop = computeCenterSquareCrop(frameW, frameH);
-        const detectorInput = resize(frame, {
-          crop: squareCrop,
-          scale: { width: DETECTOR_INPUT, height: DETECTOR_INPUT },
-          pixelFormat: "rgb",
-          dataType: "float32",
-        });
-        const detection = runDetector(detector.model, detectorInput, anchors);
-        if (detection == null) {
-          return;
-        }
-        // Detection is normalized within the square crop; map to frame pixels.
-        const centerX = squareCrop.x + detection.centerX * squareCrop.width;
-        const centerY = squareCrop.y + detection.centerY * squareCrop.height;
-        const sizePx = detection.size * squareCrop.width;
-        roiCrop = pixelRoiToClampedCropRect(
-          { centerX, centerY, size: sizePx },
-          frameW,
-          frameH
-        );
-      }
-
-      // Landmark stage on the ROI crop.
-      const landmarkInput = resize(frame, {
-        crop: roiCrop,
-        scale: { width: LANDMARK_INPUT, height: LANDMARK_INPUT },
-        pixelFormat: "rgb",
-        dataType: "float32",
-      });
-      const result = runLandmarks(landmarkModel.model, landmarkInput);
-      if (result == null || !result.posePresent) {
-        // Lost the pose: drop the tracking ROI so the next frame re-detects.
-        trackingRoi.value = null;
-        return;
-      }
-
-      const roiLocalLandmarks = result.landmarks;
-
-      // Map landmarks into frame-pixel space for tracking + overlay math.
-      const framePixelLandmarks = roiLocalLandmarksToFramePixels(roiLocalLandmarks, roiCrop);
-
-      // Next-frame ROI from auxiliary alignment points (indices 33/34),
-      // computed in frame-pixel space.
-      const nextRoi = computeRoiFromAlignmentPoints(framePixelLandmarks as unknown as Landmark[]);
-      if (nextRoi != null) {
-        trackingRoi.value = pixelRoiToClampedCropRect(
-          { centerX: nextRoi.centerX, centerY: nextRoi.centerY, size: nextRoi.size },
-          frameW,
-          frameH
-        );
-      } else {
-        trackingRoi.value = null;
-      }
-
-      // Validity + confidence use ROI-local landmarks (uniform square space,
-      // safe for the ratio/visibility checks). extractBodyRatios (on the JS
-      // side) likewise runs on ROI-local landmarks.
-      const publicLandmarks = roiLocalLandmarks.slice(0, 33);
-      const valid = isPoseValid(publicLandmarks);
-      const confidence = getPoseConfidence(publicLandmarks);
-
-      // Build frame-normalized landmarks for the overlay (per-axis normalization
-      // is fine here -- overlay renders each point independently).
-      const overlay: Landmark[] = [];
-      for (let i = 0; i < framePixelLandmarks.length; i++) {
-        const p = framePixelLandmarks[i];
-        overlay.push({ x: p.x / frameW, y: p.y / frameH, z: p.z, visibility: p.visibility });
-      }
-
-      onFrameResult(overlay, valid, confidence);
+  const poseDetection = usePoseDetection(
+    {
+      onResults: handleResults,
+      onError: (error) => {
+        console.error("Pose detection error:", error?.message);
+        setModelError(true);
+      },
     },
-    [detector, landmarkModel, resize, anchors, onFrameResult]
+    RunningMode.LIVE_STREAM,
+    "pose_landmarker_lite.task",
+    {
+      numPoses: 1,
+      minPoseDetectionConfidence: 0.5,
+      minPosePresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+      delegate: POSE_DELEGATE,
+    }
   );
 
   const handleConsentAccept = async () => {
@@ -346,16 +253,13 @@ export default function BodyScanScreen() {
     );
   }
 
-  const modelsLoading = detector.state === "loading" || landmarkModel.state === "loading";
-  const modelsError = detector.state === "error" || landmarkModel.state === "error";
-
-  if (modelsError) {
+  if (modelError) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
         <View style={styles.centerCard}>
           <Text style={[styles.cardTitle, { color: colors.text }]}>Scan Unavailable</Text>
           <Text style={[styles.cardBody, { color: colors.secondaryText }]}>
-            The on-device measurement models could not be loaded on this device. You can enter your measurements manually instead.
+            The on-device measurement model could not be loaded on this device. You can enter your measurements manually instead.
           </Text>
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: colors.tint }]}
@@ -379,8 +283,8 @@ export default function BodyScanScreen() {
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={!isProcessing}
-        frameProcessor={frameProcessor}
-        pixelFormat="yuv"
+        frameProcessor={poseDetection.frameProcessor}
+        onLayout={poseDetection.cameraViewLayoutChangeHandler}
       />
       <PoseLandmarkOverlay landmarks={overlayLandmarks} />
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -411,11 +315,6 @@ export default function BodyScanScreen() {
             <View style={styles.processingBadge}>
               <ActivityIndicator color="#fff" />
               <Text style={styles.processingText}>Processing Scan...</Text>
-            </View>
-          ) : modelsLoading ? (
-            <View style={styles.processingBadge}>
-              <ActivityIndicator color="#fff" />
-              <Text style={styles.processingText}>Loading models...</Text>
             </View>
           ) : isCapturing ? (
             <View style={styles.countdownBadge}>

@@ -173,7 +173,9 @@ export default function WardrobeScreen() {
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
           <GapAnalysis items={items} />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 16 }}>
-            {items.length > 0 ? items.map(item => renderItem({item})) : (
+            {items.length > 0 ? items.map(item => (
+              <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
+            )) : (
               <View style={styles.emptyState}>
                 <IconSymbol name="hanger" size={48} color={colors.secondaryText} />
                 <Text style={[styles.emptyText, { color: colors.secondaryText }]}>Your wardrobe is empty.</Text>
