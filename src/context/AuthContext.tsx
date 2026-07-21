@@ -151,7 +151,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         const lastLoginStr = await SecureStore.getItemAsync('jezsy_last_full_login');
         if (lastLoginStr) {
-          // 30-day forced logout removed per policy change. 
+          // 30-day forced logout removed per policy change.
           // Sessions are kept alive indefinitely.
         } else {
           // No record of login means they need one
@@ -165,14 +165,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     };
 
-    checkInitialState();
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await syncProfile(session.user);
-      }
+    // Both reads must settle before we flip isLoading, or the very first
+    // render of the redirect gate in app/_layout.tsx can act on a default
+    // hasPinSetup/requireFullLogin value that hasn't caught up yet.
+    Promise.all([
+      checkInitialState(),
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          await syncProfile(session.user);
+        }
+      }),
+    ]).finally(() => {
       setIsLoading(false);
     });
 
