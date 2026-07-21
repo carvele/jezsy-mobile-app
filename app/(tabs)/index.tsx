@@ -16,6 +16,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CATEGORY_SELECT, getCategoryLabel, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
@@ -103,10 +104,16 @@ export default function HomeScreen() {
         {mainFeature && (
           <View style={styles.editorialSection}>
             <Link href={`/product/${mainFeature.id}`} asChild>
-              <TouchableOpacity activeOpacity={0.9} style={styles.mainFeature}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.mainFeature}
+                accessibilityRole="button"
+                accessibilityLabel={`Featured: ${mainFeature.name}`}
+                accessibilityHint="Opens product details"
+              >
                 <Image
                   source={mainFeature.image_url ? { uri: mainFeature.image_url } : require('@/assets/images/partial-react-logo.png')}
-                  style={styles.mainFeatureImage}
+                  style={[styles.mainFeatureImage, { backgroundColor: colors.imagePlaceholder }]}
                   contentFit="cover"
                 />
                 <View style={styles.mainFeatureTextContainer}>
@@ -122,10 +129,16 @@ export default function HomeScreen() {
 
             {secondaryFeature && (
               <Link href={`/product/${secondaryFeature.id}`} asChild>
-                <TouchableOpacity activeOpacity={0.9} style={styles.secondaryFeature}>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  style={styles.secondaryFeature}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${secondaryFeature.name}, ₱${(secondaryFeature.sale_price || secondaryFeature.price || 0).toLocaleString()}`}
+                  accessibilityHint="Opens product details"
+                >
                   <Image
                     source={secondaryFeature.image_url ? { uri: secondaryFeature.image_url } : require('@/assets/images/partial-react-logo.png')}
-                    style={styles.secondaryFeatureImage}
+                    style={[styles.secondaryFeatureImage, { backgroundColor: colors.imagePlaceholder }]}
                     contentFit="cover"
                   />
                   <View style={styles.secondaryFeatureTextContainer}>
@@ -147,11 +160,14 @@ export default function HomeScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>The Edits</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.editsScrollContainer}>
             {CURATED_EDITS.map((edit) => (
-              <TouchableOpacity 
-                key={edit.id} 
+              <TouchableOpacity
+                key={edit.id}
                 style={styles.editCard}
                 onPress={() => router.push('/(tabs)/explore')} // Route to explore for now
                 activeOpacity={0.9}
+                accessibilityRole="button"
+                accessibilityLabel={`${edit.title}. ${edit.subtitle}`}
+                accessibilityHint="Opens the catalog"
               >
                 <Image source={{ uri: edit.image }} style={styles.editImage} contentFit="cover" />
                 <View style={styles.editOverlay} />
@@ -171,8 +187,14 @@ export default function HomeScreen() {
           <View style={styles.gridContainer}>
             {allProducts.slice(0, 6).map((item) => (
               <Link key={item.id} href={`/product/${item.id}`} asChild>
-                <TouchableOpacity style={styles.gridCard} activeOpacity={0.85}>
-                  <View style={styles.gridImageContainer}>
+                <TouchableOpacity
+                  style={styles.gridCard}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.model_3d_url ? ', available in AR' : ''}`}
+                  accessibilityHint="Opens product details"
+                >
+                  <View style={[styles.gridImageContainer, { backgroundColor: colors.imagePlaceholder }]}>
                     <Image
                       source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
                       style={styles.gridImage}
@@ -256,7 +278,6 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 3 / 4,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
   },
   mainFeatureTextContainer: {
     marginTop: 12,
@@ -280,7 +301,6 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 3 / 4,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
   },
   secondaryFeatureTextContainer: {
     marginTop: 12,
@@ -362,7 +382,6 @@ const styles = StyleSheet.create({
     aspectRatio: 3 / 4, // Strict 3:4 fashion ratio
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
     marginBottom: 10,
   },
   gridImage: {

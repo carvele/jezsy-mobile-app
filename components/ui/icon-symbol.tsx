@@ -47,6 +47,7 @@ const MAPPING = {
   'checkmark': 'check',
   'checkmark.circle': 'check-circle-outline',
   'checkmark.circle.fill': 'check-circle',
+  'xmark.circle': 'cancel',
   'trash.fill': 'delete',
   'delete.left': 'backspace',
 
@@ -73,6 +74,7 @@ const MAPPING = {
 
   // Calendar & Time
   'calendar': 'calendar-today',
+  'calendar.badge.exclamationmark': 'event-busy',
   'clock.arrow.circlepath': 'history',
 
   // Charts & Data

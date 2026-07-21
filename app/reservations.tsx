@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
@@ -13,11 +13,20 @@ import { formatTimeLabel } from '@/src/utils/dateTime';
 
 type Reservation = Database['public']['Tables']['reservations']['Row'];
 
+const STATUS_FILTERS = ['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
 export default function ReservationsScreen() {
   const { session } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
+  const params = useLocalSearchParams<{ status?: string }>();
+  const initialFilter: StatusFilter = STATUS_FILTERS.includes(params.status as StatusFilter)
+    ? (params.status as StatusFilter)
+    : 'all';
+  const [activeFilter, setActiveFilter] = useState<StatusFilter>(initialFilter);
+
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
@@ -47,15 +56,20 @@ export default function ReservationsScreen() {
   }, [session]);
 
   const getStatusColor = (status: string | null) => {
-    if (!status) return '#FFB703';
+    if (!status) return colors.warning;
     switch (status.toLowerCase()) {
-      case 'pending': return '#FFB703';
-      case 'confirmed': return '#83C5BE';
-      case 'completed': return '#06D6A0';
-      case 'cancelled': return '#EF476F';
+      case 'pending': return colors.warning;
+      case 'confirmed': return colors.info;
+      case 'completed': return colors.success;
+      case 'cancelled': return colors.error;
       default: return colors.text;
     }
   };
+
+  const filteredReservations = useMemo(() => {
+    if (activeFilter === 'all') return reservations;
+    return reservations.filter((r) => (r.status || 'pending').toLowerCase() === activeFilter);
+  }, [reservations, activeFilter]);
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {
     const dateStr = item.date ? new Date(item.date).toLocaleDateString() : 'N/A';
@@ -69,7 +83,7 @@ export default function ReservationsScreen() {
         accessibilityHint="View reservation details"
         onPress={() => { /* Detail view route pending */ }}
       >
-        <View style={styles.cardHeader}>
+        <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
           <Text style={[styles.reservationId, { color: colors.secondaryText }]}>ID: {item.display_id || item.id.substring(0,8)}</Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20', borderColor: getStatusColor(item.status) }]}>
             <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{item.status || 'Pending'}</Text>
@@ -77,9 +91,9 @@ export default function ReservationsScreen() {
         </View>
         
         <View style={styles.cardBody}>
-          <Image 
-            source={{ uri: item.image_url || 'https://via.placeholder.com/100' }}
-            style={styles.productImage}
+          <Image
+            source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
+            style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]}
             contentFit="cover"
           />
           <View style={styles.productInfo}>
@@ -113,6 +127,43 @@ export default function ReservationsScreen() {
         <View style={{ width: 24 }} />
       </View>
 
+      {!loading && reservations.length > 0 && (
+        <FlatList
+          horizontal
+          data={STATUS_FILTERS}
+          keyExtractor={(f) => f}
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterRow}
+          contentContainerStyle={styles.filterRowContent}
+          renderItem={({ item: filter }) => {
+            const isActive = activeFilter === filter;
+            const label = filter.charAt(0).toUpperCase() + filter.slice(1);
+            return (
+              <TouchableOpacity
+                onPress={() => setActiveFilter(filter)}
+                style={[
+                  styles.filterChip,
+                  { borderColor: isActive ? colors.tint : colors.border },
+                  isActive && { backgroundColor: colors.tint },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                accessibilityLabel={`Filter by ${label}`}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    { color: isActive ? colors.background : colors.secondaryText },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
+
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.tint} />
@@ -124,7 +175,7 @@ export default function ReservationsScreen() {
           <Text style={[styles.emptySubtext, { color: colors.secondaryText }]}>
             Your upcoming fitting appointments will appear here.
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.exploreButton, { backgroundColor: colors.tint }]}
             onPress={() => router.navigate('/(tabs)/explore')}
             accessibilityRole="button"
@@ -134,9 +185,25 @@ export default function ReservationsScreen() {
             <Text style={styles.exploreButtonText}>Explore Catalog</Text>
           </TouchableOpacity>
         </View>
+      ) : filteredReservations.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <IconSymbol name="calendar.badge.exclamationmark" size={64} color={colors.border} />
+          <Text style={[styles.emptyText, { color: colors.text }]}>No {activeFilter} reservations</Text>
+          <Text style={[styles.emptySubtext, { color: colors.secondaryText }]}>
+            Try a different filter to see your other reservations.
+          </Text>
+          <TouchableOpacity
+            style={[styles.exploreButton, { backgroundColor: colors.tint }]}
+            onPress={() => setActiveFilter('all')}
+            accessibilityRole="button"
+            accessibilityLabel="Show all reservations"
+          >
+            <Text style={styles.exploreButtonText}>Show All</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
-          data={reservations}
+          data={filteredReservations}
           keyExtractor={(item) => item.id}
           renderItem={renderReservationItem}
           contentContainerStyle={styles.listContent}
@@ -192,8 +259,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  filterRow: {
+    flexGrow: 0,
+    marginBottom: 4,
+  },
+  filterRowContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   listContent: {
     padding: 20,
+    paddingTop: 8,
   },
   reservationCard: {
     borderRadius: 16,
@@ -208,7 +295,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#333',
   },
   reservationId: {
     fontSize: 12,
