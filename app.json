@@ -45,10 +45,9 @@
       "expo-web-browser",
       "./plugins/withMlkitManifestFix",
       [
-        "react-native-fast-tflite",
+        "react-native-mediapipe-posedetection",
         {
-          "enableCoreMLDelegate": true,
-          "enableAndroidGpuLibraries": true
+          "assetsPaths": ["./assets/models/"]
         }
       ]
     ],

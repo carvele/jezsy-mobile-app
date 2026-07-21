@@ -8,11 +8,21 @@
  */
 
 // Pass to .select() alongside '*' to embed both the subcategory and its
-// parent (main) category in one query. Constraint names are given explicitly
-// since categories self-references via parent_id (a bare `categories(...)`
-// embed would be ambiguous).
+// parent (main) category in one query.
+//
+// Hint syntax notes (this bit is fiddly):
+//   * Outer embed uses the CONSTRAINT name (products_category_id_fkey) because
+//     it's a FK between two different tables (products -> categories); exactly
+//     one relationship matches, so the constraint name resolves cleanly.
+//   * Inner "parent" embed is a SELF-reference (categories.parent_id ->
+//     categories.id). That one constraint defines TWO relationships (a row's
+//     parent AND its children), so hinting it by constraint name
+//     (categories_parent_id_fkey) does NOT resolve -- PostgREST returns
+//     PGRST200 "no relationship found". The correct disambiguator for a
+//     self-reference is the FK COLUMN name (parent_id), which unambiguously
+//     means "follow parent_id up to the parent row" (to-one).
 export const CATEGORY_SELECT =
-  'categories!products_category_id_fkey(id, name, parent:categories!categories_parent_id_fkey(id, name))';
+  'categories!products_category_id_fkey(id, name, parent:categories!parent_id(id, name))';
 
 type ParentRef = { id: string; name: string };
 
