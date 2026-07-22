@@ -19,7 +19,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Image } from 'expo-image';
-import { Link, useRouter } from 'expo-router';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
@@ -64,6 +64,7 @@ export default function ExploreScreen() {
   const colors = Colors[theme];
   const { itemCount } = useCart();
   const router = useRouter();
+  const params = useLocalSearchParams<{ category?: string; all?: string }>();
 
   // Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,6 +74,11 @@ export default function ExploreScreen() {
   // Navigation States
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
+  // "Shop All" bypasses the category drill-down entirely and loads every
+  // active product directly -- there was previously no way to browse the
+  // catalog without picking a category first.
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [handledInitialParams, setHandledInitialParams] = useState(false);
 
   // Category States
   const [topCategories, setTopCategories] = useState<Category[]>([]);
@@ -100,6 +106,23 @@ export default function ExploreScreen() {
     };
     fetchCategories();
   }, []);
+
+  // Consume an incoming deep link (e.g. from Home's category rail or "See
+  // All") once. Category matching needs topCategories loaded first, so this
+  // waits for that fetch rather than racing it.
+  useEffect(() => {
+    if (handledInitialParams) return;
+    if (params.all === '1') {
+      setShowAllProducts(true);
+      setHandledInitialParams(true);
+    } else if (params.category && topCategories.length > 0) {
+      const match = topCategories.find((c) => c.name === params.category);
+      if (match) {
+        setSelectedCategory(match.name);
+        setHandledInitialParams(true);
+      }
+    }
+  }, [params.all, params.category, topCategories, handledInitialParams]);
 
   // products.category_id references a subcategory row directly; these maps
   // resolve the display names this screen navigates by (set from tile
@@ -159,6 +182,7 @@ export default function ExploreScreen() {
     if (level === 0) {
       setSelectedCategory(null);
       setSelectedSubCategory(null);
+      setShowAllProducts(false);
     } else if (level === 1) {
       setSelectedSubCategory(null);
     }
@@ -170,6 +194,8 @@ export default function ExploreScreen() {
       setIsSearchActive(false);
       setSearchQuery('');
       setSearchResults([]);
+    } else if (showAllProducts) {
+      setShowAllProducts(false);
     } else if (selectedSubCategory) {
       setSelectedSubCategory(null);
     } else if (selectedCategory) {
@@ -257,6 +283,32 @@ export default function ExploreScreen() {
 
     fetchProductsForCategory();
   }, [selectedCategory, selectedSubCategory]);
+
+  // Fetch every active product for "Shop All" mode.
+  useEffect(() => {
+    if (!showAllProducts) return;
+    const fetchAllProducts = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select(PRODUCT_SELECT)
+          .eq('deleted', false)
+          .eq('visibility', 'public')
+          .order('created_at', { ascending: false });
+        if (error) {
+          console.error('Error fetching all products:', error);
+        } else if (data) {
+          setProducts(data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAllProducts();
+  }, [showAllProducts]);
 
   // Real-Time Client-Side Filtering
   const filteredProducts = useMemo(() => {
@@ -468,15 +520,22 @@ export default function ExploreScreen() {
 
     // Explore / Root level
     breadcrumbItems.push(
-      <TouchableOpacity key="root" onPress={() => resetSelection(0)}>
+      <TouchableOpacity key="root" onPress={() => resetSelection(0)} accessibilityRole="button" accessibilityLabel="Back to Explore categories">
         <Text style={[styles.breadcrumbText, { color: colors.secondaryText }]}>Explore</Text>
       </TouchableOpacity>
     );
 
+    if (showAllProducts) {
+      breadcrumbItems.push(
+        <Text key="sep-all" style={[styles.breadcrumbSeparator, { color: colors.secondaryText }]}> &gt; </Text>,
+        <Text key="all" style={[styles.breadcrumbText, { color: colors.tint, fontWeight: '700' }]}>All Products</Text>
+      );
+    }
+
     if (selectedCategory) {
       breadcrumbItems.push(
         <Text key="sep1" style={[styles.breadcrumbSeparator, { color: colors.secondaryText }]}> &gt; </Text>,
-        <TouchableOpacity key="cat" onPress={() => resetSelection(1)}>
+        <TouchableOpacity key="cat" onPress={() => resetSelection(1)} accessibilityRole="button" accessibilityLabel={`Back to ${selectedCategory} subcategories`}>
           <Text style={[styles.breadcrumbText, { color: selectedSubCategory ? colors.secondaryText : colors.tint, fontWeight: selectedSubCategory ? '400' : '700' }]}>{selectedCategory}</Text>
         </TouchableOpacity>
       );
@@ -501,7 +560,13 @@ export default function ExploreScreen() {
   // Render Single Product Item (minimalist catalog card)
   const renderProductItem = useCallback(({ item }: { item: Product }) => (
     <Link href={`/product/${item.id}`} asChild>
-      <TouchableOpacity style={styles.productCard} activeOpacity={0.85}>
+      <TouchableOpacity
+        style={styles.productCard}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}, ₱${(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.on_sale ? ', on sale' : ''}${item.model_3d_url ? ', available in AR' : ''}`}
+        accessibilityHint="Opens product details"
+      >
         <View style={styles.imageContainer}>
           <Image
             source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
@@ -566,8 +631,13 @@ export default function ExploreScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Search Header */}
       <View style={styles.header}>
-        {(selectedCategory || isSearchActive) && (
-          <TouchableOpacity onPress={handleBack} style={[styles.backButton, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        {(selectedCategory || isSearchActive || showAllProducts) && (
+          <TouchableOpacity
+            onPress={handleBack}
+            style={[styles.backButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <IconSymbol name="arrow.left" size={18} color={colors.text} />
           </TouchableOpacity>
         )}
@@ -581,21 +651,27 @@ export default function ExploreScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
               onFocus={() => setIsSearchActive(true)}
+              accessibilityLabel="Search products"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <TouchableOpacity onPress={() => setSearchQuery('')} accessibilityRole="button" accessibilityLabel="Clear search">
                 <IconSymbol name="xmark" size={16} color={colors.secondaryText} />
               </TouchableOpacity>
             )}
           </View>
         </View>
         {isSearchActive && (
-          <TouchableOpacity onPress={handleBack} style={styles.cancelButton}>
+          <TouchableOpacity onPress={handleBack} style={styles.cancelButton} accessibilityRole="button" accessibilityLabel="Cancel search">
             <Text style={[styles.cancelText, { color: colors.tint }]}>Cancel</Text>
           </TouchableOpacity>
         )}
         {!isSearchActive && (
-          <TouchableOpacity onPress={() => router.push('/cart')} style={styles.cartBtn}>
+          <TouchableOpacity
+            onPress={() => router.push('/cart')}
+            style={styles.cartBtn}
+            accessibilityRole="button"
+            accessibilityLabel={itemCount > 0 ? `Cart, ${itemCount} items` : 'Cart, empty'}
+          >
             <IconSymbol name="bag" size={24} color={colors.text} />
             {itemCount > 0 && (
               <View style={[styles.cartBadge, { backgroundColor: colors.notification }]}>
@@ -613,15 +689,17 @@ export default function ExploreScreen() {
           {searchQuery.trim().length === 0 ? (
             // Idle / Search Focused suggestions: Uniqlo Minimal Aesthetic
             <View style={styles.suggestionsContainer}>
-              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 12 }]}>Trending Searches</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 12 }]}>Suggested Searches</Text>
               <View style={styles.tagsContainer}>
                 {['Summer Dress', 'Denim Jacket', 'Vintage', 'Minimalist', 'Streetwear'].map((tag, index) => (
                   <TouchableOpacity
                     key={index}
                     style={[styles.tag, { backgroundColor: colors.card, borderColor: colors.border }]}
                     onPress={() => setSearchQuery(tag)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Search for ${tag}`}
                   >
-                    <IconSymbol name="flame.fill" size={12} color={colors.notification} style={styles.tagIcon} />
+                    <IconSymbol name="magnifyingglass" size={12} color={colors.secondaryText} style={styles.tagIcon} />
                     <Text style={[styles.tagText, { color: colors.secondaryText }]}>{tag}</Text>
                   </TouchableOpacity>
                 ))}
@@ -652,6 +730,8 @@ export default function ExploreScreen() {
                         <TouchableOpacity
                           style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
                           onPress={openFilterModal}
+                          accessibilityRole="button"
+                          accessibilityLabel={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} active` : 'Open filters'}
                         >
                           <IconSymbol name="slider.horizontal.3" size={14} color={colors.tint} />
                           <Text style={[styles.filterTriggerText, { color: colors.text }]}>Filter</Text>
@@ -664,6 +744,8 @@ export default function ExploreScreen() {
                         <TouchableOpacity
                           style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
                           onPress={() => setIsSortModalOpen(true)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Open sort options"
                         >
                           <IconSymbol name="arrow.up.arrow.down" size={14} color={colors.tint} />
                           <Text style={[styles.filterTriggerText, { color: colors.text }]}>Sort</Text>
@@ -675,13 +757,18 @@ export default function ExploreScreen() {
                     {activeFiltersCount > 0 && (
                       <View style={[styles.activeFiltersWrapper, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeFiltersScroll}>
-                          <TouchableOpacity onPress={clearAllFiltersDirectly} style={[styles.clearAllTag, { borderColor: colors.border }]}>
+                          <TouchableOpacity
+                            onPress={clearAllFiltersDirectly}
+                            style={[styles.clearAllTag, { borderColor: colors.border }]}
+                            accessibilityRole="button"
+                            accessibilityLabel="Clear all filters"
+                          >
                             <Text style={[styles.clearAllTagText, { color: colors.notification }]}>Clear All</Text>
                           </TouchableOpacity>
                           {selectedNewArrivalsOnly && (
                             <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>New Arrivals</Text>
-                              <TouchableOpacity onPress={() => setSelectedNewArrivalsOnly(false)}>
+                              <TouchableOpacity onPress={() => setSelectedNewArrivalsOnly(false)} accessibilityRole="button" accessibilityLabel="Remove New Arrivals filter">
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -689,7 +776,7 @@ export default function ExploreScreen() {
                           {selectedSaleOnly && (
                             <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>On Sale</Text>
-                              <TouchableOpacity onPress={() => setSelectedSaleOnly(false)}>
+                              <TouchableOpacity onPress={() => setSelectedSaleOnly(false)} accessibilityRole="button" accessibilityLabel="Remove On Sale filter">
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -697,7 +784,7 @@ export default function ExploreScreen() {
                           {selectedArOnly && (
                             <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>Try in AR</Text>
-                              <TouchableOpacity onPress={() => setSelectedArOnly(false)}>
+                              <TouchableOpacity onPress={() => setSelectedArOnly(false)} accessibilityRole="button" accessibilityLabel="Remove Try in AR filter">
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -705,7 +792,7 @@ export default function ExploreScreen() {
                           {selectedSizes.map(size => (
                             <View key={`size-${size}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>Size: {size}</Text>
-                              <TouchableOpacity onPress={() => removeSizeFilter(size)}>
+                              <TouchableOpacity onPress={() => removeSizeFilter(size)} accessibilityRole="button" accessibilityLabel={`Remove Size ${size} filter`}>
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -713,7 +800,7 @@ export default function ExploreScreen() {
                           {selectedColors.map(color => (
                             <View key={`color-${color}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>Color: {color}</Text>
-                              <TouchableOpacity onPress={() => removeColorFilter(color)}>
+                              <TouchableOpacity onPress={() => removeColorFilter(color)} accessibilityRole="button" accessibilityLabel={`Remove Color ${color} filter`}>
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -721,7 +808,7 @@ export default function ExploreScreen() {
                           {selectedFits.map(fit => (
                             <View key={`fit-${fit}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>Fit: {fit}</Text>
-                              <TouchableOpacity onPress={() => removeFitFilter(fit)}>
+                              <TouchableOpacity onPress={() => removeFitFilter(fit)} accessibilityRole="button" accessibilityLabel={`Remove Fit ${fit} filter`}>
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -729,7 +816,7 @@ export default function ExploreScreen() {
                           {selectedMaterials.map(mat => (
                             <View key={`material-${mat}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>Material: {mat}</Text>
-                              <TouchableOpacity onPress={() => removeMaterialFilter(mat)}>
+                              <TouchableOpacity onPress={() => removeMaterialFilter(mat)} accessibilityRole="button" accessibilityLabel={`Remove Material ${mat} filter`}>
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -739,7 +826,7 @@ export default function ExploreScreen() {
                               <Text style={[styles.filterTagText, { color: colors.text }]}>
                                 Price: {selectedPriceRange === 'under1000' ? 'Under ₱1k' : selectedPriceRange === '1000to2000' ? '₱1k - ₱2k' : selectedPriceRange === '2000to4000' ? '₱2k - ₱4k' : '₱4k+'}
                               </Text>
-                              <TouchableOpacity onPress={() => setSelectedPriceRange(null)}>
+                              <TouchableOpacity onPress={() => setSelectedPriceRange(null)} accessibilityRole="button" accessibilityLabel="Remove price range filter">
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -749,7 +836,7 @@ export default function ExploreScreen() {
                               <Text style={[styles.filterTagText, { color: colors.text }]}>
                                 Price: ₱{customMinPrice || '0'}-₱{customMaxPrice || '∞'}
                               </Text>
-                              <TouchableOpacity onPress={() => { setCustomMinPrice(''); setCustomMaxPrice(''); }}>
+                              <TouchableOpacity onPress={() => { setCustomMinPrice(''); setCustomMaxPrice(''); }} accessibilityRole="button" accessibilityLabel="Remove custom price filter">
                                 <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                               </TouchableOpacity>
                             </View>
@@ -776,8 +863,18 @@ export default function ExploreScreen() {
           {renderBreadcrumbs()}
 
           {/* Level 0: Categories Grid */}
-          {!selectedCategory && (
+          {!selectedCategory && !showAllProducts && (
             <ScrollView contentContainerStyle={styles.scrollContent}>
+              <TouchableOpacity
+                style={[styles.shopAllButton, { backgroundColor: colors.tint }]}
+                onPress={() => setShowAllProducts(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Browse all products"
+              >
+                <IconSymbol name="bag.fill" size={18} color="#0D0D0D" />
+                <Text style={styles.shopAllButtonText}>Shop All Products</Text>
+              </TouchableOpacity>
+
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories</Text>
               <View style={styles.categoriesGrid}>
                 {topCategories.map((cat) => (
@@ -785,8 +882,14 @@ export default function ExploreScreen() {
                     key={cat.id}
                     style={[styles.categoryCard, { backgroundColor: colors.card }]}
                     onPress={() => setSelectedCategory(cat.name)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Browse ${cat.name}`}
                   >
-                    <Image source={{ uri: cat.image_url ?? undefined }} style={styles.categoryImage} contentFit="cover" />
+                    <Image
+                      source={cat.image_url ? { uri: cat.image_url } : require('@/assets/images/partial-react-logo.png')}
+                      style={styles.categoryImage}
+                      contentFit="cover"
+                    />
                     <View style={[styles.categoryOverlay, { backgroundColor: 'rgba(0,0,0,0.35)' }]}>
                       <Text style={[styles.categoryName, { color: '#E8D5B7' }]}>{cat.name}</Text>
                     </View>
@@ -805,9 +908,15 @@ export default function ExploreScreen() {
                 <TouchableOpacity
                   style={[styles.categoryCard, { backgroundColor: colors.card }]}
                   onPress={() => setSelectedSubCategory('View All')}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Browse all ${selectedCategory}`}
                 >
                   <Image
-                    source={{ uri: topCategories.find(c => c.name === selectedCategory)?.image_url ?? undefined }}
+                    source={
+                      topCategories.find((c) => c.name === selectedCategory)?.image_url
+                        ? { uri: topCategories.find((c) => c.name === selectedCategory)!.image_url! }
+                        : require('@/assets/images/partial-react-logo.png')
+                    }
                     style={styles.categoryImage}
                     contentFit="cover"
                   />
@@ -822,9 +931,11 @@ export default function ExploreScreen() {
                     key={subcat.id}
                     style={[styles.categoryCard, { backgroundColor: colors.card }]}
                     onPress={() => setSelectedSubCategory(subcat.name)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Browse ${subcat.name}`}
                   >
                     <Image
-                      source={{ uri: subcat.image_url || 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=500' }}
+                      source={subcat.image_url ? { uri: subcat.image_url } : require('@/assets/images/partial-react-logo.png')}
                       style={styles.categoryImage}
                       contentFit="cover"
                     />
@@ -837,8 +948,8 @@ export default function ExploreScreen() {
             </ScrollView>
           )}
 
-          {/* Level 2: Products Grid View */}
-          {selectedCategory && selectedSubCategory && (
+          {/* Level 2: Products Grid View (also used by "Shop All") */}
+          {((selectedCategory && selectedSubCategory) || showAllProducts) && (
             <View style={styles.flexOne}>
               {loading ? (
                 <View style={styles.centerContainer}>
@@ -867,6 +978,8 @@ export default function ExploreScreen() {
                           <TouchableOpacity
                             style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
                             onPress={openFilterModal}
+                            accessibilityRole="button"
+                            accessibilityLabel={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} active` : 'Open filters'}
                           >
                             <IconSymbol name="slider.horizontal.3" size={14} color={colors.tint} />
                             <Text style={[styles.filterTriggerText, { color: colors.text }]}>Filter</Text>
@@ -879,6 +992,8 @@ export default function ExploreScreen() {
                           <TouchableOpacity
                             style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
                             onPress={() => setIsSortModalOpen(true)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Sort by ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`}
                           >
                             <IconSymbol name="arrow.up.arrow.down" size={14} color={colors.tint} />
                             <Text style={[styles.filterTriggerText, { color: colors.text }]}>
@@ -892,13 +1007,18 @@ export default function ExploreScreen() {
                       {activeFiltersCount > 0 && (
                         <View style={[styles.activeFiltersWrapper, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeFiltersScroll}>
-                            <TouchableOpacity onPress={clearAllFiltersDirectly} style={[styles.clearAllTag, { borderColor: colors.border }]}>
+                            <TouchableOpacity
+                              onPress={clearAllFiltersDirectly}
+                              style={[styles.clearAllTag, { borderColor: colors.border }]}
+                              accessibilityRole="button"
+                              accessibilityLabel="Clear all filters"
+                            >
                               <Text style={[styles.clearAllTagText, { color: colors.notification }]}>Clear All</Text>
                             </TouchableOpacity>
                             {selectedNewArrivalsOnly && (
                               <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>New Arrivals</Text>
-                                <TouchableOpacity onPress={() => setSelectedNewArrivalsOnly(false)}>
+                                <TouchableOpacity onPress={() => setSelectedNewArrivalsOnly(false)} accessibilityRole="button" accessibilityLabel="Remove New Arrivals filter">
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -906,7 +1026,7 @@ export default function ExploreScreen() {
                             {selectedSaleOnly && (
                               <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>On Sale</Text>
-                                <TouchableOpacity onPress={() => setSelectedSaleOnly(false)}>
+                                <TouchableOpacity onPress={() => setSelectedSaleOnly(false)} accessibilityRole="button" accessibilityLabel="Remove On Sale filter">
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -914,7 +1034,7 @@ export default function ExploreScreen() {
                             {selectedArOnly && (
                               <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>Try in AR</Text>
-                                <TouchableOpacity onPress={() => setSelectedArOnly(false)}>
+                                <TouchableOpacity onPress={() => setSelectedArOnly(false)} accessibilityRole="button" accessibilityLabel="Remove Try in AR filter">
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -922,7 +1042,7 @@ export default function ExploreScreen() {
                             {selectedSizes.map(size => (
                               <View key={`size-${size}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>Size: {size}</Text>
-                                <TouchableOpacity onPress={() => removeSizeFilter(size)}>
+                                <TouchableOpacity onPress={() => removeSizeFilter(size)} accessibilityRole="button" accessibilityLabel={`Remove Size ${size} filter`}>
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -930,7 +1050,7 @@ export default function ExploreScreen() {
                             {selectedColors.map(color => (
                               <View key={`color-${color}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>Color: {color}</Text>
-                                <TouchableOpacity onPress={() => removeColorFilter(color)}>
+                                <TouchableOpacity onPress={() => removeColorFilter(color)} accessibilityRole="button" accessibilityLabel={`Remove Color ${color} filter`}>
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -938,7 +1058,7 @@ export default function ExploreScreen() {
                             {selectedFits.map(fit => (
                               <View key={`fit-${fit}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>Fit: {fit}</Text>
-                                <TouchableOpacity onPress={() => removeFitFilter(fit)}>
+                                <TouchableOpacity onPress={() => removeFitFilter(fit)} accessibilityRole="button" accessibilityLabel={`Remove Fit ${fit} filter`}>
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -946,7 +1066,7 @@ export default function ExploreScreen() {
                             {selectedMaterials.map(mat => (
                               <View key={`material-${mat}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>Material: {mat}</Text>
-                                <TouchableOpacity onPress={() => removeMaterialFilter(mat)}>
+                                <TouchableOpacity onPress={() => removeMaterialFilter(mat)} accessibilityRole="button" accessibilityLabel={`Remove Material ${mat} filter`}>
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -956,7 +1076,7 @@ export default function ExploreScreen() {
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>
                                   Price: {selectedPriceRange === 'under1000' ? 'Under ₱1k' : selectedPriceRange === '1000to2000' ? '₱1k - ₱2k' : selectedPriceRange === '2000to4000' ? '₱2k - ₱4k' : '₱4k+'}
                                 </Text>
-                                <TouchableOpacity onPress={() => setSelectedPriceRange(null)}>
+                                <TouchableOpacity onPress={() => setSelectedPriceRange(null)} accessibilityRole="button" accessibilityLabel="Remove price range filter">
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -966,7 +1086,7 @@ export default function ExploreScreen() {
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>
                                   Price: ₱{customMinPrice || '0'}-₱{customMaxPrice || '∞'}
                                 </Text>
-                                <TouchableOpacity onPress={() => { setCustomMinPrice(''); setCustomMaxPrice(''); }}>
+                                <TouchableOpacity onPress={() => { setCustomMinPrice(''); setCustomMaxPrice(''); }} accessibilityRole="button" accessibilityLabel="Remove custom price filter">
                                   <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
                                 </TouchableOpacity>
                               </View>
@@ -1407,6 +1527,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 16,
     marginBottom: 20,
+  },
+  shopAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 52,
+    borderRadius: 26,
+    marginTop: 16,
+  },
+  shopAllButtonText: {
+    color: '#0D0D0D',
+    fontSize: 15,
+    fontWeight: '700',
   },
   sectionTitle: {
     fontSize: 18,

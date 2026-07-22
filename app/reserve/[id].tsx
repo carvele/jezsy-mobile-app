@@ -219,7 +219,11 @@ export default function ReservationScreen() {
   }
 
   const days = generateDates();
-  const depositRequired = (product.price || 0) * 0.5;
+  // Mirrors the server-side create_reservation RPC's price resolution --
+  // both must agree, or the deposit shown here would misrepresent what
+  // actually gets charged.
+  const effectivePrice = product.on_sale && product.sale_price ? product.sale_price : (product.price || 0);
+  const depositRequired = effectivePrice * 0.5;
 
   return (
     <SafeAreaView
@@ -267,9 +271,20 @@ export default function ReservationScreen() {
             >
               Size: {size || "Standard"} • Color: {color || "Default"}
             </Text>
-            <Text style={[styles.price, { color: colors.tint }]}>
-              ₱{(product.price || 0).toFixed(2)}
-            </Text>
+            {product.on_sale && product.sale_price ? (
+              <View style={styles.priceRow}>
+                <Text style={[styles.price, { color: colors.notification }]}>
+                  ₱{effectivePrice.toFixed(2)}
+                </Text>
+                <Text style={[styles.originalPrice, { color: colors.secondaryText }]}>
+                  ₱{(product.price || 0).toFixed(2)}
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.price, { color: colors.tint }]}>
+                ₱{effectivePrice.toFixed(2)}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -358,9 +373,20 @@ export default function ReservationScreen() {
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
               Reservation Fee
             </Text>
-            <Text style={[styles.rowValue, { color: colors.text }]}>
-              ₱{(product.price || 0).toFixed(2)}
-            </Text>
+            {product.on_sale && product.sale_price ? (
+              <View style={styles.priceRow}>
+                <Text style={[styles.rowValue, { color: colors.notification }]}>
+                  ₱{effectivePrice.toFixed(2)}
+                </Text>
+                <Text style={[styles.originalPriceSmall, { color: colors.secondaryText }]}>
+                  ₱{(product.price || 0).toFixed(2)}
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.rowValue, { color: colors.text }]}>
+                ₱{effectivePrice.toFixed(2)}
+              </Text>
+            )}
           </View>
 
           <View style={styles.row}>
@@ -484,6 +510,9 @@ const styles = StyleSheet.create({
   productName: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
   productDetails: { fontSize: 14, marginBottom: 8 },
   price: { fontSize: 16, fontWeight: "800" },
+  priceRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  originalPrice: { fontSize: 13, textDecorationLine: "line-through" },
+  originalPriceSmall: { fontSize: 12, textDecorationLine: "line-through" },
   section: { marginBottom: 32 },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
   dateScroll: { flexDirection: "row" },

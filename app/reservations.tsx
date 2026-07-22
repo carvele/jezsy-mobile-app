@@ -81,7 +81,7 @@ export default function ReservationsScreen() {
         accessibilityRole="button"
         accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${item.status || 'Pending'}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
         accessibilityHint="View reservation details"
-        onPress={() => { /* Detail view route pending */ }}
+        onPress={() => router.push(`/reservations/${item.id}` as any)}
       >
         <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
           <Text style={[styles.reservationId, { color: colors.secondaryText }]}>ID: {item.display_id || item.id.substring(0,8)}</Text>
@@ -318,7 +318,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 100,
     borderRadius: 8,
-    backgroundColor: '#2A2A2A',
   },
   productInfo: {
     flex: 1,

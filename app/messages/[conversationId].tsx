@@ -1,15 +1,17 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { 
-  View, Text, StyleSheet, FlatList, TextInput, 
+import {
+  View, Text, StyleSheet, FlatList, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useMessages } from '@/src/context/MessagesContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 
@@ -17,7 +19,10 @@ export default function ChatScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
   const { session } = useAuth();
   const { sendMessage, markAsRead } = useMessages();
-  
+  const router = useRouter();
+  const theme = useColorScheme() ?? 'dark';
+  const colors = Colors[theme];
+
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
@@ -31,7 +36,7 @@ export default function ChatScreen() {
         .select('*')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true });
-        
+
       if (!error && data) {
         setMessages(data);
       }
@@ -44,9 +49,9 @@ export default function ChatScreen() {
       .channel(`messages:${conversationId}`)
       .on(
         'postgres_changes',
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
+        {
+          event: 'INSERT',
+          schema: 'public',
           table: 'messages',
           filter: `conversation_id=eq.${conversationId}`
         },
@@ -83,7 +88,7 @@ export default function ChatScreen() {
     if (!inputText.trim() || !conversationId) return;
     const textToSend = inputText.trim();
     setInputText('');
-    
+
     // Optimistic UI update
     const tempMsg = {
       id: 'temp-' + Date.now(),
@@ -117,44 +122,44 @@ export default function ChatScreen() {
         base64: true,
       });
 
-      if (!result.canceled && result.assets[0].base64) {
-        const asset = result.assets[0];
-        
-        // Optimistic Image UI
-        const tempMsg = {
-          id: 'temp-' + Date.now(),
-          text: '',
-          sender_id: session?.user.id,
-          created_at: new Date().toISOString(),
-          read_at: null,
-          image_url: asset.uri // temporary local uri
-        };
-        setMessages(prev => [...prev, tempMsg]);
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset?.base64) return;
 
-        const ext = asset.uri.split('.').pop() || 'jpg';
-        const fileName = `${Date.now()}.${ext}`;
-        const filePath = `${session?.user.id}/${fileName}`;
-        
-        let publicUrl = '';
-        const { error } = await supabase.storage.from('chat-images').upload(filePath, decode(asset.base64), { contentType: `image/${ext}` });
+      // Optimistic Image UI
+      const tempMsg = {
+        id: 'temp-' + Date.now(),
+        text: '',
+        sender_id: session?.user.id,
+        created_at: new Date().toISOString(),
+        read_at: null,
+        image_url: asset.uri // temporary local uri
+      };
+      setMessages(prev => [...prev, tempMsg]);
 
-        if (!error) {
-          const { data } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-          publicUrl = data.publicUrl;
-        }
+      const ext = asset.uri.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}.${ext}`;
+      const filePath = `${session?.user.id}/${fileName}`;
 
-        if (publicUrl) {
-          const realMsg = await sendMessage(conversationId, '', publicUrl);
-          if (realMsg) {
-             setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
-          } else {
-             setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-             Alert.alert("Error", "Failed to send image message.");
-          }
+      let publicUrl = '';
+      const { error } = await supabase.storage.from('chat-images').upload(filePath, decode(asset.base64), { contentType: `image/${ext}` });
+
+      if (!error) {
+        const { data } = supabase.storage.from('chat-images').getPublicUrl(filePath);
+        publicUrl = data.publicUrl;
+      }
+
+      if (publicUrl) {
+        const realMsg = await sendMessage(conversationId, '', publicUrl);
+        if (realMsg) {
+           setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
         } else {
-          setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-          Alert.alert("Upload Failed", "Could not upload the image to storage.");
+           setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+           Alert.alert("Error", "Failed to send image message.");
         }
+      } else {
+        setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+        Alert.alert("Upload Failed", "Could not upload the image to storage.");
       }
     } catch (e) {
       console.error('Error picking/uploading image:', e);
@@ -169,21 +174,28 @@ export default function ChatScreen() {
     return (
       <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
         <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
-          <View style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubbleThem]}>
+          <View
+            style={[
+              styles.messageBubble,
+              isMe
+                ? [styles.messageBubbleMe, { backgroundColor: colors.tint }]
+                : [styles.messageBubbleThem, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }],
+            ]}
+          >
             {item.image_url ? (
               <Image source={{ uri: item.image_url }} style={styles.messageImage} resizeMode="cover" />
             ) : null}
             {item.text ? (
-              <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextThem]}>
+              <Text style={[styles.messageText, { color: isMe ? '#0D0D0D' : colors.text }]}>
                 {item.text}
               </Text>
             ) : null}
           </View>
           <View style={styles.metaContainer}>
             {isMe && item.read_at && (
-               <Text style={styles.readReceiptText}>Read • </Text>
+               <Text style={[styles.readReceiptText, { color: colors.tint }]}>Read • </Text>
             )}
-            <Text style={styles.timestampText}>{timeString}</Text>
+            <Text style={[styles.timestampText, { color: colors.secondaryText }]}>{timeString}</Text>
           </View>
         </View>
       </View>
@@ -191,16 +203,24 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <Stack.Screen 
-        options={{ 
-          title: 'Chat',
-          headerShown: true,
-          headerBackTitle: 'Back',
-        }} 
-      />
-      <KeyboardAvoidingView 
-        style={styles.container} 
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <IconSymbol name="chevron.left" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Shop Owner</Text>
+        <View style={{ width: 32 }} />
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
@@ -213,19 +233,20 @@ export default function ChatScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
-        
-        <View style={styles.inputContainer}>
-          <TouchableOpacity 
-            style={styles.attachButton} 
+
+        <View style={[styles.inputContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+          <TouchableOpacity
+            style={styles.attachButton}
             onPress={handlePickImage}
             accessibilityRole="button"
             accessibilityLabel="Attach image"
           >
-            <IconSymbol name="camera.fill" size={24} color="#666" />
+            <IconSymbol name="camera.fill" size={24} color={colors.secondaryText} />
           </TouchableOpacity>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder="Type a message..."
+            placeholderTextColor={colors.secondaryText}
             value={inputText}
             onChangeText={setInputText}
             multiline
@@ -233,15 +254,16 @@ export default function ChatScreen() {
             returnKeyType="send"
             blurOnSubmit={false}
             onSubmitEditing={handleSend}
+            accessibilityLabel="Message input"
           />
-          <TouchableOpacity 
-            style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]} 
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: inputText.trim() ? colors.tint : colors.border }]}
             onPress={handleSend}
             disabled={!inputText.trim()}
             accessibilityRole="button"
             accessibilityLabel="Send message"
           >
-            <IconSymbol name="arrow.up.circle.fill" size={22} color="#fff" />
+            <IconSymbol name="arrow.up.circle.fill" size={22} color={inputText.trim() ? '#0D0D0D' : colors.secondaryText} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -252,11 +274,25 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  backButton: {
+    padding: 4,
+    width: 32,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
   },
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   listContent: {
     padding: 16,
@@ -287,11 +323,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   messageBubbleMe: {
-    backgroundColor: '#000',
     borderBottomRightRadius: 4,
   },
   messageBubbleThem: {
-    backgroundColor: '#e5e5ea',
     borderBottomLeftRadius: 4,
   },
   messageImage: {
@@ -306,12 +340,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
-  messageTextMe: {
-    color: '#fff',
-  },
-  messageTextThem: {
-    color: '#000',
-  },
   metaContainer: {
     flexDirection: 'row',
     marginTop: 4,
@@ -320,20 +348,16 @@ const styles = StyleSheet.create({
   },
   timestampText: {
     fontSize: 11,
-    color: '#8e8e93',
   },
   readReceiptText: {
     fontSize: 11,
-    color: '#0a7ea4',
     fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',
     padding: 12,
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopWidth: StyleSheet.hairlineWidth,
     alignItems: 'flex-end',
   },
   attachButton: {
@@ -345,7 +369,6 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -361,9 +384,5 @@ const styles = StyleSheet.create({
     height: 40,
     width: 40,
     borderRadius: 20,
-    backgroundColor: '#000',
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#ccc',
   },
 });
