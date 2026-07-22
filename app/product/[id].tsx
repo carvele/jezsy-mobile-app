@@ -166,6 +166,18 @@ export default function ProductDetailScreen() {
     return inv.available || 0;
   };
 
+  // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
+  // tracked and out of stock. The default-size logic can land on an
+  // out-of-stock size (it falls back to sizes[0] when none are available),
+  // so both actions must re-check stock rather than trust the selection.
+  const needsSize = !!(product.sizes && product.sizes.length > 0);
+  const needsColor = !!product.color;
+  const selectedStock = selectedSize ? getStockInfo(selectedSize) : null;
+  const selectedSizeOutOfStock = selectedStock !== null && selectedStock <= 0;
+  const hasRequiredSelection =
+    (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor);
+  const canPurchase = hasRequiredSelection && !selectedSizeOutOfStock;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
@@ -398,17 +410,23 @@ export default function ProductDetailScreen() {
       <View style={[styles.bottomBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={[styles.iconAction, { borderColor: colors.border }]}
+            style={[styles.iconAction, { borderColor: colors.border, opacity: canPurchase ? 1 : 0.4 }]}
             onPress={() => {
-              if (product) {
+              if (product && canPurchase) {
                 addToCart(product, 1, selectedSize || undefined, selectedColor || undefined);
                 setAddedToBag(true);
                 setTimeout(() => setAddedToBag(false), 2000);
               }
             }}
+            disabled={!canPurchase}
             accessibilityRole="button"
             accessibilityLabel="Add to shopping bag"
-            accessibilityHint="Adds the selected size and color of this item to your cart"
+            accessibilityHint={
+              selectedSizeOutOfStock
+                ? "The selected size is out of stock"
+                : "Adds the selected size and color of this item to your cart"
+            }
+            accessibilityState={{ disabled: !canPurchase }}
           >
             <IconSymbol name="bag.badge.plus" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -420,35 +438,35 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
-          {(() => {
-            const needsSize = !!(product?.sizes && product.sizes.length > 0);
-            const needsColor = !!product?.color;
-            const canReserve = (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor);
-
-            return (
-              <TouchableOpacity
-                style={[styles.primaryAction, {
-                  backgroundColor: canReserve ? colors.tint : colors.border,
-                  opacity: canReserve ? 1 : 0.7,
-                }]}
-                onPress={() => {
-                  if (product && canReserve) {
-                    router.push({
-                      pathname: "/reserve/[id]",
-                      params: { id: product.id, size: selectedSize || "", color: selectedColor || "" },
-                    });
-                  }
-                }}
-                disabled={!canReserve}
-                accessibilityRole="button"
-                accessibilityLabel="Reserve Now"
-                accessibilityHint={canReserve ? "Starts the reservation process for this item" : "Choose a size and color to enable reservation"}
-                accessibilityState={{ disabled: !canReserve }}
-              >
-                <Text style={styles.primaryActionText}>Reserve Now</Text>
-              </TouchableOpacity>
-            );
-          })()}
+          <TouchableOpacity
+            style={[styles.primaryAction, {
+              backgroundColor: canPurchase ? colors.tint : colors.border,
+              opacity: canPurchase ? 1 : 0.7,
+            }]}
+            onPress={() => {
+              if (product && canPurchase) {
+                router.push({
+                  pathname: "/reserve/[id]",
+                  params: { id: product.id, size: selectedSize || "", color: selectedColor || "" },
+                });
+              }
+            }}
+            disabled={!canPurchase}
+            accessibilityRole="button"
+            accessibilityLabel={selectedSizeOutOfStock ? "Out of Stock" : "Reserve Now"}
+            accessibilityHint={
+              selectedSizeOutOfStock
+                ? "The selected size is out of stock"
+                : canPurchase
+                  ? "Starts the reservation process for this item"
+                  : "Choose a size and color to enable reservation"
+            }
+            accessibilityState={{ disabled: !canPurchase }}
+          >
+            <Text style={styles.primaryActionText}>
+              {selectedSizeOutOfStock ? "Out of Stock" : "Reserve Now"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
