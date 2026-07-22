@@ -31,7 +31,10 @@ type Product     = Database['public']['Tables']['products']['Row'];
 
 // Outfit slot definition
 type SlotKey = 'top' | 'bottom' | 'outerwear' | 'shoes' | 'accessory';
-type SlotItem = { product_id: string | null; image_url: string; name: string; color_tags?: string[] | null };
+// image_url is what the builder previews (may be a background-removed cutout);
+// original_image_url is the persistent remote URL saved to the DB, so saved
+// outfits never reference an ephemeral on-device file:// path.
+type SlotItem = { product_id: string | null; image_url: string; original_image_url: string; name: string; color_tags?: string[] | null };
 type Slots = Record<SlotKey, SlotItem | null>;
 
 const SLOT_LABELS: Record<SlotKey, string> = {
@@ -163,6 +166,7 @@ export default function OutfitBuilderScreen() {
         [activeSlot]: {
           product_id: item.product_id,
           image_url:  finalImageUrl,
+          original_image_url: item.image_url || '',
           name:       item.category || 'Item',
           color_tags: item.color_tags,
         },
@@ -179,6 +183,7 @@ export default function OutfitBuilderScreen() {
       [activeSlot]: {
         product_id: item.id,
         image_url:  item.image_url || '',
+        original_image_url: item.image_url || '',
         name:       item.name,
         color_tags: item.color ? [item.color] : [],
       },
@@ -193,9 +198,20 @@ export default function OutfitBuilderScreen() {
   const handleSave = async () => {
     if (!session?.user?.id) return;
     const name = outfitName.trim() || 'My Outfit';
+    // Persist the original remote URL (not the possibly background-removed,
+    // device-local preview URL) so the saved outfit renders on any device.
     const items = SLOT_KEYS
       .filter((k) => slots[k] !== null)
-      .map((k) => ({ slot: k, ...slots[k] }));
+      .map((k) => {
+        const s = slots[k]!;
+        return {
+          slot: k,
+          product_id: s.product_id,
+          image_url: s.original_image_url || s.image_url,
+          name: s.name,
+          color_tags: s.color_tags,
+        };
+      });
 
     if (items.length === 0) {
       Alert.alert('Empty Outfit', 'Add at least one item before saving.');
@@ -236,7 +252,14 @@ export default function OutfitBuilderScreen() {
         </View>
 
         {item ? (
-          <TouchableOpacity style={styles.slotFilled} onPress={() => openPicker(slotKey)} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={styles.slotFilled}
+            onPress={() => openPicker(slotKey)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`${SLOT_LABELS[slotKey]}: ${item.name}. Tap to change`}
+            accessibilityHint={`Opens the picker to replace the ${SLOT_LABELS[slotKey].toLowerCase()}`}
+          >
             <Image source={{ uri: item.image_url }} style={styles.slotImage} contentFit="cover" />
             <View style={styles.slotItemInfo}>
               <Text style={[styles.slotItemName, { color: colors.text }]} numberOfLines={2}>
@@ -248,6 +271,9 @@ export default function OutfitBuilderScreen() {
               style={styles.removeBtn}
               onPress={() => removeSlot(slotKey)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${SLOT_LABELS[slotKey].toLowerCase()}`}
+              accessibilityHint={`Clears the ${SLOT_LABELS[slotKey].toLowerCase()} slot`}
             >
               <IconSymbol name="xmark.circle.fill" size={22} color={colors.secondaryText} />
             </TouchableOpacity>
@@ -257,6 +283,9 @@ export default function OutfitBuilderScreen() {
             style={[styles.slotEmpty, { borderColor: colors.border }]}
             onPress={() => openPicker(slotKey)}
             activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${SLOT_LABELS[slotKey]}`}
+            accessibilityHint={`Opens the picker to choose a ${SLOT_LABELS[slotKey].toLowerCase()}`}
           >
             <IconSymbol name="plus" size={24} color={colors.icon} />
             <Text style={[styles.slotEmptyText, { color: colors.secondaryText }]}>Add {SLOT_LABELS[slotKey]}</Text>
@@ -270,7 +299,13 @@ export default function OutfitBuilderScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to the previous screen"
+        >
           <IconSymbol name="chevron.left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Outfit Builder</Text>
@@ -278,6 +313,10 @@ export default function OutfitBuilderScreen() {
           style={[styles.saveHeaderBtn, { backgroundColor: colors.tint, opacity: filledCount === 0 ? 0.4 : 1 }]}
           onPress={() => filledCount > 0 && setSaveVisible(true)}
           disabled={filledCount === 0}
+          accessibilityRole="button"
+          accessibilityLabel="Save outfit"
+          accessibilityHint={filledCount === 0 ? "Add at least one item to save" : "Opens the save dialog to name and store this outfit"}
+          accessibilityState={{ disabled: filledCount === 0 }}
         >
           <Text style={styles.saveHeaderBtnText}>Save</Text>
         </TouchableOpacity>
@@ -329,6 +368,17 @@ export default function OutfitBuilderScreen() {
         {SLOT_KEYS.map(renderSlot)}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Processing overlay: background removal runs after the picker closes,
+          which otherwise looks frozen for a few seconds with no feedback. */}
+      {saving && !saveVisible && (
+        <View style={styles.processingOverlay} pointerEvents="auto">
+          <View style={[styles.processingCard, { backgroundColor: colors.card }]}>
+            <ActivityIndicator size="large" color={colors.tint} />
+            <Text style={[styles.processingText, { color: colors.text }]}>Processing item…</Text>
+          </View>
+        </View>
+      )}
 
       {/* ── Item Picker Modal ── */}
       <Modal visible={pickerVisible} animationType="slide" presentationStyle="pageSheet">
@@ -633,4 +683,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmBtnText: { color: '#0D0D0D', fontWeight: '800', fontSize: 15 },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  processingCard: {
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 12,
+  },
+  processingText: { fontSize: 14, fontWeight: '600' },
 });
