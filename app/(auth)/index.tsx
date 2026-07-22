@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Colors } from '@/constants/theme';
 import { ArrowRight } from 'lucide-react-native';
+import { markOnboardingSeen } from '@/src/utils/onboarding';
 
 const { width, height } = Dimensions.get('window');
 
@@ -45,11 +46,13 @@ export default function Onboarding() {
     if (currentIndex < SLIDES.length - 1) {
       flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
     } else {
+      markOnboardingSeen();
       router.push('/(auth)/welcome');
     }
   };
 
   const skip = () => {
+    markOnboardingSeen();
     router.push('/(auth)/welcome');
   };
 

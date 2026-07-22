@@ -1,11 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/src/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+
+// Local fallback since the theme's semantic `error` token lands in a
+// separate PR; matches the app's existing error/notification red (#EF476F).
+const ERROR_COLOR = '#EF476F';
 
 export default function PinEntryScreen() {
   const router = useRouter();
@@ -15,17 +20,39 @@ export default function PinEntryScreen() {
 
   const [pin, setPin] = useState('');
   const [storedPin, setStoredPin] = useState<string | null>(null);
+  const [pinLoaded, setPinLoaded] = useState(false);
+  const [error, setError] = useState(false);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     SecureStore.getItemAsync('jezsy_user_pin').then(res => {
-      if (res) setStoredPin(res);
+      setStoredPin(res);
+      setPinLoaded(true);
     });
   }, []);
 
+  const triggerError = () => {
+    setError(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start(() => {
+      setPin('');
+      setError(false);
+    });
+  };
+
   const handlePress = (num: string) => {
+    // Ignore taps until the stored PIN has loaded, so a fast first attempt
+    // never gets compared against a not-yet-loaded null and fails spuriously.
+    if (!pinLoaded || error) return;
     if (pin.length < 6) {
       const newPin = pin + num;
       setPin(newPin);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       if (newPin.length === 6) {
         verifyPin(newPin);
@@ -34,16 +61,17 @@ export default function PinEntryScreen() {
   };
 
   const handleBackspace = () => {
+    if (error) return;
     setPin(prev => prev.slice(0, -1));
   };
 
   const verifyPin = (enteredPin: string) => {
     if (enteredPin === storedPin) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setIsPinAuthenticated(true);
       router.replace('/(tabs)');
     } else {
-      Alert.alert('Incorrect PIN', 'Please try again.');
-      setPin('');
+      triggerError();
     }
   };
 
@@ -65,22 +93,28 @@ export default function PinEntryScreen() {
           <IconSymbol name="lock.fill" size={32} color={colors.tint} />
         </View>
         <Text style={[styles.title, { color: colors.text }]}>Enter PIN</Text>
-        <Text style={[styles.subtitle, { color: colors.secondaryText }]}>Enter your 6-digit PIN to access Jezsy</Text>
+        <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
+          {error ? 'Incorrect PIN, try again' : 'Enter your 6-digit PIN to access Jezsy'}
+        </Text>
 
-        <View style={styles.dotsContainer}>
-          {[...Array(6)].map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                {
-                  backgroundColor: i < pin.length ? colors.tint : colors.card,
-                  borderColor: i < pin.length ? colors.tint : colors.border,
-                }
-              ]}
-            />
-          ))}
-        </View>
+        <Animated.View style={[styles.dotsContainer, { transform: [{ translateX: shakeAnim }] }]}>
+          {[...Array(6)].map((_, i) => {
+            const filled = i < pin.length;
+            const dotColor = error ? ERROR_COLOR : colors.tint;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.dot,
+                  {
+                    backgroundColor: filled ? dotColor : colors.card,
+                    borderColor: filled ? dotColor : colors.border,
+                  }
+                ]}
+              />
+            );
+          })}
+        </Animated.View>
       </View>
 
       <View style={styles.numpad}>

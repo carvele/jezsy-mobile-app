@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/src/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -18,6 +19,7 @@ export default function PinSetupScreen() {
   const [step, setStep] = useState<'create' | 'confirm'>('create');
 
   const handlePress = (num: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (step === 'create') {
       if (pin.length < 6) {
         setPin(prev => prev + num);
@@ -29,8 +31,10 @@ export default function PinSetupScreen() {
 
         if (newConfirm.length === 6) {
           if (newConfirm === pin) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             handleSavePin(pin);
           } else {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             Alert.alert('PIN Mismatch', 'The PINs do not match. Please try again.');
             setPin('');
             setConfirmPin('');
