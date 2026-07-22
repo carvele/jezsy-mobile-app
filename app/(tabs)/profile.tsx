@@ -151,10 +151,18 @@ export default function ProfileScreen() {
               'Height, Weight, Fit preferences',
               () => router.push('/profile/measurements'),
             )}
-            {renderSettingItem('gear', 'Account Settings', 'Coming soon', () =>
-              Alert.alert('Account Settings', 'Account settings are coming in a future update.'))}
-            {renderSettingItem('bell', 'Notifications', 'Coming soon', () =>
-              Alert.alert('Notifications', 'Notification preferences are coming in a future update.'))}
+            {renderSettingItem(
+              'gear',
+              'Account Settings',
+              'Email, password',
+              () => router.push('/profile/account-settings' as any),
+            )}
+            {renderSettingItem(
+              'bell',
+              'Notifications',
+              'Push notification preferences',
+              () => router.push('/profile/notifications-settings' as any),
+            )}
             {renderSettingItem('questionmark.circle', 'Help Center', 'Message us in your Inbox', () => router.push('/(tabs)/messages'))}
           </View>
         </View>
