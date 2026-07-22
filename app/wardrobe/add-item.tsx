@@ -22,10 +22,12 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { removeBackground } from '@six33/react-native-bg-removal';
+import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 
 const { width } = Dimensions.get('window');
 
-// Categories fetched from DB
+// Fixed boutique-category vocabulary for tagging a user's own wardrobe items;
+// intentionally distinct from the products `categories` taxonomy.
 const CATEGORIES = [
   'A-Line Gowns', 'Accessories', 'Ball Gowns', 'Bridal & Wedding', 'Bridesmaid Dresses',
   'Classic Ball Gowns', 'Classic Suits', 'Clutches & Bags', 'Cocktail & Party', 'Evening Wear',
@@ -40,18 +42,6 @@ const CATEGORIES = [
 const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'] as const;
 type GarmentType = (typeof GARMENT_TYPES)[number];
 
-// Colors fetched from DB
-const COLORS = [
-  { name: 'Black', hex: '#000000' },
-  { name: 'White', hex: '#FFFFFF' },
-  { name: 'Red', hex: '#DC2626' },
-  { name: 'Blue', hex: '#2563EB' },
-  { name: 'Gold', hex: '#D4AF37' },
-  { name: 'Silver', hex: '#C0C0C0' },
-  { name: 'Pink', hex: '#EC4899' },
-  { name: 'Emerald', hex: '#047857' }
-];
-
 export default function AddWardrobeItemScreen() {
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
@@ -65,6 +55,7 @@ export default function AddWardrobeItemScreen() {
   const [category, setCategory] = useState<string>('Evening Wear');
   const [garmentType, setGarmentType] = useState<GarmentType | null>(null);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [colorOptions, setColorOptions] = useState<ColorOption[]>(DEFAULT_COLOR_OPTIONS);
   const [subCategory, setSubCategory] = useState<string>('');
   const [removeBg, setRemoveBg] = useState<boolean>(true);
   
@@ -72,8 +63,12 @@ export default function AddWardrobeItemScreen() {
   const [statusMessage, setStatusMessage] = useState<string>('');
 
   useEffect(() => {
+    fetchColorOptions().then(setColorOptions);
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
-    
+
     const processImage = async () => {
       if (!imageUri) {
         setProcessedImageUri(null);
@@ -362,7 +357,7 @@ export default function AddWardrobeItemScreen() {
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Colors</Text>
             <View style={styles.colorPalette}>
-              {COLORS.map((col) => {
+              {colorOptions.map((col) => {
                 const isSelected = selectedColors.includes(col.name);
                 const isWhite = col.name === 'White';
                 return (

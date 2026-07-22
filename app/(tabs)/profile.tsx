@@ -78,10 +78,12 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.profileInfo}>
             <Text style={[styles.profileName, { color: colors.text }]}>
-              {profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}` : 'Premium Member'}
+              {profile?.first_name
+                ? `${profile.first_name} ${profile.last_name || ''}`.trim()
+                : (user?.email?.split('@')[0] || 'JezSy Customer')}
             </Text>
             <Text style={[styles.profileEmail, { color: colors.secondaryText }]}>
-              {user?.email || 'user@example.com'}
+              {user?.email || ''}
             </Text>
           </View>
           <TouchableOpacity style={[styles.editButton, { borderColor: colors.border }]} onPress={() => router.push('/(auth)/profile-setup')}>
