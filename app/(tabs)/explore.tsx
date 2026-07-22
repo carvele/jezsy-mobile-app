@@ -1110,13 +1110,6 @@ export default function ExploreScreen() {
         </View>
       )}
 
-      {/* Floating Action Button for Scanner */}
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.tint }]}
-        onPress={() => router.push('/(tabs)/scanner')}
-      >
-        <IconSymbol name="qrcode.viewfinder" size={24} color="#0D0D0D" />
-      </TouchableOpacity>
 
       {/* FILTER BOTTOM SHEET MODAL */}
       <Modal
@@ -1924,21 +1917,5 @@ const styles = StyleSheet.create({
   },
   sortOptionLabel: {
     fontSize: 15,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 100 : 90,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 6,
-    zIndex: 10,
   },
 });

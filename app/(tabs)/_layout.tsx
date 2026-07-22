@@ -93,12 +93,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={24} name="person.fill" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="scanner"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }
