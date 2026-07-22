@@ -1213,6 +1213,51 @@ export type Database = {
           },
         ]
       }
+      store_closures: {
+        Row: {
+          closure_date: string
+          custom_close_time: string | null
+          custom_open_time: string | null
+          is_fully_closed: boolean | null
+          reason: string | null
+        }
+        Insert: {
+          closure_date: string
+          custom_close_time?: string | null
+          custom_open_time?: string | null
+          is_fully_closed?: boolean | null
+          reason?: string | null
+        }
+        Update: {
+          closure_date?: string
+          custom_close_time?: string | null
+          custom_open_time?: string | null
+          is_fully_closed?: boolean | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      store_hours: {
+        Row: {
+          close_time: string
+          day_of_week: number
+          is_closed: boolean | null
+          open_time: string
+        }
+        Insert: {
+          close_time: string
+          day_of_week: number
+          is_closed?: boolean | null
+          open_time: string
+        }
+        Update: {
+          close_time?: string
+          day_of_week?: number
+          is_closed?: boolean | null
+          open_time?: string
+        }
+        Relationships: []
+      }
       suggested_outfits: {
         Row: {
           created_at: string | null
@@ -1331,33 +1376,42 @@ export type Database = {
           color_tags: string[] | null
           created_at: string
           deleted: boolean | null
+          garment_type: string | null
           id: string
           image_url: string | null
+          last_worn_at: string | null
           product_id: string | null
           sub_category: string | null
           user_id: string | null
+          wear_count: number
         }
         Insert: {
           category?: string | null
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
+          garment_type?: string | null
           id?: string
           image_url?: string | null
+          last_worn_at?: string | null
           product_id?: string | null
           sub_category?: string | null
           user_id?: string | null
+          wear_count?: number
         }
         Update: {
           category?: string | null
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
+          garment_type?: string | null
           id?: string
           image_url?: string | null
+          last_worn_at?: string | null
           product_id?: string | null
           sub_category?: string | null
           user_id?: string | null
+          wear_count?: number
         }
         Relationships: [
           {
@@ -1401,13 +1455,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "wishlists_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

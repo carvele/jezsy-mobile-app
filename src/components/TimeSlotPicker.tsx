@@ -43,22 +43,22 @@ export function TimeSlotPicker({
       const dayOfWeek = selectedDate.getDay();
 
       // Fetch standard hours
-      const { data: hoursData, error: hoursError } = await (supabase
-        .from("store_hours" as any)
+      const { data: hoursData, error: hoursError } = await supabase
+        .from("store_hours")
         .select("*")
         .eq("day_of_week", dayOfWeek)
-        .single() as unknown as Promise<{ data: any; error: any }>);
+        .single();
 
       if (hoursError && hoursError.code !== "PGRST116") {
         throw hoursError;
       }
 
       // Fetch closures/custom hours
-      const { data: closureData, error: closureError } = await (supabase
-        .from("store_closures" as any)
+      const { data: closureData, error: closureError } = await supabase
+        .from("store_closures")
         .select("*")
         .eq("closure_date", dateStr)
-        .single() as unknown as Promise<{ data: any; error: any }>);
+        .single();
 
       if (closureError && closureError.code !== "PGRST116") {
         throw closureError;
