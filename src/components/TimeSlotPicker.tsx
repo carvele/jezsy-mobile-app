@@ -224,6 +224,10 @@ export function TimeSlotPicker({
               },
             ]}
             onPress={() => onSelectSlot(slot.value)}
+            accessibilityRole="button"
+            accessibilityLabel={slot.label}
+            accessibilityHint={slot.isAvailable ? 'Select this time slot' : slot.reason}
+            accessibilityState={{ selected: isSelected, disabled: !slot.isAvailable }}
           >
             <Text
               style={[
