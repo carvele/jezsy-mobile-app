@@ -43,9 +43,9 @@ export default function CartScreen() {
         <Text style={[styles.itemPrice, { color: colors.text }]}>
           ₱
           {(
-            item.product.sale_price ||
-            item.product.price ||
-            0
+            item.product.on_sale && item.product.sale_price
+              ? item.product.sale_price
+              : item.product.price || 0
           ).toLocaleString()}
         </Text>
 

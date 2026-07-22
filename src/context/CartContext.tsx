@@ -97,7 +97,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.removeItem(CART_STORAGE_KEY);
   }, []);
 
-  const totalAmount = items.reduce((sum, item) => sum + ((item.product.sale_price || item.product.price || 0) * item.quantity), 0);
+  const totalAmount = items.reduce((sum, item) => {
+    const { on_sale, sale_price, price } = item.product;
+    const unitPrice = on_sale && sale_price ? sale_price : (price || 0);
+    return sum + unitPrice * item.quantity;
+  }, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (

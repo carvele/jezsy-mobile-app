@@ -140,6 +140,12 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Settings</Text>
           <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
             {renderSettingItem(
+              'bag.fill',
+              'My Orders',
+              'Track your purchases',
+              () => router.push('/orders' as any),
+            )}
+            {renderSettingItem(
               'heart.fill',
               'Wishlist',
               `${wishlistIds.size} saved item${wishlistIds.size !== 1 ? 's' : ''}`,
