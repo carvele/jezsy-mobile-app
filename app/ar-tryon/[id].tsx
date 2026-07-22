@@ -151,12 +151,24 @@ export default function ARTryOnScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to the previous screen"
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>AR Try-On</Text>
-        
-        <TouchableOpacity onPress={toggleMode} style={styles.modeToggle}>
+
+        <TouchableOpacity
+          onPress={toggleMode}
+          style={styles.modeToggle}
+          accessibilityRole="button"
+          accessibilityLabel={mode === '3d' ? 'Switch to 2D camera overlay' : 'Switch to 3D model view'}
+          accessibilityHint={mode === '3d' ? 'Uses your camera to overlay the item image' : 'Shows the rotatable 3D model'}
+        >
           <Text style={styles.modeToggleText}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
         </TouchableOpacity>
       </View>
