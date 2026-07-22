@@ -20,20 +20,15 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CATEGORY_SELECT, getCategoryLabel, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
+type Category = Database['public']['Tables']['categories']['Row'];
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Define specific curated edits (collections)
-const CURATED_EDITS = [
-  { id: 'summer', title: 'The Summer Edit', subtitle: 'Lightweight essentials', image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600' },
-  { id: 'minimalist', title: 'Minimalist Core', subtitle: 'Clean lines, neutral tones', image: 'https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=600' },
-  { id: 'archive', title: 'The Archive', subtitle: 'Timeless vintage pieces', image: 'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=600' },
-  { id: 'denim', title: 'Denim Collection', subtitle: 'Classic & raw denim', image: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600' },
-];
-
 export default function HomeScreen() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [topCategories, setTopCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -43,20 +38,41 @@ export default function HomeScreen() {
 
   const fetchProducts = async () => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select(`*, ${CATEGORY_SELECT}`)
-        .eq('visibility', 'public')
-        .eq('deleted', false)
-        .order('created_at', { ascending: false });
+      const [productsRes, categoriesRes] = await Promise.all([
+        supabase
+          .from('products')
+          .select(`*, ${CATEGORY_SELECT}`)
+          .eq('visibility', 'public')
+          .eq('deleted', false)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('categories')
+          .select('*')
+          .is('parent_id', null)
+          .order('sort_order', { ascending: true }),
+      ]);
 
-      if (error) throw error;
-      
+      if (productsRes.error) throw productsRes.error;
+      if (categoriesRes.error) throw categoriesRes.error;
+
+      const data = productsRes.data;
       if (data) {
         setAllProducts(data);
         const featured = data.filter((p) => p.is_featured);
         // Fallback to top 2 products for the editorial header if no featured items exist
         setFeaturedProducts(featured.length >= 2 ? featured : data.slice(0, 2));
+
+        // Real popularity signal (same one Explore's "Most Popular" sort
+        // trusts), not just "newest" mislabeled as trending.
+        const byPopularity = [...data].sort((a, b) => {
+          const reviewDiff = (b.review_count || 0) - (a.review_count || 0);
+          if (reviewDiff !== 0) return reviewDiff;
+          return (b.rating || 0) - (a.rating || 0);
+        });
+        setTrendingProducts(byPopularity.slice(0, 6));
+      }
+      if (categoriesRes.data) {
+        setTopCategories(categoriesRes.data);
       }
     } catch (err) {
       console.error(err);
@@ -155,78 +171,120 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* 2. Shop by Edit (Curated Portrait Cards) */}
-        <View style={styles.sectionContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>The Edits</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.editsScrollContainer}>
-            {CURATED_EDITS.map((edit) => (
-              <TouchableOpacity
-                key={edit.id}
-                style={styles.editCard}
-                onPress={() => router.push('/(tabs)/explore')} // Route to explore for now
-                activeOpacity={0.9}
-                accessibilityRole="button"
-                accessibilityLabel={`${edit.title}. ${edit.subtitle}`}
-                accessibilityHint="Opens the catalog"
-              >
-                <Image source={{ uri: edit.image }} style={styles.editImage} contentFit="cover" />
-                <View style={styles.editOverlay} />
-                <View style={styles.editTextContainer}>
-                  <Text style={styles.editTitle}>{edit.title}</Text>
-                  <Text style={styles.editSubtitle}>{edit.subtitle}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* 3. Trending Grid (2-column layout right on the home page) */}
-        <View style={styles.sectionContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Trending Now</Text>
-          
-          <View style={styles.gridContainer}>
-            {allProducts.slice(0, 6).map((item) => (
-              <Link key={item.id} href={`/product/${item.id}`} asChild>
+        {/* 2. Shop by Category (real categories, deep-links into Explore) */}
+        {topCategories.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Shop by Category</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.editsScrollContainer}>
+              {topCategories.map((cat) => (
                 <TouchableOpacity
-                  style={styles.gridCard}
-                  activeOpacity={0.85}
+                  key={cat.id}
+                  style={styles.editCard}
+                  onPress={() => router.push(`/(tabs)/explore?category=${encodeURIComponent(cat.name)}` as any)}
+                  activeOpacity={0.9}
                   accessibilityRole="button"
-                  accessibilityLabel={`${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.model_3d_url ? ', available in AR' : ''}`}
-                  accessibilityHint="Opens product details"
+                  accessibilityLabel={`Shop ${cat.name}`}
+                  accessibilityHint="Opens this category in Explore"
                 >
-                  <View style={[styles.gridImageContainer, { backgroundColor: colors.imagePlaceholder }]}>
-                    <Image
-                      source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-                      style={styles.gridImage}
-                      contentFit="cover"
-                    />
-                    {item.is_new_arrival && (
-                      <View style={[styles.gridBadge, { backgroundColor: colors.tint }]}>
-                        <Text style={styles.gridBadgeText}>NEW</Text>
-                      </View>
-                    )}
-                    {item.model_3d_url && (
-                      <View style={[styles.gridBadge, { backgroundColor: 'rgba(201,169,110,0.9)', top: item.is_new_arrival ? 32 : 8, flexDirection: 'row', alignItems: 'center', gap: 2 }]}>
-                        <IconSymbol name="cube.transparent" size={10} color="#0D0D0D" />
-                        <Text style={styles.gridBadgeText}>AR</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.gridInfo}>
-                    <Text style={[styles.gridBrand, { color: colors.secondaryText }]}>
-                      {getCategoryLabel(item, 'BRAND').toUpperCase()}
-                    </Text>
-                    <Text style={[styles.gridName, { color: colors.text }]} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <Text style={[styles.gridPrice, { color: colors.text }]}>
-                      ₱{(item.sale_price || item.price || 0).toLocaleString()}
-                    </Text>
+                  <Image
+                    source={cat.image_url ? { uri: cat.image_url } : require('@/assets/images/partial-react-logo.png')}
+                    style={styles.editImage}
+                    contentFit="cover"
+                  />
+                  <View style={styles.editOverlay} />
+                  <View style={styles.editTextContainer}>
+                    <Text style={styles.editTitle}>{cat.name}</Text>
                   </View>
                 </TouchableOpacity>
-              </Link>
-            ))}
+              ))}
+            </ScrollView>
           </View>
+        )}
+
+        {/* 3. Trending Grid -- sorted by real popularity (review_count/rating),
+            not just newest, so the "Trending" label is actually accurate. */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0, paddingHorizontal: 0 }]}>Trending Now</Text>
+            {allProducts.length > 6 && (
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/explore?all=1' as any)}
+                accessibilityRole="button"
+                accessibilityLabel="See all products"
+              >
+                <Text style={[styles.seeAllText, { color: colors.tint }]}>See All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {trendingProducts.length === 0 ? (
+            <View style={styles.emptyProductsState}>
+              <IconSymbol name="bag.fill" size={40} color={colors.secondaryText} />
+              <Text style={[styles.emptyProductsText, { color: colors.secondaryText }]}>
+                No products available yet. Check back soon.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.gridContainer}>
+              {trendingProducts.map((item) => (
+                <Link key={item.id} href={`/product/${item.id}`} asChild>
+                  <TouchableOpacity
+                    style={styles.gridCard}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.on_sale ? ', on sale' : ''}${item.model_3d_url ? ', available in AR' : ''}`}
+                    accessibilityHint="Opens product details"
+                  >
+                    <View style={[styles.gridImageContainer, { backgroundColor: colors.imagePlaceholder }]}>
+                      <Image
+                        source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
+                        style={styles.gridImage}
+                        contentFit="cover"
+                      />
+                      {item.is_new_arrival && (
+                        <View style={[styles.gridBadge, { backgroundColor: colors.tint, left: 8 }]}>
+                          <Text style={styles.gridBadgeText}>NEW</Text>
+                        </View>
+                      )}
+                      {item.model_3d_url && (
+                        <View style={[styles.gridBadge, { backgroundColor: 'rgba(201,169,110,0.9)', left: 8, top: item.is_new_arrival ? 32 : 8, flexDirection: 'row', alignItems: 'center', gap: 2 }]}>
+                          <IconSymbol name="cube.transparent" size={10} color="#0D0D0D" />
+                          <Text style={styles.gridBadgeText}>AR</Text>
+                        </View>
+                      )}
+                      {item.on_sale && (
+                        <View style={[styles.gridBadge, { backgroundColor: colors.notification, right: 8 }]}>
+                          <Text style={styles.gridBadgeText}>SALE</Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.gridInfo}>
+                      <Text style={[styles.gridBrand, { color: colors.secondaryText }]}>
+                        {getCategoryLabel(item, 'BRAND').toUpperCase()}
+                      </Text>
+                      <Text style={[styles.gridName, { color: colors.text }]} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      {item.on_sale && item.sale_price ? (
+                        <View style={styles.gridPriceRow}>
+                          <Text style={[styles.gridPrice, { color: colors.notification }]}>
+                            ₱{item.sale_price.toLocaleString()}
+                          </Text>
+                          <Text style={[styles.gridOriginalPrice, { color: colors.secondaryText }]}>
+                            ₱{(item.price || 0).toLocaleString()}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={[styles.gridPrice, { color: colors.text }]}>
+                          ₱{(item.price || 0).toLocaleString()}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </Link>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Footer padding to not overlap with bottom tabs */}
@@ -326,6 +384,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 16,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyProductsState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  emptyProductsText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
   editsScrollContainer: {
     paddingHorizontal: 20,
     gap: 16,
@@ -418,5 +497,14 @@ const styles = StyleSheet.create({
   gridPrice: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  gridPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  gridOriginalPrice: {
+    fontSize: 12,
+    textDecorationLine: 'line-through',
   },
 });
