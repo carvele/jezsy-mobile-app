@@ -41,7 +41,9 @@ export default function WishlistScreen() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // No setLoading(true) here: the initial load is covered by useState, and
+    // removing an item mutates wishlistIds (a dependency), so re-showing the
+    // spinner on every removal would flash the whole grid.
     try {
       const ids = Array.from(wishlistIds);
       const { data, error } = await supabase
@@ -66,6 +68,9 @@ export default function WishlistScreen() {
       style={[styles.card, { backgroundColor: colors.card }]}
       onPress={() => router.push(`/product/${item.id}`)}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, ₱${(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}${item.on_sale ? ', on sale' : ''}`}
+      accessibilityHint="Opens product details"
     >
       <View style={styles.imageWrapper}>
         <Image
@@ -78,6 +83,9 @@ export default function WishlistScreen() {
           style={styles.heartBtn}
           onPress={() => toggleWishlist(item.id)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${item.name} from wishlist`}
+          accessibilityHint="Removes this item from your saved wishlist"
         >
           <IconSymbol name="heart.fill" size={20} color="#E05C5C" />
         </TouchableOpacity>
@@ -95,7 +103,7 @@ export default function WishlistScreen() {
           {item.name}
         </Text>
         <Text style={[styles.price, { color: item.on_sale ? colors.notification : colors.text }]}>
-          ₱{(item.sale_price || item.price || 0).toLocaleString()}
+          ₱{(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}
         </Text>
       </View>
     </TouchableOpacity>
