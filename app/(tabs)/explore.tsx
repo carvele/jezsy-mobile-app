@@ -24,6 +24,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
 import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
+import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
@@ -40,13 +41,6 @@ type Category = {
 };
 
 const FILTER_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-const FILTER_COLORS = [
-  { name: 'Black', hex: '#000000', border: 'transparent' },
-  { name: 'White', hex: '#FFFFFF', border: '#D1D5DB' },
-  { name: 'Blue', hex: '#2563EB', border: 'transparent' },
-  { name: 'Red', hex: '#DC2626', border: 'transparent' },
-  { name: 'Grey', hex: '#4B5563', border: 'transparent' },
-];
 const FILTER_FITS = ['Regular Fit', 'Slim Fit', 'Oversized', 'Relaxed', 'Tailored'];
 const FILTER_MATERIALS = ['Cotton', 'Silk', 'Linen', 'Wool', 'Cashmere', 'Denim', 'Leather', 'Satin', 'Polyester'];
 
@@ -84,6 +78,9 @@ export default function ExploreScreen() {
   const [topCategories, setTopCategories] = useState<Category[]>([]);
   const [subCategoriesByParent, setSubCategoriesByParent] = useState<Record<string, Category[]>>({});
 
+  // Color filter swatches, sourced from the DB-managed color_options table.
+  const [colorOptions, setColorOptions] = useState<ColorOption[]>(DEFAULT_COLOR_OPTIONS);
+
   // Products Loading State
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -105,6 +102,10 @@ export default function ExploreScreen() {
       }
     };
     fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    fetchColorOptions().then(setColorOptions);
   }, []);
 
   // Consume an incoming deep link (e.g. from Home's category rail or "See
@@ -1269,7 +1270,7 @@ export default function ExploreScreen() {
                 <View style={styles.filterSection}>
                   <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Colors & Patterns</Text>
                   <View style={styles.filterOptionsRow}>
-                    {FILTER_COLORS.map((color) => {
+                    {colorOptions.map((color) => {
                       const isSelected = tempColors.includes(color.name);
                       return (
                         <TouchableOpacity
