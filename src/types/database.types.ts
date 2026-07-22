@@ -1331,33 +1331,42 @@ export type Database = {
           color_tags: string[] | null
           created_at: string
           deleted: boolean | null
+          garment_type: string | null
           id: string
           image_url: string | null
+          last_worn_at: string | null
           product_id: string | null
           sub_category: string | null
           user_id: string | null
+          wear_count: number
         }
         Insert: {
           category?: string | null
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
+          garment_type?: string | null
           id?: string
           image_url?: string | null
+          last_worn_at?: string | null
           product_id?: string | null
           sub_category?: string | null
           user_id?: string | null
+          wear_count?: number
         }
         Update: {
           category?: string | null
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
+          garment_type?: string | null
           id?: string
           image_url?: string | null
+          last_worn_at?: string | null
           product_id?: string | null
           sub_category?: string | null
           user_id?: string | null
+          wear_count?: number
         }
         Relationships: [
           {
@@ -1401,13 +1410,6 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "wishlists_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
