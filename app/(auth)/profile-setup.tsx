@@ -103,6 +103,28 @@ const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 
 const TOTAL_STEPS = 3;
 
+// Formats raw phone digits into the country's spaced display format. Shared by
+// live input handling and by prefill when loading an existing stored number.
+const formatPhoneForCountry = (digits: string, country: Country): string => {
+  let cleaned = digits.replace(/\D/g, '');
+  if (country.code === 'PH' && cleaned.startsWith('0')) {
+    cleaned = cleaned.substring(1);
+  }
+  cleaned = cleaned.substring(0, country.maxLength);
+
+  let formatted = '';
+  let formatIndex = 0;
+  for (let i = 0; i < cleaned.length; i++) {
+    while (formatIndex < country.format.length && country.format[formatIndex] === ' ') {
+      formatted += ' ';
+      formatIndex++;
+    }
+    formatted += cleaned[i];
+    formatIndex++;
+  }
+  return formatted;
+};
+
 const STEP_META = [
   { icon: User,    label: 'Name',    title: "What's your\nname?",    subtitle: 'Help us personalize your experience.' },
   { icon: Phone,   label: 'Info',    title: 'Personal\ninformation.', subtitle: 'For order updates and account security.' },
@@ -111,7 +133,7 @@ const STEP_META = [
 
 export default function ProfileSetupScreen() {
   const router = useRouter();
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -139,21 +161,51 @@ export default function ProfileSetupScreen() {
   const [selectedMonth, setSelectedMonth] = useState(0);
   const [selectedYear, setSelectedYear] = useState(2000);
 
-  // Pre-fill name from Google / any OAuth provider
+  // Prefill from the existing profile (this screen doubles as "Edit profile",
+  // reached from the profile tab), falling back to OAuth metadata for names on
+  // first-time setup. Without this, editing starts blank and the skip-address
+  // path would upsert null over a previously saved address. The `prev.x ||`
+  // guards keep anything the user has already typed from being overwritten.
   useEffect(() => {
     if (!user) return;
-    const meta = user.user_metadata;
-    if (!meta) return;
+
+    const meta = user.user_metadata ?? {};
     const fullName: string = meta.full_name ?? meta.name ?? '';
-    if (fullName) {
-      const parts = fullName.trim().split(' ');
-      setData(prev => ({
-        ...prev,
-        firstName: prev.firstName || parts[0] || '',
-        lastName:  prev.lastName  || parts.slice(1).join(' ') || '',
-      }));
+    const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
+
+    // Stored phone is "+<dial><local>"; recover the country and local digits.
+    let matchedCountry: Country | null = null;
+    let localPhone = '';
+    if (profile?.phone) {
+      const m = COUNTRIES.find(c => profile.phone!.startsWith(c.dialCode));
+      if (m) {
+        matchedCountry = m;
+        localPhone = profile.phone.slice(m.dialCode.length);
+      }
     }
-  }, [user]);
+    if (matchedCountry) setSelectedCountry(matchedCountry);
+    const fmtCountry = matchedCountry ?? COUNTRIES[0];
+
+    // Stored DOB is YYYY-MM-DD; the form field uses MM/DD/YYYY.
+    let dob = '';
+    if (profile?.date_of_birth) {
+      const [y, m, d] = profile.date_of_birth.split('-');
+      if (y && m && d) dob = `${m}/${d}/${y}`;
+    }
+
+    setData(prev => ({
+      firstName:   prev.firstName   || profile?.first_name || nameParts[0] || '',
+      lastName:    prev.lastName    || profile?.last_name  || nameParts.slice(1).join(' ') || '',
+      phone:       prev.phone       || (localPhone ? formatPhoneForCountry(localPhone, fmtCountry) : ''),
+      gender:      prev.gender      || profile?.gender || '',
+      dateOfBirth: prev.dateOfBirth || dob,
+      addressLine: prev.addressLine || profile?.address_line || '',
+      barangay:    prev.barangay    || profile?.barangay || '',
+      city:        prev.city        || profile?.city || '',
+      province:    prev.province    || profile?.province || '',
+      zipCode:     prev.zipCode     || profile?.zip_code || '',
+    }));
+  }, [user, profile]);
 
   const set = (key: keyof ProfileData, value: string) =>
     setData(prev => ({ ...prev, [key]: value }));
@@ -172,25 +224,7 @@ export default function ProfileSetupScreen() {
   };
 
   const handlePhoneChange = (text: string) => {
-    let cleaned = text.replace(/\D/g, '');
-    if (selectedCountry.code === 'PH') {
-      if (cleaned.startsWith('0')) {
-        cleaned = cleaned.substring(1);
-      }
-    }
-    cleaned = cleaned.substring(0, selectedCountry.maxLength);
-
-    let formatted = '';
-    let formatIndex = 0;
-    for (let i = 0; i < cleaned.length; i++) {
-      while (formatIndex < selectedCountry.format.length && selectedCountry.format[formatIndex] === ' ') {
-        formatted += ' ';
-        formatIndex++;
-      }
-      formatted += cleaned[i];
-      formatIndex++;
-    }
-    set('phone', formatted);
+    set('phone', formatPhoneForCountry(text, selectedCountry));
   };
 
   const handleDOBChange = (text: string) => {
