@@ -62,7 +62,13 @@ export default function MeasurementsScreen() {
         
         if (scanData.overallConfidence) setScanConfidence(scanData.overallConfidence);
         if (scanData.confidence) setFieldConfidence(scanData.confidence);
-        
+
+        // Restore the height/weight entered before scanning (passed back as
+        // params); the saved-measurements load is skipped on scan return, so
+        // these fields would otherwise be blank on the remounted screen.
+        if (params.height) setHeight(String(params.height));
+        if (params.weight) setWeight(String(params.weight));
+
         setSource('camera_scan');
         setShowAdvanced(true);
       } catch(e) {
@@ -72,6 +78,7 @@ export default function MeasurementsScreen() {
   }, [params]);
 
   useEffect(() => {
+    const fromScan = params.scanned === 'true';
     const fetchMeasurements = async () => {
       if (!user) return;
       try {
@@ -81,9 +88,14 @@ export default function MeasurementsScreen() {
           .select('fit_preference, gender')
           .eq('id', user.id)
           .single();
-        
+
         if (profile?.fit_preference) setFitPreference(profile.fit_preference);
         if (profile?.gender) setGender(profile.gender);
+
+        // On return from a body scan, the scan results (applied by the other
+        // effect) must win. This fetch resolves after that synchronous effect,
+        // so applying the saved row here would clobber the fresh scan.
+        if (fromScan) return;
 
         // Fetch measurements
         const { data: metrics } = await supabase
@@ -192,6 +204,10 @@ export default function MeasurementsScreen() {
           isSelected && { backgroundColor: colors.card }
         ]}
         onPress={() => setFitPreference(val)}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} fit`}
+        accessibilityHint={`Sets your fit preference to ${label.toLowerCase()}`}
+        accessibilityState={{ selected: isSelected }}
       >
         <Text style={[styles.fitOptionText, { color: isSelected ? colors.tint : colors.text }]}>
           {label}
@@ -223,6 +239,7 @@ export default function MeasurementsScreen() {
           placeholderTextColor={colors.secondaryText}
           keyboardType="numeric"
           value={value}
+          accessibilityLabel={`${label} measurement in centimeters`}
           onChangeText={(v) => {
             setValue(v);
             // Once manually edited, it is no longer AI derived purely
@@ -249,7 +266,15 @@ export default function MeasurementsScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} disabled={saving}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to the previous screen"
+          accessibilityState={{ disabled: saving }}
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>My Sizing Profile</Text>
@@ -312,7 +337,7 @@ export default function MeasurementsScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Measurements (cm)</Text>
               
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.scanBtn, { backgroundColor: colors.tint }]}
                 onPress={() => {
                   if (!height || !weight) {
@@ -324,6 +349,9 @@ export default function MeasurementsScreen() {
                     params: { height, weight, gender }
                   });
                 }}
+                accessibilityRole="button"
+                accessibilityLabel="Auto-scan measurements with camera"
+                accessibilityHint="Opens the camera body scanner to estimate your measurements"
               >
                 <IconSymbol name="camera.viewfinder" size={16} color="#0D0D0D" />
                 <Text style={styles.scanBtnText}>Auto-Scan</Text>
@@ -340,9 +368,12 @@ export default function MeasurementsScreen() {
               {renderInput("Inseam", inseam, setInseam, 'inseam')}
             </View>
 
-            <TouchableOpacity 
-              style={styles.advancedToggle} 
+            <TouchableOpacity
+              style={styles.advancedToggle}
               onPress={() => setShowAdvanced(!showAdvanced)}
+              accessibilityRole="button"
+              accessibilityLabel={showAdvanced ? 'Hide advanced measurements' : 'Show advanced measurements'}
+              accessibilityState={{ expanded: showAdvanced }}
             >
               <Text style={{ color: colors.tint, fontWeight: '600' }}>
                 {showAdvanced ? 'Hide Advanced Measurements' : 'Show Advanced Measurements'}
@@ -367,10 +398,14 @@ export default function MeasurementsScreen() {
       </KeyboardAvoidingView>
 
       <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.saveBtn, { backgroundColor: colors.tint, opacity: saving ? 0.7 : 1 }]}
           onPress={handleSave}
           disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Save sizing profile"
+          accessibilityHint="Saves your fit preference and measurements"
+          accessibilityState={{ disabled: saving }}
         >
           {saving ? (
             <ActivityIndicator color="#0D0D0D" />
