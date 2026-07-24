@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
+import * as Speech from 'expo-speech';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
@@ -12,6 +13,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 type Product = Database['public']['Tables']['products']['Row'];
+type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category'>;
 
 export default function ARTryOnScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -19,6 +21,9 @@ export default function ARTryOnScreen() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
   const [permission, requestPermission] = useCameraPermissions();
+  const [poseGuides, setPoseGuides] = useState<PoseGuide[]>([]);
+  const [poseIndex, setPoseIndex] = useState(0);
+  const currentPose = poseGuides.length > 0 ? poseGuides[poseIndex % poseGuides.length] : null;
   
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
@@ -52,6 +57,32 @@ export default function ARTryOnScreen() {
 
     fetchProduct();
   }, [id]);
+
+  useEffect(() => {
+    const fetchPoseGuides = async () => {
+      const { data, error } = await supabase
+        .from('pose_guides')
+        .select('id,name,category')
+        .eq('deleted', false)
+        .order('created_at');
+
+      if (!error && data) {
+        setPoseGuides(data);
+      }
+    };
+
+    fetchPoseGuides();
+  }, []);
+
+  useEffect(() => {
+    if (mode === '2d' && currentPose) {
+      Speech.speak(`Try this pose: ${currentPose.name}`);
+    }
+  }, [mode, currentPose?.id]);
+
+  const handleShufflePose = () => {
+    setPoseIndex((i) => (i + 1) % poseGuides.length);
+  };
 
   if (loading) {
     return (
@@ -220,14 +251,28 @@ export default function ARTryOnScreen() {
       ) : (
         <View style={styles.webviewContainer}>
           <CameraView style={styles.camera} facing="front" />
-          <View style={styles.overlayContainer} pointerEvents="none">
-            <Image 
-              source={{ uri: product.image_url || '' }} 
-              style={styles.overlayImage} 
-              contentFit="contain" 
-            />
-            <View style={styles.overlayGuide}>
-              <Text style={styles.overlayGuideText}>Align your body with the item</Text>
+          <View style={styles.overlayContainer} pointerEvents="box-none">
+            <View pointerEvents="none">
+              <Image
+                source={{ uri: product.image_url || '' }}
+                style={styles.overlayImage}
+                contentFit="contain"
+              />
+            </View>
+            <View style={styles.overlayGuide} pointerEvents="box-none">
+              <Text style={styles.overlayGuideText}>
+                {currentPose ? `Try this pose: ${currentPose.name}` : 'Align your body with the item'}
+              </Text>
+              {currentPose && (
+                <TouchableOpacity
+                  onPress={handleShufflePose}
+                  style={styles.shuffleButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Suggest another pose"
+                >
+                  <IconSymbol name="arrow.clockwise" size={16} color="#FFF" />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -312,6 +357,8 @@ const styles = StyleSheet.create({
   overlayGuide: {
     position: 'absolute',
     bottom: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -320,5 +367,9 @@ const styles = StyleSheet.create({
   overlayGuideText: {
     color: '#FFF',
     fontWeight: '600',
-  }
+  },
+  shuffleButton: {
+    marginLeft: 10,
+    padding: 2,
+  },
 });

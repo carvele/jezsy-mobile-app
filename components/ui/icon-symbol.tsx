@@ -77,6 +77,7 @@ const MAPPING = {
   'calendar': 'calendar-today',
   'calendar.badge.exclamationmark': 'event-busy',
   'clock.arrow.circlepath': 'history',
+  'arrow.clockwise': 'refresh',
 
   // Charts & Data
   'chart.bar.fill': 'bar-chart',
