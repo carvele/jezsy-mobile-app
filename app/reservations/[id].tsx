@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link } from 'expo-router';
@@ -8,7 +8,8 @@ import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { formatTimeLabel } from '@/src/utils/dateTime';
+import { formatTimeLabel, formatLocalDate } from '@/src/utils/dateTime';
+import { TimeSlotPicker } from '@/src/components/TimeSlotPicker';
 
 type Reservation = Database['public']['Tables']['reservations']['Row'];
 
@@ -20,6 +21,10 @@ export default function ReservationDetailScreen() {
 
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState<Date>(new Date());
+  const [rescheduleSlot, setRescheduleSlot] = useState<string | undefined>();
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchReservation = useCallback(async () => {
     if (!id) return;
@@ -39,6 +44,43 @@ export default function ReservationDetailScreen() {
   useEffect(() => {
     fetchReservation();
   }, [fetchReservation]);
+
+  const generateDates = () => {
+    const dates: Date[] = [];
+    const today = new Date();
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      dates.push(d);
+    }
+    return dates;
+  };
+
+  const handleReschedule = async () => {
+    if (!rescheduleSlot) {
+      Alert.alert('Select a time', 'Please choose a new appointment time.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // Server-side: reschedule_reservation re-checks slot capacity via the
+      // validate_reservation_time trigger. Cast until DB types are regenerated.
+      const { error } = await (supabase.rpc as any)('reschedule_reservation', {
+        _reservation_id: id,
+        _date: formatLocalDate(rescheduleDate),
+        _appointment_time: rescheduleSlot,
+      });
+      if (error) throw error;
+      setShowReschedule(false);
+      setRescheduleSlot(undefined);
+      await fetchReservation();
+      Alert.alert('Rescheduled', 'Your appointment has been updated.');
+    } catch (err: any) {
+      Alert.alert('Reschedule Failed', err.message || 'Could not reschedule. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const getStatusColor = (status: string | null) => {
     if (!status) return colors.warning;
@@ -75,6 +117,7 @@ export default function ReservationDetailScreen() {
     : 'N/A';
   const statusColor = getStatusColor(reservation.status);
   const balanceDue = (reservation.rental_price || 0) - (reservation.deposit || 0);
+  const canReschedule = ['pending', 'confirmed'].includes((reservation.status || 'Pending').toLowerCase());
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
@@ -120,13 +163,78 @@ export default function ReservationDetailScreen() {
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Appointment</Text>
-          <View style={styles.infoRow}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Appointment</Text>
+            {canReschedule && !showReschedule && (
+              <TouchableOpacity
+                onPress={() => {
+                  setRescheduleDate(reservation.date ? new Date(reservation.date) : new Date());
+                  setRescheduleSlot(undefined);
+                  setShowReschedule(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Reschedule appointment"
+                accessibilityHint="Choose a new date and time for this reservation"
+              >
+                <Text style={[styles.rescheduleLink, { color: colors.tint }]}>Reschedule</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={[styles.infoRow, { marginTop: 12 }]}>
             <IconSymbol name="calendar" size={18} color={colors.tint} />
             <Text style={[styles.infoText, { color: colors.text }]}>
               {dateStr} at {formatTimeLabel(reservation.appointment_time)}
             </Text>
           </View>
+
+          {showReschedule && (
+            <View style={[styles.reschedulePanel, { borderTopColor: colors.border }]}>
+              <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new date</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                {generateDates().map((d, index) => {
+                  const isSelected = d.toDateString() === rescheduleDate.toDateString();
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[styles.dateBox, { borderColor: isSelected ? colors.tint : colors.border }, isSelected && { backgroundColor: colors.background }]}
+                      onPress={() => { setRescheduleDate(d); setRescheduleSlot(undefined); }}
+                      accessibilityRole="button"
+                      accessibilityLabel={d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      accessibilityState={{ selected: isSelected }}
+                    >
+                      <Text style={[styles.dayName, { color: isSelected ? colors.tint : colors.secondaryText }]}>
+                        {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                      </Text>
+                      <Text style={[styles.dateNum, { color: isSelected ? colors.tint : colors.text }]}>{d.getDate()}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new time</Text>
+              <TimeSlotPicker selectedDate={rescheduleDate} selectedSlot={rescheduleSlot} onSelectSlot={setRescheduleSlot} />
+              <View style={styles.rescheduleActions}>
+                <TouchableOpacity
+                  style={[styles.rescheduleCancel, { borderColor: colors.border }]}
+                  onPress={() => { setShowReschedule(false); setRescheduleSlot(undefined); }}
+                  disabled={submitting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel reschedule"
+                >
+                  <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.rescheduleConfirm, { backgroundColor: (!rescheduleSlot || submitting) ? colors.border : colors.tint }]}
+                  onPress={handleReschedule}
+                  disabled={!rescheduleSlot || submitting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Confirm new appointment"
+                  accessibilityState={{ disabled: !rescheduleSlot || submitting }}
+                >
+                  {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={{ color: '#0D0D0D', fontWeight: '700' }}>Confirm</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -208,6 +316,49 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   infoText: { fontSize: 15, fontWeight: '500' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rescheduleLink: { fontSize: 14, fontWeight: '700' },
+  reschedulePanel: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  rescheduleLabel: { fontSize: 13, fontWeight: '600', marginBottom: 10 },
+  dateBox: {
+    width: 60,
+    height: 68,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  dayName: { fontSize: 12, marginBottom: 4 },
+  dateNum: { fontSize: 18, fontWeight: '700' },
+  rescheduleActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  rescheduleCancel: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rescheduleConfirm: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
