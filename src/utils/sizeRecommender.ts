@@ -27,6 +27,33 @@ export type ProductMeasurements = {
  * @param fitPreference 'tight', 'regular', or 'loose'
  * @returns The recommended size string or null if not enough data
  */
+export type FitVerdict = 'snug' | 'fitted' | 'roomy';
+export type FitZone = { zone: 'Bust' | 'Waist' | 'Hips'; verdict: FitVerdict; deltaCm: number };
+
+/**
+ * Compares the user's measurements against one garment size's chart and
+ * classifies each zone as snug (garment smaller/equal to body), fitted (a
+ * normal 1-6 cm of ease), or roomy (more than 6 cm of ease). Guidance only --
+ * not a physical simulation. Returns [] when data is missing.
+ */
+export function analyzeFit(
+  user: UserMeasurements,
+  garment: { bust?: number; waist?: number; hips?: number } | null | undefined
+): FitZone[] {
+  if (!garment) return [];
+  const zones: FitZone[] = [];
+  const classify = (zone: FitZone['zone'], u?: number | null, g?: number) => {
+    if (!u || !g) return;
+    const delta = g - u; // positive = garment roomier than body
+    const verdict: FitVerdict = delta < 1 ? 'snug' : delta <= 6 ? 'fitted' : 'roomy';
+    zones.push({ zone, verdict, deltaCm: Math.round(delta) });
+  };
+  classify('Bust', user.bust, garment.bust);
+  classify('Waist', user.waist, garment.waist);
+  classify('Hips', user.hips, garment.hips);
+  return zones;
+}
+
 export function recommendSize(
   userMeasurements: UserMeasurements,
   productMeasurements: ProductMeasurements | null | undefined,

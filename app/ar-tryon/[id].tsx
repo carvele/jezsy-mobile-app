@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +11,8 @@ import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useSizingProfile } from '@/src/hooks/useSizingProfile';
+import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
 
 type Product = Database['public']['Tables']['products']['Row'];
 type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category'>;
@@ -24,7 +26,24 @@ export default function ARTryOnScreen() {
   const [poseGuides, setPoseGuides] = useState<PoseGuide[]>([]);
   const [poseIndex, setPoseIndex] = useState(0);
   const currentPose = poseGuides.length > 0 ? poseGuides[poseIndex % poseGuides.length] : null;
-  
+
+  // Fit guidance: overlay how this garment's recommended size sits against the
+  // user's own measurements. Guidance only, not a physical simulation.
+  const { measurements: sizingMeasurements, fitPreference, ready: sizingReady } = useSizingProfile();
+  const [showFit, setShowFit] = useState(true);
+  const recommendedSize = useMemo(
+    () => (sizingReady && sizingMeasurements && product?.measurements
+      ? recommendSize(sizingMeasurements, product.measurements as any, fitPreference)
+      : null),
+    [sizingReady, sizingMeasurements, fitPreference, product?.measurements]
+  );
+  const fitZones = useMemo(
+    () => (recommendedSize && product?.measurements && sizingMeasurements
+      ? analyzeFit(sizingMeasurements, (product.measurements as any)[recommendedSize])
+      : []),
+    [recommendedSize, sizingMeasurements, product?.measurements]
+  );
+
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
@@ -277,6 +296,34 @@ export default function ARTryOnScreen() {
           </View>
         </View>
       )}
+
+      {sizingReady && recommendedSize && fitZones.length > 0 && showFit && (
+        <View style={styles.fitPanel} pointerEvents="box-none">
+          <View style={[styles.fitCard, { borderColor: colors.tint }]}>
+            <View style={styles.fitHeader}>
+              <Text style={styles.fitTitle}>Your fit · Size {recommendedSize}</Text>
+              <TouchableOpacity
+                onPress={() => setShowFit(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Hide fit guide"
+                hitSlop={8}
+              >
+                <IconSymbol name="xmark" size={14} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+            {fitZones.map((z) => {
+              const vColor = z.verdict === 'snug' ? '#FFCC00' : z.verdict === 'roomy' ? '#4DA3FF' : '#34C759';
+              return (
+                <View key={z.zone} style={styles.fitRow}>
+                  <Text style={styles.fitZone}>{z.zone}</Text>
+                  <Text style={[styles.fitVerdict, { color: vColor }]}>{z.verdict}</Text>
+                </View>
+              );
+            })}
+            <Text style={styles.fitNote}>Estimated from your measurements</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -285,6 +332,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  fitPanel: {
+    position: 'absolute',
+    bottom: 100,
+    left: 16,
+    zIndex: 30,
+  },
+  fitCard: {
+    backgroundColor: 'rgba(13,13,13,0.92)',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    width: 190,
+  },
+  fitHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  fitTitle: { color: '#FFF', fontSize: 13, fontWeight: '800' },
+  fitRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  fitZone: { color: 'rgba(255,255,255,0.8)', fontSize: 12 },
+  fitVerdict: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  fitNote: { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 6 },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
