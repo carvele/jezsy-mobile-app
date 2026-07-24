@@ -14,6 +14,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
 
 export default function ChatScreen() {
   const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
@@ -25,7 +26,32 @@ export default function ChatScreen() {
 
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
+  const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string>>({});
+  const resolvedImageUrlsRef = useRef(resolvedImageUrls);
+  resolvedImageUrlsRef.current = resolvedImageUrls;
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    const toResolve = messages.filter(m => m.image_url && resolvedImageUrlsRef.current[m.id] === undefined);
+    if (toResolve.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        toResolve.map(async (m) => [m.id, (await resolveChatImageUrl(m.image_url)) ?? ''] as const)
+      );
+      if (cancelled) return;
+      setResolvedImageUrls(prev => {
+        const next = { ...prev };
+        for (const [id, url] of entries) next[id] = url;
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -141,16 +167,15 @@ export default function ChatScreen() {
       const fileName = `${Date.now()}.${ext}`;
       const filePath = `${session?.user.id}/${fileName}`;
 
-      let publicUrl = '';
+      let uploadedPath = '';
       const { error } = await supabase.storage.from('chat-images').upload(filePath, decode(asset.base64), { contentType: `image/${ext}` });
 
       if (!error) {
-        const { data } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-        publicUrl = data.publicUrl;
+        uploadedPath = filePath;
       }
 
-      if (publicUrl) {
-        const realMsg = await sendMessage(conversationId, '', publicUrl);
+      if (uploadedPath) {
+        const realMsg = await sendMessage(conversationId, '', uploadedPath);
         if (realMsg) {
            setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
         } else {
@@ -182,8 +207,8 @@ export default function ChatScreen() {
                 : [styles.messageBubbleThem, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }],
             ]}
           >
-            {item.image_url ? (
-              <Image source={{ uri: item.image_url }} style={styles.messageImage} resizeMode="cover" />
+            {item.image_url && resolvedImageUrls[item.id] ? (
+              <Image source={{ uri: resolvedImageUrls[item.id] }} style={styles.messageImage} resizeMode="cover" />
             ) : null}
             {item.text ? (
               <Text style={[styles.messageText, { color: isMe ? '#0D0D0D' : colors.text }]}>
