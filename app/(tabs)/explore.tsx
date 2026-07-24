@@ -59,7 +59,8 @@ export default function ExploreScreen() {
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
   const { itemCount } = useCart();
-  const { measurements: sizingMeasurements, fitPreference, ready: sizingReady } = useSizingProfile();
+  const { measurements: sizingMeasurements, fitPreference, ready: sizingReady, needsSetup: needsSizingSetup } = useSizingProfile();
+  const [sizingNudgeDismissed, setSizingNudgeDismissed] = useState(false);
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string; all?: string }>();
 
@@ -929,6 +930,33 @@ export default function ExploreScreen() {
                 <IconSymbol name="bag.fill" size={18} color="#0D0D0D" />
                 <Text style={styles.shopAllButtonText}>Shop All Products</Text>
               </TouchableOpacity>
+
+              {needsSizingSetup && !sizingNudgeDismissed && (
+                <View style={[styles.sizingNudge, { backgroundColor: colors.card, borderColor: colors.tint }]}>
+                  <IconSymbol name="person.fill" size={20} color={colors.tint} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sizingNudgeTitle, { color: colors.text }]}>Get your size on every item</Text>
+                    <Text style={[styles.sizingNudgeBody, { color: colors.secondaryText }]}>
+                      Add your measurements once to see a recommended size right on the catalog.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => router.push('/profile/measurements')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add your measurements"
+                    >
+                      <Text style={[styles.sizingNudgeAction, { color: colors.tint }]}>Add measurements</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setSizingNudgeDismissed(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss sizing prompt"
+                    hitSlop={8}
+                  >
+                    <IconSymbol name="xmark" size={16} color={colors.secondaryText} />
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories</Text>
               <View style={styles.categoriesGrid}>
@@ -1832,6 +1860,29 @@ const styles = StyleSheet.create({
   },
   fitBadgeText: {
     fontSize: 11,
+    fontWeight: '700',
+  },
+  sizingNudge: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  sizingNudgeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  sizingNudgeBody: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 8,
+  },
+  sizingNudgeAction: {
+    fontSize: 13,
     fontWeight: '700',
   },
   centerContainer: {

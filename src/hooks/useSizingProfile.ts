@@ -12,15 +12,18 @@ export function useSizingProfile() {
   const [measurements, setMeasurements] = useState<UserMeasurements | null>(null);
   const [fitPreference, setFitPreference] = useState<string>('regular');
   const [ready, setReady] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setLoaded(false);
 
     const load = async () => {
       if (!user?.id) {
         setMeasurements(null);
         setFitPreference('regular');
         setReady(false);
+        setLoaded(true);
         return;
       }
       try {
@@ -42,6 +45,8 @@ export function useSizingProfile() {
         console.error('Error loading sizing profile:', err);
         setMeasurements(null);
         setReady(false);
+      } finally {
+        if (!cancelled) setLoaded(true);
       }
     };
 
@@ -51,5 +56,10 @@ export function useSizingProfile() {
     };
   }, [user?.id]);
 
-  return { measurements, fitPreference, ready };
+  // True only for a signed-in user we have finished checking who has no usable
+  // measurements yet -- the signal for a "set up your sizing" prompt. Avoids
+  // flashing during the initial load and never fires for signed-out users.
+  const needsSetup = loaded && !!user?.id && !ready;
+
+  return { measurements, fitPreference, ready, needsSetup };
 }
