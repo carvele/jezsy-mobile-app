@@ -5,30 +5,39 @@ Guidance for Claude Code working with code in this repo.
 ## General Principles
 
 - Generate concise, short solutions for new modules or code.
-- Watch for over-engineering, oversized files needing refactor.
-- Watch for weird syntax/style mismatching rest of codebase.
-- Watch for obvious bugs.
-- Prioritize concise, precise code and docs changes.
+- Avoid over-engineering and oversized files; refactor when necessary.
+- Maintain consistent syntax and style with the rest of the codebase.
+- Watch for obvious bugs and logic errors.
+- Prioritize concise, precise code and documentation changes.
 - No emojis or special characters in comments.
 - Write `activity-log.md` in `/docs` to refer back to if confused.
-- Make a to-do list; run major changes by user first.
+- Make a to-do list for multi-step work; confirm scope before large or architectural changes. Once a plan is agreed (or the user gives blanket authorization, e.g. "agent decide"), proceed without re-asking at each step.
 - Review existing files before refactor or change.
 - Markdown files use kebab-case naming (e.g. `some-description-changes.md`).
 - Don't auto-commit activity logs and docs.
-- Comments: one-liner, one sentence.
+- Comments: one-liner, one sentence, only when the WHY is non-obvious.
 
 ## Code Quality
 
 - Use the right data structures and algorithms for the problem.
-- Don't expose data needlessly (least privilege).
+- Apply least privilege: don't expose data needlessly.
 - No external libraries unless absolutely necessary.
 - Use the project dependency file for correct versions.
 - Avoid redundancy unless it improves usability.
-- Prioritize native React Native performance (use `useMemo`/`useCallback` when necessary, and prefer Expo's standard libraries over third-party npm packages).
+- Prioritize native React Native performance:
+  - Use `useMemo`/`useCallback` when necessary.
+  - Prefer Expo's standard libraries over third-party npm packages.
+  - Profile before optimizing; avoid premature optimization.
+
+## Verification
+
+- No automated test suite is configured in this repo (no `test` script, no Jest/Testing Library). Don't scaffold one unprompted — verify changes with `npx tsc --noEmit` and `eslint` instead, and for UI changes, a manual/browser check per the run instructions.
+- Update `README.md` or relevant `/docs` files when a change alters setup steps or a documented workflow.
 
 ## Version Control
 
-- Commit after significant changes, with clear messages.
+- Commit after significant changes, with clear, descriptive messages.
+- Match the repo's existing convention: `type(scope): imperative summary` (e.g. `feat(ar-tryon):`, `fix(security):`, `chore(types):`), body explains the why.
 - Keep commits focused, atomic.
 - No auto-push of any branch.
 - One feature per branch off main; stack dependent features and state the base branch in the commit body.
@@ -37,6 +46,8 @@ Guidance for Claude Code working with code in this repo.
 ## Database & Migrations
 
 - The Supabase DB is shared and live: the admin-dashboard repo and a co-worker apply to it too. Coordinate schema changes.
+- There is no staging environment — migrations apply directly to the shared live DB. Write idempotent SQL (`IF NOT EXISTS`, `CREATE OR REPLACE`) so a re-apply or ledger drift is never destructive.
+- Confirm with the user before applying a migration, unless they've already authorized it for the session.
 - Every schema change is a file in `supabase/migrations/` with a matching `.rollback.sql`; do not rely on ad-hoc SQL.
 - After applying a migration, re-sync the migration ledger (apply can drift ledger versions) and regenerate `src/types/database.types.ts`.
 - Prefer SECURITY INVOKER RPCs that write least-privilege columns; verify grants with `has_function_privilege` (REVOKE FROM anon alone can no-op due to the PUBLIC default grant).
