@@ -31,7 +31,7 @@ The diagram has four horizontal zones:
 - State layer: `AuthProvider → WishlistProvider → CartProvider → MessagesProvider` (nested in that order)
 - Utility layer: `sizeRecommender`, `colorMatcher`, `measurementCalculator`, `pushNotifications`, etc.
 - Data access: single `supabase` client instance (PostgREST + Auth + Storage + Realtime channels over WebSocket)
-- Local persistence: SecureStore (session tokens, PIN) and AsyncStorage (cart, session user object)
+- Local persistence: SecureStore (session tokens) and AsyncStorage (cart, session user object)
 
 **Zone 2 — On-Device ML / Native Capabilities (inside the phone, no network)**
 - Background removal: `@six33/react-native-bg-removal` (Google MLKit subject segmentation)
@@ -73,7 +73,7 @@ No paid services are integrated. There is no payment gateway: payment is handled
 
 Navigation uses **Expo Router file-based routing** with a root Stack, two route groups, and stacked detail screens.
 
-**Root:** [app/_layout.tsx](../app/_layout.tsx) — wraps the app in the four context providers, then `InitialLayout` performs **route guarding**: unauthenticated users are redirected to `(auth)`, users without a profile to `profile-setup`, without a PIN to `pin-setup`, and with a PIN but not yet PIN-verified to `pin-entry`. React Navigation light/dark theme is applied here.
+**Root:** [app/_layout.tsx](../app/_layout.tsx) — wraps the app in the four context providers, then `InitialLayout` performs **route guarding**: unauthenticated users are redirected to `(auth)`, and users without a profile to `profile-setup`. React Navigation light/dark theme is applied here. The local 6-digit PIN gate was removed on 2026-07-27; the Supabase session is now the only unlock.
 
 **Route groups and screens:**
 
@@ -82,7 +82,6 @@ Navigation uses **Expo Router file-based routing** with a root Stack, two route 
 | `(auth)/index`, `welcome` | Entry / welcome, Google OAuth |
 | `(auth)/auth` | Email/password and email OTP sign-in |
 | `(auth)/profile-setup` | First-time profile completion (writes `profiles`) |
-| `(auth)/pin-setup`, `pin-entry` | Local PIN creation / verification (SecureStore) |
 | `(tabs)/index` | Home — featured products |
 | `(tabs)/explore` | Catalog browse: categories, search, filters |
 | `(tabs)/wardrobe` | Digital wardrobe: items, saved outfits, capsules |
@@ -119,7 +118,7 @@ AuthProvider → WishlistProvider → CartProvider → MessagesProvider
 
 | Context | State owned | Functions exposed | Persistence |
 |---|---|---|---|
-| `AuthContext` | `user`, `session`, `profile`, loading flags, PIN flags (`hasPinSetup`, `isPinAuthenticated`, `requireFullLogin`) | `refreshProfile`, `signOut`, PIN flag setters; internally syncs (`upsert`) the `profiles` row on every auth state change and registers the push token | Supabase session in SecureStore/AsyncStorage; PIN in SecureStore |
+| `AuthContext` | `user`, `session`, `profile`, loading flags | `refreshProfile`, `signOut`; internally syncs (`upsert`) the `profiles` row on every auth state change and registers the push token | Supabase session in SecureStore/AsyncStorage |
 | `WishlistContext` | `wishlistIds: Set<string>` | `isInWishlist`, `toggleWishlist` (optimistic update with rollback on error) | `wishlists` table |
 | `CartContext` | `items: CartItem[]`, derived `totalAmount`, `itemCount` | `addToCart`, `removeFromCart`, `updateQuantity`, `clearCart` | AsyncStorage only (`@jezsy_cart`) — never synced to the server until checkout |
 | `MessagesContext` | `conversations`, derived `unreadCount`, `loading` | `sendMessage`, `markAsRead`, `getOrCreateConversation`, `refreshConversations`; subscribes to a Realtime channel on `conversations` and refetches on any change | `conversations` / `messages` tables |

@@ -22,7 +22,6 @@ import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
 import { Colors } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
-import * as SecureStore from 'expo-secure-store';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -171,8 +170,6 @@ export default function AuthScreen() {
 
       if (error) throw error;
 
-      await SecureStore.setItemAsync('jezsy_last_full_login', new Date().toISOString());
-
       // Auth state listener handles routing
     } catch (err: any) {
       console.error('Login error:', err);
@@ -248,8 +245,6 @@ export default function AuthScreen() {
       });
 
       if (error) throw error;
-
-      await SecureStore.setItemAsync('jezsy_last_full_login', new Date().toISOString());
 
       // AuthState change listener in root layout will automatically handle routing
     } catch (err: any) {

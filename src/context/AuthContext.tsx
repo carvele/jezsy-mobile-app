@@ -22,11 +22,6 @@ type AuthContextType = {
   /** Call this after saving profile data so routing re-evaluates immediately. */
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
-  hasPinSetup: boolean;
-  isPinAuthenticated: boolean;
-  requireFullLogin: boolean;
-  setHasPinSetup: (val: boolean) => void;
-  setIsPinAuthenticated: (val: boolean) => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -37,11 +32,6 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   refreshProfile: async () => {},
   signOut: async () => {},
-  hasPinSetup: false,
-  isPinAuthenticated: false,
-  requireFullLogin: false,
-  setHasPinSetup: () => {},
-  setIsPinAuthenticated: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -51,9 +41,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
 
-  const [hasPinSetup, setHasPinSetup] = useState(false);
-  const [isPinAuthenticated, setIsPinAuthenticated] = useState(false);
-  const [requireFullLogin, setRequireFullLogin] = useState(false);
   const fetchProfile = useCallback(async (userId: string) => {
     setIsProfileLoading(true);
     try {
@@ -139,47 +126,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    await SecureStore.deleteItemAsync('jezsy_user_pin');
-    await SecureStore.deleteItemAsync('jezsy_last_full_login');
-    setHasPinSetup(false);
-    setIsPinAuthenticated(false);
-    setRequireFullLogin(false);
   }, []);
 
   useEffect(() => {
-    const checkInitialState = async () => {
-      try {
-        const lastLoginStr = await SecureStore.getItemAsync('jezsy_last_full_login');
-        if (lastLoginStr) {
-          // 30-day forced logout removed per policy change.
-          // Sessions are kept alive indefinitely.
-        } else {
-          // No record of login means they need one
-          setRequireFullLogin(true);
-        }
+    // The local PIN feature was removed; drop the secrets it left behind on
+    // devices that had already set one. Fire-and-forget: nothing gates on it.
+    void SecureStore.deleteItemAsync('jezsy_user_pin').catch(() => {});
+    void SecureStore.deleteItemAsync('jezsy_last_full_login').catch(() => {});
 
-        const storedPin = await SecureStore.getItemAsync('jezsy_user_pin');
-        setHasPinSetup(!!storedPin);
-      } catch (err) {
-        console.error('Error checking secure store:', err);
-      }
-    };
-
-    // Both reads must settle before we flip isLoading, or the very first
-    // render of the redirect gate in app/_layout.tsx can act on a default
-    // hasPinSetup/requireFullLogin value that hasn't caught up yet.
-    Promise.all([
-      checkInitialState(),
-      supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session } }) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
           await syncProfile(session.user);
         }
-      }),
-    ]).finally(() => {
-      setIsLoading(false);
-    });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -209,11 +175,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profile,
         refreshProfile,
         signOut,
-        hasPinSetup,
-        isPinAuthenticated,
-        requireFullLogin,
-        setHasPinSetup,
-        setIsPinAuthenticated,
       }}
     >
       {children}
