@@ -134,8 +134,12 @@ export default function AuthScreen() {
     } catch (err: any) {
       console.error('Sign Up error:', err);
       let msg = err.message ?? 'Could not create your account.';
+      // Never confirm that an address is already registered. Supabase
+      // obfuscates this case when email confirmations are on, so this branch
+      // only fires with confirmations off -- where its raw message would
+      // otherwise disclose more than the removed pre-check did.
       if (msg.includes('already registered')) {
-        msg = 'This email is already registered. Please log in instead.';
+        msg = 'Could not create your account. Please check your details and try again.';
       }
       Alert.alert('Sign Up Failed', msg);
     } finally {
