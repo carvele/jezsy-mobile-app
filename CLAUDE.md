@@ -29,6 +29,13 @@ Guidance for Claude Code working with code in this repo.
   - Prefer Expo's standard libraries over third-party npm packages.
   - Profile before optimizing; avoid premature optimization.
 
+## Platform
+
+- Expo with a **dev client and prebuild (CNG)** — not Expo Go. `android/` is generated and gitignored; there is no committed `ios/`. Run with `expo run:android`, not `expo start` against Expo Go.
+- Three third-party native modules are in use and are load-bearing: `react-native-vision-camera`, `react-native-mediapipe-posedetection`, `react-native-worklets-core`. Body scan and AR try-on depend on them.
+- Consequence: any feature touching camera, pose, or worklets cannot be verified in Expo Go, and code paths must degrade safely when native modules are absent (see `src/utils/pushNotifications.ts` for the lazy-import + try/catch pattern).
+- Adding another native module is a real cost (rebuild, dev-client redistribution). Confirm with the user first, and prefer an Expo standard library where one exists.
+
 ## Verification
 
 - No automated test suite is configured in this repo (no `test` script, no Jest/Testing Library). Don't scaffold one unprompted — verify changes with `npx tsc --noEmit` and `eslint` instead, and for UI changes, a manual/browser check per the run instructions.
@@ -51,6 +58,7 @@ Guidance for Claude Code working with code in this repo.
 - Every schema change is a file in `supabase/migrations/` with a matching `.rollback.sql`; do not rely on ad-hoc SQL.
 - After applying a migration, re-sync the migration ledger (apply can drift ledger versions) and regenerate `src/types/database.types.ts`.
 - Prefer SECURITY INVOKER RPCs that write least-privilege columns; verify grants with `has_function_privilege` (REVOKE FROM anon alone can no-op due to the PUBLIC default grant).
+- Exception, and check for it: an INVOKER RPC whose target table has an admin-only INSERT/UPDATE policy will fail closed for customers, silently. `create_reservation` shipped this way and blocked every customer reservation. When an RPC *is* the trusted customer write path, it must be SECURITY DEFINER with its own guards — auth check, caller-derived owner id, server-side price resolution — as `create_order` does. Match the RPC's security mode to the policy it has to satisfy.
 
 ## AI Restrictions
 
