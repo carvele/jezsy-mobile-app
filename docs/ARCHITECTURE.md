@@ -20,7 +20,7 @@ Within the client, the code is organized in layers:
 4. **Data access** — a single configured Supabase client (`src/lib/supabase.ts`) with generated database types (`src/types/database.types.ts`).
 5. **Native/device integration** — Expo modules (camera, sensors, speech, secure storage, notifications) plus an on-device ML library for background removal.
 
-A design constraint documented in `docs/FREE_TIER_AUDIT.md` shapes the whole architecture: the project runs on a strict zero-cost budget, so all ML/AR processing happens **on-device** and all backend services stay within Supabase's free tier.
+A design constraint documented in `docs/free-tier-audit.md` shapes the whole architecture: the project runs on a strict zero-cost budget, so all ML/AR processing happens **on-device** and all backend services stay within Supabase's free tier.
 
 ### 1.2 Architecture Diagram (description)
 
@@ -269,4 +269,4 @@ For development use — ordered roughly by impact.
 
 ---
 
-*Sources: repository at commit `74795f7` (branch `main`); live Supabase schema and `pg_policy` catalog queried 2026-07-19; `docs/FREE_TIER_AUDIT.md` for cost-constraint rationale.*
+*Sources: repository at commit `74795f7` (branch `main`); live Supabase schema and `pg_policy` catalog queried 2026-07-19; `docs/free-tier-audit.md` for cost-constraint rationale.*
