@@ -465,6 +465,9 @@ export type Database = {
       }
       messages: {
         Row: {
+          context_label: string | null
+          context_ref: string | null
+          context_type: string | null
           conversation_id: string
           created_at: string | null
           id: string
@@ -476,6 +479,9 @@ export type Database = {
           text: string | null
         }
         Insert: {
+          context_label?: string | null
+          context_ref?: string | null
+          context_type?: string | null
           conversation_id: string
           created_at?: string | null
           id?: string
@@ -487,6 +493,9 @@ export type Database = {
           text?: string | null
         }
         Update: {
+          context_label?: string | null
+          context_ref?: string | null
+          context_type?: string | null
           conversation_id?: string
           created_at?: string | null
           id?: string
@@ -920,6 +929,7 @@ export type Database = {
           image_url: string | null
           payment_status: string | null
           payment_type: string | null
+          pickup_token: string | null
           product_id: string | null
           product_name: string | null
           quantity: number | null
@@ -949,6 +959,7 @@ export type Database = {
           image_url?: string | null
           payment_status?: string | null
           payment_type?: string | null
+          pickup_token?: string | null
           product_id?: string | null
           product_name?: string | null
           quantity?: number | null
@@ -978,6 +989,7 @@ export type Database = {
           image_url?: string | null
           payment_status?: string | null
           payment_type?: string | null
+          pickup_token?: string | null
           product_id?: string | null
           product_name?: string | null
           quantity?: number | null
@@ -1213,6 +1225,51 @@ export type Database = {
           },
         ]
       }
+      store_closures: {
+        Row: {
+          closure_date: string
+          custom_close_time: string | null
+          custom_open_time: string | null
+          is_fully_closed: boolean | null
+          reason: string | null
+        }
+        Insert: {
+          closure_date: string
+          custom_close_time?: string | null
+          custom_open_time?: string | null
+          is_fully_closed?: boolean | null
+          reason?: string | null
+        }
+        Update: {
+          closure_date?: string
+          custom_close_time?: string | null
+          custom_open_time?: string | null
+          is_fully_closed?: boolean | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      store_hours: {
+        Row: {
+          close_time: string
+          day_of_week: number
+          is_closed: boolean | null
+          open_time: string
+        }
+        Insert: {
+          close_time: string
+          day_of_week: number
+          is_closed?: boolean | null
+          open_time: string
+        }
+        Update: {
+          close_time?: string
+          day_of_week?: number
+          is_closed?: boolean | null
+          open_time?: string
+        }
+        Relationships: []
+      }
       suggested_outfits: {
         Row: {
           created_at: string | null
@@ -1412,6 +1469,13 @@ export type Database = {
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "wishlists_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
@@ -1449,6 +1513,14 @@ export type Database = {
       is_staff_or_admin: { Args: never; Returns: boolean }
       merge_message_reaction: {
         Args: { p_emoji: string; p_message_id: string; p_user_id: string }
+        Returns: Json
+      }
+      reschedule_reservation: {
+        Args: {
+          _appointment_time: string
+          _date: string
+          _reservation_id: string
+        }
         Returns: Json
       }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
