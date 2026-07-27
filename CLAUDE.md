@@ -31,6 +31,15 @@ Guidance for Claude Code working with code in this repo.
 - Commit after significant changes, with clear messages.
 - Keep commits focused, atomic.
 - No auto-push of any branch.
+- One feature per branch off main; stack dependent features and state the base branch in the commit body.
+- Avoid multiple in-flight branches editing the same file; if unavoidable, keep the edits in distinct regions to limit merge conflicts.
+
+## Database & Migrations
+
+- The Supabase DB is shared and live: the admin-dashboard repo and a co-worker apply to it too. Coordinate schema changes.
+- Every schema change is a file in `supabase/migrations/` with a matching `.rollback.sql`; do not rely on ad-hoc SQL.
+- After applying a migration, re-sync the migration ledger (apply can drift ledger versions) and regenerate `src/types/database.types.ts`.
+- Prefer SECURITY INVOKER RPCs that write least-privilege columns; verify grants with `has_function_privilege` (REVOKE FROM anon alone can no-op due to the PUBLIC default grant).
 
 ## AI Restrictions
 
