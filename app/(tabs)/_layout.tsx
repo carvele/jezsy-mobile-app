@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 
@@ -7,12 +7,22 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMessages } from '@/src/context/MessagesContext';
+import { useAuth } from '@/src/context/AuthContext';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = (colorScheme ?? 'light') === 'dark';
   const { unreadCount } = useMessages();
+  const { session, isPasswordRecovery } = useAuth();
+
+  // Defence in depth. The root layout's redirect effect was the single
+  // enforcement point, and effects run after mount, so a deep link straight
+  // into a tab rendered an authenticated screen for a frame before bouncing.
+  // Declared after the hooks above so hook order stays stable.
+  if (!session || isPasswordRecovery) {
+    return <Redirect href="/(auth)" />;
+  }
 
   return (
     <Tabs

@@ -26,7 +26,7 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function InitialLayout() {
-  const { session, isLoading, isProfileLoading, profile } = useAuth();
+  const { session, isLoading, isProfileLoading, profile, isPasswordRecovery, beginPasswordRecovery } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -39,18 +39,20 @@ function InitialLayout() {
   useEffect(() => {
     Linking.getInitialURL().then(async (url) => {
       if (await handleRecoveryUrl(url)) {
+        beginPasswordRecovery();
         router.replace('/(auth)/reset-password' as any);
       }
     });
 
     const subscription = Linking.addEventListener('url', async ({ url }) => {
       if (await handleRecoveryUrl(url)) {
+        beginPasswordRecovery();
         router.replace('/(auth)/reset-password' as any);
       }
     });
 
     return () => subscription.remove();
-  }, [router]);
+  }, [router, beginPasswordRecovery]);
 
   useEffect(() => {
     hasSeenOnboarding().then(setOnboardingSeen);
@@ -76,10 +78,14 @@ function InitialLayout() {
     const onProfileSetup = segments[1] === 'profile-setup';
     const onResetPassword = (segments[1] as string) === 'reset-password';
 
-    // A recovery session is a real (temporary) session, so it would
-    // otherwise satisfy every branch below and get redirected straight past
-    // this screen into the tabs before the user sets a new password.
-    if (onResetPassword) return;
+    // A recovery session is a real session, so without this the emailed reset
+    // link would function as a full login: satisfy the branches below, reach
+    // the tabs, and never require a new password. Pin the user here until
+    // updateUser succeeds (or they sign out from the screen itself).
+    if (isPasswordRecovery) {
+      if (!onResetPassword) router.replace('/(auth)/reset-password' as any);
+      return;
+    }
 
     if (!session) {
       if (!inAuthGroup) {
@@ -98,7 +104,7 @@ function InitialLayout() {
         }
       }
     }
-  }, [flagsReady, session, segments, profile, router, onboardingSeen]);
+  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery]);
 
   useEffect(() => {
     if (hasBootstrapped) {
