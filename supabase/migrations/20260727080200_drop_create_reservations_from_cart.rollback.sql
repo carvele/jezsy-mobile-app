@@ -1,0 +1,9 @@
+-- Reverts 20260727080200_drop_create_reservations_from_cart.sql
+--
+-- No automatic restore. The function body is not reproduced here on purpose:
+-- it inserted reservations at client-supplied prices with no auth check, and
+-- re-creating it verbatim would reopen finding H-1. If a service-role caller
+-- turns out to depend on it, rewrite it with an auth guard and server-side
+-- price resolution rather than restoring the original.
+--
+-- Original definition is recoverable from git history prior to this migration.
