@@ -16,11 +16,13 @@ import { supabase } from '@/src/lib/supabase';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useAuth } from '@/src/context/AuthContext';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
+  const { endPasswordRecovery, signOut } = useAuth();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -42,6 +44,10 @@ export default function ResetPasswordScreen() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
+      // Only now does the recovery session stop being a recovery session, so
+      // routing may release the user into the app.
+      endPasswordRecovery();
+
       Alert.alert('Password Updated', 'Your password has been reset.', [
         { text: 'OK', onPress: () => router.replace('/(tabs)') },
       ]);
@@ -50,6 +56,14 @@ export default function ResetPasswordScreen() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Routing pins the user to this screen while a recovery session is active,
+  // so there has to be a way out that does not grant access to the app.
+  const handleCancel = async () => {
+    await signOut();
+    endPasswordRecovery();
+    router.replace('/(auth)/welcome');
   };
 
   return (
@@ -119,6 +133,18 @@ export default function ResetPasswordScreen() {
               <Text style={styles.submitButtonText}>Update Password</Text>
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={handleCancel}
+            disabled={submitting}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel password reset and sign out"
+          >
+            <Text style={[styles.cancelButtonText, { color: colors.secondaryText }]}>
+              Cancel and sign out
+            </Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -169,5 +195,15 @@ const styles = StyleSheet.create({
     color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '700',
+  },
+  cancelButton: {
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

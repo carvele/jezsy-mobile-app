@@ -22,6 +22,14 @@ type AuthContextType = {
   /** Call this after saving profile data so routing re-evaluates immediately. */
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * True while a password-recovery session is active. A recovery session is a
+   * real session, so routing must pin the user to reset-password until they
+   * actually set a new password -- otherwise the emailed link is a full login.
+   */
+  isPasswordRecovery: boolean;
+  beginPasswordRecovery: () => void;
+  endPasswordRecovery: () => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -32,6 +40,9 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   refreshProfile: async () => {},
   signOut: async () => {},
+  isPasswordRecovery: false,
+  beginPasswordRecovery: () => {},
+  endPasswordRecovery: () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -40,6 +51,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+
+  const beginPasswordRecovery = useCallback(() => setIsPasswordRecovery(true), []);
+  const endPasswordRecovery = useCallback(() => setIsPasswordRecovery(false), []);
 
   const fetchProfile = useCallback(async (userId: string) => {
     setIsProfileLoading(true);
@@ -149,6 +164,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        // Belt-and-braces alongside the explicit begin/end calls: on platforms
+        // where the SDK detects the recovery link itself, this is the only
+        // signal we get.
+        if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
+        if (event === 'SIGNED_OUT') setIsPasswordRecovery(false);
+
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -175,6 +196,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profile,
         refreshProfile,
         signOut,
+        isPasswordRecovery,
+        beginPasswordRecovery,
+        endPasswordRecovery,
       }}
     >
       {children}

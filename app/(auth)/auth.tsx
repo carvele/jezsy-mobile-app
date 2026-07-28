@@ -105,13 +105,6 @@ export default function AuthScreen() {
 
     setLoading(true);
     try {
-      const { data: emailExists, error: rpcError } = await supabase.rpc('check_email_exists', { lookup_email: trimmedEmail });
-      if (!rpcError && emailExists) {
-        Alert.alert('Sign Up Failed', 'Email already registered. Please log in instead.');
-        setLoading(false);
-        return;
-      }
-
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
@@ -125,15 +118,28 @@ export default function AuthScreen() {
         return;
       }
 
-      // If confirm email is ON, we transition to OTP verification mode
+      // Supabase does not error on a duplicate address: it returns an
+      // obfuscated user with an empty identities array and sends no email,
+      // deliberately, so the response cannot be used to enumerate accounts.
+      // That empty array is the only reliable duplicate signal. No account is
+      // created either way, so the requirement is already satisfied by the
+      // server -- we detect it only to avoid arming a resend timer for a code
+      // that was never sent, and we take the identical UI path so this branch
+      // stays indistinguishable from a real signup.
+      const isDuplicate = !!data?.user && (data.user.identities?.length ?? 0) === 0;
+
       setVerificationType('signup');
-      setTimer(60);
+      if (!isDuplicate) setTimer(60);
       transitionMode('otp_verify');
     } catch (err: any) {
       console.error('Sign Up error:', err);
       let msg = err.message ?? 'Could not create your account.';
+      // Never confirm that an address is already registered. Supabase
+      // obfuscates this case when email confirmations are on, so this branch
+      // only fires with confirmations off -- where its raw message would
+      // otherwise disclose more than the removed pre-check did.
       if (msg.includes('already registered')) {
-        msg = 'This email is already registered. Please log in instead.';
+        msg = 'Could not create your account. Please check your details and try again.';
       }
       Alert.alert('Sign Up Failed', msg);
     } finally {
@@ -156,13 +162,9 @@ export default function AuthScreen() {
 
     setLoading(true);
     try {
-      const { data: emailExists, error: rpcError } = await supabase.rpc('check_email_exists', { lookup_email: trimmedEmail });
-      if (!rpcError && !emailExists) {
-        Alert.alert('Login Failed', 'Email not found. Please sign up first.');
-        setLoading(false);
-        return;
-      }
-
+      // No pre-flight existence check: signInWithPassword already rejects both
+      // an unknown address and a wrong password, so the check enforced nothing
+      // and only disclosed which addresses are registered.
       const { error } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password,
@@ -200,13 +202,8 @@ export default function AuthScreen() {
 
     setLoading(true);
     try {
-      const { data: emailExists, error: rpcError } = await supabase.rpc('check_email_exists', { lookup_email: trimmedEmail });
-      if (!rpcError && !emailExists) {
-        Alert.alert('Sign In Failed', 'Email not found. Please sign up first.');
-        setLoading(false);
-        return;
-      }
-
+      // signInWithOtp does not disclose whether the address exists; a
+      // pre-flight existence check would have undone that.
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmedEmail,
       });
@@ -260,15 +257,10 @@ export default function AuthScreen() {
     if (timer > 0) return;
     setLoading(true);
     try {
-      const { data: emailExists, error: rpcError } = await supabase.rpc('check_email_exists', { lookup_email: email.trim().toLowerCase() });
-
+      // Both branches previously gated on an existence check that disclosed
+      // whether the address was registered. Supabase's own responses here are
+      // deliberately non-disclosing, so let them through unchanged.
       if (verificationType === 'signup') {
-        if (!rpcError && emailExists) {
-          Alert.alert('Sign Up Failed', 'Email already registered. Please log in instead.');
-          setLoading(false);
-          return;
-        }
-
         // Resend signup confirmation by signing up again (handles resending)
         const { error } = await supabase.auth.signUp({
           email: email.trim().toLowerCase(),
@@ -276,12 +268,6 @@ export default function AuthScreen() {
         });
         if (error) throw error;
       } else {
-        if (!rpcError && !emailExists) {
-          Alert.alert('Resend Failed', 'Email not found. Please sign up first.');
-          setLoading(false);
-          return;
-        }
-
         // Resend passwordless login OTP
         const { error } = await supabase.auth.signInWithOtp({
           email: email.trim().toLowerCase(),
@@ -315,13 +301,8 @@ export default function AuthScreen() {
 
     setLoading(true);
     try {
-      const { data: emailExists, error: rpcError } = await supabase.rpc('check_email_exists', { lookup_email: trimmedEmail });
-      if (!rpcError && !emailExists) {
-        Alert.alert('Reset Failed', 'Email not found. Please sign up first.');
-        setLoading(false);
-        return;
-      }
-
+      // The existence check here contradicted the deliberately generic
+      // "If an account exists..." message shown on success below.
       const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
         redirectTo: Linking.createURL('reset-password'),
       });
