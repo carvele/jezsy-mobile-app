@@ -6,11 +6,18 @@ import { useAuth } from './AuthContext';
 type Conversation = Database['public']['Tables']['conversations']['Row'];
 type Message = Database['public']['Tables']['messages']['Row'];
 
+// What a message is regarding, so staff see the subject of an inquiry.
+export type MessageContext = {
+  type: 'product' | 'reservation' | 'order';
+  ref?: string | null;
+  label: string;
+};
+
 interface MessagesContextType {
   conversations: Conversation[];
   unreadCount: number;
   loading: boolean;
-  sendMessage: (conversationId: string, text: string, imageUrl?: string) => Promise<Message | null>;
+  sendMessage: (conversationId: string, text: string, imageUrl?: string, context?: MessageContext) => Promise<Message | null>;
   markAsRead: (conversationId: string) => Promise<void>;
   getOrCreateConversation: () => Promise<Conversation | null>;
   refreshConversations: () => Promise<void>;
@@ -65,20 +72,27 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [session, refreshConversations]);
 
-  const sendMessage = async (conversationId: string, text: string, imageUrl?: string) => {
+  const sendMessage = async (conversationId: string, text: string, imageUrl?: string, context?: MessageContext) => {
     if (!session?.user.id) return null;
 
     try {
-      // 1. Insert message
+      // 1. Insert message. Cast to any: context_* columns are added by
+      // migration 20260724091000 and are not yet in the generated types.
+      const payload: any = {
+        conversation_id: conversationId,
+        sender_id: session.user.id,
+        sender_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : 'Customer',
+        text,
+        image_url: imageUrl || null,
+      };
+      if (context) {
+        payload.context_type = context.type;
+        payload.context_ref = context.ref ?? null;
+        payload.context_label = context.label;
+      }
       const { data: message, error: messageError } = await supabase
         .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          sender_id: session.user.id,
-          sender_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : 'Customer',
-          text,
-          image_url: imageUrl || null,
-        })
+        .insert(payload)
         .select()
         .single();
 

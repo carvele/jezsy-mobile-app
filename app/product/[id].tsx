@@ -125,9 +125,16 @@ export default function ProductDetailScreen() {
 
   const handleMessageSeller = async () => {
     const conv = await getOrCreateConversation();
-    if (conv) {
-      router.push(`/messages/${conv.id}` as any);
-    }
+    if (!conv) return;
+    router.push({
+      pathname: '/messages/[conversationId]',
+      params: {
+        conversationId: conv.id,
+        ctxType: 'product',
+        ctxRef: product?.id ?? '',
+        ctxLabel: product ? `${product.name}${selectedSize ? ` (Size ${selectedSize})` : ''}` : 'a product',
+      },
+    } as any);
   };
 
   if (loading) {

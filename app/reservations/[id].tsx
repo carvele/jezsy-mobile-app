@@ -9,6 +9,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { formatTimeLabel } from '@/src/utils/dateTime';
+import { useMessages } from '@/src/context/MessagesContext';
 
 type Reservation = Database['public']['Tables']['reservations']['Row'];
 
@@ -17,6 +18,7 @@ export default function ReservationDetailScreen() {
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
+  const { getOrCreateConversation } = useMessages();
 
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,20 @@ export default function ReservationDetailScreen() {
   useEffect(() => {
     fetchReservation();
   }, [fetchReservation]);
+
+  const handleAskAboutReservation = async () => {
+    const conv = await getOrCreateConversation();
+    if (!conv || !reservation) return;
+    router.push({
+      pathname: '/messages/[conversationId]',
+      params: {
+        conversationId: conv.id,
+        ctxType: 'reservation',
+        ctxRef: reservation.id,
+        ctxLabel: `Reservation ${reservation.display_id || reservation.id.substring(0, 8)}${reservation.product_name ? ` - ${reservation.product_name}` : ''}`,
+      },
+    } as any);
+  };
 
   const getStatusColor = (status: string | null) => {
     if (!status) return colors.warning;
@@ -116,6 +132,13 @@ export default function ReservationDetailScreen() {
                 </TouchableOpacity>
               </Link>
             )}
+            <TouchableOpacity
+              onPress={handleAskAboutReservation}
+              accessibilityRole="button"
+              accessibilityLabel="Ask the shop owner about this reservation"
+            >
+              <Text style={[styles.viewProductLink, { color: colors.tint }]}>Ask about this reservation</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

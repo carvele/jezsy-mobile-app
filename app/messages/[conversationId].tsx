@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
-import { useMessages } from '@/src/context/MessagesContext';
+import { useMessages, MessageContext } from '@/src/context/MessagesContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -17,7 +17,12 @@ import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
 
 export default function ChatScreen() {
-  const { conversationId } = useLocalSearchParams<{ conversationId: string }>();
+  const { conversationId, ctxType, ctxRef, ctxLabel } = useLocalSearchParams<{
+    conversationId: string;
+    ctxType?: string;
+    ctxRef?: string;
+    ctxLabel?: string;
+  }>();
   const { session } = useAuth();
   const { sendMessage, markAsRead } = useMessages();
   const router = useRouter();
@@ -26,6 +31,7 @@ export default function ChatScreen() {
 
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
+  const [pendingContext, setPendingContext] = useState<MessageContext | null>(null);
   const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string>>({});
   const resolvedImageUrlsRef = useRef(resolvedImageUrls);
   resolvedImageUrlsRef.current = resolvedImageUrls;
@@ -110,9 +116,18 @@ export default function ChatScreen() {
     };
   }, [conversationId, markAsRead, session?.user.id]);
 
+  // Prime the subject from the "Ask about this" entry point; it rides along on
+  // the next message the user sends, then clears.
+  useEffect(() => {
+    if (ctxLabel && (ctxType === 'product' || ctxType === 'reservation' || ctxType === 'order')) {
+      setPendingContext({ type: ctxType, ref: ctxRef ?? null, label: ctxLabel });
+    }
+  }, [ctxType, ctxRef, ctxLabel]);
+
   const handleSend = async () => {
     if (!inputText.trim() || !conversationId) return;
     const textToSend = inputText.trim();
+    const contextToSend = pendingContext;
     setInputText('');
 
     // Optimistic UI update
@@ -122,18 +137,20 @@ export default function ChatScreen() {
       sender_id: session?.user.id,
       created_at: new Date().toISOString(),
       read_at: null,
-      image_url: null
+      image_url: null,
+      context_label: contextToSend?.label ?? null,
     };
     setMessages(prev => [...prev, tempMsg]);
 
-    const result = await sendMessage(conversationId, textToSend);
+    const result = await sendMessage(conversationId, textToSend, undefined, contextToSend ?? undefined);
     if (!result) {
       // Revert if failed
       setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
       setInputText(textToSend);
     } else {
-      // Replace temp message with real one
+      // Replace temp message with real one; context has now been attached.
       setMessages(prev => prev.map(m => m.id === tempMsg.id ? result : m));
+      if (contextToSend) setPendingContext(null);
     }
   };
 
@@ -207,6 +224,13 @@ export default function ChatScreen() {
                 : [styles.messageBubbleThem, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }],
             ]}
           >
+            {item.context_label ? (
+              <View style={[styles.contextChip, { backgroundColor: isMe ? 'rgba(0,0,0,0.12)' : colors.background, borderColor: isMe ? 'transparent' : colors.border }]}>
+                <Text style={[styles.contextChipText, { color: isMe ? '#0D0D0D' : colors.secondaryText }]} numberOfLines={1}>
+                  Re: {item.context_label}
+                </Text>
+              </View>
+            ) : null}
             {item.image_url && resolvedImageUrls[item.id] ? (
               <Image source={{ uri: resolvedImageUrls[item.id] }} style={styles.messageImage} resizeMode="cover" />
             ) : null}
@@ -258,6 +282,23 @@ export default function ChatScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
+
+        {pendingContext && (
+          <View style={[styles.contextBanner, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <IconSymbol name="tag.fill" size={14} color={colors.tint} />
+            <Text style={[styles.contextBannerText, { color: colors.text }]} numberOfLines={1}>
+              Re: {pendingContext.label}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setPendingContext(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Clear message subject"
+              hitSlop={8}
+            >
+              <IconSymbol name="xmark" size={14} color={colors.secondaryText} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={[styles.inputContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
           <TouchableOpacity
@@ -376,6 +417,32 @@ const styles = StyleSheet.create({
   },
   readReceiptText: {
     fontSize: 11,
+    fontWeight: '600',
+  },
+  contextChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 6,
+    maxWidth: 220,
+  },
+  contextChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  contextBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  contextBannerText: {
+    flex: 1,
+    fontSize: 13,
     fontWeight: '600',
   },
   inputContainer: {
