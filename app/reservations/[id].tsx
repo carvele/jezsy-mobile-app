@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link } from 'expo-router';
+import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
@@ -161,9 +162,14 @@ export default function ReservationDetailScreen() {
               <IconSymbol name="checkmark.circle.fill" size={18} color="#0D0D0D" />
               <Text style={styles.pickupTitle}>PICKUP PASS</Text>
             </View>
+            {reservation.pickup_token && (
+              <View style={styles.pickupQrWrap}>
+                <QRCode value={`jezsy-pickup:${reservation.pickup_token}`} size={140} backgroundColor="#FFFFFF" color="#0D0D0D" />
+              </View>
+            )}
             <Text style={styles.pickupRef}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
             <Text style={styles.pickupHint}>
-              Show this reference at the boutique to collect your item. Bring a valid ID and your remaining balance.
+              Show this code at the boutique to collect your item. Bring a valid ID and your remaining balance.
             </Text>
           </View>
         )}
@@ -338,7 +344,8 @@ const styles = StyleSheet.create({
   },
   pickupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   pickupTitle: { fontSize: 13, fontWeight: '800', color: '#0D0D0D', letterSpacing: 1 },
-  pickupRef: { fontSize: 28, fontWeight: '900', color: '#0D0D0D', letterSpacing: 2, marginBottom: 8 },
+  pickupQrWrap: { alignSelf: 'center', padding: 12, borderRadius: 12, backgroundColor: '#FFFFFF', marginBottom: 16 },
+  pickupRef: { fontSize: 28, fontWeight: '900', color: '#0D0D0D', letterSpacing: 2, marginBottom: 8, textAlign: 'center' },
   pickupHint: { fontSize: 12, lineHeight: 17, color: '#0D0D0D' },
   productCard: {
     flexDirection: 'row',
