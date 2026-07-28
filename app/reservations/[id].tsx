@@ -155,6 +155,19 @@ export default function ReservationDetailScreen() {
           </View>
         </View>
 
+        {(reservation.status || '').toLowerCase() === 'confirmed' && (
+          <View style={[styles.pickupCard, { backgroundColor: colors.tint }]}>
+            <View style={styles.pickupHeader}>
+              <IconSymbol name="checkmark.circle.fill" size={18} color="#0D0D0D" />
+              <Text style={styles.pickupTitle}>PICKUP PASS</Text>
+            </View>
+            <Text style={styles.pickupRef}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
+            <Text style={styles.pickupHint}>
+              Show this reference at the boutique to collect your item. Bring a valid ID and your remaining balance.
+            </Text>
+          </View>
+        )}
+
         <View style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Image
             source={reservation.image_url ? { uri: reservation.image_url } : require('@/assets/images/partial-react-logo.png')}
@@ -318,6 +331,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusText: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  pickupCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  pickupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  pickupTitle: { fontSize: 13, fontWeight: '800', color: '#0D0D0D', letterSpacing: 1 },
+  pickupRef: { fontSize: 28, fontWeight: '900', color: '#0D0D0D', letterSpacing: 2, marginBottom: 8 },
+  pickupHint: { fontSize: 12, lineHeight: 17, color: '#0D0D0D' },
   productCard: {
     flexDirection: 'row',
     borderRadius: 16,
