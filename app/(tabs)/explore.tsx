@@ -25,6 +25,8 @@ import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
 import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
+import { recommendSize } from '@/src/utils/sizeRecommender';
+import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
@@ -57,6 +59,8 @@ export default function ExploreScreen() {
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
   const { itemCount } = useCart();
+  const { measurements: sizingMeasurements, fitPreference, ready: sizingReady, needsSetup: needsSizingSetup } = useSizingProfile();
+  const [sizingNudgeDismissed, setSizingNudgeDismissed] = useState(false);
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string; all?: string }>();
 
@@ -158,6 +162,7 @@ export default function ExploreScreen() {
   const [selectedNewArrivalsOnly, setSelectedNewArrivalsOnly] = useState(false);
   const [selectedSaleOnly, setSelectedSaleOnly] = useState(false);
   const [selectedArOnly, setSelectedArOnly] = useState(false);
+  const [selectedMySizeOnly, setSelectedMySizeOnly] = useState(false);
   const [selectedFits, setSelectedFits] = useState<string[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
 
@@ -175,6 +180,7 @@ export default function ExploreScreen() {
   const [tempNewArrivalsOnly, setTempNewArrivalsOnly] = useState(false);
   const [tempSaleOnly, setTempSaleOnly] = useState(false);
   const [tempArOnly, setTempArOnly] = useState(false);
+  const [tempMySizeOnly, setTempMySizeOnly] = useState(false);
   const [tempFits, setTempFits] = useState<string[]>([]);
   const [tempMaterials, setTempMaterials] = useState<string[]>([]);
 
@@ -311,6 +317,20 @@ export default function ExploreScreen() {
     fetchAllProducts();
   }, [showAllProducts]);
 
+  // Fit-aware sizing: recommended size per product for the currently visible
+  // list, computed from the user's stored measurements. Empty when the user
+  // has no usable measurements, which keeps the badge and "My Size" filter
+  // from ever guessing.
+  const recommendedSizes = useMemo(() => {
+    const map = new Map<string, string | null>();
+    if (!sizingReady || !sizingMeasurements) return map;
+    const source = isSearchActive ? searchResults : products;
+    source.forEach((p) => {
+      map.set(p.id, recommendSize(sizingMeasurements, (p as any).measurements, fitPreference));
+    });
+    return map;
+  }, [products, searchResults, isSearchActive, sizingMeasurements, fitPreference, sizingReady]);
+
   // Real-Time Client-Side Filtering
   const filteredProducts = useMemo(() => {
     const listToFilter = isSearchActive ? searchResults : products;
@@ -380,6 +400,15 @@ export default function ExploreScreen() {
         if (!hasMat) return false;
       }
 
+      // 8. My Size filter (fit-aware): keep only items whose recommended size
+      // is resolvable and, when the product lists sizes, actually offered.
+      if (selectedMySizeOnly) {
+        const rec = recommendedSizes.get(product.id);
+        if (!rec) return false;
+        const sizes = product.sizes || [];
+        if (sizes.length > 0 && !sizes.includes(rec)) return false;
+      }
+
       return true;
     });
   }, [
@@ -394,6 +423,8 @@ export default function ExploreScreen() {
     selectedNewArrivalsOnly,
     selectedSaleOnly,
     selectedArOnly,
+    selectedMySizeOnly,
+    recommendedSizes,
     selectedFits,
     selectedMaterials,
   ]);
@@ -429,6 +460,7 @@ export default function ExploreScreen() {
     setTempNewArrivalsOnly(selectedNewArrivalsOnly);
     setTempSaleOnly(selectedSaleOnly);
     setTempArOnly(selectedArOnly);
+    setTempMySizeOnly(selectedMySizeOnly);
     setTempFits(selectedFits);
     setTempMaterials(selectedMaterials);
     setIsFilterModalOpen(true);
@@ -443,6 +475,7 @@ export default function ExploreScreen() {
     setSelectedNewArrivalsOnly(tempNewArrivalsOnly);
     setSelectedSaleOnly(tempSaleOnly);
     setSelectedArOnly(tempArOnly);
+    setSelectedMySizeOnly(tempMySizeOnly);
     setSelectedFits(tempFits);
     setSelectedMaterials(tempMaterials);
     setIsFilterModalOpen(false);
@@ -457,6 +490,7 @@ export default function ExploreScreen() {
     setTempNewArrivalsOnly(false);
     setTempSaleOnly(false);
     setTempArOnly(false);
+    setTempMySizeOnly(false);
     setTempFits([]);
     setTempMaterials([]);
   };
@@ -470,6 +504,7 @@ export default function ExploreScreen() {
     setSelectedNewArrivalsOnly(false);
     setSelectedSaleOnly(false);
     setSelectedArOnly(false);
+    setSelectedMySizeOnly(false);
     setSelectedFits([]);
     setSelectedMaterials([]);
   };
@@ -612,10 +647,21 @@ export default function ExploreScreen() {
               ₱{(item.price || 0).toLocaleString()}
             </Text>
           )}
+          {(() => {
+            const rec = recommendedSizes.get(item.id);
+            return rec ? (
+              <View style={styles.fitBadgeRow} accessibilityLabel={`Recommended for you: size ${rec}`}>
+                <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
+                <Text style={[styles.fitBadgeText, { color: colors.tint }]} numberOfLines={1}>
+                  Your size: {rec}
+                </Text>
+              </View>
+            ) : null;
+          })()}
         </View>
       </TouchableOpacity>
     </Link>
-  ), [colors]);
+  ), [colors, recommendedSizes]);
 
   const activeFiltersCount =
     selectedSizes.length +
@@ -625,6 +671,7 @@ export default function ExploreScreen() {
     (selectedNewArrivalsOnly ? 1 : 0) +
     (selectedSaleOnly ? 1 : 0) +
     (selectedArOnly ? 1 : 0) +
+    (selectedMySizeOnly ? 1 : 0) +
     selectedFits.length +
     selectedMaterials.length;
 
@@ -790,6 +837,14 @@ export default function ExploreScreen() {
                               </TouchableOpacity>
                             </View>
                           )}
+                          {selectedMySizeOnly && (
+                            <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                              <Text style={[styles.filterTagText, { color: colors.text }]}>My Size</Text>
+                              <TouchableOpacity onPress={() => setSelectedMySizeOnly(false)} accessibilityRole="button" accessibilityLabel="Remove My Size filter">
+                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
+                              </TouchableOpacity>
+                            </View>
+                          )}
                           {selectedSizes.map(size => (
                             <View key={`size-${size}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                               <Text style={[styles.filterTagText, { color: colors.text }]}>Size: {size}</Text>
@@ -875,6 +930,33 @@ export default function ExploreScreen() {
                 <IconSymbol name="bag.fill" size={18} color="#0D0D0D" />
                 <Text style={styles.shopAllButtonText}>Shop All Products</Text>
               </TouchableOpacity>
+
+              {needsSizingSetup && !sizingNudgeDismissed && (
+                <View style={[styles.sizingNudge, { backgroundColor: colors.card, borderColor: colors.tint }]}>
+                  <IconSymbol name="person.fill" size={20} color={colors.tint} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sizingNudgeTitle, { color: colors.text }]}>Get your size on every item</Text>
+                    <Text style={[styles.sizingNudgeBody, { color: colors.secondaryText }]}>
+                      Add your measurements once to see a recommended size right on the catalog.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => router.push('/profile/measurements')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add your measurements"
+                    >
+                      <Text style={[styles.sizingNudgeAction, { color: colors.tint }]}>Add measurements</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setSizingNudgeDismissed(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss sizing prompt"
+                    hitSlop={8}
+                  >
+                    <IconSymbol name="xmark" size={16} color={colors.secondaryText} />
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories</Text>
               <View style={styles.categoriesGrid}>
@@ -1040,6 +1122,14 @@ export default function ExploreScreen() {
                                 </TouchableOpacity>
                               </View>
                             )}
+                            {selectedMySizeOnly && (
+                              <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                <Text style={[styles.filterTagText, { color: colors.text }]}>My Size</Text>
+                                <TouchableOpacity onPress={() => setSelectedMySizeOnly(false)} accessibilityRole="button" accessibilityLabel="Remove My Size filter">
+                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
+                                </TouchableOpacity>
+                              </View>
+                            )}
                             {selectedSizes.map(size => (
                               <View key={`size-${size}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
                                 <Text style={[styles.filterTagText, { color: colors.text }]}>Size: {size}</Text>
@@ -1182,6 +1272,22 @@ export default function ExploreScreen() {
                       <IconSymbol name="cube.transparent" size={14} color={tempArOnly ? '#0D0D0D' : colors.tint} style={{ marginRight: 6 }} />
                       <Text style={[styles.chipButtonText, { color: tempArOnly ? '#0D0D0D' : colors.text }]}>Try in AR</Text>
                     </TouchableOpacity>
+
+                    {sizingReady && (
+                      <TouchableOpacity
+                        style={[
+                          styles.chipButton,
+                          {
+                            backgroundColor: tempMySizeOnly ? colors.tint : colors.card,
+                            borderColor: tempMySizeOnly ? colors.tint : colors.border,
+                          },
+                        ]}
+                        onPress={() => setTempMySizeOnly(!tempMySizeOnly)}
+                      >
+                        <IconSymbol name="checkmark.circle.fill" size={14} color={tempMySizeOnly ? '#0D0D0D' : colors.tint} style={{ marginRight: 6 }} />
+                        <Text style={[styles.chipButtonText, { color: tempMySizeOnly ? '#0D0D0D' : colors.text }]}>My Size</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
 
@@ -1745,6 +1851,39 @@ const styles = StyleSheet.create({
   originalPriceText: {
     fontSize: 11,
     textDecorationLine: 'line-through',
+  },
+  fitBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  fitBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  sizingNudge: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  sizingNudgeTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  sizingNudgeBody: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 8,
+  },
+  sizingNudgeAction: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   centerContainer: {
     flex: 1,
