@@ -20,13 +20,13 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
-// Held until the auth bootstrap (session + PIN/profile flags) and the
-// onboarding-seen check both resolve, so the tabs-anchor screen is never
-// mounted before we know the correct first screen to land on.
+// Held until the auth bootstrap (session + profile) and the onboarding-seen
+// check both resolve, so the tabs-anchor screen is never mounted before we
+// know the correct first screen to land on.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function InitialLayout() {
-  const { session, isLoading, isProfileLoading, profile, hasPinSetup, isPinAuthenticated, requireFullLogin } = useAuth();
+  const { session, isLoading, isProfileLoading, profile } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -74,16 +74,14 @@ function InitialLayout() {
 
     const inAuthGroup = segments[0] === '(auth)';
     const onProfileSetup = segments[1] === 'profile-setup';
-    const onPinSetup = segments[1] === 'pin-setup';
-    const onPinEntry = segments[1] === 'pin-entry';
     const onResetPassword = (segments[1] as string) === 'reset-password';
 
     // A recovery session is a real (temporary) session, so it would
     // otherwise satisfy every branch below and get redirected straight past
-    // this screen into the tabs/PIN flow before the user sets a new password.
+    // this screen into the tabs before the user sets a new password.
     if (onResetPassword) return;
 
-    if (!session || requireFullLogin) {
+    if (!session) {
       if (!inAuthGroup) {
         // Returning (or already-onboarded) users skip straight past the
         // marketing carousel to the login/welcome screen.
@@ -93,10 +91,6 @@ function InitialLayout() {
       // User is logged in
       if (!profile || !profile.first_name) {
         if (!onProfileSetup) router.replace('/(auth)/profile-setup');
-      } else if (!hasPinSetup) {
-        if (!onPinSetup) router.replace('/(auth)/pin-setup');
-      } else if (!isPinAuthenticated) {
-        if (!onPinEntry) router.replace('/(auth)/pin-entry');
       } else {
         // Fully authenticated and set up
         if (inAuthGroup) {
@@ -104,7 +98,7 @@ function InitialLayout() {
         }
       }
     }
-  }, [flagsReady, session, segments, profile, router, hasPinSetup, isPinAuthenticated, requireFullLogin, onboardingSeen]);
+  }, [flagsReady, session, segments, profile, router, onboardingSeen]);
 
   useEffect(() => {
     if (hasBootstrapped) {
