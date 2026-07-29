@@ -27,14 +27,27 @@ export default function InboxScreen() {
       return;
     }
     try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      setNotifications(data || []);
+      const nowIso = new Date().toISOString();
+      const [personalRes, announcementsRes, dismissalsRes] = await Promise.all([
+        supabase.from('notifications').select('*').eq('user_id', user.id),
+        supabase.from('announcements').select('*').or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+        supabase.from('announcement_dismissals').select('announcement_id').eq('user_id', user.id),
+      ]);
+
+      if (personalRes.error) throw personalRes.error;
+      if (announcementsRes.error) throw announcementsRes.error;
+      if (dismissalsRes.error) throw dismissalsRes.error;
+
+      const dismissedIds = new Set((dismissalsRes.data || []).map(d => d.announcement_id));
+      const activeAnnouncements = (announcementsRes.data || [])
+        .filter(a => !dismissedIds.has(a.id))
+        .map(a => ({ ...a, kind: 'announcement' as const, is_read: true }));
+      const personal = (personalRes.data || []).map(n => ({ ...n, kind: 'personal' as const }));
+
+      const combined = [...personal, ...activeAnnouncements].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      setNotifications(combined);
     } catch (err) {
       console.error('Error fetching notifications:', err);
     } finally {
@@ -55,6 +68,16 @@ export default function InboxScreen() {
         .update({ is_read: true })
         .eq('id', id)
         .eq('user_id', user.id);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const dismissAnnouncement = async (id: string) => {
+    if (!user) return;
+    setNotifications(prev => prev.filter(n => !(n.kind === 'announcement' && n.id === id)));
+    try {
+      await supabase.from('announcement_dismissals').insert({ user_id: user.id, announcement_id: id });
     } catch (e) {
       console.error(e);
     }
@@ -113,29 +136,43 @@ export default function InboxScreen() {
     );
   };
 
-  const renderNotificationItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      style={[styles.notificationCard, { backgroundColor: item.is_read ? colors.background : colors.card, borderBottomColor: colors.border }]}
-      onPress={() => markAsRead(item.id)}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.title}, ${item.is_read ? 'read' : 'unread'}`}
-      accessibilityHint={item.is_read ? 'This notification has been read' : 'Tap to mark this notification as read'}
-    >
-      <View style={[styles.iconContainer, { backgroundColor: colors.tint + '20' }]}>
-        <IconSymbol name={getIconForType(item.type)} size={24} color={colors.tint} />
-      </View>
-      <View style={styles.notificationContent}>
-        <View style={styles.notificationHeader}>
-          <Text style={[styles.notificationTitle, { color: colors.text }]}>{item.title}</Text>
-          {!item.is_read && <View style={styles.unreadDot} />}
+  const renderNotificationItem = ({ item }: { item: any }) => {
+    const isAnnouncement = item.kind === 'announcement';
+    return (
+      <TouchableOpacity
+        style={[styles.notificationCard, { backgroundColor: item.is_read ? colors.background : colors.card, borderBottomColor: colors.border }]}
+        onPress={() => !isAnnouncement && markAsRead(item.id)}
+        disabled={isAnnouncement}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}, ${item.is_read ? 'read' : 'unread'}`}
+        accessibilityHint={isAnnouncement ? undefined : (item.is_read ? 'This notification has been read' : 'Tap to mark this notification as read')}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: colors.tint + '20' }]}>
+          <IconSymbol name={getIconForType(item.type)} size={24} color={colors.tint} />
         </View>
-        <Text style={[styles.notificationBody, { color: colors.secondaryText }]}>{item.body}</Text>
-        <Text style={[styles.notificationDate, { color: colors.secondaryText }]}>
-          {new Date(item.created_at).toLocaleString()}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.notificationContent}>
+          <View style={styles.notificationHeader}>
+            <Text style={[styles.notificationTitle, { color: colors.text }]}>{item.title}</Text>
+            {!item.is_read && <View style={styles.unreadDot} />}
+          </View>
+          <Text style={[styles.notificationBody, { color: colors.secondaryText }]}>{item.body}</Text>
+          <Text style={[styles.notificationDate, { color: colors.secondaryText }]}>
+            {new Date(item.created_at).toLocaleString()}
+          </Text>
+        </View>
+        {isAnnouncement && (
+          <TouchableOpacity
+            style={styles.dismissButton}
+            onPress={() => dismissAnnouncement(item.id)}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss this announcement"
+          >
+            <IconSymbol name="xmark" size={16} color={colors.secondaryText} />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -379,5 +416,9 @@ const styles = StyleSheet.create({
   },
   notificationDate: {
     fontSize: 12,
-  }
+  },
+  dismissButton: {
+    padding: 4,
+    alignSelf: 'flex-start',
+  },
 });
