@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, Image, Alert
+  TouchableOpacity, KeyboardAvoidingView, Platform, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,8 +15,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
+import { useToast } from '@/src/context/ToastContext';
 
 export default function ChatScreen() {
+  const { showToast } = useToast();
   const { conversationId, ctxType, ctxRef, ctxLabel } = useLocalSearchParams<{
     conversationId: string;
     ctxType?: string;
@@ -197,15 +199,15 @@ export default function ChatScreen() {
            setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
         } else {
            setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-           Alert.alert("Error", "Failed to send image message.");
+           showToast("Failed to send image message.", 'error');
         }
       } else {
         setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-        Alert.alert("Upload Failed", "Could not upload the image to storage.");
+        showToast("Could not upload the image to storage.", 'error');
       }
     } catch (e) {
       console.error('Error picking/uploading image:', e);
-      Alert.alert("Error", "An unexpected error occurred while picking the image.");
+      showToast("An unexpected error occurred while picking the image.", 'error');
     }
   };
 

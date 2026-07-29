@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/theme';
@@ -7,8 +7,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
+import { useToast } from '@/src/context/ToastContext';
 
 export default function CreateCapsuleScreen() {
+  const { showToast } = useToast();
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
@@ -23,12 +25,12 @@ export default function CreateCapsuleScreen() {
     if (!session?.user?.id) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
-      Alert.alert('Name Required', 'Please give your capsule a name.');
+      showToast('Please give your capsule a name.', 'error');
       return;
     }
     const parsedTarget = parseInt(targetCount, 10);
     if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
-      Alert.alert('Invalid Target', 'Target item count must be a positive number.');
+      showToast('Target item count must be a positive number.', 'error');
       return;
     }
 
@@ -48,7 +50,7 @@ export default function CreateCapsuleScreen() {
       router.replace(`/wardrobe/capsule/${data.id}` as any);
     } catch (err: any) {
       console.error('Error creating capsule:', err);
-      Alert.alert('Save Failed', err.message || 'Could not create the capsule. Please try again.');
+      showToast(err.message || 'Could not create the capsule. Please try again.', 'error');
     } finally {
       setSaving(false);
     }

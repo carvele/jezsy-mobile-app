@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/theme';
@@ -8,8 +8,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { savePushTokenToProfile } from '@/src/utils/pushNotifications';
+import { useToast } from '@/src/context/ToastContext';
 
 export default function NotificationsSettingsScreen() {
+  const { showToast } = useToast();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
   const router = useRouter();
@@ -57,10 +59,7 @@ export default function NotificationsSettingsScreen() {
           .maybeSingle();
         if (!data?.expo_push_token) {
           setPushEnabled(false);
-          Alert.alert(
-            'Could Not Enable',
-            'Push notifications need permission and a physical device. Check your device settings and try again.',
-          );
+          showToast('Push notifications need permission and a physical device. Check your device settings and try again.', 'error');
         }
       } else {
         const { error } = await supabase
@@ -71,7 +70,7 @@ export default function NotificationsSettingsScreen() {
       }
     } catch (err: any) {
       setPushEnabled(!next);
-      Alert.alert('Error', err.message || 'Could not update notification settings.');
+      showToast(err.message || 'Could not update notification settings.', 'error');
     } finally {
       setUpdating(false);
     }

@@ -17,8 +17,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useToast } from '@/src/context/ToastContext';
 
 export default function CheckoutScreen() {
+  const { showToast } = useToast();
   const theme = useColorScheme() ?? "dark";
   const colors = Colors[theme];
   const router = useRouter();
@@ -64,17 +66,17 @@ export default function CheckoutScreen() {
     }
 
     if (!address.street || !address.city || !address.province || !address.zip) {
-      Alert.alert("Missing Info", "Please fill in all address fields.");
+      showToast("Please fill in all address fields.", 'info');
       return;
     }
 
     if (!isValidDate(pickupDate)) {
-      Alert.alert("Invalid Date", "Please enter a valid pickup date in YYYY-MM-DD format.");
+      showToast("Please enter a valid pickup date in YYYY-MM-DD format.", 'error');
       return;
     }
 
     if (items.length === 0) {
-      Alert.alert("Empty Bag", "Your bag is empty.");
+      showToast("Your bag is empty.", 'info');
       return;
     }
 
@@ -103,7 +105,7 @@ export default function CheckoutScreen() {
       router.replace(`/orders/${orderId}` as any);
     } catch (err: any) {
       console.error("Checkout failed", err);
-      Alert.alert("Checkout Failed", err.message || "Something went wrong.");
+      showToast(err.message || "Something went wrong.", 'error');
     } finally {
       setProcessing(false);
     }

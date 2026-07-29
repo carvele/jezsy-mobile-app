@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Camera,
@@ -29,6 +29,7 @@ import {
 } from "@/src/utils/poseDetector";
 import { computeMeasurements, type Gender } from "@/src/utils/measurementCalculator";
 import { BurstCollector } from "@/src/utils/burstAverager";
+import { useToast } from '@/src/context/ToastContext';
 
 // CPU (default) delegate. GPU delegate is a device-tuning follow-up: an
 // unsupported delegate fails the whole model load, so correctness-first we
@@ -37,6 +38,7 @@ import { BurstCollector } from "@/src/utils/burstAverager";
 const POSE_DELEGATE = Delegate.CPU;
 
 export default function BodyScanScreen() {
+  const { showToast } = useToast();
   const theme = useColorScheme() ?? "dark";
   const colors = Colors[theme];
   const router = useRouter();
@@ -70,10 +72,10 @@ export default function BodyScanScreen() {
 
   useEffect(() => {
     if (!height || !weight) {
-      Alert.alert("Missing Info", "Please enter your height and weight first.");
+      showToast("Please enter your height and weight first.", 'info');
       router.back();
     }
-  }, [height, weight, router]);
+  }, [height, weight, router, showToast]);
 
   useEffect(() => {
     if (consentGranted && hasPermission) {

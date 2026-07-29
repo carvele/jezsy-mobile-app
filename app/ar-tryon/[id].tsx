@@ -13,11 +13,13 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
+import { useToast } from '@/src/context/ToastContext';
 
 type Product = Database['public']['Tables']['products']['Row'];
 type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category'>;
 
 export default function ARTryOnScreen() {
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,7 +130,7 @@ export default function ARTryOnScreen() {
       if (!permission?.granted) {
         const { granted } = await requestPermission();
         if (!granted) {
-          Alert.alert("Camera Required", "Camera access is needed for the 2D overlay.");
+          showToast("Camera access is needed for the 2D overlay.", 'info');
           return;
         }
       }

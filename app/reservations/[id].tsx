@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link } from 'expo-router';
@@ -12,10 +12,12 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { formatTimeLabel, formatLocalDate } from '@/src/utils/dateTime';
 import { useMessages } from '@/src/context/MessagesContext';
 import { TimeSlotPicker } from '@/src/components/TimeSlotPicker';
+import { useToast } from '@/src/context/ToastContext';
 
 type Reservation = Database['public']['Tables']['reservations']['Row'];
 
 export default function ReservationDetailScreen() {
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
@@ -75,7 +77,7 @@ export default function ReservationDetailScreen() {
 
   const handleReschedule = async () => {
     if (!rescheduleSlot) {
-      Alert.alert('Select a time', 'Please choose a new appointment time.');
+      showToast('Please choose a new appointment time.', 'info');
       return;
     }
     setSubmitting(true);
@@ -91,9 +93,9 @@ export default function ReservationDetailScreen() {
       setShowReschedule(false);
       setRescheduleSlot(undefined);
       await fetchReservation();
-      Alert.alert('Rescheduled', 'Your appointment has been updated.');
+      showToast('Your appointment has been updated.', 'success');
     } catch (err: any) {
-      Alert.alert('Reschedule Failed', err.message || 'Could not reschedule. Please try again.');
+      showToast(err.message || 'Could not reschedule. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }

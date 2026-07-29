@@ -7,7 +7,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   Animated,
   StatusBar,
@@ -20,6 +19,7 @@ import { ArrowLeft, ArrowRight, Check, User, Phone, MapPin, Calendar, ChevronDow
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Colors } from '@/constants/theme';
+import { useToast } from '@/src/context/ToastContext';
 
 
 
@@ -132,6 +132,7 @@ const STEP_META = [
 ];
 
 export default function ProfileSetupScreen() {
+  const { showToast } = useToast();
   const router = useRouter();
   const { user, profile, refreshProfile } = useAuth();
   const [step, setStep] = useState(0);
@@ -296,63 +297,60 @@ export default function ProfileSetupScreen() {
   const validate = (): boolean => {
     if (step === 0) {
       if (!data.firstName.trim() || !data.lastName.trim()) {
-        Alert.alert('Missing Info', 'Please enter your first and last name.');
+        showToast('Please enter your first and last name.', 'info');
         return false;
       }
     }
     if (step === 1) {
       const cleanedPhone = data.phone.replace(/\D/g, '');
       if (!cleanedPhone) {
-        Alert.alert('Missing Info', 'Please enter your phone number.');
+        showToast('Please enter your phone number.', 'info');
         return false;
       }
       if (!selectedCountry.regex.test(cleanedPhone)) {
-        Alert.alert(
-          'Invalid Phone',
-          `Please enter a valid ${selectedCountry.name} phone number (${selectedCountry.format}).`
-        );
+        showToast(`Please enter a valid ${selectedCountry.name} phone number (${selectedCountry.format}).`, 'error');
         return false;
       }
       if (!data.gender) {
-        Alert.alert('Missing Info', 'Please select your gender.');
+        showToast('Please select your gender.', 'info');
         return false;
       }
       if (!data.dateOfBirth.trim()) {
-        Alert.alert('Missing Info', 'Please enter your date of birth.');
+        showToast('Please enter your date of birth.', 'info');
         return false;
       }
 
       // Check standard DOB format MM/DD/YYYY
       const dobPattern = /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/(19|20)\d{2}$/;
       if (!dobPattern.test(data.dateOfBirth.trim())) {
-        Alert.alert('Invalid Date', 'Please enter a valid date in MM/DD/YYYY format.');
+        showToast('Please enter a valid date in MM/DD/YYYY format.', 'error');
         return false;
       }
 
       if (!parseDateOfBirth()) {
-        Alert.alert('Invalid Date', 'Please enter a real calendar date.');
+        showToast('Please enter a real calendar date.', 'error');
         return false;
       }
     }
     if (step === 2) {
       if (!data.addressLine.trim()) {
-        Alert.alert('Missing Info', 'Please enter your street address.');
+        showToast('Please enter your street address.', 'info');
         return false;
       }
       if (!data.barangay.trim()) {
-        Alert.alert('Missing Info', 'Please enter your barangay.');
+        showToast('Please enter your barangay.', 'info');
         return false;
       }
       if (!data.city.trim()) {
-        Alert.alert('Missing Info', 'Please enter your city/municipality.');
+        showToast('Please enter your city/municipality.', 'info');
         return false;
       }
       if (!data.province.trim()) {
-        Alert.alert('Missing Info', 'Please enter your province.');
+        showToast('Please enter your province.', 'info');
         return false;
       }
       if (!data.zipCode.trim()) {
-        Alert.alert('Missing Info', 'Please enter your zip code.');
+        showToast('Please enter your zip code.', 'info');
         return false;
       }
     }
@@ -402,7 +400,7 @@ export default function ProfileSetupScreen() {
       await refreshProfile();
       router.replace('/(tabs)');
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Could not save profile. Please try again.');
+      showToast(err.message ?? 'Could not save profile. Please try again.', 'error');
     } finally {
       setLoading(false);
     }

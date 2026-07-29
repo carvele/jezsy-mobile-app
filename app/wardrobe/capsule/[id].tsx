@@ -9,11 +9,13 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Database } from '@/src/types/database.types';
+import { useToast } from '@/src/context/ToastContext';
 
 type Capsule = Database['public']['Tables']['capsules']['Row'];
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
 export default function CapsuleDetailScreen() {
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
@@ -94,7 +96,7 @@ export default function CapsuleDetailScreen() {
       setCapsuleItems((prev) => [...prev, item]);
     } catch (err) {
       console.error('Error adding item to capsule:', err);
-      Alert.alert('Error', 'Could not add this item. Please try again.');
+      showToast('Could not add this item. Please try again.', 'error');
     } finally {
       setAddingId(null);
     }
@@ -112,7 +114,7 @@ export default function CapsuleDetailScreen() {
       setCapsuleItems((prev) => prev.filter((i) => i.id !== item.id));
     } catch (err) {
       console.error('Error removing item from capsule:', err);
-      Alert.alert('Error', 'Could not remove this item. Please try again.');
+      showToast('Could not remove this item. Please try again.', 'error');
     }
   };
 
@@ -131,7 +133,7 @@ export default function CapsuleDetailScreen() {
             router.back();
           } catch (err) {
             console.error('Error deleting capsule:', err);
-            Alert.alert('Error', 'Could not delete this capsule. Please try again.');
+            showToast('Could not delete this capsule. Please try again.', 'error');
             setDeleting(false);
           }
         },

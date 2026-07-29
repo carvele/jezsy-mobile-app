@@ -25,6 +25,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { Database } from '@/src/types/database.types';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { evaluateColors } from '@/src/utils/colorMatcher';
+import { useToast } from '@/src/context/ToastContext';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 type Product     = Database['public']['Tables']['products']['Row'];
@@ -61,6 +62,7 @@ const EMPTY_SLOTS: Slots = {
 };
 
 export default function OutfitBuilderScreen() {
+  const { showToast } = useToast();
   const theme  = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
   const router = useRouter();
@@ -214,7 +216,7 @@ export default function OutfitBuilderScreen() {
       });
 
     if (items.length === 0) {
-      Alert.alert('Empty Outfit', 'Add at least one item before saving.');
+      showToast('Add at least one item before saving.', 'error');
       return;
     }
 
@@ -233,7 +235,7 @@ export default function OutfitBuilderScreen() {
       ]);
     } catch (err) {
       console.error('Error saving outfit:', err);
-      Alert.alert('Save Failed', 'Could not save outfit. Please try again.');
+      showToast('Could not save outfit. Please try again.', 'error');
     } finally {
       setSaving(false);
     }

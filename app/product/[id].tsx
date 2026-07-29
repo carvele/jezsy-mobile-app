@@ -12,7 +12,6 @@ import {
   Dimensions,
   FlatList,
   Image as RNImage,
-  Alert,
   Share,
 } from "react-native";
 
@@ -33,6 +32,7 @@ import { CATEGORY_SELECT, getMainCategoryId, getMainCategoryName, WithCategoryEm
 import { recommendSize, ProductMeasurements } from "@/src/utils/sizeRecommender";
 import { SizeChartModal } from "@/src/components/SizeChartModal";
 import { ImageViewerModal } from "@/src/components/ImageViewerModal";
+import { useToast } from '@/src/context/ToastContext';
 
 type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
 type Inventory = Database["public"]["Tables"]["inventory"]["Row"];
@@ -40,6 +40,7 @@ type Inventory = Database["public"]["Tables"]["inventory"]["Row"];
 const { width } = Dimensions.get("window");
 
 export default function ProductDetailScreen() {
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [inventory, setInventory] = useState<Inventory[]>([]);
@@ -158,7 +159,7 @@ export default function ProductDetailScreen() {
 
   const handleNotifyMe = async () => {
     if (!user?.id || !id || !selectedSize) {
-      Alert.alert("Sign in required", "Log in to get notified when this size is back in stock.");
+      showToast("Log in to get notified when this size is back in stock.", 'info');
       return;
     }
     setNotifySubmitting(true);

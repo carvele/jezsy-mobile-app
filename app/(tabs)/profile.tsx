@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -10,10 +10,12 @@ import { Database } from '@/src/types/database.types';
 import { useRouter } from 'expo-router';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { StreakBadge } from '@/src/components/StreakBadge';
+import { useToast } from '@/src/context/ToastContext';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
 export default function ProfileScreen() {
+  const { showToast } = useToast();
   const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const router = useRouter();
@@ -44,7 +46,7 @@ export default function ProfileScreen() {
     try {
       await signOut();
     } catch (error: any) {
-      Alert.alert('Sign Out Failed', error.message);
+      showToast(error.message, 'error');
     }
   };
 

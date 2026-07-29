@@ -22,6 +22,7 @@ import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
 import { Colors } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
+import { useToast } from '@/src/context/ToastContext';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -39,6 +40,7 @@ type Mode = 'login' | 'signup' | 'otp_request' | 'otp_verify' | 'forgot';
 type VerificationType = 'signup' | 'login';
 
 export default function AuthScreen() {
+  const { showToast } = useToast();
   const router = useRouter();
 
   const [mode, setMode] = useState<Mode>('login');
@@ -91,15 +93,15 @@ export default function AuthScreen() {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !validateEmail(trimmedEmail)) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      showToast('Please enter a valid email address.', 'error');
       return;
     }
     if (password.length < 8) {
-      Alert.alert('Weak Password', 'Password must be at least 8 characters.');
+      showToast('Password must be at least 8 characters.', 'error');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Password Mismatch', 'Passwords do not match. Please try again.');
+      showToast('Passwords do not match. Please try again.', 'error');
       return;
     }
 
@@ -141,7 +143,7 @@ export default function AuthScreen() {
       if (msg.includes('already registered')) {
         msg = 'Could not create your account. Please check your details and try again.';
       }
-      Alert.alert('Sign Up Failed', msg);
+      showToast(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -152,11 +154,11 @@ export default function AuthScreen() {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !validateEmail(trimmedEmail)) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      showToast('Please enter a valid email address.', 'error');
       return;
     }
     if (!password) {
-      Alert.alert('Missing Password', 'Please enter your password.');
+      showToast('Please enter your password.', 'info');
       return;
     }
 
@@ -185,7 +187,7 @@ export default function AuthScreen() {
         transitionMode('otp_verify');
         return;
       }
-      Alert.alert('Login Failed', msg);
+      showToast(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -196,7 +198,7 @@ export default function AuthScreen() {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !validateEmail(trimmedEmail)) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      showToast('Please enter a valid email address.', 'error');
       return;
     }
 
@@ -219,7 +221,7 @@ export default function AuthScreen() {
       if (errorMessage.includes('rate limit')) {
         errorMessage = 'You have requested too many codes recently. Please try again later.';
       }
-      Alert.alert('Sign In Failed', errorMessage);
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -229,7 +231,7 @@ export default function AuthScreen() {
   const handleVerifyOtp = async (codeToVerify?: string) => {
     const code = codeToVerify ?? otpCode;
     if (code.length < 6) {
-      Alert.alert('Invalid Code', 'Please enter the 6-digit code sent to your email.');
+      showToast('Please enter the 6-digit code sent to your email.', 'error');
       return;
     }
 
@@ -246,7 +248,7 @@ export default function AuthScreen() {
       // AuthState change listener in root layout will automatically handle routing
     } catch (err: any) {
       console.error('Verify OTP error:', err);
-      Alert.alert('Verification Failed', err.message ?? 'The code entered is invalid or has expired.');
+      showToast(err.message ?? 'The code entered is invalid or has expired.', 'error');
     } finally {
       setLoading(false);
     }
@@ -277,14 +279,14 @@ export default function AuthScreen() {
 
       setTimer(60);
       setOtpCode('');
-      Alert.alert('Code Resent', 'A new 6-digit verification code has been sent to your email.');
+      showToast('A new 6-digit verification code has been sent to your email.', 'success');
     } catch (err: any) {
       console.error('Resend OTP error:', err);
       let errorMessage = err.message ?? 'Could not resend verification code.';
       if (errorMessage.includes('rate limit')) {
         errorMessage = 'You have requested too many codes recently. Please try again later.';
       }
-      Alert.alert('Resend Failed', errorMessage);
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -295,7 +297,7 @@ export default function AuthScreen() {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !validateEmail(trimmedEmail)) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      showToast('Please enter a valid email address.', 'error');
       return;
     }
 
@@ -320,7 +322,7 @@ export default function AuthScreen() {
       if (msg.includes('rate limit')) {
         msg = 'Too many requests. Please try again later.';
       }
-      Alert.alert('Reset Failed', msg);
+      showToast(msg, 'error');
     } finally {
       setLoading(false);
     }

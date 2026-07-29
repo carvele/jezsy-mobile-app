@@ -23,6 +23,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
+import { useToast } from '@/src/context/ToastContext';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +44,7 @@ const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessor
 type GarmentType = (typeof GARMENT_TYPES)[number];
 
 export default function AddWardrobeItemScreen() {
+  const { showToast } = useToast();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
   const router = useRouter();
@@ -119,7 +121,7 @@ export default function AddWardrobeItemScreen() {
       if (useCamera) {
         const cameraPerm = await ImagePicker.requestCameraPermissionsAsync();
         if (!cameraPerm.granted) {
-          Alert.alert('Permission Denied', 'Camera permission is required to snap photos.');
+          showToast('Camera permission is required to snap photos.', 'error');
           return;
         }
         result = await ImagePicker.launchCameraAsync({
@@ -131,7 +133,7 @@ export default function AddWardrobeItemScreen() {
       } else {
         const libraryPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!libraryPerm.granted) {
-          Alert.alert('Permission Denied', 'Gallery permission is required to choose photos.');
+          showToast('Gallery permission is required to choose photos.', 'error');
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
@@ -147,7 +149,7 @@ export default function AddWardrobeItemScreen() {
       }
     } catch (e) {
       console.error('Error picking image:', e);
-      Alert.alert('Error', 'An error occurred while picking the image.');
+      showToast('An error occurred while picking the image.', 'error');
     }
   };
 
@@ -161,15 +163,15 @@ export default function AddWardrobeItemScreen() {
 
   const handleSave = async () => {
     if (!session?.user?.id) {
-      Alert.alert('Authentication Required', 'You must be logged in to add items.');
+      showToast('You must be logged in to add items.', 'error');
       return;
     }
     if (!imageUri) {
-      Alert.alert('No Image', 'Please select or capture a photo first.');
+      showToast('Please select or capture a photo first.', 'info');
       return;
     }
     if (!garmentType) {
-      Alert.alert('Missing Type', 'Please choose a garment type (Top, Bottom, etc.) so it can be included in wardrobe insights.');
+      showToast('Please choose a garment type (Top, Bottom, etc.) so it can be included in wardrobe insights.', 'info');
       return;
     }
 
@@ -221,7 +223,7 @@ export default function AddWardrobeItemScreen() {
       ]);
     } catch (err: any) {
       console.error('Error saving wardrobe item:', err);
-      Alert.alert('Save Failed', err.message || 'Could not save item. Please try again.');
+      showToast(err.message || 'Could not save item. Please try again.', 'error');
     } finally {
       setSaving(false);
       setStatusMessage('');
