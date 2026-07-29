@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Colors } from '@/constants/theme';
@@ -11,6 +11,14 @@ interface ReviewsListProps {
   productId: string;
 }
 
+type SortKey = 'recent' | 'highest' | 'lowest';
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'recent', label: 'Recent' },
+  { key: 'highest', label: 'Highest' },
+  { key: 'lowest', label: 'Lowest' },
+];
+
 export function ReviewsList({ productId }: ReviewsListProps) {
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
@@ -19,6 +27,8 @@ export function ReviewsList({ productId }: ReviewsListProps) {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [stats, setStats] = useState({ average: 0, count: 0, breakdown: [0,0,0,0,0] });
+  const [sortBy, setSortBy] = useState<SortKey>('recent');
+  const [photosOnly, setPhotosOnly] = useState(false);
 
   const fetchReviews = useCallback(async () => {
     setLoading(true);
@@ -64,6 +74,22 @@ export function ReviewsList({ productId }: ReviewsListProps) {
   useEffect(() => {
     fetchReviews();
   }, [fetchReviews]);
+
+  const visibleReviews = useMemo(() => {
+    const filtered = photosOnly
+      ? reviews.filter(r => r.images && r.images.length > 0)
+      : reviews;
+    const sorted = [...filtered];
+    if (sortBy === 'highest') sorted.sort((a, b) => b.rating - a.rating);
+    else if (sortBy === 'lowest') sorted.sort((a, b) => a.rating - b.rating);
+    else sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return sorted;
+  }, [reviews, sortBy, photosOnly]);
+
+  const photoReviewCount = useMemo(
+    () => reviews.filter(r => r.images && r.images.length > 0).length,
+    [reviews]
+  );
 
   const renderStars = (rating: number) => {
     return (
@@ -112,19 +138,60 @@ export function ReviewsList({ productId }: ReviewsListProps) {
         </View>
       )}
 
+      {reviews.length > 1 && (
+        <View style={styles.controlsRow}>
+          {SORT_OPTIONS.map(opt => {
+            const active = sortBy === opt.key;
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.chip, { borderColor: active ? colors.tint : colors.border }, active && { backgroundColor: colors.tint + '20' }]}
+                onPress={() => setSortBy(opt.key)}
+                accessibilityRole="button"
+                accessibilityLabel={`Sort reviews by ${opt.label}`}
+                accessibilityState={{ selected: active }}
+              >
+                <Text style={[styles.chipText, { color: active ? colors.tint : colors.secondaryText }]}>{opt.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+          {photoReviewCount > 0 && (
+            <TouchableOpacity
+              style={[styles.chip, { borderColor: photosOnly ? colors.tint : colors.border }, photosOnly && { backgroundColor: colors.tint + '20' }]}
+              onPress={() => setPhotosOnly(v => !v)}
+              accessibilityRole="button"
+              accessibilityLabel="Show only reviews with photos"
+              accessibilityState={{ selected: photosOnly }}
+            >
+              <Text style={[styles.chipText, { color: photosOnly ? colors.tint : colors.secondaryText }]}>
+                With photos ({photoReviewCount})
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {loading ? (
         <ActivityIndicator color={colors.tint} style={{ marginVertical: 32 }} />
       ) : reviews.length === 0 ? (
         <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No reviews yet. Be the first to share your thoughts!</Text>
+      ) : visibleReviews.length === 0 ? (
+        <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No reviews match this filter.</Text>
       ) : (
         <View style={styles.list}>
-          {reviews.map(review => (
+          {visibleReviews.map(review => (
             <View key={review.id} style={[styles.reviewCard, { borderBottomColor: colors.border }]}>
               <View style={styles.reviewHeader}>
                 <View style={styles.reviewerInfo}>
                   <Text style={[styles.reviewerName, { color: colors.text }]}>
                     {review.user?.first_name || 'Anonymous'} {review.user?.last_name?.[0] ? `${review.user.last_name[0]}.` : ''}
                   </Text>
+                  {review.verified_purchase && (
+                    <View style={styles.verifiedBadge}>
+                      <IconSymbol name="checkmark.circle.fill" size={10} color="#34C759" />
+                      <Text style={styles.verifiedText}>Verified</Text>
+                    </View>
+                  )}
                 </View>
                 <Text style={[styles.date, { color: colors.secondaryText }]}>
                   {new Date(review.created_at).toLocaleDateString()}
@@ -226,6 +293,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 15,
     marginVertical: 24,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  chip: {
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   list: {
     gap: 16,

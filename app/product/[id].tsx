@@ -30,7 +30,8 @@ import { useMessages } from "@/src/context/MessagesContext";
 import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
 import { CATEGORY_SELECT, getMainCategoryId, getMainCategoryName, WithCategoryEmbed } from "@/src/utils/categoryDisplay";
-import { recommendSize } from "@/src/utils/sizeRecommender";
+import { recommendSize, ProductMeasurements } from "@/src/utils/sizeRecommender";
+import { SizeChartModal } from "@/src/components/SizeChartModal";
 
 type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
 type Inventory = Database["public"]["Tables"]["inventory"]["Row"];
@@ -52,6 +53,7 @@ export default function ProductDetailScreen() {
   const [quantity, setQuantity] = useState(1);
   const [notifyRequested, setNotifyRequested] = useState(false);
   const [notifySubmitting, setNotifySubmitting] = useState(false);
+  const [sizeChartVisible, setSizeChartVisible] = useState(false);
 
   const router = useRouter();
   const theme = useColorScheme() ?? "light";
@@ -243,6 +245,8 @@ export default function ProductDetailScreen() {
   const hasRequiredSelection =
     (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor);
   const canPurchase = hasRequiredSelection && !selectedSizeOutOfStock;
+  const sizeChart = (product.measurements as ProductMeasurements | null) || null;
+  const hasSizeChart = !!sizeChart && (product.sizes || []).some(s => sizeChart[s]);
   const maxQuantity = selectedStock !== null ? selectedStock : 10;
   const effectiveQuantity = Math.min(Math.max(quantity, 1), Math.max(maxQuantity, 1));
 
@@ -401,12 +405,23 @@ export default function ProductDetailScreen() {
             <View style={styles.section}>
               <View style={styles.sizeHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Size</Text>
-                {recommendedSize && (
-                  <View style={[styles.recBadge, { backgroundColor: colors.tint + "20" }]}>
-                    <IconSymbol name="ruler.fill" size={12} color={colors.tint} />
-                    <Text style={[styles.recText, { color: colors.tint }]}>Recommended: {recommendedSize}</Text>
-                  </View>
-                )}
+                <View style={styles.sizeHeaderActions}>
+                  {recommendedSize && (
+                    <View style={[styles.recBadge, { backgroundColor: colors.tint + "20" }]}>
+                      <IconSymbol name="ruler.fill" size={12} color={colors.tint} />
+                      <Text style={[styles.recText, { color: colors.tint }]}>Recommended: {recommendedSize}</Text>
+                    </View>
+                  )}
+                  {hasSizeChart && (
+                    <TouchableOpacity
+                      onPress={() => setSizeChartVisible(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel="View the size chart"
+                    >
+                      <Text style={[styles.sizeChartLink, { color: colors.tint }]}>Size Chart</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
                 {product.sizes.map((s, index) => {
@@ -525,6 +540,16 @@ export default function ProductDetailScreen() {
           )}
 
           <RecentlyViewed excludeProductId={product.id} />
+
+          {hasSizeChart && sizeChart && (
+            <SizeChartModal
+              visible={sizeChartVisible}
+              measurements={sizeChart}
+              sizes={product.sizes || []}
+              recommendedSize={recommendedSize}
+              onClose={() => setSizeChartVisible(false)}
+            />
+          )}
 
           {/* Spacer for sticky bottom bar */}
           <View style={{ height: 100 }} />
@@ -652,6 +677,8 @@ const styles = StyleSheet.create({
   sizeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   recBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, gap: 4 },
   recText: { fontSize: 12, fontWeight: "700" },
+  sizeHeaderActions: { flexDirection: "row", alignItems: "center", gap: 12 },
+  sizeChartLink: { fontSize: 13, fontWeight: "700", textDecorationLine: "underline" },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
   description: { fontSize: 15, lineHeight: 24 },
   optionsList: { gap: 12, paddingRight: 20 },
