@@ -45,6 +45,7 @@ export default function ProductDetailScreen() {
   const [addedToBag, setAddedToBag] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [quantity, setQuantity] = useState(1);
 
   const router = useRouter();
   const theme = useColorScheme() ?? "light";
@@ -184,6 +185,8 @@ export default function ProductDetailScreen() {
   const hasRequiredSelection =
     (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor);
   const canPurchase = hasRequiredSelection && !selectedSizeOutOfStock;
+  const maxQuantity = selectedStock !== null ? selectedStock : 10;
+  const effectiveQuantity = Math.min(Math.max(quantity, 1), Math.max(maxQuantity, 1));
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -376,6 +379,37 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
+          {/* Quantity */}
+          {canPurchase && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Quantity</Text>
+              <View style={styles.quantityRow}>
+                <TouchableOpacity
+                  style={[styles.quantityBtn, { borderColor: colors.border, opacity: effectiveQuantity <= 1 ? 0.4 : 1 }]}
+                  onPress={() => setQuantity(q => Math.max(1, q - 1))}
+                  disabled={effectiveQuantity <= 1}
+                  accessibilityRole="button"
+                  accessibilityLabel="Decrease quantity"
+                >
+                  <IconSymbol name="minus" size={16} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={[styles.quantityValue, { color: colors.text }]}>{effectiveQuantity}</Text>
+                <TouchableOpacity
+                  style={[styles.quantityBtn, { borderColor: colors.border, opacity: effectiveQuantity >= maxQuantity ? 0.4 : 1 }]}
+                  onPress={() => setQuantity(q => Math.min(maxQuantity, q + 1))}
+                  disabled={effectiveQuantity >= maxQuantity}
+                  accessibilityRole="button"
+                  accessibilityLabel="Increase quantity"
+                >
+                  <IconSymbol name="plus" size={16} color={colors.text} />
+                </TouchableOpacity>
+                {selectedStock !== null && (
+                  <Text style={[styles.quantityHint, { color: colors.secondaryText }]}>{selectedStock} available</Text>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* Product Details (Material & Care) */}
           {(product.material || product.care_instructions || product.fit_and_sizing) && (
             <View style={[styles.section, styles.detailsSection, { borderColor: colors.border }]}>
@@ -420,7 +454,7 @@ export default function ProductDetailScreen() {
             style={[styles.iconAction, { borderColor: colors.border, opacity: canPurchase ? 1 : 0.4 }]}
             onPress={() => {
               if (product && canPurchase) {
-                addToCart(product, 1, selectedSize || undefined, selectedColor || undefined);
+                addToCart(product, effectiveQuantity, selectedSize || undefined, selectedColor || undefined);
                 setAddedToBag(true);
                 setTimeout(() => setAddedToBag(false), 2000);
               }
@@ -535,6 +569,13 @@ const styles = StyleSheet.create({
   optionsList: { gap: 12, paddingRight: 20 },
   optionButton: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
   optionText: { fontSize: 15, fontWeight: "600" },
+  quantityRow: { flexDirection: "row", alignItems: "center", gap: 16 },
+  quantityBtn: {
+    width: 40, height: 40, borderRadius: 20, borderWidth: 1,
+    justifyContent: "center", alignItems: "center",
+  },
+  quantityValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
+  quantityHint: { fontSize: 13, marginLeft: 4 },
   detailsSection: {
     borderWidth: 1,
     borderRadius: 16,
