@@ -12,6 +12,8 @@ import {
   Dimensions,
   FlatList,
   Image as RNImage,
+  Alert,
+  Share,
 } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -19,6 +21,8 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ReviewsList } from "@/src/components/ReviewsList";
 import { RelatedProducts } from "@/src/components/RelatedProducts";
+import { RecentlyViewed } from "@/src/components/RecentlyViewed";
+import { addRecentlyViewed } from "@/src/utils/recentlyViewed";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
 import { useWishlist } from "@/src/context/WishlistContext";
@@ -46,6 +50,8 @@ export default function ProductDetailScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [notifyRequested, setNotifyRequested] = useState(false);
+  const [notifySubmitting, setNotifySubmitting] = useState(false);
 
   const router = useRouter();
   const theme = useColorScheme() ?? "light";
@@ -123,6 +129,58 @@ export default function ProductDetailScreen() {
 
     fetchProductAndInventory();
   }, [id, user?.id]);
+
+  useEffect(() => {
+    if (id) addRecentlyViewed(id);
+  }, [id]);
+
+  useEffect(() => {
+    const checkNotifyRequest = async () => {
+      if (!user?.id || !id || !selectedSize) {
+        setNotifyRequested(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("stock_notify_requests")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("product_id", id)
+        .eq("size", selectedSize)
+        .maybeSingle();
+      setNotifyRequested(!!data);
+    };
+    checkNotifyRequest();
+  }, [id, user?.id, selectedSize]);
+
+  const handleNotifyMe = async () => {
+    if (!user?.id || !id || !selectedSize) {
+      Alert.alert("Sign in required", "Log in to get notified when this size is back in stock.");
+      return;
+    }
+    setNotifySubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("stock_notify_requests")
+        .insert({ user_id: user.id, product_id: id, size: selectedSize });
+      if (error && error.code !== "23505") throw error; // 23505 = already requested
+      setNotifyRequested(true);
+    } catch (err) {
+      console.error("Error requesting stock notification:", err);
+    } finally {
+      setNotifySubmitting(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!product) return;
+    try {
+      await Share.share({
+        message: `Check out ${product.name} on JezSy: jezsymobileapp://product/${product.id}`,
+      });
+    } catch (err) {
+      console.error("Error sharing product:", err);
+    }
+  };
 
   const handleMessageSeller = async () => {
     const conv = await getOrCreateConversation();
@@ -235,6 +293,14 @@ export default function ProductDetailScreen() {
             accessibilityHint={isInWishlist(product.id) ? "Removes this item from your favorites list" : "Saves this item to your favorites list"}
           >
             <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? "#E05C5C" : "#FFF"} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shareButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
+            onPress={handleShare}
+            accessibilityRole="button"
+            accessibilityLabel="Share this item"
+          >
+            <IconSymbol name="paperplane.fill" size={22} color="#FFF" />
           </TouchableOpacity>
           {product.model_3d_url && (
             <TouchableOpacity
@@ -410,6 +476,22 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
+          {/* Notify Me when the selected size is out of stock */}
+          {selectedSizeOutOfStock && (
+            <TouchableOpacity
+              style={[styles.notifyBtn, { borderColor: colors.tint, opacity: notifySubmitting ? 0.6 : 1 }]}
+              onPress={handleNotifyMe}
+              disabled={notifySubmitting || notifyRequested}
+              accessibilityRole="button"
+              accessibilityLabel={notifyRequested ? "You will be notified when this size is back in stock" : "Notify me when this size is back in stock"}
+            >
+              <IconSymbol name={notifyRequested ? "checkmark.circle.fill" : "bell.fill"} size={18} color={colors.tint} />
+              <Text style={[styles.notifyBtnText, { color: colors.tint }]}>
+                {notifyRequested ? "We'll notify you when it's back" : "Notify Me When Available"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Product Details (Material & Care) */}
           {(product.material || product.care_instructions || product.fit_and_sizing) && (
             <View style={[styles.section, styles.detailsSection, { borderColor: colors.border }]}>
@@ -441,6 +523,8 @@ export default function ProductDetailScreen() {
           {getMainCategoryId(product) && (
             <RelatedProducts mainCategoryId={getMainCategoryId(product)} currentProductId={product.id} />
           )}
+
+          <RecentlyViewed excludeProductId={product.id} />
 
           {/* Spacer for sticky bottom bar */}
           <View style={{ height: 100 }} />
@@ -545,6 +629,10 @@ const styles = StyleSheet.create({
     position: "absolute", top: Platform.OS === "ios" ? 60 : 40, right: 20,
     width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
   },
+  shareButton: {
+    position: "absolute", top: Platform.OS === "ios" ? 60 : 40, right: 76,
+    width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
+  },
   arButton: {
     position: "absolute", bottom: 60, right: 20, flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, gap: 8,
@@ -576,6 +664,20 @@ const styles = StyleSheet.create({
   },
   quantityValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
   quantityHint: { fontSize: 13, marginLeft: 4 },
+  notifyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderRadius: 24,
+    marginTop: 24,
+    gap: 8,
+  },
+  notifyBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
   detailsSection: {
     borderWidth: 1,
     borderRadius: 16,
