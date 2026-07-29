@@ -18,6 +18,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CATEGORY_SELECT, getCategoryLabel, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
+import { RecentlyViewed } from '@/src/components/RecentlyViewed';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -286,6 +287,8 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
+
+        <RecentlyViewed />
 
         {/* Footer padding to not overlap with bottom tabs */}
         <View style={{ height: 100 }} />

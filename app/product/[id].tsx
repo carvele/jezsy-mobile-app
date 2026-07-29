@@ -13,6 +13,7 @@ import {
   FlatList,
   Image as RNImage,
   Alert,
+  Share,
 } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -20,6 +21,8 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ReviewsList } from "@/src/components/ReviewsList";
 import { RelatedProducts } from "@/src/components/RelatedProducts";
+import { RecentlyViewed } from "@/src/components/RecentlyViewed";
+import { addRecentlyViewed } from "@/src/utils/recentlyViewed";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
 import { useWishlist } from "@/src/context/WishlistContext";
@@ -128,6 +131,10 @@ export default function ProductDetailScreen() {
   }, [id, user?.id]);
 
   useEffect(() => {
+    if (id) addRecentlyViewed(id);
+  }, [id]);
+
+  useEffect(() => {
     const checkNotifyRequest = async () => {
       if (!user?.id || !id || !selectedSize) {
         setNotifyRequested(false);
@@ -161,6 +168,17 @@ export default function ProductDetailScreen() {
       console.error("Error requesting stock notification:", err);
     } finally {
       setNotifySubmitting(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!product) return;
+    try {
+      await Share.share({
+        message: `Check out ${product.name} on JezSy: jezsymobileapp://product/${product.id}`,
+      });
+    } catch (err) {
+      console.error("Error sharing product:", err);
     }
   };
 
@@ -275,6 +293,14 @@ export default function ProductDetailScreen() {
             accessibilityHint={isInWishlist(product.id) ? "Removes this item from your favorites list" : "Saves this item to your favorites list"}
           >
             <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? "#E05C5C" : "#FFF"} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shareButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
+            onPress={handleShare}
+            accessibilityRole="button"
+            accessibilityLabel="Share this item"
+          >
+            <IconSymbol name="paperplane.fill" size={22} color="#FFF" />
           </TouchableOpacity>
           {product.model_3d_url && (
             <TouchableOpacity
@@ -498,6 +524,8 @@ export default function ProductDetailScreen() {
             <RelatedProducts mainCategoryId={getMainCategoryId(product)} currentProductId={product.id} />
           )}
 
+          <RecentlyViewed excludeProductId={product.id} />
+
           {/* Spacer for sticky bottom bar */}
           <View style={{ height: 100 }} />
         </View>
@@ -599,6 +627,10 @@ const styles = StyleSheet.create({
   },
   favoriteButton: {
     position: "absolute", top: Platform.OS === "ios" ? 60 : 40, right: 20,
+    width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
+  },
+  shareButton: {
+    position: "absolute", top: Platform.OS === "ios" ? 60 : 40, right: 76,
     width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
   },
   arButton: {
