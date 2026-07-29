@@ -95,9 +95,28 @@ export default function CartScreen() {
             accessibilityLabel={`Remove ${item.product.name} from bag`}
             accessibilityHint="Removes this item from your shopping bag"
           >
-            <IconSymbol name="trash" size={20} color={colors.notification} />
+            <IconSymbol name="trash.fill" size={20} color={colors.notification} />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={[styles.reserveBtn, { backgroundColor: colors.tint }]}
+          onPress={() =>
+            router.push({
+              pathname: '/reserve/[id]',
+              params: {
+                id: item.product.id,
+                size: item.selectedSize || '',
+                color: item.selectedColor || '',
+              },
+            })
+          }
+          accessibilityRole="button"
+          accessibilityLabel={`Reserve ${item.product.name}`}
+          accessibilityHint="Opens the reservation flow to pick a pickup date and time for this item"
+        >
+          <Text style={styles.reserveBtnText}>Reserve</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -171,33 +190,22 @@ export default function CartScreen() {
                 ₱{totalAmount.toLocaleString()}
               </Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text
-                style={[styles.summaryLabel, { color: colors.secondaryText }]}
-              >
-                Shipping
-              </Text>
-              <Text style={[styles.summaryValue, { color: colors.text }]}>
-                Calculated at checkout
-              </Text>
-            </View>
             <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
               <Text style={[styles.totalLabel, { color: colors.text }]}>
-                Total
+                Deposit if you reserve all
               </Text>
-              <Text style={[styles.totalValue, { color: colors.text }]}>
-                ₱{totalAmount.toLocaleString()}
+              <Text style={[styles.totalValue, { color: colors.tint }]}>
+                ₱{(totalAmount * 0.5).toLocaleString()}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.checkoutBtn, { backgroundColor: colors.tint }]}
-              onPress={() => router.push("/checkout")}
-              accessibilityRole="button"
-              accessibilityLabel={`Proceed to Checkout, total ${totalAmount.toLocaleString()} pesos`}
-              accessibilityHint="Opens the checkout screen to complete your purchase"
-            >
-              <Text style={styles.checkoutBtnText}>Proceed to Checkout</Text>
-            </TouchableOpacity>
+            {/* There is no single "reserve everything" action: each reservation
+                books its own pickup slot, and slot capacity is enforced per
+                appointment by validate_reservation_time. */}
+            <Text style={[styles.footerNote, { color: colors.secondaryText }]}>
+              Reserve items one at a time — each needs its own pickup date and
+              time. You pay a 50% deposit per item and settle the balance when
+              you collect it.
+            </Text>
           </View>
         </>
       )}
@@ -347,17 +355,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     marginBottom: 24,
   },
-  totalLabel: { fontSize: 18, fontWeight: "700" },
+  totalLabel: { fontSize: 16, fontWeight: "700" },
   totalValue: { fontSize: 20, fontWeight: "800" },
-  checkoutBtn: {
-    height: 56,
-    borderRadius: 28,
+  footerNote: { fontSize: 13, lineHeight: 19 },
+  reserveBtn: {
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 12,
   },
-  checkoutBtnText: {
+  reserveBtnText: {
     color: "#0D0D0D",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "800",
   },
 });

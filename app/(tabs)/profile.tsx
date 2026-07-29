@@ -9,6 +9,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useRouter } from 'expo-router';
 import { useWishlist } from '@/src/context/WishlistContext';
+import { useCart } from '@/src/context/CartContext';
 import { StreakBadge } from '@/src/components/StreakBadge';
 import { useToast } from '@/src/context/ToastContext';
 
@@ -20,6 +21,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const router = useRouter();
   const { wishlistIds } = useWishlist();
+  const { itemCount } = useCart();
   
   const theme = useColorScheme() ?? 'light';
   const colors = Colors[theme];
@@ -145,9 +147,9 @@ export default function ProfileScreen() {
           <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
             {renderSettingItem(
               'bag.fill',
-              'My Orders',
-              'Track your purchases',
-              () => router.push('/orders' as any),
+              'My Bag',
+              `${itemCount} item${itemCount !== 1 ? 's' : ''} ready to reserve`,
+              () => router.push('/cart'),
             )}
             {renderSettingItem(
               'heart.fill',
