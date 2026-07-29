@@ -13,6 +13,40 @@ export function formatTimeValue(date: Date): string {
   return `${hours}:${minutes}:00`;
 }
 
+export function isSameCalendarDay(a: string, b: string): boolean {
+  const dateA = new Date(a);
+  const dateB = new Date(b);
+  if (Number.isNaN(dateA.getTime()) || Number.isNaN(dateB.getTime())) return false;
+
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  );
+}
+
+// Day label for chat date separators. Compares calendar days rather than
+// elapsed hours, so a message sent at 11pm reads "Yesterday" at 1am and not
+// "Today".
+export function formatDateSeparator(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const daysAgo = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+
+  if (daysAgo === 0) return 'Today';
+  if (daysAgo === 1) return 'Yesterday';
+
+  return date.toLocaleDateString(undefined, {
+    weekday: daysAgo > 1 && daysAgo < 7 ? 'long' : undefined,
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  });
+}
+
 export function formatTimeLabel(time: string | null | undefined): string {
   if (!time) return 'N/A';
 

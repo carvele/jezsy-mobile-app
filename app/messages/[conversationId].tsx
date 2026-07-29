@@ -15,7 +15,17 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
+import { formatDateSeparator, isSameCalendarDay } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
+
+type ProductPreview = {
+  id: string;
+  name: string;
+  price: number | null;
+  sale_price: number | null;
+  on_sale: boolean | null;
+  image_url: string | null;
+};
 
 export default function ChatScreen() {
   const { showToast } = useToast();
@@ -37,6 +47,11 @@ export default function ChatScreen() {
   const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string>>({});
   const resolvedImageUrlsRef = useRef(resolvedImageUrls);
   resolvedImageUrlsRef.current = resolvedImageUrls;
+  // null marks a product that was looked up and no longer exists, which stops
+  // the effect below re-querying it on every message change.
+  const [productPreviews, setProductPreviews] = useState<Record<string, ProductPreview | null>>({});
+  const productPreviewsRef = useRef(productPreviews);
+  productPreviewsRef.current = productPreviews;
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -52,6 +67,39 @@ export default function ChatScreen() {
       setResolvedImageUrls(prev => {
         const next = { ...prev };
         for (const [id, url] of entries) next[id] = url;
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages]);
+
+  // Product-context messages render as a card, which needs the product itself.
+  // Same shape as the image resolution above: fetch only what is missing.
+  useEffect(() => {
+    const missing = [
+      ...new Set(
+        messages
+          .filter(m => m.context_type === 'product' && m.context_ref)
+          .map(m => m.context_ref as string)
+      ),
+    ].filter(id => productPreviewsRef.current[id] === undefined);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('id, name, price, sale_price, on_sale, image_url')
+        .in('id', missing);
+      if (cancelled) return;
+
+      setProductPreviews(prev => {
+        const next = { ...prev };
+        for (const id of missing) next[id] = null;
+        for (const product of data || []) next[product.id] = product as ProductPreview;
         return next;
       });
     })();
@@ -141,6 +189,10 @@ export default function ChatScreen() {
       read_at: null,
       image_url: null,
       context_label: contextToSend?.label ?? null,
+      // Carried on the optimistic row too, so a product question renders as a
+      // card immediately instead of switching from chip to card on the swap.
+      context_type: contextToSend?.type ?? null,
+      context_ref: contextToSend?.ref ?? null,
     };
     setMessages(prev => [...prev, tempMsg]);
 
@@ -211,12 +263,30 @@ export default function ChatScreen() {
     }
   };
 
-  const renderMessage = ({ item }: { item: any }) => {
+  const renderMessage = ({ item, index }: { item: any; index: number }) => {
     const isMe = item.sender_id === session?.user.id;
     const timeString = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+    const previous = index > 0 ? messages[index - 1] : null;
+    const showDateSeparator = !previous || !isSameCalendarDay(previous.created_at, item.created_at);
+
+    // Falls back to the plain chip while the lookup is in flight, for a
+    // deleted product, and for reservation/order contexts.
+    const productPreview =
+      item.context_type === 'product' && item.context_ref
+        ? productPreviews[item.context_ref]
+        : null;
+
     return (
-      <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
+      <>
+        {showDateSeparator ? (
+          <View style={styles.dateSeparator}>
+            <Text style={[styles.dateSeparatorText, { color: colors.secondaryText }]}>
+              {formatDateSeparator(item.created_at)}
+            </Text>
+          </View>
+        ) : null}
+        <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
         <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
           <View
             style={[
@@ -226,7 +296,33 @@ export default function ChatScreen() {
                 : [styles.messageBubbleThem, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }],
             ]}
           >
-            {item.context_label ? (
+            {productPreview ? (
+              <TouchableOpacity
+                style={[styles.productCard, { backgroundColor: isMe ? 'rgba(0,0,0,0.10)' : colors.background, borderColor: isMe ? 'rgba(0,0,0,0.12)' : colors.border }]}
+                onPress={() => router.push(`/product/${item.context_ref}`)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Question about ${productPreview.name}. Opens the product page.`}
+              >
+                <Image
+                  source={productPreview.image_url ? { uri: productPreview.image_url } : require('@/assets/images/partial-react-logo.png')}
+                  style={styles.productCardImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.productCardBody}>
+                  <Text style={[styles.productCardEyebrow, { color: isMe ? 'rgba(0,0,0,0.55)' : colors.secondaryText }]}>
+                    Question about
+                  </Text>
+                  <Text style={[styles.productCardName, { color: isMe ? '#0D0D0D' : colors.text }]} numberOfLines={2}>
+                    {productPreview.name}
+                  </Text>
+                  <Text style={[styles.productCardPrice, { color: isMe ? '#0D0D0D' : colors.tint }]}>
+                    ₱{productPreview.on_sale && productPreview.sale_price ? productPreview.sale_price : productPreview.price}
+                  </Text>
+                </View>
+                <IconSymbol name="chevron.right" size={14} color={isMe ? 'rgba(0,0,0,0.4)' : colors.secondaryText} />
+              </TouchableOpacity>
+            ) : item.context_label ? (
               <View style={[styles.contextChip, { backgroundColor: isMe ? 'rgba(0,0,0,0.12)' : colors.background, borderColor: isMe ? 'transparent' : colors.border }]}>
                 <Text style={[styles.contextChipText, { color: isMe ? '#0D0D0D' : colors.secondaryText }]} numberOfLines={1}>
                   Re: {item.context_label}
@@ -249,7 +345,8 @@ export default function ChatScreen() {
             <Text style={[styles.timestampText, { color: colors.secondaryText }]}>{timeString}</Text>
           </View>
         </View>
-      </View>
+        </View>
+      </>
     );
   };
 
@@ -280,6 +377,10 @@ export default function ChatScreen() {
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
+          // Product lookups land after the messages themselves, and that
+          // resolution does not touch `data` -- without this the rows keep
+          // rendering the fallback chip.
+          extraData={productPreviews}
           contentContainerStyle={styles.listContent}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
@@ -420,6 +521,54 @@ const styles = StyleSheet.create({
   readReceiptText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  dateSeparator: {
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  dateSeparatorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  productCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: 220,
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 8,
+    // Cancels the bubble's own horizontal padding so the card reads as a
+    // distinct panel inset in the bubble rather than a floating box.
+    marginHorizontal: -8,
+    marginTop: -2,
+  },
+  productCardImage: {
+    width: 44,
+    height: 56,
+    borderRadius: 8,
+    backgroundColor: 'rgba(127,127,127,0.15)',
+  },
+  productCardBody: {
+    flex: 1,
+    gap: 1,
+  },
+  productCardEyebrow: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  productCardName: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  productCardPrice: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   contextChip: {
     alignSelf: 'flex-start',
