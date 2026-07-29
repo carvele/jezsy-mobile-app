@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -17,6 +16,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
+import { useToast } from '@/src/context/ToastContext';
 
 // Required to dismiss the auth session on iOS
 WebBrowser.maybeCompleteAuthSession();
@@ -44,6 +44,7 @@ const GoogleLogo = () => (
 );
 
 export default function WelcomeScreen() {
+  const { showToast } = useToast();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = React.useState(false);
 
@@ -109,7 +110,7 @@ export default function WelcomeScreen() {
       }
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
-      Alert.alert('Sign In Failed', err.message ?? 'Could not sign in with Google. Please try again.');
+      showToast(err.message ?? 'Could not sign in with Google. Please try again.', 'error');
     } finally {
       setGoogleLoading(false);
     }

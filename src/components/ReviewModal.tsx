@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, Modal, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Dimensions, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, Modal, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
@@ -8,6 +8,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
+import { useToast } from '@/src/context/ToastContext';
 
 const MAX_REVIEW_IMAGES = 4;
 
@@ -19,6 +20,7 @@ interface ReviewModalProps {
 }
 
 export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewModalProps) {
+  const { showToast } = useToast();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
   const { user } = useAuth();
@@ -49,7 +51,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
 
   const handleSubmit = async () => {
     if (!user) {
-      Alert.alert('Error', 'You must be logged in to review.');
+      showToast('You must be logged in to review.', 'error');
       return;
     }
     if (rating < 1 || rating > 5) return;
@@ -77,7 +79,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Thank you for your review!');
+      showToast('Thank you for your review!', 'success');
       setRating(5);
       setComment('');
       setImages([]);
@@ -85,7 +87,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
       onClose();
     } catch (err: any) {
       console.error('Error submitting review:', err);
-      Alert.alert('Error', err.message || 'Failed to submit review.');
+      showToast(err.message || 'Failed to submit review.', 'error');
     } finally {
       setSubmitting(false);
     }

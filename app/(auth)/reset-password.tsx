@@ -17,8 +17,10 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
+import { useToast } from '@/src/context/ToastContext';
 
 export default function ResetPasswordScreen() {
+  const { showToast } = useToast();
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
@@ -31,11 +33,11 @@ export default function ResetPasswordScreen() {
 
   const handleSubmit = async () => {
     if (password.length < 8) {
-      Alert.alert('Password Too Short', 'Please use at least 8 characters.');
+      showToast('Please use at least 8 characters.', 'error');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Passwords Don’t Match', 'Please re-enter matching passwords.');
+      showToast('Please re-enter matching passwords.', 'error');
       return;
     }
 
@@ -52,7 +54,7 @@ export default function ResetPasswordScreen() {
         { text: 'OK', onPress: () => router.replace('/(tabs)') },
       ]);
     } catch (err: any) {
-      Alert.alert('Reset Failed', err.message ?? 'Could not update your password.');
+      showToast(err.message ?? 'Could not update your password.', 'error');
     } finally {
       setSubmitting(false);
     }

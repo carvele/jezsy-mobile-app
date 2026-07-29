@@ -8,6 +8,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
+import { useToast } from '@/src/context/ToastContext';
 
 type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
 type OutfitSlotItem = {
@@ -27,6 +28,7 @@ const SLOT_LABELS: Record<string, string> = {
 };
 
 export default function OutfitDetailScreen() {
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
@@ -73,7 +75,7 @@ export default function OutfitDetailScreen() {
             router.back();
           } catch (err) {
             console.error('Error deleting outfit:', err);
-            Alert.alert('Error', 'Could not delete this outfit. Please try again.');
+            showToast('Could not delete this outfit. Please try again.', 'error');
             setDeleting(false);
           }
         },

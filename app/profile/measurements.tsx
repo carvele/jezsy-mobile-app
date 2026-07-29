@@ -8,8 +8,10 @@ import { useAuth } from '@/src/context/AuthContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { sanitizeForStorage } from '@/src/utils/measurementPrivacy';
+import { useToast } from '@/src/context/ToastContext';
 
 export default function MeasurementsScreen() {
+  const { showToast } = useToast();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
   const router = useRouter();
@@ -188,7 +190,7 @@ export default function MeasurementsScreen() {
       ]);
     } catch (err: any) {
       console.error(err);
-      Alert.alert('Error', err.message || 'Failed to save measurements.');
+      showToast(err.message || 'Failed to save measurements.', 'error');
     } finally {
       setSaving(false);
     }
@@ -341,7 +343,7 @@ export default function MeasurementsScreen() {
                 style={[styles.scanBtn, { backgroundColor: colors.tint }]}
                 onPress={() => {
                   if (!height || !weight) {
-                    Alert.alert('Missing Info', 'Please enter your height and weight above before scanning.');
+                    showToast('Please enter your height and weight above before scanning.', 'info');
                     return;
                   }
                   router.push({

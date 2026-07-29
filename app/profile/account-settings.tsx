@@ -7,7 +7,6 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -18,8 +17,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
+import { useToast } from '@/src/context/ToastContext';
 
 export default function AccountSettingsScreen() {
+  const { showToast } = useToast();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
   const router = useRouter();
@@ -32,11 +33,11 @@ export default function AccountSettingsScreen() {
 
   const handleChangePassword = async () => {
     if (password.length < 8) {
-      Alert.alert('Password Too Short', 'Please use at least 8 characters.');
+      showToast('Please use at least 8 characters.', 'error');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Passwords Don’t Match', 'Please re-enter matching passwords.');
+      showToast('Please re-enter matching passwords.', 'error');
       return;
     }
 
@@ -47,9 +48,9 @@ export default function AccountSettingsScreen() {
 
       setPassword('');
       setConfirmPassword('');
-      Alert.alert('Password Updated', 'Your password has been changed.');
+      showToast('Your password has been changed.', 'error');
     } catch (err: any) {
-      Alert.alert('Update Failed', err.message ?? 'Could not update your password.');
+      showToast(err.message ?? 'Could not update your password.', 'error');
     } finally {
       setSubmitting(false);
     }

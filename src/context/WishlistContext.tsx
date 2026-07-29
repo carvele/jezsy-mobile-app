@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { Alert } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { useToast } from '@/src/context/ToastContext';
 
 type WishlistContextType = {
   wishlistIds: Set<string>;
@@ -19,6 +19,7 @@ const WishlistContext = createContext<WishlistContextType>({
 
 export const WishlistProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
 
@@ -48,7 +49,7 @@ export const WishlistProvider = ({ children }: { children: React.ReactNode }) =>
 
   const toggleWishlist = useCallback(async (productId: string) => {
     if (!user?.id) {
-      Alert.alert('Sign in required', 'Please sign in to save items to your wishlist.');
+      showToast('Please sign in to save items to your wishlist.', 'info');
       return;
     }
 
@@ -90,7 +91,7 @@ export const WishlistProvider = ({ children }: { children: React.ReactNode }) =>
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, wishlistIds]);
+  }, [user?.id, wishlistIds, showToast]);
 
   return (
     <WishlistContext.Provider value={{ wishlistIds, isInWishlist, toggleWishlist, isLoading }}>

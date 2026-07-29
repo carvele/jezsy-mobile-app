@@ -8,6 +8,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
+import { useToast } from '@/src/context/ToastContext';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
@@ -23,6 +24,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function WardrobeItemDetailScreen() {
+  const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
@@ -70,7 +72,7 @@ export default function WardrobeItemDetailScreen() {
       setItem(data);
     } catch (err) {
       console.error('Error logging wear:', err);
-      Alert.alert('Error', 'Could not log this wear. Please try again.');
+      showToast('Could not log this wear. Please try again.', 'error');
     } finally {
       setLogging(false);
     }
@@ -94,7 +96,7 @@ export default function WardrobeItemDetailScreen() {
             router.back();
           } catch (err) {
             console.error('Error deleting wardrobe item:', err);
-            Alert.alert('Error', 'Could not remove this item. Please try again.');
+            showToast('Could not remove this item. Please try again.', 'error');
             setDeleting(false);
           }
         },

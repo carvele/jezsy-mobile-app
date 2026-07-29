@@ -14,6 +14,7 @@ import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { WishlistProvider } from '@/src/context/WishlistContext';
 import { CartProvider } from '@/src/context/CartContext';
 import { MessagesProvider } from '@/src/context/MessagesContext';
+import { ToastProvider } from '@/src/context/ToastContext';
 import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
 
@@ -136,15 +137,17 @@ export default function RootLayout() {
   // to receive touches on Android; iOS auto-wraps but Android does not.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <WishlistProvider>
-          <CartProvider>
-            <MessagesProvider>
-              <InitialLayout />
-            </MessagesProvider>
-          </CartProvider>
-        </WishlistProvider>
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <WishlistProvider>
+            <CartProvider>
+              <MessagesProvider>
+                <InitialLayout />
+              </MessagesProvider>
+            </CartProvider>
+          </WishlistProvider>
+        </AuthProvider>
+      </ToastProvider>
     </GestureHandlerRootView>
   );
 }

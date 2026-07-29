@@ -21,10 +21,12 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useToast } from '@/src/context/ToastContext';
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
 export default function ReservationScreen() {
+  const { showToast } = useToast();
   const { id, size, color } = useLocalSearchParams<{
     id: string;
     size: string;
@@ -117,20 +119,17 @@ export default function ReservationScreen() {
 
   const handleReserve = async () => {
     if (!session?.user || !product) {
-      Alert.alert("Error", "You must be logged in to make a reservation.");
+      showToast("You must be logged in to make a reservation.", 'error');
       return;
     }
 
     if (!appointmentTime) {
-      Alert.alert("Incomplete", "Please select a valid appointment time.");
+      showToast("Please select a valid appointment time.", 'info');
       return;
     }
 
     if (!receiptUri) {
-      Alert.alert(
-        "Incomplete",
-        "Please upload proof of downpayment (at least 50% of the reservation fee).",
-      );
+      showToast("Please upload proof of downpayment (at least 50% of the reservation fee).", 'info');
       return;
     }
 
@@ -177,10 +176,7 @@ export default function ReservationScreen() {
       );
     } catch (error: any) {
       console.error("Reservation error:", error);
-      Alert.alert(
-        "Reservation Failed",
-        error.message || "Failed to submit reservation. Please try again.",
-      );
+      showToast(error.message || "Failed to submit reservation. Please try again.", 'error');
     } finally {
       setSubmitting(false);
     }
