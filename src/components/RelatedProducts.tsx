@@ -3,41 +3,95 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
+import { useWishlist } from '@/src/context/WishlistContext';
+import { getRecentlyViewed } from '@/src/utils/recentlyViewed';
+import { rankCandidates } from '@/src/utils/recommendations';
+
+// Fetched wide, then ranked down -- ordering by relevance has to happen after
+// the affinity signals are known, which Postgres has no way to express here.
+const CANDIDATE_POOL = 40;
+const VISIBLE_COUNT = 6;
 
 // mainCategoryId is the *top-level* category's id (a product's own
-// category_id points at its subcategory, one level down) — "related" means
-// "anything else under the same main category", matching the old behavior
-// of comparing on the main category text, just via the FK now.
-export function RelatedProducts({ mainCategoryId, currentProductId }: { mainCategoryId: string | null; currentProductId: string }) {
+// category_id points at its subcategory, one level down). currentSubCategoryId
+// is that own category_id, used to rank exact-subcategory matches highest.
+export function RelatedProducts({
+  mainCategoryId,
+  currentProductId,
+  currentSubCategoryId = null,
+}: {
+  mainCategoryId: string | null;
+  currentProductId: string;
+  currentSubCategoryId?: string | null;
+}) {
   const [products, setProducts] = useState<any[]>([]);
+  const { wishlistIds } = useWishlist();
   const router = useRouter();
 
   useEffect(() => {
-    if (!mainCategoryId) return;
+    let cancelled = false;
 
-    const fetchRelated = async () => {
-      const { data: subs } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('parent_id', mainCategoryId);
+    const fetchRecommendations = async () => {
+      const recentIds = await getRecentlyViewed();
+      const signalIds = [...new Set([...wishlistIds, ...recentIds])].filter(
+        (id) => id !== currentProductId,
+      );
 
-      const subIds = (subs || []).map((s) => s.id);
-      if (subIds.length === 0) return;
+      // Which categories the user keeps returning to. Derived on the fly from
+      // signals already on the device; nothing is stored server-side for this.
+      let affinityCategoryIds = new Set<string>();
+      if (signalIds.length > 0) {
+        const { data } = await supabase
+          .from('products')
+          .select('category_id')
+          .in('id', signalIds);
+        affinityCategoryIds = new Set(
+          (data || []).map((p) => p.category_id).filter(Boolean) as string[],
+        );
+      }
+
+      let subIds: string[] = [];
+      if (mainCategoryId) {
+        const { data: subs } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('parent_id', mainCategoryId);
+        subIds = (subs || []).map((s) => s.id);
+      }
+
+      const poolCategoryIds = [...new Set([...subIds, ...affinityCategoryIds])];
+      if (poolCategoryIds.length === 0) {
+        if (!cancelled) setProducts([]);
+        return;
+      }
 
       const { data } = await supabase
         .from('products')
         .select('*')
-        .in('category_id', subIds)
+        .in('category_id', poolCategoryIds)
         .neq('id', currentProductId)
-        .limit(6);
+        .limit(CANDIDATE_POOL);
 
-      if (data) {
-        setProducts(data);
-      }
+      if (cancelled || !data) return;
+
+      // Wishlisted and recently-viewed items are strong signals but poor
+      // suggestions -- the user has already seen or saved them, and both get
+      // their own strip elsewhere on this screen.
+      const seen = new Set([...wishlistIds, ...recentIds]);
+      const unseen = data.filter((p) => !seen.has(p.id));
+
+      // Falling back to the full pool matters on a small catalog, where
+      // excluding everything the user has touched can empty the strip.
+      const candidates = unseen.length > 0 ? unseen : data;
+      const signals = { currentSubCategoryId, affinityCategoryIds };
+      setProducts(rankCandidates(candidates, signals, VISIBLE_COUNT));
     };
 
-    fetchRelated();
-  }, [mainCategoryId, currentProductId]);
+    fetchRecommendations();
+    return () => {
+      cancelled = true;
+    };
+  }, [mainCategoryId, currentProductId, currentSubCategoryId, wishlistIds]);
 
   if (products.length === 0) return null;
 
@@ -51,7 +105,7 @@ export function RelatedProducts({ mainCategoryId, currentProductId }: { mainCate
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             onPress={() => router.push(`/product/${item.id}`)}
           >
