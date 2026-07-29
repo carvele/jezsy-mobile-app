@@ -1112,6 +1112,7 @@ export type Database = {
           product_id: string
           rating: number
           user_id: string
+          verified_purchase: boolean
         }
         Insert: {
           comment?: string | null
@@ -1121,6 +1122,7 @@ export type Database = {
           product_id: string
           rating: number
           user_id: string
+          verified_purchase?: boolean
         }
         Update: {
           comment?: string | null
@@ -1130,6 +1132,7 @@ export type Database = {
           product_id?: string
           rating?: number
           user_id?: string
+          verified_purchase?: boolean
         }
         Relationships: [
           {

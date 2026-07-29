@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Linking from 'expo-linking';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -131,15 +132,19 @@ function InitialLayout() {
 }
 
 export default function RootLayout() {
+  // GestureHandlerRootView must wrap the whole tree for react-native-gesture-handler
+  // to receive touches on Android; iOS auto-wraps but Android does not.
   return (
-    <AuthProvider>
-      <WishlistProvider>
-        <CartProvider>
-          <MessagesProvider>
-            <InitialLayout />
-          </MessagesProvider>
-        </CartProvider>
-      </WishlistProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <WishlistProvider>
+          <CartProvider>
+            <MessagesProvider>
+              <InitialLayout />
+            </MessagesProvider>
+          </CartProvider>
+        </WishlistProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }
