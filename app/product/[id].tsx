@@ -332,53 +332,38 @@ export default function ProductDetailScreen() {
         </View>
 
         <View style={styles.contentContainer}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.title, { color: colors.text }]}>{product.name}</Text>
-            <View style={{ alignItems: 'flex-end' }}>
-              {product.on_sale && product.sale_price ? (
-                <>
-                  <Text style={[styles.priceOriginal, { color: colors.secondaryText }]}>₱{(product.price || 0).toFixed(2)}</Text>
-                  <Text style={[styles.priceSale, { color: colors.tint }]}>₱{(product.sale_price || 0).toFixed(2)}</Text>
-                  {product.discount_percentage && (
-                    <View style={styles.discountBadge}>
-                      <Text style={styles.discountText}>{product.discount_percentage}% OFF</Text>
-                    </View>
-                  )}
-                </>
-              ) : (
-                <Text style={[styles.price, { color: colors.tint }]}>₱{(product.price || 0).toFixed(2)}</Text>
-              )}
-            </View>
-          </View>
-
+          {/* Category eyebrow, then name, then the figures that qualify it.
+              The name is the heading; price used to be set at nearly the same
+              size and weight, so the two competed for first read. */}
           <Text style={[styles.category, { color: colors.secondaryText }]}>
             {getMainCategoryName(product)?.toUpperCase()}
           </Text>
 
-          {/* Message Seller Button */}
-          <TouchableOpacity
-            style={[styles.messageButton, { borderColor: colors.tint }]}
-            onPress={handleMessageSeller}
-            accessibilityRole="button"
-            accessibilityLabel="Ask the shop owner a question about this item"
-          >
-            <IconSymbol name="envelope.fill" size={20} color={colors.tint} />
-            <Text style={[styles.messageButtonText, { color: colors.tint }]}>Ask a Question about this item</Text>
-          </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.text }]}>{product.name}</Text>
 
-          {/* Description */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Description</Text>
-            <Text 
-              style={[styles.description, { color: colors.secondaryText }]}
-              numberOfLines={descExpanded ? undefined : 3}
-            >
-              {product.description || "No description available for this premium piece."}
-            </Text>
-            {product.description && product.description.length > 100 && (
-              <TouchableOpacity onPress={() => setDescExpanded(!descExpanded)} style={{ marginTop: 8 }}>
-                <Text style={{ color: colors.tint, fontWeight: '600' }}>{descExpanded ? 'Read less' : 'Read more'}</Text>
-              </TouchableOpacity>
+          {product.rating && product.review_count ? (
+            <View style={styles.ratingRow}>
+              <IconSymbol name="star.fill" size={13} color={colors.tint} />
+              <Text style={[styles.ratingValue, { color: colors.text }]}>{product.rating.toFixed(1)}</Text>
+              <Text style={[styles.ratingCount, { color: colors.secondaryText }]}>
+                ({product.review_count} review{product.review_count === 1 ? '' : 's'})
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.priceRow}>
+            {product.on_sale && product.sale_price ? (
+              <>
+                <Text style={[styles.priceSale, { color: colors.tint }]}>₱{(product.sale_price || 0).toFixed(2)}</Text>
+                <Text style={[styles.priceOriginal, { color: colors.secondaryText }]}>₱{(product.price || 0).toFixed(2)}</Text>
+                {product.discount_percentage ? (
+                  <View style={styles.discountBadge}>
+                    <Text style={styles.discountText}>{product.discount_percentage}% OFF</Text>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <Text style={[styles.price, { color: colors.tint }]}>₱{(product.price || 0).toFixed(2)}</Text>
             )}
           </View>
 
@@ -542,6 +527,36 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
+          {/* Description sits below the factual details: those answer "will
+              this fit me", which is the question that decides a reservation,
+              where the description is marketing copy. */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Description</Text>
+            <Text
+              style={[styles.description, { color: colors.secondaryText }]}
+              numberOfLines={descExpanded ? undefined : 3}
+            >
+              {product.description || "No description available for this premium piece."}
+            </Text>
+            {product.description && product.description.length > 100 && (
+              <TouchableOpacity onPress={() => setDescExpanded(!descExpanded)} style={{ marginTop: 8 }}>
+                <Text style={{ color: colors.tint, fontWeight: '600' }}>{descExpanded ? 'Read less' : 'Read more'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Secondary action, so it sits after the buying decision rather
+              than above the size and colour pickers. */}
+          <TouchableOpacity
+            style={[styles.messageButton, { borderColor: colors.tint }]}
+            onPress={handleMessageSeller}
+            accessibilityRole="button"
+            accessibilityLabel="Ask the shop owner a question about this item"
+          >
+            <IconSymbol name="envelope.fill" size={20} color={colors.tint} />
+            <Text style={[styles.messageButtonText, { color: colors.tint }]}>Ask a Question about this item</Text>
+          </TouchableOpacity>
+
           {/* Customer Reviews & Ratings */}
           <ReviewsList productId={product.id} />
 
@@ -682,21 +697,27 @@ const styles = StyleSheet.create({
   },
   arButtonText: { color: "#0D0D0D", fontWeight: "700", fontSize: 14 },
   contentContainer: { padding: 24, borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
-  titleRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
-  title: { flex: 1, fontSize: 26, fontWeight: "800", marginRight: 16 },
-  price: { fontSize: 24, fontWeight: "800" },
-  priceOriginal: { fontSize: 16, textDecorationLine: 'line-through', fontWeight: '500' },
-  priceSale: { fontSize: 24, fontWeight: "800" },
-  discountBadge: { backgroundColor: '#E05C5C', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4 },
+  // One clear step down at each level: 26/800 name, 20/700 price, 16/700
+  // section headings, 12/700 eyebrow. Previously the name was 26/800 and the
+  // price 24/800, which read as two headings.
+  title: { fontSize: 26, fontWeight: "800", marginBottom: 6 },
+  ratingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
+  ratingValue: { fontSize: 13, fontWeight: "700" },
+  ratingCount: { fontSize: 13 },
+  priceRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 20 },
+  price: { fontSize: 20, fontWeight: "700" },
+  priceOriginal: { fontSize: 14, textDecorationLine: 'line-through', fontWeight: '500' },
+  priceSale: { fontSize: 20, fontWeight: "800" },
+  discountBadge: { backgroundColor: '#E05C5C', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   discountText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-  category: { fontSize: 14, fontWeight: "600", letterSpacing: 1, marginBottom: 24 },
+  category: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2, marginBottom: 6 },
   section: { marginTop: 24 },
   sizeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   recBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, gap: 4 },
   recText: { fontSize: 12, fontWeight: "700" },
   sizeHeaderActions: { flexDirection: "row", alignItems: "center", gap: 12 },
   sizeChartLink: { fontSize: 13, fontWeight: "700", textDecorationLine: "underline" },
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: "700", letterSpacing: 0.2, marginBottom: 12 },
   description: { fontSize: 15, lineHeight: 24 },
   optionsList: { gap: 12, paddingRight: 20 },
   optionButton: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
