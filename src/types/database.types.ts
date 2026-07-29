@@ -1647,6 +1647,7 @@ export type Database = {
         Returns: undefined
       }
       update_user_streak: { Args: never; Returns: undefined }
+      verify_pickup: { Args: { _pickup_token: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never

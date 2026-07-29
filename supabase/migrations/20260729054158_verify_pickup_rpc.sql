@@ -11,9 +11,10 @@
 -- is_staff_or_admin() (not is_admin_or_owner()) so any front-of-house staff
 -- can complete a handoff, not just admins/owners.
 --
--- STAGED, NOT APPLIED: pairs with the admin-dashboard scanning UI, which
--- does not exist yet. Coordinate with the admin-dashboard developer before
--- applying and building the scan flow there.
+-- APPLIED 2026-07-29 as 20260729054158. The admin-dashboard scanning UI does
+-- not exist yet, so nothing calls this function in production: it is inert
+-- until that flow is built. The admin-dashboard developer still needs to be
+-- told it exists.
 
 CREATE OR REPLACE FUNCTION public.verify_pickup(_pickup_token uuid)
 RETURNS jsonb
