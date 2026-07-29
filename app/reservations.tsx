@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
+import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -165,8 +166,8 @@ export default function ReservationsScreen() {
       )}
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.tint} />
+        <View style={{ paddingHorizontal: 20 }}>
+          <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
         </View>
       ) : reservations.length === 0 ? (
         <View style={styles.centerContainer}>

@@ -7,8 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
-  ActivityIndicator,
-  Modal,
+    Modal,
   KeyboardAvoidingView,
   Platform,
   Dimensions,
@@ -24,6 +23,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
 import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
+import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
@@ -1035,8 +1035,8 @@ export default function ExploreScreen() {
           {((selectedCategory && selectedSubCategory) || showAllProducts) && (
             <View style={styles.flexOne}>
               {loading ? (
-                <View style={styles.centerContainer}>
-                  <ActivityIndicator size="large" color={colors.tint} />
+                <View style={styles.skeletonGrid}>
+                  <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
                 </View>
               ) : (
                 <FlatList
@@ -1891,6 +1891,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 80,
     gap: 12,
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
   },
   emptyText: {
     fontSize: 15,
