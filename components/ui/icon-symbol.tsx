@@ -44,6 +44,7 @@ const MAPPING = {
 
   // Actions
   'plus': 'add',
+  'minus': 'remove',
   'checkmark': 'check',
   'checkmark.circle': 'check-circle-outline',
   'checkmark.circle.fill': 'check-circle',
