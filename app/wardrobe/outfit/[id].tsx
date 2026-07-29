@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   slotLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
     marginBottom: 4,

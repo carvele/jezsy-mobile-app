@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   verifiedText: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#34C759',
     fontWeight: '600',
   },

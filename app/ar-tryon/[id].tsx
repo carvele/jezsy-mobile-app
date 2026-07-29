@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   fitRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   fitZone: { color: 'rgba(255,255,255,0.8)', fontSize: 12 },
   fitVerdict: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
-  fitNote: { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 6 },
+  fitNote: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 6 },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

@@ -7,8 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
-  ActivityIndicator,
-  Modal,
+    Modal,
   KeyboardAvoidingView,
   Platform,
   Dimensions,
@@ -24,6 +23,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
 import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
+import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
@@ -1035,8 +1035,8 @@ export default function ExploreScreen() {
           {((selectedCategory && selectedSubCategory) || showAllProducts) && (
             <View style={styles.flexOne}>
               {loading ? (
-                <View style={styles.centerContainer}>
-                  <ActivityIndicator size="large" color={colors.tint} />
+                <View style={styles.skeletonGrid}>
+                  <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
                 </View>
               ) : (
                 <FlatList
@@ -1596,7 +1596,7 @@ const styles = StyleSheet.create({
   },
   cartBadgeText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
   breadcrumbWrapper: {
@@ -1748,7 +1748,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badgeText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0D0D0D',
   },
@@ -1768,7 +1768,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   clearAllTagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   filterTag: {
@@ -1781,7 +1781,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   filterTagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   filterTagClose: {
@@ -1821,7 +1821,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   productBadgeText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0D0D0D',
   },
@@ -1831,7 +1831,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   productCategory: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
   },
@@ -1849,7 +1849,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   originalPriceText: {
-    fontSize: 11,
+    fontSize: 12,
     textDecorationLine: 'line-through',
   },
   fitBadgeRow: {
@@ -1859,7 +1859,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   fitBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   sizingNudge: {
@@ -1891,6 +1891,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 80,
     gap: 12,
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
   },
   emptyText: {
     fontSize: 15,

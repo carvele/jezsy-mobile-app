@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
+import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -95,8 +96,8 @@ export default function OrdersScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.tint} />
+        <View style={{ paddingHorizontal: 20 }}>
+          <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
         </View>
       ) : orders.length === 0 ? (
         <View style={styles.centerContainer}>
@@ -193,7 +194,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
   },

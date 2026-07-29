@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMessages } from '@/src/context/MessagesContext';
@@ -8,6 +8,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 
 export default function InboxScreen() {
   const { conversations, loading: messagesLoading } = useMessages();
@@ -201,8 +202,8 @@ export default function InboxScreen() {
       {/* Messages Tab */}
       {activeTab === 'messages' && (
         messagesLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color={colors.tint} />
+          <View style={{ paddingHorizontal: 16 }}>
+            <SkeletonList count={5}><ListRowSkeleton /></SkeletonList>
           </View>
         ) : conversations.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -225,8 +226,8 @@ export default function InboxScreen() {
       {/* Notifications Tab */}
       {activeTab === 'notifications' && (
         notificationsLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color={colors.tint} />
+          <View style={{ paddingHorizontal: 16 }}>
+            <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
           </View>
         ) : notifications.length === 0 ? (
           <View style={styles.emptyContainer}>

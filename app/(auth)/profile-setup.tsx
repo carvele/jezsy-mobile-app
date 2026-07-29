@@ -897,7 +897,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row' },
   fieldGroup: { gap: 8 },
   label: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.38)',
     letterSpacing: 1.6,
@@ -1091,7 +1091,7 @@ const styles = StyleSheet.create({
   },
   pickerColumnLabel: {
     color: 'rgba(255,255,255,0.3)',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.5,
     marginBottom: 10,

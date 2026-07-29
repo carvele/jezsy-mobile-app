@@ -364,7 +364,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   wearBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
   itemInfo: {

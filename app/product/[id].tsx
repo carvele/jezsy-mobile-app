@@ -459,10 +459,10 @@ export default function ProductDetailScreen() {
                         <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{s}</Text>
                       </TouchableOpacity>
                       {stock !== null && stock > 0 && stock <= 5 && (
-                        <Text style={{ fontSize: 10, color: '#E05C5C', marginTop: 4 }}>Only {stock} left</Text>
+                        <Text style={{ fontSize: 12, color: '#E05C5C', marginTop: 4 }}>Only {stock} left</Text>
                       )}
                       {isOutOfStock && (
-                        <Text style={{ fontSize: 10, color: colors.secondaryText, marginTop: 4 }}>Out of stock</Text>
+                        <Text style={{ fontSize: 12, color: colors.secondaryText, marginTop: 4 }}>Out of stock</Text>
                       )}
                     </View>
                   );
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
   priceOriginal: { fontSize: 16, textDecorationLine: 'line-through', fontWeight: '500' },
   priceSale: { fontSize: 24, fontWeight: "800" },
   discountBadge: { backgroundColor: '#E05C5C', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4 },
-  discountText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+  discountText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
   category: { fontSize: 14, fontWeight: "600", letterSpacing: 1, marginBottom: 24 },
   section: { marginTop: 24 },
   sizeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
