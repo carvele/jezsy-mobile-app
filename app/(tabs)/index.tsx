@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   featureBrand: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.5,
     marginBottom: 4,
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   gridBadgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0D0D0D',
   },
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   gridBrand: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
     marginBottom: 4,

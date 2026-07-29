@@ -210,9 +210,9 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
   },
-  saleBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  saleBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   info: { padding: 10, gap: 2 },
-  category: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  category: { fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
   name: { fontSize: 14, fontWeight: '600' },
   price: { fontSize: 14, fontWeight: '700' },
 });

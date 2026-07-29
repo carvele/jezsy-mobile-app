@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
   },

@@ -1596,7 +1596,7 @@ const styles = StyleSheet.create({
   },
   cartBadgeText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
   breadcrumbWrapper: {
@@ -1748,7 +1748,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badgeText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0D0D0D',
   },
@@ -1768,7 +1768,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   clearAllTagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   filterTag: {
@@ -1781,7 +1781,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   filterTagText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   filterTagClose: {
@@ -1821,7 +1821,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   productBadgeText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0D0D0D',
   },
@@ -1831,7 +1831,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   productCategory: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
   },
@@ -1849,7 +1849,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   originalPriceText: {
-    fontSize: 11,
+    fontSize: 12,
     textDecorationLine: 'line-through',
   },
   fitBadgeRow: {
@@ -1859,7 +1859,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   fitBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   sizingNudge: {

@@ -415,10 +415,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   timestampText: {
-    fontSize: 11,
+    fontSize: 12,
   },
   readReceiptText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   contextChip: {
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
     maxWidth: 220,
   },
   contextChipText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   contextBanner: {

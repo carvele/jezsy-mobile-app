@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.4)',
     letterSpacing: 1.5,
