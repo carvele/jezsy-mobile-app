@@ -4,6 +4,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { TimeSlotPicker } from "@/src/components/TimeSlotPicker";
 import { useAuth } from "@/src/context/AuthContext";
 import { supabase } from "@/src/lib/supabase";
+import { startReservationPayment } from "@/src/lib/payments";
 import { Database } from "@/src/types/database.types";
 import { formatLocalDate } from "@/src/utils/dateTime";
 import { scheduleReservationReminder } from "@/src/utils/pushNotifications";
@@ -42,6 +43,9 @@ export default function ReservationScreen() {
 
   // Payment Receipt
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  // Gateway is the default; the manual receipt path stays for customers who
+  // transfer directly.
+  const [payMethod, setPayMethod] = useState<'gateway' | 'receipt'>('gateway');
 
   const router = useRouter();
   const theme = useColorScheme() ?? "dark";
@@ -128,15 +132,16 @@ export default function ReservationScreen() {
       return;
     }
 
-    if (!receiptUri) {
+    if (payMethod === 'receipt' && !receiptUri) {
       showToast("Please upload proof of downpayment (at least 50% of the reservation fee).", 'info');
       return;
     }
 
     setSubmitting(true);
     try {
-      // Upload receipt first
-      const receiptPath = await uploadReceipt(receiptUri);
+      // A null receipt path is how create_reservation is told this deposit is
+      // coming through the gateway instead.
+      const receiptPath = payMethod === 'receipt' && receiptUri ? await uploadReceipt(receiptUri) : null;
       const reservationDate = formatLocalDate(selectedDate);
 
       // Price and deposit are computed server-side by create_reservation
@@ -148,7 +153,10 @@ export default function ReservationScreen() {
         _quantity: 1,
         _date: reservationDate,
         _appointment_time: appointmentTime,
-        _receipt_path: receiptPath,
+        // Cast: the DB signature is still `text`, but the generated type is not
+        // nullable. Regenerating types after the migration applies will not
+        // change that, since Postgres has no notion of a non-null argument.
+        _receipt_path: receiptPath as unknown as string,
       });
 
       if (error) {
@@ -162,12 +170,24 @@ export default function ReservationScreen() {
       }
 
       const displayId = (data as any)?.display_id;
+      const reservationId = (data as any)?.id;
 
       await scheduleReservationReminder(
         displayId,
         reservationDate,
         appointmentTime,
       );
+
+      if (payMethod === 'gateway') {
+        // The reservation exists before the payment does -- there has to be
+        // something for the deposit to settle against.
+        const { paymentId, checkoutUrl } = await startReservationPayment(reservationId);
+        router.replace({
+          pathname: '/payment/[paymentId]',
+          params: { paymentId, url: checkoutUrl },
+        } as any);
+        return;
+      }
 
       Alert.alert(
         "Success",
@@ -181,6 +201,9 @@ export default function ReservationScreen() {
       setSubmitting(false);
     }
   };
+
+  const needsReceipt = payMethod === 'receipt' && !receiptUri;
+  const canSubmit = !!appointmentTime && !needsReceipt && !submitting;
 
   if (loading) {
     return (
@@ -394,6 +417,47 @@ export default function ReservationScreen() {
             </Text>
           </View>
 
+          <View style={styles.payMethodRow}>
+            {([
+              { key: 'gateway', label: 'Pay with GCash' },
+              { key: 'receipt', label: 'Upload receipt' },
+            ] as const).map((option) => {
+              const isSelected = payMethod === option.key;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[
+                    styles.payMethodChip,
+                    { borderColor: isSelected ? colors.tint : colors.border },
+                    isSelected && { backgroundColor: colors.card },
+                  ]}
+                  onPress={() => setPayMethod(option.key)}
+                  accessibilityRole="radio"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected: isSelected, checked: isSelected }}
+                >
+                  <Text
+                    style={[
+                      styles.payMethodText,
+                      { color: isSelected ? colors.tint : colors.secondaryText },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {payMethod === 'gateway' ? (
+            <View style={styles.receiptStatus}>
+              <IconSymbol name="checkmark.circle.fill" size={16} color={colors.tint} />
+              <Text style={[styles.receiptStatusText, { color: colors.secondaryText }]}>
+                You will be taken to a secure page to pay ₱{depositRequired.toFixed(2)}
+              </Text>
+            </View>
+          ) : (
+          <>
           <TouchableOpacity
             style={[
               styles.uploadButton,
@@ -436,6 +500,8 @@ export default function ReservationScreen() {
               <Text style={[styles.receiptStatusText, { color: colors.warning }]}>Receipt required to confirm reservation</Text>
             </View>
           )}
+          </>
+          )}
         </View>
       </ScrollView>
 
@@ -448,27 +514,22 @@ export default function ReservationScreen() {
         <TouchableOpacity
           style={[
             styles.primaryAction,
-            {
-              backgroundColor:
-                !appointmentTime || !receiptUri || submitting
-                  ? colors.border
-                  : colors.tint,
-            },
+            { backgroundColor: canSubmit ? colors.tint : colors.border },
           ]}
           onPress={handleReserve}
-          disabled={!appointmentTime || !receiptUri || submitting}
+          disabled={!canSubmit}
           accessibilityRole="button"
           accessibilityLabel="Confirm Reservation"
           accessibilityHint={
-            !appointmentTime && !receiptUri
-              ? 'Select a pickup time and upload a receipt to enable'
-              : !appointmentTime
-                ? 'Select a pickup time to enable'
-                : !receiptUri
-                  ? 'Upload a payment receipt to enable'
+            !appointmentTime
+              ? 'Select a pickup time to enable'
+              : needsReceipt
+                ? 'Upload a payment receipt to enable'
+                : payMethod === 'gateway'
+                  ? 'Creates the reservation and opens the payment page'
                   : 'Submits your reservation request'
           }
-          accessibilityState={{ disabled: !appointmentTime || !receiptUri || submitting }}
+          accessibilityState={{ disabled: !canSubmit }}
         >
           {submitting ? (
             <ActivityIndicator color={colors.background} />
@@ -548,6 +609,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  payMethodRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  payMethodChip: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  payMethodText: { fontSize: 13, fontWeight: "700" },
   uploadPlaceholder: { alignItems: "center" },
   uploadText: { marginTop: 8, fontSize: 14, fontWeight: "500" },
   receiptPreview: { width: "100%", height: "100%" },
