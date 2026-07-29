@@ -12,6 +12,7 @@ import {
   Dimensions,
   FlatList,
   Image as RNImage,
+  Alert,
 } from "react-native";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -46,6 +47,8 @@ export default function ProductDetailScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [notifyRequested, setNotifyRequested] = useState(false);
+  const [notifySubmitting, setNotifySubmitting] = useState(false);
 
   const router = useRouter();
   const theme = useColorScheme() ?? "light";
@@ -123,6 +126,43 @@ export default function ProductDetailScreen() {
 
     fetchProductAndInventory();
   }, [id, user?.id]);
+
+  useEffect(() => {
+    const checkNotifyRequest = async () => {
+      if (!user?.id || !id || !selectedSize) {
+        setNotifyRequested(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("stock_notify_requests")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("product_id", id)
+        .eq("size", selectedSize)
+        .maybeSingle();
+      setNotifyRequested(!!data);
+    };
+    checkNotifyRequest();
+  }, [id, user?.id, selectedSize]);
+
+  const handleNotifyMe = async () => {
+    if (!user?.id || !id || !selectedSize) {
+      Alert.alert("Sign in required", "Log in to get notified when this size is back in stock.");
+      return;
+    }
+    setNotifySubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("stock_notify_requests")
+        .insert({ user_id: user.id, product_id: id, size: selectedSize });
+      if (error && error.code !== "23505") throw error; // 23505 = already requested
+      setNotifyRequested(true);
+    } catch (err) {
+      console.error("Error requesting stock notification:", err);
+    } finally {
+      setNotifySubmitting(false);
+    }
+  };
 
   const handleMessageSeller = async () => {
     const conv = await getOrCreateConversation();
@@ -410,6 +450,22 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
+          {/* Notify Me when the selected size is out of stock */}
+          {selectedSizeOutOfStock && (
+            <TouchableOpacity
+              style={[styles.notifyBtn, { borderColor: colors.tint, opacity: notifySubmitting ? 0.6 : 1 }]}
+              onPress={handleNotifyMe}
+              disabled={notifySubmitting || notifyRequested}
+              accessibilityRole="button"
+              accessibilityLabel={notifyRequested ? "You will be notified when this size is back in stock" : "Notify me when this size is back in stock"}
+            >
+              <IconSymbol name={notifyRequested ? "checkmark.circle.fill" : "bell.fill"} size={18} color={colors.tint} />
+              <Text style={[styles.notifyBtnText, { color: colors.tint }]}>
+                {notifyRequested ? "We'll notify you when it's back" : "Notify Me When Available"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Product Details (Material & Care) */}
           {(product.material || product.care_instructions || product.fit_and_sizing) && (
             <View style={[styles.section, styles.detailsSection, { borderColor: colors.border }]}>
@@ -576,6 +632,20 @@ const styles = StyleSheet.create({
   },
   quantityValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
   quantityHint: { fontSize: 13, marginLeft: 4 },
+  notifyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderRadius: 24,
+    marginTop: 24,
+    gap: 8,
+  },
+  notifyBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
   detailsSection: {
     borderWidth: 1,
     borderRadius: 16,
