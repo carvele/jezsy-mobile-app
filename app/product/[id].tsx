@@ -32,6 +32,7 @@ import { Database } from "@/src/types/database.types";
 import { CATEGORY_SELECT, getMainCategoryId, getMainCategoryName, WithCategoryEmbed } from "@/src/utils/categoryDisplay";
 import { recommendSize, ProductMeasurements } from "@/src/utils/sizeRecommender";
 import { SizeChartModal } from "@/src/components/SizeChartModal";
+import { ImageViewerModal } from "@/src/components/ImageViewerModal";
 
 type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
 type Inventory = Database["public"]["Tables"]["inventory"]["Row"];
@@ -54,6 +55,7 @@ export default function ProductDetailScreen() {
   const [notifyRequested, setNotifyRequested] = useState(false);
   const [notifySubmitting, setNotifySubmitting] = useState(false);
   const [sizeChartVisible, setSizeChartVisible] = useState(false);
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
 
   const router = useRouter();
   const theme = useColorScheme() ?? "light";
@@ -265,7 +267,15 @@ export default function ProductDetailScreen() {
               setActiveImageIndex(index);
             }}
             renderItem={({ item }) => (
-              <Image source={{ uri: item }} style={{ width, height: 500 }} contentFit="cover" />
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => setViewerUri(item)}
+                accessibilityRole="button"
+                accessibilityLabel="View image full screen"
+                accessibilityHint="Opens a zoomable full-screen view of this product image"
+              >
+                <Image source={{ uri: item }} style={{ width, height: 500 }} contentFit="cover" />
+              </TouchableOpacity>
             )}
             keyExtractor={(item, index) => index.toString()}
           />
@@ -540,6 +550,12 @@ export default function ProductDetailScreen() {
           )}
 
           <RecentlyViewed excludeProductId={product.id} />
+
+          <ImageViewerModal
+            visible={!!viewerUri}
+            uri={viewerUri}
+            onClose={() => setViewerUri(null)}
+          />
 
           {hasSizeChart && sizeChart && (
             <SizeChartModal
