@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -31,6 +32,83 @@ export default function AccountSettingsScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
+  const [deletionBusy, setDeletionBusy] = useState(false);
+
+  // Cast: account_deletion_requests is added by migration 20260729101500 and
+  // is not in the generated types until that is applied and they are
+  // regenerated.
+  const deletionTable = useCallback(
+    () => (supabase as any).from('account_deletion_requests'),
+    [],
+  );
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await deletionTable()
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+      if (!cancelled) setPendingDeletionId(data?.id ?? null);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, deletionTable]);
+
+  const submitDeletionRequest = async () => {
+    if (!user?.id) return;
+    setDeletionBusy(true);
+    try {
+      const { data, error } = await deletionTable()
+        .insert({ user_id: user.id })
+        .select('id')
+        .single();
+      if (error) throw error;
+
+      setPendingDeletionId(data.id);
+      showToast('Deletion request submitted. Our team will be in touch.', 'success');
+    } catch (err: any) {
+      showToast(err.message ?? 'Could not submit your request.', 'error');
+    } finally {
+      setDeletionBusy(false);
+    }
+  };
+
+  // Kept as an Alert rather than a toast: this needs a confirm/cancel choice,
+  // matching the other destructive confirmations in the app.
+  const handleRequestDeletion = () => {
+    Alert.alert(
+      'Request account deletion',
+      'Your account will not be deleted right away. We review each request by hand, and any active reservations must be settled first. You can withdraw the request at any time before it is processed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Request deletion', style: 'destructive', onPress: submitDeletionRequest },
+      ],
+    );
+  };
+
+  const handleWithdrawDeletion = async () => {
+    if (!pendingDeletionId) return;
+    setDeletionBusy(true);
+    try {
+      const { error } = await deletionTable().delete().eq('id', pendingDeletionId);
+      if (error) throw error;
+
+      setPendingDeletionId(null);
+      showToast('Deletion request withdrawn.', 'success');
+    } catch (err: any) {
+      showToast(err.message ?? 'Could not withdraw your request.', 'error');
+    } finally {
+      setDeletionBusy(false);
+    }
+  };
+
   const handleChangePassword = async () => {
     if (password.length < 8) {
       showToast('Please use at least 8 characters.', 'error');
@@ -48,7 +126,7 @@ export default function AccountSettingsScreen() {
 
       setPassword('');
       setConfirmPassword('');
-      showToast('Your password has been changed.', 'error');
+      showToast('Your password has been changed.', 'success');
     } catch (err: any) {
       showToast(err.message ?? 'Could not update your password.', 'error');
     } finally {
@@ -81,7 +159,7 @@ export default function AccountSettingsScreen() {
             </Text>
           </View>
 
-          <View style={[styles.section, { borderColor: colors.border, borderBottomWidth: 0 }]}>
+          <View style={[styles.section, { borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Change Password</Text>
 
             <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -143,6 +221,62 @@ export default function AccountSettingsScreen() {
               )}
             </TouchableOpacity>
           </View>
+
+          <View style={[styles.section, { borderColor: colors.border, borderBottomWidth: 0 }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Delete Account</Text>
+
+            {pendingDeletionId ? (
+              <>
+                <View style={[styles.noticeBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                  <IconSymbol name="clock.arrow.circlepath" size={18} color={colors.tint} />
+                  <Text style={[styles.noticeText, { color: colors.secondaryText }]}>
+                    Your deletion request is with our team. We will email you once it has
+                    been processed.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { borderColor: colors.border, opacity: deletionBusy ? 0.6 : 1 }]}
+                  onPress={handleWithdrawDeletion}
+                  disabled={deletionBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Withdraw account deletion request"
+                  accessibilityState={{ disabled: deletionBusy }}
+                >
+                  {deletionBusy ? (
+                    <ActivityIndicator color={colors.text} />
+                  ) : (
+                    <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
+                      Withdraw Request
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.noticeText, { color: colors.secondaryText, marginBottom: 16 }]}>
+                  Deletion is handled by hand so we can settle any active reservations
+                  first. Requesting it does not sign you out or remove anything straight
+                  away.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.dangerButton, { borderColor: colors.error, opacity: deletionBusy ? 0.6 : 1 }]}
+                  onPress={handleRequestDeletion}
+                  disabled={deletionBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Request account deletion"
+                  accessibilityState={{ disabled: deletionBusy }}
+                >
+                  {deletionBusy ? (
+                    <ActivityIndicator color={colors.error} />
+                  ) : (
+                    <Text style={[styles.dangerButtonText, { color: colors.error }]}>
+                      Request Account Deletion
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -200,6 +334,42 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#0D0D0D',
     fontSize: 16,
+    fontWeight: '700',
+  },
+  noticeBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  noticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  dangerButton: {
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dangerButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    fontSize: 15,
     fontWeight: '700',
   },
 });
