@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, Modal, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, Modal, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Dimensions, ScrollView } from 'react-native';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
+
+const MAX_REVIEW_IMAGES = 4;
 
 interface ReviewModalProps {
   visible: boolean;
@@ -20,7 +25,27 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
   
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
+  const [images, setImages] = useState<{ uri: string; base64: string; ext: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  const handlePickImage = async () => {
+    if (images.length >= MAX_REVIEW_IMAGES) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset?.base64) return;
+    const ext = asset.uri.split('.').pop() || 'jpg';
+    setImages(prev => [...prev, { uri: asset.uri, base64: asset.base64!, ext }]);
+  };
+
+  const removeImage = (uri: string) => {
+    setImages(prev => prev.filter(img => img.uri !== uri));
+  };
 
   const handleSubmit = async () => {
     if (!user) {
@@ -28,22 +53,34 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
       return;
     }
     if (rating < 1 || rating > 5) return;
-    
+
     setSubmitting(true);
     try {
+      const uploadedUrls: string[] = [];
+      for (const img of images) {
+        const filePath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${img.ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from('review-images')
+          .upload(filePath, decode(img.base64), { contentType: `image/${img.ext}` });
+        if (uploadError) throw uploadError;
+        const { data: publicUrl } = supabase.storage.from('review-images').getPublicUrl(filePath);
+        uploadedUrls.push(publicUrl.publicUrl);
+      }
+
       const { error } = await supabase.from('reviews').insert({
         product_id: productId,
         user_id: user.id,
         rating,
         comment: comment.trim() || null,
-        images: [] // Image upload omitted for brevity on free tier
+        images: uploadedUrls,
       });
-      
+
       if (error) throw error;
-      
+
       Alert.alert('Success', 'Thank you for your review!');
       setRating(5);
       setComment('');
+      setImages([]);
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -97,7 +134,34 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
               onChangeText={setComment}
             />
 
-            <TouchableOpacity 
+            <Text style={[styles.label, { color: colors.text }]}>Add photos (optional)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow} contentContainerStyle={{ gap: 12 }}>
+              {images.map(img => (
+                <View key={img.uri} style={styles.photoThumbWrap}>
+                  <Image source={{ uri: img.uri }} style={styles.photoThumb} contentFit="cover" />
+                  <TouchableOpacity
+                    style={styles.photoRemoveBtn}
+                    onPress={() => removeImage(img.uri)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove this photo"
+                  >
+                    <IconSymbol name="xmark" size={12} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {images.length < MAX_REVIEW_IMAGES && (
+                <TouchableOpacity
+                  style={[styles.photoAddBtn, { borderColor: colors.border }]}
+                  onPress={handlePickImage}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add a photo to your review"
+                >
+                  <IconSymbol name="camera.fill" size={22} color={colors.secondaryText} />
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
               style={[styles.submitBtn, { backgroundColor: colors.tint, opacity: submitting ? 0.7 : 1 }]}
               onPress={handleSubmit}
               disabled={submitting}
@@ -187,5 +251,36 @@ const styles = StyleSheet.create({
     color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '700',
+  },
+  photoRow: {
+    marginBottom: 24,
+  },
+  photoThumbWrap: {
+    position: 'relative',
+  },
+  photoThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+  },
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoAddBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { Image } from 'expo-image';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -131,6 +132,13 @@ export function ReviewsList({ productId }: ReviewsListProps) {
               </View>
               {renderStars(review.rating)}
               {review.comment && <Text style={[styles.comment, { color: colors.text }]}>{review.comment}</Text>}
+              {review.images && review.images.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reviewPhotoRow} contentContainerStyle={{ gap: 8 }}>
+                  {review.images.map((url: string, idx: number) => (
+                    <Image key={idx} source={{ uri: url }} style={styles.reviewPhoto} contentFit="cover" />
+                  ))}
+                </ScrollView>
+              )}
             </View>
           ))}
         </View>
@@ -262,5 +270,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     lineHeight: 20,
+  },
+  reviewPhotoRow: {
+    marginTop: 10,
+  },
+  reviewPhoto: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
   },
 });
