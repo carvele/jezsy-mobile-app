@@ -233,7 +233,7 @@ export default function HomeScreen() {
                     style={styles.gridCard}
                     activeOpacity={0.85}
                     accessibilityRole="button"
-                    accessibilityLabel={`${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.on_sale ? ', on sale' : ''}${item.model_3d_url ? ', available in AR' : ''}`}
+                    accessibilityLabel={`${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.on_sale ? ', on sale' : ''}${item.model_3d_url ? ', available in AR' : ''}${item.stock !== null && item.stock !== undefined ? (item.stock <= 0 ? ', out of stock' : `, ${item.stock} in stock`) : ''}`}
                     accessibilityHint="Opens product details"
                   >
                     <View style={[styles.gridImageContainer, { backgroundColor: colors.imagePlaceholder }]}>
@@ -278,6 +278,32 @@ export default function HomeScreen() {
                       ) : (
                         <Text style={[styles.gridPrice, { color: colors.text }]}>
                           ₱{(item.price || 0).toLocaleString()}
+                        </Text>
+                      )}
+                      {/* Same treatment as the Explore cards. products.stock is
+                          the total across sizes, kept current by the
+                          sync_product_stock trigger. Null means the product
+                          predates stock tracking, so say nothing rather than
+                          claiming it is out of stock. */}
+                      {item.stock !== null && item.stock !== undefined && (
+                        <Text
+                          style={[
+                            styles.gridStock,
+                            {
+                              color:
+                                item.stock <= 0
+                                  ? colors.error
+                                  : item.stock <= 5
+                                    ? colors.warning
+                                    : colors.secondaryText,
+                            },
+                          ]}
+                        >
+                          {item.stock <= 0
+                            ? 'Out of stock'
+                            : item.stock <= 5
+                              ? `Only ${item.stock} left`
+                              : `${item.stock} in stock`}
                         </Text>
                       )}
                     </View>
@@ -509,5 +535,10 @@ const styles = StyleSheet.create({
   gridOriginalPrice: {
     fontSize: 12,
     textDecorationLine: 'line-through',
+  },
+  gridStock: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });

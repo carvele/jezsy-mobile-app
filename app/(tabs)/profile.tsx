@@ -181,7 +181,9 @@ export default function ProfileScreen() {
               'Push notification preferences',
               () => router.push('/profile/notifications-settings' as any),
             )}
-            {renderSettingItem('questionmark.circle', 'Help Center', 'Message us in your Inbox', () => router.push('/(tabs)/messages'))}
+            {/* Help Center removed: it was a row that only called
+                router.push('/(tabs)/messages'), duplicating the Messages tab
+                already in the bottom nav, with no help content behind it. */}
           </View>
         </View>
 

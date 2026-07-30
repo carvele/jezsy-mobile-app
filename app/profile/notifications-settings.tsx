@@ -10,6 +10,18 @@ import { supabase } from '@/src/lib/supabase';
 import { savePushTokenToProfile } from '@/src/utils/pushNotifications';
 import { useToast } from '@/src/context/ToastContext';
 
+// Each failure gets its own message. The switch used to blame permissions and
+// emulators for everything, which masked the real cause: no EAS projectId is
+// configured, so an Expo push token can never be minted.
+const PUSH_FAILURE_MESSAGE: Record<string, string> = {
+  'expo-go': 'Push notifications do not work in Expo Go. Use a development build.',
+  'no-device': 'Push notifications need a physical device. Emulators cannot receive them.',
+  denied: 'Notifications are blocked. Enable them for JezSy in your device settings.',
+  'not-configured':
+    'Push notifications are not set up for this build yet. An EAS project ID is required.',
+  error: 'Could not turn on push notifications. Please try again.',
+};
+
 export default function NotificationsSettingsScreen() {
   const { showToast } = useToast();
   const theme = useColorScheme() ?? 'dark';
@@ -51,15 +63,10 @@ export default function NotificationsSettingsScreen() {
     setUpdating(true);
     try {
       if (next) {
-        await savePushTokenToProfile(user.id);
-        const { data } = await supabase
-          .from('profiles')
-          .select('expo_push_token')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (!data?.expo_push_token) {
+        const result = await savePushTokenToProfile(user.id);
+        if (result.status !== 'ok') {
           setPushEnabled(false);
-          showToast('Push notifications need permission and a physical device. Check your device settings and try again.', 'error');
+          showToast(PUSH_FAILURE_MESSAGE[result.status], 'error');
         }
       } else {
         const { error } = await supabase
