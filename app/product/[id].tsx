@@ -547,7 +547,11 @@ export default function ProductDetailScreen() {
 
           {/* Related Products */}
           {getMainCategoryId(product) && (
-            <RelatedProducts mainCategoryId={getMainCategoryId(product)} currentProductId={product.id} />
+            <RelatedProducts
+              mainCategoryId={getMainCategoryId(product)}
+              currentProductId={product.id}
+              currentSubCategoryId={product.category_id}
+            />
           )}
 
           <RecentlyViewed excludeProductId={product.id} />
