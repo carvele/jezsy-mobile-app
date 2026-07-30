@@ -95,7 +95,11 @@ export default function InboxScreen() {
   };
 
   const renderMessageItem = ({ item }: { item: any }) => {
-    const isStaff = profile?.role === 'admin' || profile?.role === 'owner';
+    // Must match is_staff_or_admin() in the DB, which returns true for staff too.
+    // Omitting 'staff' here meant a staff member -- whom RLS lets see every
+    // conversation -- was shown "Shop Owner" instead of the customer's ref.
+    const isStaff =
+      profile?.role === 'staff' || profile?.role === 'admin' || profile?.role === 'owner';
     const displayName = isStaff ? `Customer (${item.customer_id.substring(0, 6)})` : 'Shop Owner';
 
     const dateStr = item.last_message_time
