@@ -10,6 +10,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { formatTimeLabel, formatLocalDate } from '@/src/utils/dateTime';
+import { resolveSignedStorageUrl } from '@/src/utils/signedStorageUrl';
 import { useMessages } from '@/src/context/MessagesContext';
 import { TimeSlotPicker } from '@/src/components/TimeSlotPicker';
 import { useToast } from '@/src/context/ToastContext';
@@ -30,6 +31,7 @@ export default function ReservationDetailScreen() {
   const [rescheduleDate, setRescheduleDate] = useState<Date>(new Date());
   const [rescheduleSlot, setRescheduleSlot] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
 
   const fetchReservation = useCallback(async () => {
     if (!id) return;
@@ -45,6 +47,25 @@ export default function ReservationDetailScreen() {
       setLoading(false);
     }
   }, [id]);
+
+  // receipt_url holds a bare object path in a private bucket, so it needs a
+  // signed URL before <Image> can load it.
+  useEffect(() => {
+    const path = reservation?.receipt_url;
+    if (!path) {
+      setReceiptUri(null);
+      return;
+    }
+
+    let cancelled = false;
+    resolveSignedStorageUrl('payment_receipts', path).then((url) => {
+      if (!cancelled) setReceiptUri(url);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reservation?.receipt_url]);
 
   useEffect(() => {
     fetchReservation();
@@ -304,7 +325,13 @@ export default function ReservationDetailScreen() {
         {reservation.receipt_url && (
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment Receipt</Text>
-            <Image source={{ uri: reservation.receipt_url }} style={styles.receiptImage} contentFit="cover" />
+            {receiptUri ? (
+              <Image source={{ uri: receiptUri }} style={styles.receiptImage} contentFit="cover" />
+            ) : (
+              <View style={[styles.receiptImage, styles.receiptPlaceholder]}>
+                <ActivityIndicator color={colors.tint} />
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -431,5 +458,9 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: 12,
+  },
+  receiptPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

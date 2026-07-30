@@ -78,61 +78,75 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const syncProfile = useCallback(async (authUser: User | null | undefined) => {
     if (!authUser?.id) {
       setProfile(null);
+      setIsProfileLoading(false);
       return null;
     }
 
-    // The handle_new_user DB trigger already creates a bare profile row
-    // (id/email/role) on signup, so a row normally exists by the time this
-    // runs. Fetch it first: this callback fires on every auth-state change
-    // (including silent token refreshes), and re-seeding names from OAuth
-    // metadata each time would clobber a name the user edited in
-    // profile-setup. Only seed names when they are still empty.
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", authUser.id)
-      .maybeSingle();
+    // The routing gate in app/_layout.tsx holds off on redirecting while
+    // isProfileLoading is true. This flag has to be raised here, before the
+    // first await: onAuthStateChange calls this without awaiting it and then
+    // immediately clears isLoading, so without it the gate wakes up on a live
+    // session with a still-null profile and routes to profile-setup for a
+    // frame before the real profile arrives.
+    setIsProfileLoading(true);
+    try {
+      // The handle_new_user DB trigger already creates a bare profile row
+      // (id/email/role) on signup, so a row normally exists by the time this
+      // runs. Fetch it first: this callback fires on every auth-state change
+      // (including silent token refreshes), and re-seeding names from OAuth
+      // metadata each time would clobber a name the user edited in
+      // profile-setup. Only seed names when they are still empty.
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
+        .maybeSingle();
 
-    if (existing?.first_name) {
-      setProfile(existing);
+      if (existing?.first_name) {
+        setProfile(existing);
+        savePushTokenToProfile(authUser.id);
+        return existing;
+      }
+
+      const metadata = authUser.user_metadata ?? {};
+      const fullName = (metadata.full_name ?? metadata.name ?? "")
+        .toString()
+        .trim();
+      const nameParts = fullName.split(/\s+/).filter(Boolean);
+      const firstName = nameParts.shift() ?? "";
+      const lastName = nameParts.join(" ") ?? "";
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: authUser.id,
+            email: authUser.email ?? null,
+            first_name: firstName || null,
+            last_name: lastName || null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" },
+        )
+        .select("*")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Failed to sync profile", error);
+        // Fall back to whatever row already existed rather than nulling it out.
+        setProfile(existing ?? null);
+        return existing ?? null;
+      }
+
+      const nextProfile = data ?? existing ?? null;
+      setProfile(nextProfile);
       savePushTokenToProfile(authUser.id);
-      return existing;
+      return nextProfile;
+    } finally {
+      // Must run on every path including a thrown query: leaving this true
+      // would strand the app on the pre-bootstrap placeholder forever.
+      setIsProfileLoading(false);
     }
-
-    const metadata = authUser.user_metadata ?? {};
-    const fullName = (metadata.full_name ?? metadata.name ?? "")
-      .toString()
-      .trim();
-    const nameParts = fullName.split(/\s+/).filter(Boolean);
-    const firstName = nameParts.shift() ?? "";
-    const lastName = nameParts.join(" ") ?? "";
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .upsert(
-        {
-          id: authUser.id,
-          email: authUser.email ?? null,
-          first_name: firstName || null,
-          last_name: lastName || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "id" },
-      )
-      .select("*")
-      .maybeSingle();
-
-    if (error) {
-      console.error("Failed to sync profile", error);
-      // Fall back to whatever row already existed rather than nulling it out.
-      setProfile(existing ?? null);
-      return existing ?? null;
-    }
-
-    const nextProfile = data ?? existing ?? null;
-    setProfile(nextProfile);
-    savePushTokenToProfile(authUser.id);
-    return nextProfile;
   }, []);
 
   const refreshProfile = useCallback(async () => {

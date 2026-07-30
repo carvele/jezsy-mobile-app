@@ -943,6 +943,7 @@ export default function ExploreScreen() {
                       onPress={() => router.push('/profile/measurements')}
                       accessibilityRole="button"
                       accessibilityLabel="Add your measurements"
+                      hitSlop={8}
                     >
                       <Text style={[styles.sizingNudgeAction, { color: colors.tint }]}>Add measurements</Text>
                     </TouchableOpacity>
@@ -1869,6 +1870,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
+    // Both this card's border and the Shop All button above it are drawn in
+    // colors.tint; with no gap the two tinted edges meet and read as one
+    // overlapping element.
+    marginTop: 16,
     marginBottom: 20,
   },
   sizingNudgeTitle: {
