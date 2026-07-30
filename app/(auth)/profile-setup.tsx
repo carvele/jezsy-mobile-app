@@ -14,6 +14,7 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, ArrowRight, Check, User, Phone, MapPin, Calendar, ChevronDown } from 'lucide-react-native';
 import { supabase } from '@/src/lib/supabase';
@@ -137,6 +138,7 @@ const STEP_META = [
 export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' | 'edit' } = {}) {
   const { showToast } = useToast();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, profile, refreshProfile } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -596,7 +598,7 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
       <LinearGradient colors={['#0A0A0A', '#0f0f0f']} style={StyleSheet.absoluteFillObject} />
 
       {/* Top step indicator */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={back} activeOpacity={0.7}>
           <ArrowLeft size={22} color="rgba(255,255,255,0.7)" />
         </TouchableOpacity>
@@ -848,7 +850,6 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 56 : 36,
     paddingHorizontal: 20,
     paddingBottom: 12,
     gap: 12,

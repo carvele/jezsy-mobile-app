@@ -15,6 +15,8 @@ import {
   Share,
 } from "react-native";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -59,6 +61,7 @@ export default function ProductDetailScreen() {
   const [viewerUri, setViewerUri] = useState<string | null>(null);
 
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const theme = useColorScheme() ?? "light";
   const colors = Colors[theme];
   const { isInWishlist, toggleWishlist } = useWishlist();
@@ -292,7 +295,7 @@ export default function ProductDetailScreen() {
 
           {/* Top Floating Buttons */}
           <TouchableOpacity 
-            style={[styles.backButton, { backgroundColor: "rgba(0,0,0,0.5)" }]} 
+            style={[styles.backButton, { top: insets.top + 12, backgroundColor: "rgba(0,0,0,0.5)" }]} 
             onPress={handleBack}
             accessibilityRole="button"
             accessibilityLabel="Go back"
@@ -301,7 +304,7 @@ export default function ProductDetailScreen() {
             <IconSymbol name="chevron.left" size={24} color="#FFF" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.favoriteButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
+            style={[styles.favoriteButton, { top: insets.top + 12, backgroundColor: "rgba(0,0,0,0.5)" }]}
             onPress={() => toggleWishlist(product.id)}
             accessibilityRole="button"
             accessibilityLabel={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
@@ -310,7 +313,7 @@ export default function ProductDetailScreen() {
             <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? "#E05C5C" : "#FFF"} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.shareButton, { backgroundColor: "rgba(0,0,0,0.5)" }]}
+            style={[styles.shareButton, { top: insets.top + 12, backgroundColor: "rgba(0,0,0,0.5)" }]}
             onPress={handleShare}
             accessibilityRole="button"
             accessibilityLabel="Share this item"
@@ -682,16 +685,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     width: 24,
   },
+  // `top` is supplied inline from useSafeAreaInsets: these float over the image
+  // with edge-to-edge enabled, so a hardcoded guess put them under the status
+  // bar on any device with a taller one.
   backButton: {
-    position: "absolute", top: Platform.OS === "ios" ? 60 : 40, left: 20,
+    position: "absolute", left: 20,
     width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
   },
   favoriteButton: {
-    position: "absolute", top: Platform.OS === "ios" ? 60 : 40, right: 20,
+    position: "absolute", right: 20,
     width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
   },
   shareButton: {
-    position: "absolute", top: Platform.OS === "ios" ? 60 : 40, right: 76,
+    position: "absolute", right: 76,
     width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
   },
   arButton: {

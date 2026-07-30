@@ -16,6 +16,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
@@ -40,6 +41,7 @@ type Mode = 'login' | 'signup' | 'otp_request' | 'otp_verify' | 'forgot';
 type VerificationType = 'signup' | 'login';
 
 export default function AuthScreen() {
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const router = useRouter();
 
@@ -404,12 +406,12 @@ export default function AuthScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {/* Back button */}
-        <TouchableOpacity style={styles.backBtn} onPress={goBack} activeOpacity={0.7}>
+        <TouchableOpacity style={[styles.backBtn, { top: insets.top + 12 }]} onPress={goBack} activeOpacity={0.7}>
           <ArrowLeft size={22} color="#fff" />
         </TouchableOpacity>
 
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 64 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -632,7 +634,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   backBtn: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 58 : 40,
     left: 24,
     zIndex: 10,
     padding: 8,
@@ -642,7 +643,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingHorizontal: 24,
     paddingBottom: 40,
-    paddingTop: Platform.OS === 'ios' ? 100 : 80,
   },
   headingWrapper: {
     marginBottom: 28,
