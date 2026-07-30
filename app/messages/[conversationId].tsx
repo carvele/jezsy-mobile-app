@@ -36,13 +36,15 @@ export default function ChatScreen() {
     ctxLabel?: string;
   }>();
   const { session } = useAuth();
-  const { sendMessage, markAsRead } = useMessages();
+  const { sendMessage, editMessage, markAsRead } = useMessages();
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
 
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
+  // Non-null while editing: the composer becomes an edit box for that message.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingContext, setPendingContext] = useState<MessageContext | null>(null);
   const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string>>({});
   const resolvedImageUrlsRef = useRef(resolvedImageUrls);
@@ -174,7 +176,53 @@ export default function ChatScreen() {
     }
   }, [ctxType, ctxRef, ctxLabel]);
 
+  // Sender-only, text-only, and never a message still in flight: a temp- id has
+  // no row to update yet.
+  const canEdit = (item: any) =>
+    item.sender_id === session?.user.id &&
+    !!item.text &&
+    !item.image_url &&
+    !String(item.id).startsWith('temp-');
+
+  const beginEdit = (item: any) => {
+    if (!canEdit(item)) return;
+    setEditingId(item.id);
+    setInputText(item.text);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setInputText('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+    const nextText = inputText.trim();
+    if (!nextText) return;
+
+    const target = messages.find((m) => m.id === editingId);
+    if (target && target.text === nextText) {
+      cancelEdit();
+      return;
+    }
+
+    const editedAt = new Date().toISOString();
+    // Optimistic, then reverted from the previous text if the update is refused.
+    setMessages(prev =>
+      prev.map(m => (m.id === editingId ? { ...m, text: nextText, edited_at: editedAt } : m)),
+    );
+    setEditingId(null);
+    setInputText('');
+
+    const result = await editMessage(editingId, nextText);
+    if (!result) {
+      setMessages(prev => prev.map(m => (m.id === editingId ? (target ?? m) : m)));
+      showToast('Could not edit that message.', 'error');
+    }
+  };
+
   const handleSend = async () => {
+    if (editingId) return handleSaveEdit();
     if (!inputText.trim() || !conversationId) return;
     const textToSend = inputText.trim();
     const contextToSend = pendingContext;
@@ -288,12 +336,20 @@ export default function ChatScreen() {
         ) : null}
         <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
         <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
-          <View
+          <TouchableOpacity
+            activeOpacity={canEdit(item) ? 0.7 : 1}
+            onLongPress={() => beginEdit(item)}
+            delayLongPress={300}
+            disabled={!canEdit(item)}
+            accessibilityRole={canEdit(item) ? 'button' : undefined}
+            accessibilityLabel={canEdit(item) ? `Your message: ${item.text}` : undefined}
+            accessibilityHint={canEdit(item) ? 'Long press to edit this message' : undefined}
             style={[
               styles.messageBubble,
               isMe
                 ? [styles.messageBubbleMe, { backgroundColor: colors.tint }]
                 : [styles.messageBubbleThem, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }],
+              editingId === item.id && { opacity: 0.55 },
             ]}
           >
             {productPreview ? (
@@ -337,12 +393,15 @@ export default function ChatScreen() {
                 {item.text}
               </Text>
             ) : null}
-          </View>
+          </TouchableOpacity>
           <View style={styles.metaContainer}>
             {isMe && item.read_at && (
                <Text style={[styles.readReceiptText, { color: colors.tint }]}>Read • </Text>
             )}
             <Text style={[styles.timestampText, { color: colors.secondaryText }]}>{timeString}</Text>
+            {item.edited_at ? (
+              <Text style={[styles.timestampText, { color: colors.secondaryText }]}> • edited</Text>
+            ) : null}
           </View>
         </View>
         </View>
@@ -386,7 +445,24 @@ export default function ChatScreen() {
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
 
-        {pendingContext && (
+        {editingId && (
+          <View style={[styles.contextBanner, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <IconSymbol name="checkmark" size={14} color={colors.tint} />
+            <Text style={[styles.contextBannerText, { color: colors.text }]} numberOfLines={1}>
+              Editing message
+            </Text>
+            <TouchableOpacity
+              onPress={cancelEdit}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel editing"
+              hitSlop={8}
+            >
+              <IconSymbol name="xmark" size={14} color={colors.secondaryText} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {pendingContext && !editingId && (
           <View style={[styles.contextBanner, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
             <IconSymbol name="tag.fill" size={14} color={colors.tint} />
             <Text style={[styles.contextBannerText, { color: colors.text }]} numberOfLines={1}>
@@ -404,35 +480,43 @@ export default function ChatScreen() {
         )}
 
         <View style={[styles.inputContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-          <TouchableOpacity
-            style={styles.attachButton}
-            onPress={handlePickImage}
-            accessibilityRole="button"
-            accessibilityLabel="Attach image"
-          >
-            <IconSymbol name="camera.fill" size={24} color={colors.secondaryText} />
-          </TouchableOpacity>
+          {/* Attaching an image mid-edit would send a new message rather than
+              change the one being edited, so it is hidden while editing. */}
+          {!editingId && (
+            <TouchableOpacity
+              style={styles.attachButton}
+              onPress={handlePickImage}
+              accessibilityRole="button"
+              accessibilityLabel="Attach image"
+            >
+              <IconSymbol name="camera.fill" size={24} color={colors.secondaryText} />
+            </TouchableOpacity>
+          )}
           <TextInput
             style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
-            placeholder="Type a message..."
+            placeholder={editingId ? 'Edit your message...' : 'Type a message...'}
             placeholderTextColor={colors.secondaryText}
             value={inputText}
             onChangeText={setInputText}
             multiline
             maxLength={500}
-            returnKeyType="send"
+            returnKeyType={editingId ? 'done' : 'send'}
             blurOnSubmit={false}
             onSubmitEditing={handleSend}
-            accessibilityLabel="Message input"
+            accessibilityLabel={editingId ? 'Edit message' : 'Message input'}
           />
           <TouchableOpacity
             style={[styles.sendButton, { backgroundColor: inputText.trim() ? colors.tint : colors.border }]}
             onPress={handleSend}
             disabled={!inputText.trim()}
             accessibilityRole="button"
-            accessibilityLabel="Send message"
+            accessibilityLabel={editingId ? 'Save changes' : 'Send message'}
           >
-            <IconSymbol name="arrow.up.circle.fill" size={22} color={inputText.trim() ? '#0D0D0D' : colors.secondaryText} />
+            <IconSymbol
+              name={editingId ? 'checkmark' : 'arrow.up.circle.fill'}
+              size={22}
+              color={inputText.trim() ? '#0D0D0D' : colors.secondaryText}
+            />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
