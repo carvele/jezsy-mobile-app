@@ -5,12 +5,21 @@ import Constants from "expo-constants";
 // Detect if running inside Expo Go.
 const IS_EXPO_GO = Constants.appOwnership === "expo";
 
-export async function registerForPushNotificationsAsync(): Promise<
-  string | null
-> {
+// Discriminated rather than `string | null` so the settings toggle can say why
+// registration failed. It previously reported every failure as a permission or
+// emulator problem, which hid the fact that the EAS projectId is missing.
+export type PushRegistration =
+  | { status: "ok"; token: string }
+  | { status: "expo-go" }
+  | { status: "no-device" }
+  | { status: "denied" }
+  | { status: "not-configured" }
+  | { status: "error"; message: string };
+
+export async function registerForPushNotificationsAsync(): Promise<PushRegistration> {
   if (IS_EXPO_GO) {
     console.log("Push notifications skipped: running in Expo Go.");
-    return null;
+    return { status: "expo-go" };
   }
 
   let Device: any;
@@ -51,7 +60,7 @@ export async function registerForPushNotificationsAsync(): Promise<
     // Guard: Device module may be undefined if import failed unexpectedly
     if (!Device || !Device.isDevice) {
       console.log("Must use physical device for Push Notifications");
-      return null;
+      return { status: "no-device" };
     }
 
     const permission = (await Notifications.getPermissionsAsync()) as any;
@@ -64,49 +73,65 @@ export async function registerForPushNotificationsAsync(): Promise<
 
     if (finalStatus !== "granted") {
       console.log("Failed to get push token for push notification!");
-      return null;
+      return { status: "denied" };
     }
 
+    // Not present in app.json or eas.json today, so this is the branch that
+    // actually fires. It is a configuration gap, not a runtime failure: an Expo
+    // push token cannot be minted without it, and notify-status sends through
+    // Expo's push API so a bare FCM device token would not do. Run `eas init`
+    // (or copy the id from expo.dev) into expo.extra.eas.projectId.
     const projectId =
       Constants?.expoConfig?.extra?.eas?.projectId ??
       (Constants as any)?.easConfig?.projectId;
-    if (!projectId) throw new Error("Project ID not found");
+    if (!projectId) {
+      console.log(
+        "Push notifications not configured: expo.extra.eas.projectId is missing.",
+      );
+      return { status: "not-configured" };
+    }
 
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
-    return data;
-  } catch (e) {
+    return { status: "ok", token: data };
+  } catch (e: any) {
     console.log("Push notification registration failed (non-fatal):", e);
-    return null;
+    return { status: "error", message: e?.message ?? "Unknown error" };
   }
 }
 
-const pushRegistrationPromises = new Map<string, Promise<void>>();
+const pushRegistrationPromises = new Map<string, Promise<PushRegistration>>();
 
-export async function savePushTokenToProfile(userId: string): Promise<void> {
-  if (IS_EXPO_GO) return;
+// Returns the outcome so a caller that is a user-facing toggle can explain
+// itself. Still never throws: it also runs fire-and-forget from the login path,
+// where an unhandled rejection must not be able to degrade sign-in.
+export async function savePushTokenToProfile(userId: string): Promise<PushRegistration> {
+  if (IS_EXPO_GO) return { status: "expo-go" };
 
   const existingPromise = pushRegistrationPromises.get(userId);
   if (existingPromise) {
     return existingPromise;
   }
 
-  const savePromise = (async () => {
+  const savePromise = (async (): Promise<PushRegistration> => {
     try {
-      const token = await registerForPushNotificationsAsync();
-      if (token) {
-        await supabase
+      const result = await registerForPushNotificationsAsync();
+      if (result.status === "ok") {
+        const { error } = await supabase
           .from("profiles")
-          .update({ expo_push_token: token })
+          .update({ expo_push_token: result.token })
           .eq("id", userId);
+        if (error) return { status: "error", message: error.message };
       }
-    } catch (error) {
+      return result;
+    } catch (error: any) {
       console.error("Error saving push token to profile:", error);
+      return { status: "error", message: error?.message ?? "Unknown error" };
     }
   })();
 
   pushRegistrationPromises.set(userId, savePromise);
   try {
-    await savePromise;
+    return await savePromise;
   } finally {
     pushRegistrationPromises.delete(userId);
   }
