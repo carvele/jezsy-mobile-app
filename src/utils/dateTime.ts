@@ -49,9 +49,32 @@ export function isSameCalendarDay(a: string, b: string): boolean {
   );
 }
 
-// Day label for chat date separators. Compares calendar days rather than
-// elapsed hours, so a message sent at 11pm reads "Yesterday" at 1am and not
-// "Today".
+// A separator starts a new group when the calendar day changes or when more
+// than an hour has passed, which is roughly how Messenger breaks a thread up.
+// Without the gap rule a long same-day conversation gets one label at the very
+// top and nothing after it.
+const GROUP_GAP_MS = 60 * 60 * 1000;
+
+export function shouldStartMessageGroup(
+  previousIso: string | null | undefined,
+  iso: string,
+): boolean {
+  if (!previousIso) return true;
+  if (!isSameCalendarDay(previousIso, iso)) return true;
+
+  const previous = new Date(previousIso).getTime();
+  const current = new Date(iso).getTime();
+  if (Number.isNaN(previous) || Number.isNaN(current)) return true;
+
+  return current - previous > GROUP_GAP_MS;
+}
+
+// Separator label: time alone for today, "WED AT 10:43 AM" within the past
+// week, "JUL 22 AT 10:43 AM" beyond it. Calendar days rather than elapsed hours
+// decide which, so an 11pm message reads as yesterday at 1am rather than today.
+//
+// The time comes from toLocaleTimeString rather than a hand-built 24h string, so
+// it matches formatTimeLabel and the device's own 12/24-hour setting.
 export function formatDateSeparator(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
@@ -60,15 +83,23 @@ export function formatDateSeparator(iso: string): string {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const daysAgo = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
 
-  if (daysAgo === 0) return 'Today';
-  if (daysAgo === 1) return 'Yesterday';
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-  return date.toLocaleDateString(undefined, {
-    weekday: daysAgo > 1 && daysAgo < 7 ? 'long' : undefined,
+  if (daysAgo === 0) return time;
+  if (daysAgo === 1) return `YESTERDAY AT ${time}`;
+
+  if (daysAgo > 1 && daysAgo < 7) {
+    const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
+    return `${weekday.toUpperCase()} AT ${time}`;
+  }
+
+  const datePart = date.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
   });
+
+  return `${datePart.toUpperCase()} AT ${time}`;
 }
 
 export function formatTimeLabel(time: string | null | undefined): string {
