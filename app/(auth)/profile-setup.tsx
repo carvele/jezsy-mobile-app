@@ -131,7 +131,10 @@ const STEP_META = [
   { icon: MapPin,  label: 'Address', title: 'Your delivery\naddress.',  subtitle: 'Where should we send your orders?' },
 ];
 
-export default function ProfileSetupScreen() {
+// mode is supplied by app/profile/edit.tsx, which renders this same screen
+// outside the (auth) group. Expo Router renders routes with no props, hence
+// the defaults on both the prop and the object itself.
+export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' | 'edit' } = {}) {
   const { showToast } = useToast();
   const router = useRouter();
   const { user, profile, refreshProfile } = useAuth();
@@ -398,7 +401,10 @@ export default function ProfileSetupScreen() {
 
       // Refresh profile in context so root layout re-routes to (tabs)
       await refreshProfile();
-      router.replace('/(tabs)');
+      // Editing was reached by a push from the profile tab, so return there
+      // rather than dropping the user on Home.
+      if (mode === 'edit' && router.canGoBack()) router.back();
+      else router.replace('/(tabs)');
     } catch (err: any) {
       showToast(err.message ?? 'Could not save profile. Please try again.', 'error');
     } finally {

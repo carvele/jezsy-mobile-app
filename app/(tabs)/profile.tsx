@@ -88,7 +88,7 @@ export default function ProfileScreen() {
               {user?.email || ''}
             </Text>
           </View>
-          <TouchableOpacity style={[styles.editButton, { borderColor: colors.border }]} onPress={() => router.push('/(auth)/profile-setup')}>
+          <TouchableOpacity style={[styles.editButton, { borderColor: colors.border }]} onPress={() => router.push('/profile/edit')}>
             <Text style={[styles.editButtonText, { color: colors.text }]}>Edit</Text>
           </TouchableOpacity>
         </View>
