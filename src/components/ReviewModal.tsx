@@ -33,7 +33,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
   const handlePickImage = async () => {
     if (images.length >= MAX_REVIEW_IMAGES) return;
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.7,
       base64: true,
