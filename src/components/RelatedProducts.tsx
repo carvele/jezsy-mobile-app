@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/lib/supabase';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { getRecentlyViewed } from '@/src/utils/recentlyViewed';
 import { rankCandidates } from '@/src/utils/recommendations';
+import { ProductCard } from '@/src/components/ProductCard';
+import { CATEGORY_SELECT } from '@/src/utils/categoryDisplay';
 
 // Fetched wide, then ranked down -- ordering by relevance has to happen after
 // the affinity signals are known, which Postgres has no way to express here.
@@ -26,7 +28,8 @@ export function RelatedProducts({
 }) {
   const [products, setProducts] = useState<any[]>([]);
   const { wishlistIds } = useWishlist();
-  const router = useRouter();
+  const theme = useColorScheme();
+  const colors = Colors[theme];
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +70,7 @@ export function RelatedProducts({
 
       const { data } = await supabase
         .from('products')
-        .select('*')
+        .select(`*, ${CATEGORY_SELECT}`)
         .in('category_id', poolCategoryIds)
         .neq('id', currentProductId)
         .limit(CANDIDATE_POOL);
@@ -97,35 +100,14 @@ export function RelatedProducts({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>You May Also Like</Text>
+      <Text style={[styles.title, { color: colors.text }]}>You May Also Like</Text>
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
         data={products}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push(`/product/${item.id}`)}
-          >
-            <Image
-              source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-              style={styles.image}
-              contentFit="cover"
-            />
-            <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.price}>
-              {item.on_sale && item.sale_price ? (
-                <>
-                  <Text style={styles.originalPrice}>₱{item.price}</Text> ₱{item.sale_price}
-                </>
-              ) : (
-                `₱${item.price}`
-              )}
-            </Text>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => <ProductCard product={item} variant="rail" />}
       />
     </View>
   );
@@ -144,33 +126,6 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingLeft: 24,
-    paddingRight: 8,
-  },
-  card: {
-    width: 140,
-    marginRight: 16,
-  },
-  image: {
-    width: 140,
-    height: 180,
-    borderRadius: 12,
-    marginBottom: 8,
-    backgroundColor: '#f0f0f0',
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  price: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#C9A96E',
-  },
-  originalPrice: {
-    textDecorationLine: 'line-through',
-    color: '#888',
-    fontSize: 12,
-    fontWeight: '400',
+    paddingRight: 10,
   },
 });

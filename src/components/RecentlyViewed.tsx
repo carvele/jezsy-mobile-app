@@ -1,16 +1,16 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
-import { Image } from 'expo-image';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/lib/supabase';
 import { getRecentlyViewed } from '@/src/utils/recentlyViewed';
+import { ProductCard } from '@/src/components/ProductCard';
+import { CATEGORY_SELECT } from '@/src/utils/categoryDisplay';
 
 export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string }) {
   const [products, setProducts] = useState<any[]>([]);
-  const router = useRouter();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   useFocusEffect(
@@ -22,7 +22,11 @@ export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string
           if (active) setProducts([]);
           return;
         }
-        const { data } = await supabase.from('products').select('*').in('id', ids);
+        // Category embed included so ProductCard's eyebrow has something to show.
+        const { data } = await supabase
+          .from('products')
+          .select(`*, ${CATEGORY_SELECT}`)
+          .in('id', ids);
         if (!active) return;
         // Preserve most-recent-first order; the IN query returns arbitrary order.
         const byId = new Map((data || []).map(p => [p.id, p]));
@@ -44,24 +48,7 @@ export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string
         data={products}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push(`/product/${item.id}`)}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${item.name}`}
-          >
-            <Image
-              source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-              style={[styles.image, { backgroundColor: colors.imagePlaceholder }]}
-              contentFit="cover"
-            />
-            <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
-            <Text style={[styles.price, { color: colors.tint }]}>
-              ₱{(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toFixed(2)}
-            </Text>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => <ProductCard product={item} variant="rail" />}
       />
     </View>
   );
@@ -80,25 +67,6 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingLeft: 24,
-    paddingRight: 8,
-  },
-  card: {
-    width: 120,
-    marginRight: 16,
-  },
-  image: {
-    width: 120,
-    height: 156,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  price: {
-    fontSize: 14,
-    fontWeight: '700',
+    paddingRight: 10,
   },
 });
