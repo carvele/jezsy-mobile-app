@@ -600,7 +600,7 @@ export default function ExploreScreen() {
         style={styles.productCard}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={`${item.name}, ₱${(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.on_sale ? ', on sale' : ''}${item.model_3d_url ? ', available in AR' : ''}`}
+        accessibilityLabel={`${item.name}, ₱${(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.on_sale ? ', on sale' : ''}${item.model_3d_url ? ', available in AR' : ''}${item.stock !== null && item.stock !== undefined ? (item.stock <= 0 ? ', out of stock' : `, ${item.stock} in stock`) : ''}`}
         accessibilityHint="Opens product details"
       >
         <View style={styles.imageContainer}>
@@ -658,6 +658,30 @@ export default function ExploreScreen() {
               </View>
             ) : null;
           })()}
+          {/* products.stock is the total across sizes, kept in step with
+              inventory by the sync_product_stock trigger. Null means the
+              product predates that tracking, so say nothing rather than "0". */}
+          {item.stock !== null && item.stock !== undefined && (
+            <Text
+              style={[
+                styles.stockText,
+                {
+                  color:
+                    item.stock <= 0
+                      ? colors.error
+                      : item.stock <= 5
+                        ? colors.warning
+                        : colors.secondaryText,
+                },
+              ]}
+            >
+              {item.stock <= 0
+                ? 'Out of stock'
+                : item.stock <= 5
+                  ? `Only ${item.stock} left`
+                  : `${item.stock} in stock`}
+            </Text>
+          )}
         </View>
       </TouchableOpacity>
     </Link>
@@ -1862,6 +1886,11 @@ const styles = StyleSheet.create({
   fitBadgeText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  stockText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
   },
   sizingNudge: {
     flexDirection: 'row',
