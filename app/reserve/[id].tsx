@@ -133,7 +133,7 @@ export default function ReservationScreen() {
     }
 
     if (!receiptUri || !receiptBase64) {
-      showToast("Please upload proof of downpayment (at least 50% of the reservation fee).", 'info');
+      showToast("Please upload proof of payment for the reservation fee (50%).", 'info');
       return;
     }
 
@@ -366,7 +366,8 @@ export default function ReservationScreen() {
             Payment Info
           </Text>
           <Text style={[styles.paymentNote, { color: colors.secondaryText }]}>
-            A minimum deposit of 50% is required to secure this reservation.
+            A reservation fee of 50% secures this booking. You settle the balance
+            when you collect the item.
           </Text>
 
           <View style={styles.row}>
@@ -391,7 +392,7 @@ export default function ReservationScreen() {
 
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              Required Deposit (50%)
+              Reservation Fee (50%)
             </Text>
             <Text style={[styles.rowValue, { color: colors.tint }]}>
               ₱{depositRequired.toFixed(2)}

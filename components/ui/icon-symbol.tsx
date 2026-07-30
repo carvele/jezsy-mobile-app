@@ -18,6 +18,7 @@ const MAPPING = {
   'house.fill': 'home',
   'chevron.right': 'chevron-right',
   'chevron.left': 'chevron-left',
+  'chevron.down': 'expand-more',
   'chevron.left.forwardslash.chevron.right': 'code',
   'arrow.left': 'arrow-back',
   'arrow.up.arrow.down': 'swap-vert',

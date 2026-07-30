@@ -309,7 +309,7 @@ export default function ReservationDetailScreen() {
             <Text style={[styles.rowValue, { color: colors.text }]}>₱{(reservation.rental_price || 0).toFixed(2)}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={[styles.rowText, { color: colors.secondaryText }]}>Deposit Paid</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>Reservation Fee</Text>
             <Text style={[styles.rowValue, { color: colors.success }]}>₱{(reservation.deposit || 0).toFixed(2)}</Text>
           </View>
           <View style={[styles.row, { marginBottom: 0 }]}>

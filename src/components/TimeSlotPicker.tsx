@@ -7,9 +7,13 @@ import {
     formatTimeValue,
     toStoreTimeValue,
 } from "@/src/utils/dateTime";
+import { IconSymbol } from "@/components/ui/icon-symbol";
 import React, { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Modal,
+    Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -33,6 +37,7 @@ export function TimeSlotPicker({
   const colors = Colors[theme];
 
   const [loading, setLoading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [slots, setSlots] = useState<
     { value: string; label: string; isAvailable: boolean; reason?: string }[]
   >([]);
@@ -67,7 +72,10 @@ export function TimeSlotPicker({
 
       let isOpen = true;
       let openTime = "10:00:00";
-      let closeTime = "20:00:00";
+      // Fallback only, for a day with no store_hours row. Kept in step with the
+      // table, which closes at 17:00 -- validate_reservation_time is the real
+      // gate, so a wider default here would just offer slots the DB rejects.
+      let closeTime = "17:00:00";
       let closedReason = "Boutique is closed";
 
       if (closureData) {
@@ -209,45 +217,122 @@ export function TimeSlotPicker({
     );
   }
 
+  const selectedLabel = slots.find((s) => s.value === selectedSlot)?.label;
+  const availableCount = slots.filter((s) => s.isAvailable).length;
+
   return (
-    <View style={styles.grid}>
-      {slots.map((slot) => {
-        const isSelected = selectedSlot === slot.value;
-        return (
-          <TouchableOpacity
-            key={slot.value}
-            disabled={!slot.isAvailable}
-            style={[
-              styles.button,
-              {
-                borderColor: isSelected ? colors.tint : colors.border,
-                backgroundColor: isSelected ? colors.card : "transparent",
-                opacity: slot.isAvailable ? 1 : 0.4,
-              },
-            ]}
-            onPress={() => onSelectSlot(slot.value)}
-            accessibilityRole="button"
-            accessibilityLabel={slot.label}
-            accessibilityHint={slot.isAvailable ? 'Select this time slot' : slot.reason}
-            accessibilityState={{ selected: isSelected, disabled: !slot.isAvailable }}
-          >
-            <Text
-              style={[
-                styles.text,
-                {
-                  color: isSelected ? colors.tint : colors.text,
-                  textDecorationLine: slot.isAvailable
-                    ? "none"
-                    : "line-through",
-                },
-              ]}
-            >
-              {slot.label}
-            </Text>
+    <>
+      <TouchableOpacity
+        style={[styles.trigger, { borderColor: colors.border, backgroundColor: colors.card }]}
+        onPress={() => setPickerOpen(true)}
+        disabled={availableCount === 0}
+        accessibilityRole="button"
+        accessibilityLabel={selectedLabel ? `Appointment time, ${selectedLabel}` : 'Select an appointment time'}
+        accessibilityHint={
+          availableCount === 0
+            ? 'No times are available on this date'
+            : 'Opens the list of available times'
+        }
+        accessibilityState={{ disabled: availableCount === 0 }}
+      >
+        <IconSymbol name="calendar" size={18} color={colors.tint} />
+        <Text
+          style={[
+            styles.triggerText,
+            { color: selectedLabel ? colors.text : colors.secondaryText },
+          ]}
+        >
+          {availableCount === 0
+            ? 'No times left on this date'
+            : selectedLabel ?? 'Select a time'}
+        </Text>
+        <IconSymbol name="chevron.down" size={18} color={colors.secondaryText} />
+      </TouchableOpacity>
+
+      {availableCount > 0 && (
+        <Text style={[styles.availabilityHint, { color: colors.secondaryText }]}>
+          {availableCount} {availableCount === 1 ? 'time' : 'times'} available
+        </Text>
+      )}
+
+      {/* A sheet rather than the old always-open grid: at 30-minute intervals
+          the grid was a dozen-plus buttons pushing the rest of the form off
+          screen. */}
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setPickerOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Close time picker"
+        >
+          <TouchableOpacity style={[styles.sheet, { backgroundColor: colors.card }]} activeOpacity={1}>
+            <View style={styles.sheetHeader}>
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>Pick a time</Text>
+              <TouchableOpacity
+                onPress={() => setPickerOpen(false)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Text style={[styles.sheetClose, { color: colors.tint }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {slots.map((slot) => {
+                const isSelected = selectedSlot === slot.value;
+                return (
+                  <TouchableOpacity
+                    key={slot.value}
+                    disabled={!slot.isAvailable}
+                    style={[
+                      styles.row,
+                      { borderBottomColor: colors.border },
+                      isSelected && { backgroundColor: colors.background },
+                    ]}
+                    onPress={() => {
+                      onSelectSlot(slot.value);
+                      setPickerOpen(false);
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityLabel={slot.label}
+                    accessibilityHint={slot.isAvailable ? 'Select this time slot' : slot.reason}
+                    accessibilityState={{ selected: isSelected, disabled: !slot.isAvailable }}
+                  >
+                    <Text
+                      style={[
+                        styles.rowLabel,
+                        {
+                          color: slot.isAvailable ? colors.text : colors.secondaryText,
+                          textDecorationLine: slot.isAvailable ? 'none' : 'line-through',
+                        },
+                      ]}
+                    >
+                      {slot.label}
+                    </Text>
+                    {slot.isAvailable ? (
+                      isSelected ? (
+                        <IconSymbol name="checkmark.circle.fill" size={20} color={colors.tint} />
+                      ) : null
+                    ) : (
+                      <Text style={[styles.rowReason, { color: colors.secondaryText }]}>
+                        {slot.reason}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </TouchableOpacity>
-        );
-      })}
-    </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 }
 
@@ -257,22 +342,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  grid: {
+  trigger: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: 12,
-  },
-  button: {
-    width: "48%",
-    paddingVertical: 14,
+    height: 52,
+    paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
+  },
+  triggerText: { flex: 1, fontSize: 15, fontWeight: "600" },
+  availabilityHint: { fontSize: 12, marginTop: 8 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+    maxHeight: "70%",
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 12,
   },
-  text: {
-    fontSize: 14,
-    fontWeight: "600",
+  sheetTitle: { fontSize: 18, fontWeight: "700" },
+  sheetClose: { fontSize: 15, fontWeight: "700" },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  rowLabel: { fontSize: 15, fontWeight: "600" },
+  rowReason: { fontSize: 12 },
   closedContainer: {
     padding: 20,
     borderRadius: 12,
