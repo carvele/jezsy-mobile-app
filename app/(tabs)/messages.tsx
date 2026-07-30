@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: 16,
-    paddingBottom: 100, // padding for bottom tab bar
+    paddingBottom: 120, // clears the floating tab bar at its largest bottom inset
   },
   conversationItem: {
     flexDirection: 'row',

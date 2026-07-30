@@ -5,7 +5,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
@@ -20,11 +19,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
 import { ProductCard } from '@/src/components/ProductCard';
+import { CategoryCard } from '@/src/components/CategoryCard';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -179,25 +177,14 @@ export default function HomeScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Shop by Category</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.editsScrollContainer}>
               {topCategories.map((cat) => (
-                <TouchableOpacity
+                <CategoryCard
                   key={cat.id}
-                  style={styles.editCard}
-                  onPress={() => router.push(`/(tabs)/explore?category=${encodeURIComponent(cat.name)}` as any)}
-                  activeOpacity={0.9}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Shop ${cat.name}`}
-                  accessibilityHint="Opens this category in Explore"
-                >
-                  <Image
-                    source={cat.image_url ? { uri: cat.image_url } : require('@/assets/images/partial-react-logo.png')}
-                    style={styles.editImage}
-                    contentFit="cover"
-                  />
-                  <View style={styles.editOverlay} />
-                  <View style={styles.editTextContainer}>
-                    <Text style={styles.editTitle}>{cat.name}</Text>
-                  </View>
-                </TouchableOpacity>
+                  category={cat}
+                  variant="rail"
+                  onPress={() =>
+                    router.push(`/(tabs)/explore?category=${encodeURIComponent(cat.name)}` as any)
+                  }
+                />
               ))}
             </ScrollView>
           </View>
@@ -254,7 +241,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContent: {
-    paddingBottom: 0,
+    // Clears the floating tab bar, whose offset now follows the bottom
+    // safe-area inset and so is taller on three-button navigation.
+    paddingBottom: 120,
   },
   header: {
     paddingHorizontal: 20,
@@ -358,35 +347,6 @@ const styles = StyleSheet.create({
   editsScrollContainer: {
     paddingHorizontal: 20,
     gap: 16,
-  },
-  editCard: {
-    width: SCREEN_WIDTH * 0.65,
-    height: 320,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  editImage: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-  },
-  editOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  editTextContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  editTitle: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textAlign: 'center',
-    marginBottom: 8,
   },
 
   // Trending Grid
