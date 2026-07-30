@@ -186,17 +186,26 @@ export default function AddWardrobeItemScreen() {
         : 'jpg';
       const fileName = `${session.user.id}/${Date.now()}.${ext}`;
 
-      const formData = new FormData();
-      formData.append('file', {
-        uri: finalUri,
-        name: fileName.split('/').pop() || `photo.${ext}`,
-        type: `image/${ext}`,
-      } as any);
+      // Read the bytes ourselves rather than handing Supabase a FormData wrapper
+      // around a file:// uri -- that silently produced a zero-byte body and
+      // failed with "Network request failed" on Android, the same bug that broke
+      // reservation receipts.
+      //
+      // fetch + arrayBuffer rather than the decode(base64) used for receipts and
+      // chat images: those have base64 in hand from the image picker, but this
+      // uri may come from removeBackground(), which returns only a path.
+      const response = await fetch(finalUri);
+      if (!response.ok && response.status !== 0) {
+        throw new Error('Could not read the selected image.');
+      }
+      const bytes = await response.arrayBuffer();
+      if (!bytes || bytes.byteLength === 0) {
+        throw new Error('The selected image appears to be empty.');
+      }
 
-      // Upload to supabase storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('wardrobe-images')
-        .upload(fileName, formData, { upsert: false, contentType: `image/${ext}` });
+        .upload(fileName, bytes, { upsert: false, contentType: `image/${ext}` });
 
       if (uploadError) throw uploadError;
 
