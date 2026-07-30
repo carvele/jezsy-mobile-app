@@ -1,6 +1,7 @@
 import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -15,6 +16,13 @@ export default function TabLayout() {
   const isDark = (colorScheme ?? 'light') === 'dark';
   const { unreadCount } = useMessages();
   const { session, isPasswordRecovery } = useAuth();
+  const insets = useSafeAreaInsets();
+
+  // The bar floats, so its offset has to clear whatever the system puts below
+  // it. That is a gesture pill on some devices and a three-button navigation bar
+  // on others -- the previous hardcoded 20 on Android sat behind the buttons on
+  // the latter. A small floor keeps it off the very edge where the inset is 0.
+  const barBottom = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 10) + 8;
 
   // Defence in depth. The root layout's redirect effect was the single
   // enforcement point, and effects run after mount, so a deep link straight
@@ -36,16 +44,24 @@ export default function TabLayout() {
           fontSize: 12,
           fontWeight: '600',
           letterSpacing: 0.3,
-          marginTop: -2,
+        },
+        // Badge sized to sit on a 58pt pill rather than a full-width bar, where
+        // the default overflowed the rounded edge.
+        tabBarBadgeStyle: {
+          fontSize: 11,
+          lineHeight: 14,
+          minWidth: 18,
+          height: 18,
+          borderRadius: 9,
         },
         tabBarStyle: {
           position: 'absolute',
-          bottom: Platform.OS === 'ios' ? 28 : 20,
+          bottom: barBottom,
           left: 16,
           right: 16,
-          height: 58,
+          height: 62,
           backgroundColor: isDark ? 'rgba(13,13,13,0.88)' : 'rgba(255,255,255,0.92)',
-          borderRadius: 28,
+          borderRadius: 31,
           borderTopWidth: 0,
           borderWidth: isDark ? 1 : 0.5,
           borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
@@ -64,7 +80,8 @@ export default function TabLayout() {
               }),
         },
         tabBarItemStyle: {
-          paddingVertical: 6,
+          paddingTop: 8,
+          paddingBottom: 8,
         },
       }}>
       <Tabs.Screen

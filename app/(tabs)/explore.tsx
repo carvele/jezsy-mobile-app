@@ -17,7 +17,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
@@ -25,6 +24,7 @@ import { useCart } from '@/src/context/CartContext';
 import { CATEGORY_SELECT, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { ProductCard } from '@/src/components/ProductCard';
+import { CategoryCard } from '@/src/components/CategoryCard';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
@@ -901,22 +901,12 @@ export default function ExploreScreen() {
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories</Text>
               <View style={styles.categoriesGrid}>
                 {topCategories.map((cat) => (
-                  <TouchableOpacity
+                  <CategoryCard
                     key={cat.id}
-                    style={[styles.categoryCard, { backgroundColor: colors.card }]}
+                    category={cat}
+                    variant="grid"
                     onPress={() => setSelectedCategory(cat.name)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Browse ${cat.name}`}
-                  >
-                    <Image
-                      source={cat.image_url ? { uri: cat.image_url } : require('@/assets/images/partial-react-logo.png')}
-                      style={styles.categoryImage}
-                      contentFit="cover"
-                    />
-                    <View style={[styles.categoryOverlay, { backgroundColor: 'rgba(0,0,0,0.35)' }]}>
-                      <Text style={[styles.categoryName, { color: '#E8D5B7' }]}>{cat.name}</Text>
-                    </View>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
             </ScrollView>
@@ -927,45 +917,25 @@ export default function ExploreScreen() {
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Shop {selectedCategory}</Text>
               <View style={styles.categoriesGrid}>
-                {/* View All option */}
-                <TouchableOpacity
-                  style={[styles.categoryCard, { backgroundColor: colors.card }]}
+                {/* View All is a synthetic category: it borrows the parent's
+                    image so the row does not start with a blank tile. */}
+                <CategoryCard
+                  category={{
+                    id: 'view-all',
+                    name: 'View All',
+                    image_url: topCategories.find((c) => c.name === selectedCategory)?.image_url ?? null,
+                  }}
+                  variant="grid"
                   onPress={() => setSelectedSubCategory('View All')}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Browse all ${selectedCategory}`}
-                >
-                  <Image
-                    source={
-                      topCategories.find((c) => c.name === selectedCategory)?.image_url
-                        ? { uri: topCategories.find((c) => c.name === selectedCategory)!.image_url! }
-                        : require('@/assets/images/partial-react-logo.png')
-                    }
-                    style={styles.categoryImage}
-                    contentFit="cover"
-                  />
-                  <View style={[styles.categoryOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
-                    <Text style={[styles.categoryName, { color: '#E8D5B7' }]}>View All</Text>
-                  </View>
-                </TouchableOpacity>
+                />
 
-                {/* Specific Subcategories */}
                 {(subCategoriesByParent[selectedCategory] || []).map((subcat) => (
-                  <TouchableOpacity
+                  <CategoryCard
                     key={subcat.id}
-                    style={[styles.categoryCard, { backgroundColor: colors.card }]}
+                    category={subcat}
+                    variant="grid"
                     onPress={() => setSelectedSubCategory(subcat.name)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Browse ${subcat.name}`}
-                  >
-                    <Image
-                      source={subcat.image_url ? { uri: subcat.image_url } : require('@/assets/images/partial-react-logo.png')}
-                      style={styles.categoryImage}
-                      contentFit="cover"
-                    />
-                    <View style={[styles.categoryOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
-                      <Text style={[styles.categoryName, { color: '#E8D5B7', fontSize: 14, textAlign: 'center', paddingHorizontal: 8 }]}>{subcat.name}</Text>
-                    </View>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
             </ScrollView>
@@ -1559,7 +1529,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   welcomeTitle: {
     fontSize: 22,
@@ -1592,32 +1562,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     gap: 12,
-  },
-  categoryCard: {
-    width: '48%',
-    height: 160,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  categoryImage: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-  },
-  categoryOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  categoryName: {
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    textShadowColor: 'rgba(0, 0, 0, 0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
   suggestionsContainer: {
     paddingHorizontal: 16,
@@ -1721,7 +1665,7 @@ const styles = StyleSheet.create({
   },
   productList: {
     paddingHorizontal: 12,
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   productRow: {
     flexDirection: 'row',
