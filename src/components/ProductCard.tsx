@@ -1,0 +1,227 @@
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
+import { Image } from 'expo-image';
+import { Link } from 'expo-router';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useWishlist } from '@/src/context/WishlistContext';
+import { getCategoryLabel } from '@/src/utils/categoryDisplay';
+
+const PLACEHOLDER = require('@/assets/images/partial-react-logo.png');
+
+// 'grid' fills half the row in a two-column list; 'rail' is a fixed width for
+// horizontal strips. Both share one set of internals -- the point of this
+// component is that there is only one place to change a product card.
+export type ProductCardVariant = 'grid' | 'rail';
+
+const RAIL_WIDTH = 150;
+const LOW_STOCK_THRESHOLD = 5;
+
+type Props = {
+  product: any;
+  variant?: ProductCardVariant;
+  /** Shown as a "Your size" chip when the fit recommender has a match. */
+  recommendedSize?: string | null;
+  showStock?: boolean;
+};
+
+export function ProductCard({
+  product,
+  variant = 'grid',
+  recommendedSize,
+  showStock = true,
+}: Props) {
+  const theme = useColorScheme();
+  const colors = Colors[theme];
+  const { isInWishlist, toggleWishlist } = useWishlist();
+
+  const onSale = !!(product.on_sale && product.sale_price);
+  const price = onSale ? product.sale_price : product.price || 0;
+  const saved = isInWishlist(product.id);
+
+  // Null stock means the product predates stock tracking; treat it as unknown
+  // rather than sold out.
+  const stock: number | null | undefined = product.stock;
+  const hasStock = stock !== null && stock !== undefined;
+  const outOfStock = hasStock && stock <= 0;
+  const lowStock = hasStock && stock > 0 && stock <= LOW_STOCK_THRESHOLD;
+
+  const stockLabel = !hasStock
+    ? null
+    : outOfStock
+      ? 'Out of stock'
+      : lowStock
+        ? `Only ${stock} left`
+        : `${stock} in stock`;
+
+  const stockColor = outOfStock ? colors.error : lowStock ? colors.warning : colors.secondaryText;
+
+  const accessibilityLabel = [
+    product.name,
+    `₱${Number(price).toLocaleString()}`,
+    onSale ? 'on sale' : null,
+    product.is_new_arrival ? 'new arrival' : null,
+    product.model_3d_url ? 'available in AR' : null,
+    recommendedSize ? `your size ${recommendedSize}` : null,
+    stockLabel,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  return (
+    <Link href={`/product/${product.id}`} asChild>
+      <TouchableOpacity
+        style={[styles.card, variant === 'rail' ? styles.cardRail : styles.cardGrid]}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint="Opens product details"
+      >
+        <View style={[styles.imageWrap, { backgroundColor: colors.imagePlaceholder }]}>
+          <Image
+            source={product.image_url ? { uri: product.image_url } : PLACEHOLDER}
+            style={[styles.image, outOfStock && styles.imageDimmed]}
+            contentFit="cover"
+          />
+
+          {/* Left column of badges so they never collide with the heart. */}
+          <View style={styles.badgeColumn}>
+            {product.is_new_arrival && (
+              <View style={[styles.badge, { backgroundColor: colors.tint }]}>
+                <Text style={styles.badgeText}>NEW</Text>
+              </View>
+            )}
+            {onSale && (
+              <View style={[styles.badge, { backgroundColor: colors.notification }]}>
+                <Text style={styles.badgeText}>
+                  {product.discount_percentage ? `-${product.discount_percentage}%` : 'SALE'}
+                </Text>
+              </View>
+            )}
+            {product.model_3d_url && (
+              <View style={[styles.badge, styles.badgeRow, { backgroundColor: 'rgba(201,169,110,0.92)' }]}>
+                <IconSymbol name="cube.transparent" size={10} color="#0D0D0D" />
+                <Text style={styles.badgeText}>AR</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Saving from the catalog was previously impossible without opening
+              the product. Pressable rather than nesting inside the Link's
+              Touchable, so the tap does not also navigate. */}
+          <Pressable
+            style={styles.heart}
+            onPress={() => toggleWishlist(product.id)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={saved ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
+            accessibilityState={{ selected: saved }}
+          >
+            <View style={styles.heartBg}>
+              <IconSymbol
+                name={saved ? 'heart.fill' : 'heart'}
+                size={16}
+                color={saved ? '#E05C5C' : '#FFF'}
+              />
+            </View>
+          </Pressable>
+
+          {outOfStock && (
+            <View style={styles.soldOutOverlay}>
+              <Text style={styles.soldOutText}>SOLD OUT</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.info}>
+          <Text style={[styles.category, { color: colors.secondaryText }]} numberOfLines={1}>
+            {getCategoryLabel(product, 'COLLECTION').toUpperCase()}
+          </Text>
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+            {product.name}
+          </Text>
+
+          <View style={styles.priceRow}>
+            <Text style={[styles.price, { color: onSale ? colors.notification : colors.text }]}>
+              ₱{Number(price).toLocaleString()}
+            </Text>
+            {onSale && (
+              <Text style={[styles.priceWas, { color: colors.secondaryText }]}>
+                ₱{Number(product.price || 0).toLocaleString()}
+              </Text>
+            )}
+          </View>
+
+          {recommendedSize ? (
+            <View style={styles.fitRow}>
+              <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
+              <Text style={[styles.fitText, { color: colors.tint }]} numberOfLines={1}>
+                Your size: {recommendedSize}
+              </Text>
+            </View>
+          ) : null}
+
+          {showStock && stockLabel ? (
+            <Text style={[styles.stock, { color: stockColor }]}>{stockLabel}</Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    </Link>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { marginBottom: 20 },
+  cardGrid: { width: '48%', maxWidth: '48%' },
+  cardRail: { width: RAIL_WIDTH, marginRight: 14, marginBottom: 0 },
+  imageWrap: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  image: { width: '100%', height: '100%' },
+  imageDimmed: { opacity: 0.45 },
+  badgeColumn: { position: 'absolute', top: 8, left: 8, gap: 4, alignItems: 'flex-start' },
+  badge: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  badgeText: { fontSize: 12, fontWeight: '800', color: '#0D0D0D' },
+  heart: { position: 'absolute', top: 6, right: 6 },
+  heartBg: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  soldOutOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '45%',
+    alignItems: 'center',
+  },
+  soldOutText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    color: '#FFF',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  info: { paddingTop: 8, paddingHorizontal: 2, gap: 3 },
+  category: { fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+  name: { fontSize: 13, fontWeight: '500' },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  price: { fontSize: 13, fontWeight: '700' },
+  priceWas: { fontSize: 12, textDecorationLine: 'line-through' },
+  fitRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  fitText: { fontSize: 12, fontWeight: '700' },
+  stock: { fontSize: 12, fontWeight: '600' },
+});

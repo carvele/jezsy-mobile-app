@@ -18,12 +18,13 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Image } from 'expo-image';
-import { Link, useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
-import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
+import { CATEGORY_SELECT, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { ProductCard } from '@/src/components/ProductCard';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
@@ -593,99 +594,13 @@ export default function ExploreScreen() {
     );
   };
 
-  // Render Single Product Item (minimalist catalog card)
   const renderProductItem = useCallback(({ item }: { item: Product }) => (
-    <Link href={`/product/${item.id}`} asChild>
-      <TouchableOpacity
-        style={styles.productCard}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel={`${item.name}, ₱${(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.on_sale ? ', on sale' : ''}${item.model_3d_url ? ', available in AR' : ''}${item.stock !== null && item.stock !== undefined ? (item.stock <= 0 ? ', out of stock' : `, ${item.stock} in stock`) : ''}`}
-        accessibilityHint="Opens product details"
-      >
-        <View style={styles.imageContainer}>
-          <Image
-            source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-            style={styles.productImage}
-            contentFit="cover"
-          />
-          {item.is_new_arrival && (
-            <View style={[styles.productBadge, { backgroundColor: colors.tint, left: 8, top: 8 }]}>
-              <Text style={styles.productBadgeText}>NEW</Text>
-            </View>
-          )}
-          {item.model_3d_url && (
-            <View style={[styles.productBadge, { backgroundColor: 'rgba(201,169,110,0.9)', left: 8, top: item.is_new_arrival ? 32 : 8, flexDirection: 'row', alignItems: 'center', gap: 2 }]}>
-              <IconSymbol name="cube.transparent" size={10} color="#0D0D0D" />
-              <Text style={styles.productBadgeText}>AR</Text>
-            </View>
-          )}
-          {item.on_sale && (
-            <View style={[styles.productBadge, { backgroundColor: colors.notification, right: 8, top: 8 }]}>
-              <Text style={styles.productBadgeText}>SALE</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.productInfo}>
-          <Text style={[styles.productCategory, { color: colors.secondaryText }]}>
-            {getCategoryLabel(item, 'COLLECTION').toUpperCase()}
-          </Text>
-          <Text style={[styles.productName, { color: colors.text }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-          {item.on_sale && item.sale_price ? (
-            <View style={styles.priceRow}>
-              <Text style={[styles.productPrice, { color: colors.notification }]}>
-                ₱{item.sale_price.toLocaleString()}
-              </Text>
-              <Text style={[styles.originalPriceText, { color: colors.secondaryText }]}>
-                ₱{(item.price || 0).toLocaleString()}
-              </Text>
-            </View>
-          ) : (
-            <Text style={[styles.productPrice, { color: colors.text }]}>
-              ₱{(item.price || 0).toLocaleString()}
-            </Text>
-          )}
-          {(() => {
-            const rec = recommendedSizes.get(item.id);
-            return rec ? (
-              <View style={styles.fitBadgeRow} accessibilityLabel={`Recommended for you: size ${rec}`}>
-                <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
-                <Text style={[styles.fitBadgeText, { color: colors.tint }]} numberOfLines={1}>
-                  Your size: {rec}
-                </Text>
-              </View>
-            ) : null;
-          })()}
-          {/* products.stock is the total across sizes, kept in step with
-              inventory by the sync_product_stock trigger. Null means the
-              product predates that tracking, so say nothing rather than "0". */}
-          {item.stock !== null && item.stock !== undefined && (
-            <Text
-              style={[
-                styles.stockText,
-                {
-                  color:
-                    item.stock <= 0
-                      ? colors.error
-                      : item.stock <= 5
-                        ? colors.warning
-                        : colors.secondaryText,
-                },
-              ]}
-            >
-              {item.stock <= 0
-                ? 'Out of stock'
-                : item.stock <= 5
-                  ? `Only ${item.stock} left`
-                  : `${item.stock} in stock`}
-            </Text>
-          )}
-        </View>
-      </TouchableOpacity>
-    </Link>
-  ), [colors, recommendedSizes]);
+    <ProductCard
+      product={item}
+      variant="grid"
+      recommendedSize={recommendedSizes.get(item.id)}
+    />
+  ), [recommendedSizes]);
 
   const activeFiltersCount =
     selectedSizes.length +
@@ -1704,14 +1619,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  subCategoriesList: {
-    gap: 12,
-  },
-  subCategoryRowImage: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-  },
   suggestionsContainer: {
     paddingHorizontal: 16,
     paddingVertical: 16,
@@ -1820,77 +1727,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
-  },
-  productCard: {
-    width: '48%',
-    maxWidth: '48%',
-    marginBottom: 20,
-  },
-  imageContainer: {
-    width: '100%',
-    aspectRatio: 3 / 4,
-    borderRadius: 8,
-    backgroundColor: '#2A2A2A',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  productImage: {
-    width: '100%',
-    height: '100%',
-  },
-  productBadge: {
-    position: 'absolute',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-    zIndex: 1,
-  },
-  productBadgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0D0D0D',
-  },
-  productInfo: {
-    paddingTop: 8,
-    paddingHorizontal: 2,
-    gap: 3,
-  },
-  productCategory: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  productName: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  productPrice: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  originalPriceText: {
-    fontSize: 12,
-    textDecorationLine: 'line-through',
-  },
-  fitBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  fitBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  stockText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
   },
   sizingNudge: {
     flexDirection: 'row',

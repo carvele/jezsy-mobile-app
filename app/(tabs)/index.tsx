@@ -17,8 +17,9 @@ import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { CATEGORY_SELECT, getCategoryLabel, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
+import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
+import { ProductCard } from '@/src/components/ProductCard';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -228,87 +229,7 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.gridContainer}>
               {trendingProducts.map((item) => (
-                <Link key={item.id} href={`/product/${item.id}`} asChild>
-                  <TouchableOpacity
-                    style={styles.gridCard}
-                    activeOpacity={0.85}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}${item.is_new_arrival ? ', new arrival' : ''}${item.on_sale ? ', on sale' : ''}${item.model_3d_url ? ', available in AR' : ''}${item.stock !== null && item.stock !== undefined ? (item.stock <= 0 ? ', out of stock' : `, ${item.stock} in stock`) : ''}`}
-                    accessibilityHint="Opens product details"
-                  >
-                    <View style={[styles.gridImageContainer, { backgroundColor: colors.imagePlaceholder }]}>
-                      <Image
-                        source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-                        style={styles.gridImage}
-                        contentFit="cover"
-                      />
-                      {item.is_new_arrival && (
-                        <View style={[styles.gridBadge, { backgroundColor: colors.tint, left: 8 }]}>
-                          <Text style={styles.gridBadgeText}>NEW</Text>
-                        </View>
-                      )}
-                      {item.model_3d_url && (
-                        <View style={[styles.gridBadge, { backgroundColor: 'rgba(201,169,110,0.9)', left: 8, top: item.is_new_arrival ? 32 : 8, flexDirection: 'row', alignItems: 'center', gap: 2 }]}>
-                          <IconSymbol name="cube.transparent" size={10} color="#0D0D0D" />
-                          <Text style={styles.gridBadgeText}>AR</Text>
-                        </View>
-                      )}
-                      {item.on_sale && (
-                        <View style={[styles.gridBadge, { backgroundColor: colors.notification, right: 8 }]}>
-                          <Text style={styles.gridBadgeText}>SALE</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.gridInfo}>
-                      <Text style={[styles.gridBrand, { color: colors.secondaryText }]}>
-                        {getCategoryLabel(item, 'BRAND').toUpperCase()}
-                      </Text>
-                      <Text style={[styles.gridName, { color: colors.text }]} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      {item.on_sale && item.sale_price ? (
-                        <View style={styles.gridPriceRow}>
-                          <Text style={[styles.gridPrice, { color: colors.notification }]}>
-                            ₱{item.sale_price.toLocaleString()}
-                          </Text>
-                          <Text style={[styles.gridOriginalPrice, { color: colors.secondaryText }]}>
-                            ₱{(item.price || 0).toLocaleString()}
-                          </Text>
-                        </View>
-                      ) : (
-                        <Text style={[styles.gridPrice, { color: colors.text }]}>
-                          ₱{(item.price || 0).toLocaleString()}
-                        </Text>
-                      )}
-                      {/* Same treatment as the Explore cards. products.stock is
-                          the total across sizes, kept current by the
-                          sync_product_stock trigger. Null means the product
-                          predates stock tracking, so say nothing rather than
-                          claiming it is out of stock. */}
-                      {item.stock !== null && item.stock !== undefined && (
-                        <Text
-                          style={[
-                            styles.gridStock,
-                            {
-                              color:
-                                item.stock <= 0
-                                  ? colors.error
-                                  : item.stock <= 5
-                                    ? colors.warning
-                                    : colors.secondaryText,
-                            },
-                          ]}
-                        >
-                          {item.stock <= 0
-                            ? 'Out of stock'
-                            : item.stock <= 5
-                              ? `Only ${item.stock} left`
-                              : `${item.stock} in stock`}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                </Link>
+                <ProductCard key={item.id} product={item} variant="grid" />
               ))}
             </View>
           )}
@@ -467,12 +388,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
-  editSubtitle: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
 
   // Trending Grid
   gridContainer: {
@@ -480,65 +395,5 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     paddingHorizontal: 16,
     justifyContent: 'space-between',
-  },
-  gridCard: {
-    width: '48%', // Ensure exact 2-column fit with small gap
-    marginBottom: 24,
-  },
-  gridImageContainer: {
-    width: '100%',
-    aspectRatio: 3 / 4, // Strict 3:4 fashion ratio
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  gridImage: {
-    width: '100%',
-    height: '100%',
-  },
-  gridBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  gridBadgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0D0D0D',
-  },
-  gridInfo: {
-    paddingHorizontal: 4,
-  },
-  gridBrand: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  gridName: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  gridPrice: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  gridPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  gridOriginalPrice: {
-    fontSize: 12,
-    textDecorationLine: 'line-through',
-  },
-  gridStock: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
   },
 });
