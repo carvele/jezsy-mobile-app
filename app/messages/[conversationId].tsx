@@ -15,7 +15,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
-import { formatDateSeparator, isSameCalendarDay } from '@/src/utils/dateTime';
+import { formatDateSeparator, shouldStartMessageGroup } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
 
 type ProductPreview = {
@@ -268,7 +268,7 @@ export default function ChatScreen() {
     const timeString = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const previous = index > 0 ? messages[index - 1] : null;
-    const showDateSeparator = !previous || !isSameCalendarDay(previous.created_at, item.created_at);
+    const showDateSeparator = shouldStartMessageGroup(previous?.created_at, item.created_at);
 
     // Falls back to the plain chip while the lookup is in flight, for a
     // deleted product, and for reservation/order contexts.
