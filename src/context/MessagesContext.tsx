@@ -18,6 +18,7 @@ interface MessagesContextType {
   unreadCount: number;
   loading: boolean;
   sendMessage: (conversationId: string, text: string, imageUrl?: string, context?: MessageContext) => Promise<Message | null>;
+  editMessage: (messageId: string, text: string) => Promise<Message | null>;
   markAsRead: (conversationId: string) => Promise<void>;
   getOrCreateConversation: () => Promise<Conversation | null>;
   refreshConversations: () => Promise<void>;
@@ -109,6 +110,34 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Only the sender may change `text` -- enforce_message_edit_scope
+  // (20260722172749) raises for anyone else, so the sender_id filter below is
+  // defence in depth rather than the only guard.
+  const editMessage = async (messageId: string, text: string) => {
+    if (!session?.user.id) return null;
+
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+
+    try {
+      // Cast: edited_at is added by 20260730150000 and is not in the generated
+      // types until they are regenerated.
+      const { data, error } = await supabase
+        .from('messages')
+        .update({ text: trimmed, edited_at: new Date().toISOString() } as any)
+        .eq('id', messageId)
+        .eq('sender_id', session.user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error editing message:', error);
+      return null;
+    }
+  };
+
   const markAsRead = async (conversationId: string) => {
     try {
       await supabase
@@ -188,6 +217,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
         unreadCount,
         loading,
         sendMessage,
+        editMessage,
         markAsRead,
         getOrCreateConversation,
         refreshConversations
