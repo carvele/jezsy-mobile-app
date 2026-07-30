@@ -19,6 +19,7 @@ interface MessagesContextType {
   loading: boolean;
   sendMessage: (conversationId: string, text: string, imageUrl?: string, context?: MessageContext) => Promise<Message | null>;
   editMessage: (messageId: string, text: string) => Promise<Message | null>;
+  toggleReaction: (messageId: string, emoji: string) => Promise<Record<string, string> | null>;
   markAsRead: (conversationId: string) => Promise<void>;
   getOrCreateConversation: () => Promise<Conversation | null>;
   refreshConversations: () => Promise<void>;
@@ -138,6 +139,29 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // merge_message_reaction (20260720191000) already toggles: sending the emoji a
+  // user has already set removes it. The reactions map is { userId: emoji }, so
+  // one reaction per person per message. Permission rides on the messages UPDATE
+  // policy, which is scoped to conversation participants -- so reacting to the
+  // other party's message is allowed, unlike editing it.
+  const toggleReaction = async (messageId: string, emoji: string) => {
+    if (!session?.user.id) return null;
+
+    try {
+      const { data, error } = await supabase.rpc('merge_message_reaction', {
+        p_message_id: messageId,
+        p_user_id: session.user.id,
+        p_emoji: emoji,
+      });
+
+      if (error) throw error;
+      return (data ?? {}) as Record<string, string>;
+    } catch (error) {
+      console.error('Error toggling reaction:', error);
+      return null;
+    }
+  };
+
   const markAsRead = async (conversationId: string) => {
     try {
       await supabase
@@ -218,6 +242,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
         loading,
         sendMessage,
         editMessage,
+        toggleReaction,
         markAsRead,
         getOrCreateConversation,
         refreshConversations
