@@ -7,6 +7,7 @@ import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
 import { formatLocalDate } from "@/src/utils/dateTime";
 import { scheduleReservationReminder } from "@/src/utils/pushNotifications";
+import { decode } from "base64-arraybuffer";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -42,6 +43,7 @@ export default function ReservationScreen() {
 
   // Payment Receipt
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
 
   const router = useRouter();
   const theme = useColorScheme() ?? "dark";
@@ -85,14 +87,23 @@ export default function ReservationScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       quality: 0.8,
+      base64: true,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      setReceiptUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        showToast("Could not read that image. Please pick another.", 'error');
+        return;
+      }
+      setReceiptUri(asset.uri);
+      setReceiptBase64(asset.base64);
     }
   };
 
-  const uploadReceipt = async (uri: string): Promise<string> => {
+  // FormData uploads of a file:// uri fail with "Network request failed" on
+  // Android; the rest of the app uploads decoded base64 instead.
+  const uploadReceipt = async (uri: string, base64: string): Promise<string> => {
     const userId = session?.user?.id;
     if (!userId) throw new Error("User not authenticated");
 
@@ -101,16 +112,9 @@ export default function ReservationScreen() {
       : "jpg";
     const fileName = `${userId}/${Date.now()}.${ext}`;
 
-    const formData = new FormData();
-    formData.append('file', {
-      uri: uri,
-      name: fileName.split('/').pop() || `photo.${ext}`,
-      type: `image/${ext}`,
-    } as any);
-
     const { data, error } = await supabase.storage
       .from("payment_receipts")
-      .upload(fileName, formData, { upsert: false, contentType: `image/${ext}` });
+      .upload(fileName, decode(base64), { upsert: false, contentType: `image/${ext}` });
 
     if (error) throw error;
 
@@ -128,7 +132,7 @@ export default function ReservationScreen() {
       return;
     }
 
-    if (!receiptUri) {
+    if (!receiptUri || !receiptBase64) {
       showToast("Please upload proof of downpayment (at least 50% of the reservation fee).", 'info');
       return;
     }
@@ -136,7 +140,7 @@ export default function ReservationScreen() {
     setSubmitting(true);
     try {
       // Upload receipt first
-      const receiptPath = await uploadReceipt(receiptUri);
+      const receiptPath = await uploadReceipt(receiptUri, receiptBase64);
       const reservationDate = formatLocalDate(selectedDate);
 
       // Price and deposit are computed server-side by create_reservation

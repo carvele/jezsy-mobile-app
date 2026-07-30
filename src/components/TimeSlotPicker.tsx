@@ -5,6 +5,7 @@ import {
     formatLocalDate,
     formatTimeLabel,
     formatTimeValue,
+    toStoreTimeValue,
 } from "@/src/utils/dateTime";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -116,9 +117,10 @@ export function TimeSlotPicker({
           const status = (r.status || "Pending").toLowerCase();
           const isActive =
             !r.deleted && status !== "cancelled" && status !== "completed";
-          if (r.appointment_time && isActive) {
-            bookedCounts[r.appointment_time] =
-              (bookedCounts[r.appointment_time] || 0) + 1;
+          // Stored as timestamptz; key by wall clock so it matches the slots below.
+          const slotValue = toStoreTimeValue(r.appointment_time);
+          if (slotValue && isActive) {
+            bookedCounts[slotValue] = (bookedCounts[slotValue] || 0) + 1;
           }
         });
       }
