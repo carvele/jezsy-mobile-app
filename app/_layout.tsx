@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -138,21 +139,27 @@ export default function RootLayout() {
   // to receive touches on Android; iOS auto-wraps but Android does not.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* Outermost provider: ToastProvider and every screen below it call
-          useColorScheme, which reads the override from here. */}
-      <AppThemeProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <WishlistProvider>
-              <CartProvider>
-                <MessagesProvider>
-                  <InitialLayout />
-                </MessagesProvider>
-              </CartProvider>
-            </WishlistProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </AppThemeProvider>
+      {/* android.edgeToEdgeEnabled draws the app behind the status bar, so real
+          insets are the only correct top offset. React Navigation supplies a
+          compat provider per-screen, but not above these context providers --
+          ToastContext needs insets too, and was using a hardcoded guess. */}
+      <SafeAreaProvider>
+        {/* Outermost of the app providers: ToastProvider and every screen below
+            it call useColorScheme, which reads the override from here. */}
+        <AppThemeProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <WishlistProvider>
+                <CartProvider>
+                  <MessagesProvider>
+                    <InitialLayout />
+                  </MessagesProvider>
+                </CartProvider>
+              </WishlistProvider>
+            </AuthProvider>
+          </ToastProvider>
+        </AppThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

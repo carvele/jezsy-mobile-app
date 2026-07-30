@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState, ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -29,6 +30,7 @@ const ICON: Record<ToastKind, Parameters<typeof IconSymbol>[0]['name']> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastState | null>(null);
   const theme = useColorScheme() ?? 'dark';
+  const insets = useSafeAreaInsets();
   const colors = Colors[theme];
 
   const opacity = useSharedValue(0);
@@ -71,7 +73,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <Animated.View
           style={[
             styles.wrap,
-            { backgroundColor: colors.card, borderColor: accent },
+            // Real inset now that a SafeAreaProvider sits above this in the root
+            // layout. Under edge-to-edge the old hardcoded guess put the toast
+            // under the status bar on any device with a taller one.
+            { top: insets.top + 12, backgroundColor: colors.card, borderColor: accent },
             animatedStyle,
           ]}
           pointerEvents="box-none"
@@ -98,9 +103,6 @@ export function useToast() {
 const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
-    // Matches the floating-button offset used elsewhere in the app rather than
-    // depending on a SafeAreaProvider being present above this component.
-    top: Platform.OS === 'ios' ? 60 : 40,
     left: 16,
     right: 16,
     flexDirection: 'row',
