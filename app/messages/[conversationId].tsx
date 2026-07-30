@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, Image
+  TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -17,6 +17,10 @@ import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
 import { formatDateSeparator, shouldStartMessageGroup } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
+
+// One reaction per person per message, so this is a shortlist rather than a
+// full picker -- matching the set the admin dashboard already offers.
+const REACTION_EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 type ProductPreview = {
   id: string;
@@ -36,7 +40,7 @@ export default function ChatScreen() {
     ctxLabel?: string;
   }>();
   const { session } = useAuth();
-  const { sendMessage, editMessage, markAsRead } = useMessages();
+  const { sendMessage, editMessage, toggleReaction, markAsRead } = useMessages();
   const router = useRouter();
   const theme = useColorScheme() ?? 'dark';
   const colors = Colors[theme];
@@ -45,6 +49,9 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   // Non-null while editing: the composer becomes an edit box for that message.
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The long-press target. Reactions apply to anyone's message; Edit only shows
+  // for your own, so one sheet serves both.
+  const [actionTarget, setActionTarget] = useState<any | null>(null);
   const [pendingContext, setPendingContext] = useState<MessageContext | null>(null);
   const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string>>({});
   const resolvedImageUrlsRef = useRef(resolvedImageUrls);
@@ -188,6 +195,28 @@ export default function ChatScreen() {
     if (!canEdit(item)) return;
     setEditingId(item.id);
     setInputText(item.text);
+  };
+
+  // An optimistic row has no database row yet, so neither action applies to it.
+  const canAct = (item: any) => !String(item.id).startsWith('temp-');
+
+  const handleReact = async (emoji: string) => {
+    const target = actionTarget;
+    setActionTarget(null);
+    if (!target) return;
+
+    const previous = target.reactions ?? {};
+    const next = await toggleReaction(target.id, emoji);
+    if (next === null) {
+      showToast('Could not add that reaction.', 'error');
+      return;
+    }
+
+    // The realtime UPDATE will also deliver this, but applying it here keeps the
+    // tap feeling immediate; both converge on the same map.
+    setMessages(prev =>
+      prev.map(m => (m.id === target.id ? { ...m, reactions: next ?? previous } : m)),
+    );
   };
 
   const cancelEdit = () => {
@@ -337,13 +366,18 @@ export default function ChatScreen() {
         <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
         <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
           <TouchableOpacity
-            activeOpacity={canEdit(item) ? 0.7 : 1}
-            onLongPress={() => beginEdit(item)}
+            activeOpacity={canAct(item) ? 0.7 : 1}
+            onLongPress={() => canAct(item) && setActionTarget(item)}
             delayLongPress={300}
-            disabled={!canEdit(item)}
-            accessibilityRole={canEdit(item) ? 'button' : undefined}
-            accessibilityLabel={canEdit(item) ? `Your message: ${item.text}` : undefined}
-            accessibilityHint={canEdit(item) ? 'Long press to edit this message' : undefined}
+            disabled={!canAct(item)}
+            accessibilityRole={canAct(item) ? 'button' : undefined}
+            accessibilityHint={
+              canAct(item)
+                ? canEdit(item)
+                  ? 'Long press to react or edit this message'
+                  : 'Long press to react to this message'
+                : undefined
+            }
             style={[
               styles.messageBubble,
               isMe
@@ -394,6 +428,51 @@ export default function ChatScreen() {
               </Text>
             ) : null}
           </TouchableOpacity>
+          {(() => {
+            // reactions is { userId: emoji }; collapse to emoji -> count and
+            // highlight the one this user picked.
+            const reactions: Record<string, string> = item.reactions ?? {};
+            const entries = Object.entries(reactions);
+            if (entries.length === 0) return null;
+
+            const grouped = entries.reduce<Record<string, number>>((acc, [, emoji]) => {
+              acc[emoji] = (acc[emoji] ?? 0) + 1;
+              return acc;
+            }, {});
+            const mine = session?.user.id ? reactions[session.user.id] : undefined;
+
+            return (
+              <View style={[styles.reactionRow, isMe ? styles.reactionRowMe : styles.reactionRowThem]}>
+                {Object.entries(grouped).map(([emoji, count]) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={[
+                      styles.reactionPill,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: mine === emoji ? colors.tint : colors.border,
+                      },
+                    ]}
+                    onPress={() => toggleReaction(item.id, emoji).then(next => {
+                      if (next) {
+                        setMessages(prev =>
+                          prev.map(m => (m.id === item.id ? { ...m, reactions: next } : m)),
+                        );
+                      }
+                    })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${emoji} ${count}`}
+                    accessibilityHint={mine === emoji ? 'Removes your reaction' : 'Adds your reaction'}
+                  >
+                    <Text style={styles.reactionEmoji}>{emoji}</Text>
+                    {count > 1 && (
+                      <Text style={[styles.reactionCount, { color: colors.secondaryText }]}>{count}</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            );
+          })()}
           <View style={styles.metaContainer}>
             {isMe && item.read_at && (
                <Text style={[styles.readReceiptText, { color: colors.tint }]}>Read • </Text>
@@ -444,6 +523,61 @@ export default function ChatScreen() {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
+
+        <Modal
+          visible={!!actionTarget}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActionTarget(null)}
+        >
+          <TouchableOpacity
+            style={styles.sheetOverlay}
+            activeOpacity={1}
+            onPress={() => setActionTarget(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Close message actions"
+          >
+            <TouchableOpacity style={[styles.actionSheet, { backgroundColor: colors.card }]} activeOpacity={1}>
+              <View style={styles.emojiRow}>
+                {REACTION_EMOJI.map(emoji => {
+                  const mine =
+                    session?.user.id && (actionTarget?.reactions ?? {})[session.user.id] === emoji;
+                  return (
+                    <TouchableOpacity
+                      key={emoji}
+                      style={[
+                        styles.emojiButton,
+                        mine && { backgroundColor: colors.background, borderColor: colors.tint },
+                      ]}
+                      onPress={() => handleReact(emoji)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`React with ${emoji}`}
+                      accessibilityState={{ selected: !!mine }}
+                    >
+                      <Text style={styles.emojiButtonText}>{emoji}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {actionTarget && canEdit(actionTarget) && (
+                <TouchableOpacity
+                  style={[styles.actionRow, { borderTopColor: colors.border }]}
+                  onPress={() => {
+                    const target = actionTarget;
+                    setActionTarget(null);
+                    beginEdit(target);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit message"
+                >
+                  <IconSymbol name="checkmark" size={18} color={colors.tint} />
+                  <Text style={[styles.actionRowText, { color: colors.text }]}>Edit message</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
 
         {editingId && (
           <View style={[styles.contextBanner, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
@@ -606,6 +740,56 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  reactionRow: { flexDirection: 'row', gap: 4, marginTop: 4 },
+  reactionRowMe: { justifyContent: 'flex-end' },
+  reactionRowThem: { justifyContent: 'flex-start' },
+  reactionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  reactionEmoji: { fontSize: 13 },
+  reactionCount: { fontSize: 12, fontWeight: '600' },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  actionSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 16,
+  },
+  emojiRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 12,
+    paddingBottom: 16,
+  },
+  emojiButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emojiButtonText: { fontSize: 24 },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  actionRowText: { fontSize: 15, fontWeight: '600' },
   dateSeparator: {
     alignItems: 'center',
     marginTop: 4,
