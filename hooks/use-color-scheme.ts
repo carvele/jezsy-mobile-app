@@ -1,1 +1,12 @@
-export { useColorScheme } from 'react-native';
+import { useColorScheme as useSystemColorScheme } from 'react-native';
+import { useThemeContext } from '@/src/context/ThemeContext';
+
+// Every themed screen already calls this hook, so routing the in-app override
+// through it is what makes one toggle apply app-wide without editing each call
+// site. Falls back to the OS value when no AppThemeProvider is mounted.
+export function useColorScheme(): 'light' | 'dark' {
+  const themeContext = useThemeContext();
+  const systemScheme = useSystemColorScheme();
+
+  return themeContext?.scheme ?? systemScheme ?? 'light';
+}

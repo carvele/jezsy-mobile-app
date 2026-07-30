@@ -85,6 +85,11 @@ const MAPPING = {
   'chart.bar.fill': 'bar-chart',
   'slider.horizontal.3': 'tune',
 
+  // Appearance
+  'moon.fill': 'dark-mode',
+  'sun.max.fill': 'light-mode',
+  'circle.lefthalf.filled': 'contrast',
+
   // Misc
   'heart': 'favorite-border',
   'heart.fill': 'favorite',

@@ -15,6 +15,7 @@ import { WishlistProvider } from '@/src/context/WishlistContext';
 import { CartProvider } from '@/src/context/CartContext';
 import { MessagesProvider } from '@/src/context/MessagesContext';
 import { ToastProvider } from '@/src/context/ToastContext';
+import { AppThemeProvider } from '@/src/context/ThemeContext';
 import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
 
@@ -137,17 +138,21 @@ export default function RootLayout() {
   // to receive touches on Android; iOS auto-wraps but Android does not.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ToastProvider>
-        <AuthProvider>
-          <WishlistProvider>
-            <CartProvider>
-              <MessagesProvider>
-                <InitialLayout />
-              </MessagesProvider>
-            </CartProvider>
-          </WishlistProvider>
-        </AuthProvider>
-      </ToastProvider>
+      {/* Outermost provider: ToastProvider and every screen below it call
+          useColorScheme, which reads the override from here. */}
+      <AppThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <WishlistProvider>
+              <CartProvider>
+                <MessagesProvider>
+                  <InitialLayout />
+                </MessagesProvider>
+              </CartProvider>
+            </WishlistProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </AppThemeProvider>
     </GestureHandlerRootView>
   );
 }

@@ -170,6 +170,12 @@ export default function ProfileScreen() {
               () => router.push('/profile/account-settings' as any),
             )}
             {renderSettingItem(
+              'moon.fill',
+              'Appearance',
+              'Light, dark, or match device',
+              () => router.push('/profile/appearance' as any),
+            )}
+            {renderSettingItem(
               'bell',
               'Notifications',
               'Push notification preferences',
