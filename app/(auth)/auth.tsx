@@ -183,7 +183,16 @@ export default function AuthScreen() {
       if (msg.includes('Invalid login credentials')) {
         msg = 'Incorrect email or password. Please try again.';
       } else if (msg.includes('Email not confirmed')) {
-        // Switch to OTP verification if email is not confirmed
+        // signInWithPassword failing never dispatches a code, so send one
+        // explicitly before arming the resend timer
+        const { error: resendError } = await supabase.auth.resend({
+          type: 'signup',
+          email: trimmedEmail,
+        });
+        if (resendError) {
+          showToast(resendError.message ?? 'Could not send verification code.', 'error');
+          return;
+        }
         setVerificationType('signup');
         setTimer(60);
         transitionMode('otp_verify');
@@ -265,10 +274,11 @@ export default function AuthScreen() {
       // whether the address was registered. Supabase's own responses here are
       // deliberately non-disclosing, so let them through unchanged.
       if (verificationType === 'signup') {
-        // Resend signup confirmation by signing up again (handles resending)
-        const { error } = await supabase.auth.signUp({
+        // resend() needs no password -- signUp() would reject the empty
+        // string transitionMode leaves behind after every screen change
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
           email: email.trim().toLowerCase(),
-          password,
         });
         if (error) throw error;
       } else {

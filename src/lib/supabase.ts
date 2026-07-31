@@ -9,18 +9,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const ExpoSecureStoreAdapter = {
   getItem: async (key: string) => {
     try {
-      const minimalSessionStr = await SecureStore.getItemAsync(key);
+      let minimalSessionStr = await SecureStore.getItemAsync(key);
       if (!minimalSessionStr) {
-        // Fallback check in AsyncStorage
-        return await AsyncStorage.getItem(key);
+        // Falls back here once a session exceeded SecureStore's 2048-byte limit
+        minimalSessionStr = await AsyncStorage.getItem(key);
+        if (!minimalSessionStr) return null;
       }
-      
-      const minimalSession = JSON.parse(minimalSessionStr);
-      // Retrieve the user object from AsyncStorage
+
+      // Only session values are split with a companion `_user` entry; other
+      // keys (e.g. the PKCE code verifier) pass through unchanged.
       const userStr = await AsyncStorage.getItem(`${key}_user`);
-      if (userStr) {
-        minimalSession.user = JSON.parse(userStr);
-      }
+      if (!userStr) return minimalSessionStr;
+
+      const minimalSession = JSON.parse(minimalSessionStr);
+      minimalSession.user = JSON.parse(userStr);
       return JSON.stringify(minimalSession);
     } catch (e) {
       console.error('Error in ExpoSecureStoreAdapter.getItem:', e);
