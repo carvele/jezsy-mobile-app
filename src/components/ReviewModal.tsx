@@ -23,7 +23,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
   const { showToast } = useToast();
   const theme = useColorScheme();
   const colors = Colors[theme];
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -69,12 +69,23 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
         uploadedUrls.push(publicUrl.publicUrl);
       }
 
+      // profiles' read policy only lets a customer see their own row, so
+      // ReviewsList can't resolve another reviewer's name via an embed --
+      // denormalize the display name here, at the one point where the
+      // author's own profile is guaranteed readable.
+      const reviewerName = profile?.first_name
+        ? [profile.first_name, profile.last_name ? `${profile.last_name[0]}.` : null]
+            .filter(Boolean)
+            .join(' ')
+        : null;
+
       const { error } = await supabase.from('reviews').insert({
         product_id: productId,
         user_id: user.id,
         rating,
         comment: comment.trim() || null,
         images: uploadedUrls,
+        reviewer_name: reviewerName,
       });
 
       if (error) throw error;

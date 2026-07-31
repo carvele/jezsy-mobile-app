@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletion_requests: {
+        Row: {
+          created_at: string
+          id: string
+          processed_at: string | null
+          processed_by: string | null
+          reason: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          reason?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          reason?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_deletion_requests_processed_by_fkey"
+            columns: ["processed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_deletion_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcement_dismissals: {
         Row: {
           announcement_id: string
@@ -541,6 +586,7 @@ export type Database = {
           context_type: string | null
           conversation_id: string
           created_at: string | null
+          edited_at: string | null
           id: string
           image_url: string | null
           reactions: Json
@@ -555,6 +601,7 @@ export type Database = {
           context_type?: string | null
           conversation_id: string
           created_at?: string | null
+          edited_at?: string | null
           id?: string
           image_url?: string | null
           reactions?: Json
@@ -569,6 +616,7 @@ export type Database = {
           context_type?: string | null
           conversation_id?: string
           created_at?: string | null
+          edited_at?: string | null
           id?: string
           image_url?: string | null
           reactions?: Json
@@ -635,92 +683,6 @@ export type Database = {
           },
         ]
       }
-      order_items: {
-        Row: {
-          id: string
-          order_id: string
-          product_id: string
-          quantity: number | null
-          selected_color: string | null
-          selected_size: string | null
-          unit_price: number
-        }
-        Insert: {
-          id?: string
-          order_id: string
-          product_id: string
-          quantity?: number | null
-          selected_color?: string | null
-          selected_size?: string | null
-          unit_price: number
-        }
-        Update: {
-          id?: string
-          order_id?: string
-          product_id?: string
-          quantity?: number | null
-          selected_color?: string | null
-          selected_size?: string | null
-          unit_price?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "order_items_order_id_fkey"
-            columns: ["order_id"]
-            isOneToOne: false
-            referencedRelation: "orders"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "order_items_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      orders: {
-        Row: {
-          created_at: string
-          customer_id: string
-          display_id: string
-          id: string
-          payment_intent_id: string | null
-          shipping_address: Json
-          status: string | null
-          total_amount: number
-        }
-        Insert: {
-          created_at?: string
-          customer_id: string
-          display_id: string
-          id?: string
-          payment_intent_id?: string | null
-          shipping_address: Json
-          status?: string | null
-          total_amount: number
-        }
-        Update: {
-          created_at?: string
-          customer_id?: string
-          display_id?: string
-          id?: string
-          payment_intent_id?: string | null
-          shipping_address?: Json
-          status?: string | null
-          total_amount?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "orders_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       pattern_list: {
         Row: {
           created_at: string | null
@@ -741,6 +703,72 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      payments: {
+        Row: {
+          amount_centavos: number
+          created_at: string
+          currency: string
+          id: string
+          last_event: Json | null
+          last_event_id: string | null
+          method: string | null
+          provider: string
+          provider_payment_id: string | null
+          provider_ref: string | null
+          reservation_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_centavos: number
+          created_at?: string
+          currency?: string
+          id?: string
+          last_event?: Json | null
+          last_event_id?: string | null
+          method?: string | null
+          provider?: string
+          provider_payment_id?: string | null
+          provider_ref?: string | null
+          reservation_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_centavos?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          last_event?: Json | null
+          last_event_id?: string | null
+          method?: string | null
+          provider?: string
+          provider_payment_id?: string | null
+          provider_ref?: string | null
+          reservation_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pose_guides: {
         Row: {
@@ -998,6 +1026,7 @@ export type Database = {
           hidden_in_history: boolean | null
           id: string
           image_url: string | null
+          payment_due_at: string | null
           payment_status: string | null
           payment_type: string | null
           pickup_token: string | null
@@ -1028,6 +1057,7 @@ export type Database = {
           hidden_in_history?: boolean | null
           id?: string
           image_url?: string | null
+          payment_due_at?: string | null
           payment_status?: string | null
           payment_type?: string | null
           pickup_token?: string | null
@@ -1058,6 +1088,7 @@ export type Database = {
           hidden_in_history?: boolean | null
           id?: string
           image_url?: string | null
+          payment_due_at?: string | null
           payment_status?: string | null
           payment_type?: string | null
           pickup_token?: string | null
@@ -1111,6 +1142,7 @@ export type Database = {
           images: string[] | null
           product_id: string
           rating: number
+          reviewer_name: string | null
           user_id: string
           verified_purchase: boolean
         }
@@ -1121,6 +1153,7 @@ export type Database = {
           images?: string[] | null
           product_id: string
           rating: number
+          reviewer_name?: string | null
           user_id: string
           verified_purchase?: boolean
         }
@@ -1131,6 +1164,7 @@ export type Database = {
           images?: string[] | null
           product_id?: string
           rating?: number
+          reviewer_name?: string | null
           user_id?: string
           verified_purchase?: boolean
         }
@@ -1597,10 +1631,6 @@ export type Database = {
     }
     Functions: {
       check_email_exists: { Args: { lookup_email: string }; Returns: boolean }
-      create_order: {
-        Args: { _items: Json; _shipping_address: Json }
-        Returns: Json
-      }
       create_reservation: {
         Args: {
           _appointment_time: string
@@ -1621,6 +1651,14 @@ export type Database = {
           _pickup_time: string
         }
         Returns: undefined
+      }
+      expire_unpaid_reservations: { Args: never; Returns: number }
+      get_slot_booked_counts: {
+        Args: { _date: string }
+        Returns: {
+          booked_count: number
+          slot_time: string
+        }[]
       }
       is_admin_or_owner: { Args: never; Returns: boolean }
       is_staff_or_admin: { Args: never; Returns: boolean }
