@@ -46,6 +46,10 @@ export default function ResetPasswordScreen() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
+      // A password reset is often "I think I was compromised" -- revoke any
+      // session on other devices, not just this one.
+      await supabase.auth.signOut({ scope: 'others' });
+
       // Only now does the recovery session stop being a recovery session, so
       // routing may release the user into the app.
       endPasswordRecovery();

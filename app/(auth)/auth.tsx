@@ -59,15 +59,23 @@ export default function AuthScreen() {
 
   const otpInputRef = useRef<TextInput>(null);
 
-  // Timer countdown handler for OTP resend
+  // Timer countdown handler for OTP resend. Depending on whether counting has
+  // started (rather than on `timer` itself) means this only fires once per
+  // countdown, instead of tearing down and recreating the interval every tick.
+  const isCounting = timer > 0;
   useEffect(() => {
-    if (timer > 0) {
-      const interval = setInterval(() => {
-        setTimer(t => t - 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [timer]);
+    if (!isCounting) return;
+    const interval = setInterval(() => {
+      setTimer(t => {
+        if (t <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isCounting]);
 
   // Focus the hidden OTP input when transitioning to 'otp_verify' step
   useEffect(() => {
@@ -183,7 +191,16 @@ export default function AuthScreen() {
       if (msg.includes('Invalid login credentials')) {
         msg = 'Incorrect email or password. Please try again.';
       } else if (msg.includes('Email not confirmed')) {
-        // Switch to OTP verification if email is not confirmed
+        // signInWithPassword failing never dispatches a code, so send one
+        // explicitly before arming the resend timer
+        const { error: resendError } = await supabase.auth.resend({
+          type: 'signup',
+          email: trimmedEmail,
+        });
+        if (resendError) {
+          showToast(resendError.message ?? 'Could not send verification code.', 'error');
+          return;
+        }
         setVerificationType('signup');
         setTimer(60);
         transitionMode('otp_verify');
@@ -265,10 +282,11 @@ export default function AuthScreen() {
       // whether the address was registered. Supabase's own responses here are
       // deliberately non-disclosing, so let them through unchanged.
       if (verificationType === 'signup') {
-        // Resend signup confirmation by signing up again (handles resending)
-        const { error } = await supabase.auth.signUp({
+        // resend() needs no password -- signUp() would reject the empty
+        // string transitionMode leaves behind after every screen change
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
           email: email.trim().toLowerCase(),
-          password,
         });
         if (error) throw error;
       } else {

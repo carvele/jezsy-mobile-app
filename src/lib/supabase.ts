@@ -4,23 +4,64 @@ import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import { Database } from '@/src/types/database.types';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Android's Keystore-backed SecureStore caps a single value at ~2048 bytes.
+// Chunk oversized values across multiple keys instead of falling back to
+// AsyncStorage, which is unencrypted.
+const SECURE_STORE_LIMIT = 2000;
+
+async function setChunked(key: string, value: string) {
+  const count = Math.ceil(value.length / SECURE_STORE_LIMIT);
+  await SecureStore.setItemAsync(`${key}_chunks`, String(count));
+  await Promise.all(
+    Array.from({ length: count }, (_, i) =>
+      SecureStore.setItemAsync(`${key}_c${i}`, value.slice(i * SECURE_STORE_LIMIT, (i + 1) * SECURE_STORE_LIMIT)),
+    ),
+  );
+}
+
+async function getChunked(key: string): Promise<string | null> {
+  const countStr = await SecureStore.getItemAsync(`${key}_chunks`);
+  if (!countStr) return null;
+  const count = parseInt(countStr, 10);
+  const parts = await Promise.all(
+    Array.from({ length: count }, (_, i) => SecureStore.getItemAsync(`${key}_c${i}`)),
+  );
+  return parts.some((p) => p == null) ? null : parts.join('');
+}
+
+async function deleteChunked(key: string) {
+  const countStr = await SecureStore.getItemAsync(`${key}_chunks`);
+  if (!countStr) return;
+  const count = parseInt(countStr, 10);
+  await Promise.all([
+    SecureStore.deleteItemAsync(`${key}_chunks`),
+    ...Array.from({ length: count }, (_, i) => SecureStore.deleteItemAsync(`${key}_c${i}`)),
+  ]);
+}
+
+async function setSecureValue(key: string, value: string) {
+  if (value.length > 2048) {
+    await SecureStore.deleteItemAsync(key);
+    await setChunked(key, value);
+  } else {
+    await deleteChunked(key);
+    await SecureStore.setItemAsync(key, value);
+  }
+}
 
 const ExpoSecureStoreAdapter = {
   getItem: async (key: string) => {
     try {
-      const minimalSessionStr = await SecureStore.getItemAsync(key);
-      if (!minimalSessionStr) {
-        // Fallback check in AsyncStorage
-        return await AsyncStorage.getItem(key);
-      }
-      
+      const minimalSessionStr = (await SecureStore.getItemAsync(key)) ?? (await getChunked(key));
+      if (!minimalSessionStr) return null;
+
+      // Only session values are split with a companion `_user` entry; other
+      // keys (e.g. the PKCE code verifier) pass through unchanged.
+      const userStr = await SecureStore.getItemAsync(`${key}_user`);
+      if (!userStr) return minimalSessionStr;
+
       const minimalSession = JSON.parse(minimalSessionStr);
-      // Retrieve the user object from AsyncStorage
-      const userStr = await AsyncStorage.getItem(`${key}_user`);
-      if (userStr) {
-        minimalSession.user = JSON.parse(userStr);
-      }
+      minimalSession.user = JSON.parse(userStr);
       return JSON.stringify(minimalSession);
     } catch (e) {
       console.error('Error in ExpoSecureStoreAdapter.getItem:', e);
@@ -31,47 +72,28 @@ const ExpoSecureStoreAdapter = {
     try {
       const session = JSON.parse(value);
       if (session && session.access_token && session.user) {
-        // Extract user and store in AsyncStorage
-        const user = session.user;
-        await AsyncStorage.setItem(`${key}_user`, JSON.stringify(user));
-        
-        // Remove user from session to keep it small for SecureStore
+        // Persist only the fields the app actually reads back off a restored
+        // session (id/email/user_metadata), not the full Supabase user object
+        // -- phone, app_metadata, identities, etc are unused PII at rest.
+        const { id, email, user_metadata } = session.user;
+        await SecureStore.setItemAsync(`${key}_user`, JSON.stringify({ id, email, user_metadata }));
+
         const { user: _, ...minimalSession } = session;
-        const minimalSessionStr = JSON.stringify(minimalSession);
-        
-        if (minimalSessionStr.length > 2048) {
-          console.warn('Session tokens exceed 2048 bytes, storing in AsyncStorage');
-          await AsyncStorage.setItem(key, minimalSessionStr);
-          await SecureStore.deleteItemAsync(key);
-        } else {
-          await SecureStore.setItemAsync(key, minimalSessionStr);
-          await AsyncStorage.removeItem(key); // Clean up fallback
-        }
+        await setSecureValue(key, JSON.stringify(minimalSession));
       } else {
-        if (value.length > 2048) {
-          await AsyncStorage.setItem(key, value);
-          await SecureStore.deleteItemAsync(key);
-        } else {
-          await SecureStore.setItemAsync(key, value);
-          await AsyncStorage.removeItem(key);
-        }
+        await setSecureValue(key, value);
       }
     } catch (e) {
       console.error('Error in ExpoSecureStoreAdapter.setItem:', e);
-      // Fallback
-      if (value.length > 2048) {
-        await AsyncStorage.setItem(key, value);
-      } else {
-        await SecureStore.setItemAsync(key, value);
-      }
+      await setSecureValue(key, value).catch(() => {});
     }
   },
   removeItem: async (key: string) => {
     try {
       await Promise.all([
         SecureStore.deleteItemAsync(key),
-        AsyncStorage.removeItem(key),
-        AsyncStorage.removeItem(`${key}_user`),
+        SecureStore.deleteItemAsync(`${key}_user`),
+        deleteChunked(key),
       ]);
     } catch (e) {
       console.error('Error in ExpoSecureStoreAdapter.removeItem:', e);
