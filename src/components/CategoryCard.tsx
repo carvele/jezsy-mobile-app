@@ -9,6 +9,17 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 const PLACEHOLDER = require('@/assets/images/partial-react-logo.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// The grid card needs BOTH dimensions as real numbers. Every child here is
+// absolutely positioned, so the card has no in-flow content to give it a
+// height -- and aspectRatio does not resolve one inside the wrapping flex row
+// the grid uses, so the card collapsed and the whole Categories section
+// rendered blank. (The rail variant gets away with aspectRatio because it
+// lives in a horizontal ScrollView.) Height is derived from the width to keep
+// the intended 3:2 landscape shape.
+// 16 = the grid's page padding each side, 12 = the gutter between columns.
+const GRID_CARD_WIDTH = (SCREEN_WIDTH - 16 * 2 - 12) / 2;
+const GRID_CARD_HEIGHT = GRID_CARD_WIDTH / (3 / 2);
+
 export type CategoryCardVariant = 'grid' | 'rail';
 
 type Props = {
@@ -76,7 +87,7 @@ const styles = StyleSheet.create({
   // narrow phone as well as a tablet. Both are landscape-ish on purpose: as
   // portrait posters, ten categories cost roughly three screens of scrolling
   // before any product was visible.
-  cardGrid: { width: '48%', aspectRatio: 3 / 2 },
+  cardGrid: { width: GRID_CARD_WIDTH, height: GRID_CARD_HEIGHT },
   cardRail: { width: SCREEN_WIDTH * 0.42, aspectRatio: 4 / 3 },
   image: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
