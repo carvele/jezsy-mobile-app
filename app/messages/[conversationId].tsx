@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useMessages, MessageContext } from '@/src/context/MessagesContext';
@@ -63,6 +63,20 @@ export default function ChatScreen() {
   productPreviewsRef.current = productPreviews;
   const flatListRef = useRef<FlatList>(null);
 
+  // resolveChatImageUrl's signed URLs expire after an hour, but each message
+  // is only ever resolved once (guarded by the `undefined` check below) --
+  // a conversation left open past that point would show broken images with
+  // no way to recover short of leaving and returning. Refocusing clears the
+  // cache so every image message resolves again, cheap since a conversation
+  // holds few of them.
+  const [focusTick, setFocusTick] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setResolvedImageUrls({});
+      setFocusTick(t => t + 1);
+    }, [])
+  );
+
   useEffect(() => {
     const toResolve = messages.filter(m => m.image_url && resolvedImageUrlsRef.current[m.id] === undefined);
     if (toResolve.length === 0) return;
@@ -83,7 +97,7 @@ export default function ChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [messages]);
+  }, [messages, focusTick]);
 
   // Product-context messages render as a card, which needs the product itself.
   // Same shape as the image resolution above: fetch only what is missing.
