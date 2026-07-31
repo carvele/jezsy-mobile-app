@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter, Link } from 'expo-router';
+import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
@@ -49,23 +49,27 @@ export default function ReservationDetailScreen() {
   }, [id]);
 
   // receipt_url holds a bare object path in a private bucket, so it needs a
-  // signed URL before <Image> can load it.
-  useEffect(() => {
-    const path = reservation?.receipt_url;
-    if (!path) {
-      setReceiptUri(null);
-      return;
-    }
+  // signed URL before <Image> can load it. Signed URLs expire after an hour,
+  // so this also re-resolves on focus -- otherwise a reservation left open
+  // (or revisited later) shows a broken image once the old one lapses.
+  const receiptPath = reservation?.receipt_url;
+  useFocusEffect(
+    useCallback(() => {
+      if (!receiptPath) {
+        setReceiptUri(null);
+        return;
+      }
 
-    let cancelled = false;
-    resolveSignedStorageUrl('payment_receipts', path).then((url) => {
-      if (!cancelled) setReceiptUri(url);
-    });
+      let cancelled = false;
+      resolveSignedStorageUrl('payment_receipts', receiptPath).then((url) => {
+        if (!cancelled) setReceiptUri(url);
+      });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [reservation?.receipt_url]);
+      return () => {
+        cancelled = true;
+      };
+    }, [receiptPath])
+  );
 
   useEffect(() => {
     fetchReservation();
