@@ -21,6 +21,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ConsentModal } from "@/src/components/ConsentModal";
 import { TiltGuide } from "@/src/components/TiltGuide";
 import { PoseLandmarkOverlay } from "@/src/components/PoseLandmarkOverlay";
+import { SilhouetteOverlay } from "@/src/components/SilhouetteOverlay";
 import {
   isPoseValid,
   getPoseConfidence,
@@ -305,12 +306,7 @@ export default function BodyScanScreen() {
 
         {!isCapturing && <TiltGuide onTiltValid={setIsTiltValid} onGuideState={handleTiltGuideState} />}
 
-        {/* Silhouette guide */}
-        <View style={styles.silhouetteContainer} pointerEvents="none">
-          <View style={[styles.headOutline, { borderColor: outlineColor }]} />
-          <View style={[styles.shouldersOutline, { borderColor: outlineColor }]} />
-          <View style={[styles.torsoOutline, { borderColor: outlineColor }]} />
-        </View>
+        <SilhouetteOverlay color={outlineColor} />
 
         <View style={styles.controls}>
           {isProcessing ? (
@@ -363,27 +359,6 @@ const styles = StyleSheet.create({
   cardBody: { fontSize: 15, lineHeight: 22, textAlign: "center", marginBottom: 24 },
   actionButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 999 },
   actionText: { color: "#0D0D0D", fontSize: 14, fontWeight: "700" },
-  silhouetteContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 5,
-  },
-  headOutline: {
-    width: 80, height: 100,
-    borderWidth: 2, borderRadius: 50,
-    borderStyle: "dashed", marginBottom: 10,
-  },
-  shouldersOutline: {
-    width: 220, height: 60,
-    borderWidth: 2, borderRadius: 30,
-    borderStyle: "dashed", borderBottomWidth: 0,
-  },
-  torsoOutline: {
-    width: 180, height: 250,
-    borderWidth: 2, borderRadius: 20,
-    borderStyle: "dashed", borderTopWidth: 0,
-  },
   controls: {
     alignItems: "center",
     paddingBottom: 60,
