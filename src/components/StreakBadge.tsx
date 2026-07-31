@@ -7,7 +7,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 
 export function StreakBadge() {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const { session } = useAuth();
   

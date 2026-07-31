@@ -12,7 +12,7 @@ import { useToast } from '@/src/context/ToastContext';
 export default function CreateCapsuleScreen() {
   const { showToast } = useToast();
   const router = useRouter();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const { session } = useAuth();
 

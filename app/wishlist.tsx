@@ -26,7 +26,7 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 
 export default function WishlistScreen() {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const router = useRouter();
   const { user } = useAuth();
@@ -50,7 +50,8 @@ export default function WishlistScreen() {
         .from('products')
         .select(`*, ${CATEGORY_SELECT}`)
         .in('id', ids)
-        .eq('deleted', false);
+        .eq('deleted', false)
+        .eq('visibility', 'public');
       if (!error && data) setItems(data);
     } catch (err) {
       console.error('Error fetching wishlist products:', err);

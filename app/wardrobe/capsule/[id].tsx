@@ -18,7 +18,7 @@ export default function CapsuleDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const { session } = useAuth();
 

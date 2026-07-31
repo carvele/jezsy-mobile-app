@@ -18,7 +18,7 @@ interface CapsuleCardProps {
 }
 
 export function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   
   const progress = Math.min(capsule.item_count / capsule.target_count, 1);

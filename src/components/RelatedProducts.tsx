@@ -73,6 +73,8 @@ export function RelatedProducts({
         .select(`*, ${CATEGORY_SELECT}`)
         .in('category_id', poolCategoryIds)
         .neq('id', currentProductId)
+        .eq('deleted', false)
+        .eq('visibility', 'public')
         .limit(CANDIDATE_POOL);
 
       if (cancelled || !data) return;

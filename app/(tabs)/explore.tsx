@@ -57,7 +57,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function ExploreScreen() {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const { itemCount } = useCart();
   const { measurements: sizingMeasurements, fitPreference, ready: sizingReady, needsSetup: needsSizingSetup } = useSizingProfile();

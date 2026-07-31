@@ -8,5 +8,7 @@ export function useColorScheme(): 'light' | 'dark' {
   const themeContext = useThemeContext();
   const systemScheme = useSystemColorScheme();
 
-  return themeContext?.scheme ?? systemScheme ?? 'light';
+  // The app is dark-first by design (see Colors.dark usage throughout); fall
+  // back to that, not 'light', when neither a provider nor the OS gives a value.
+  return themeContext?.scheme ?? systemScheme ?? 'dark';
 }

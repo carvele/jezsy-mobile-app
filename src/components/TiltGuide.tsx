@@ -8,58 +8,59 @@ interface Props {
   onGuideState?: (state: 'tilt_down' | 'tilt_up' | 'hold_steady') => void;
 }
 
+type GuideState = 'tilt_down' | 'tilt_up' | 'hold_steady';
+
 export function TiltGuide({ onTiltValid, onGuideState }: Props) {
-  const [pitch, setPitch] = useState<number>(0);
+  // Tracks the discrete guide state rather than the raw pitch, so a render
+  // (and effect re-run, since this was in the accelerometer effect's own
+  // state) doesn't fire on every ~16ms sample -- only on an actual crossing.
+  const [guideState, setGuideState] = useState<GuideState>('hold_steady');
 
   useEffect(() => {
     // Set update interval to ~60fps
     Accelerometer.setUpdateInterval(16);
 
-    let lastReportedState = 'hold_steady';
-
     const subscription = Accelerometer.addListener(({ y, z }) => {
       // Calculate pitch angle in degrees from gravity vector
       // y is up/down axis, z is front/back axis
       const angle = Math.atan2(y, z) * (180 / Math.PI);
-      
+
       // Standardize so 0 is perfectly vertical
       let normalizedPitch = angle - 90;
       if (normalizedPitch < -180) normalizedPitch += 360;
-      
-      setPitch(normalizedPitch);
-      
+
       // Valid if phone is within ±15 degrees of vertical
       const isValid = Math.abs(normalizedPitch) <= 15;
       onTiltValid(isValid);
 
-      let currentState: 'tilt_down' | 'tilt_up' | 'hold_steady' = 'hold_steady';
+      let currentState: GuideState = 'hold_steady';
       if (normalizedPitch > 15) {
         currentState = 'tilt_down';
       } else if (normalizedPitch < -15) {
         currentState = 'tilt_up';
       }
 
-      if (currentState !== lastReportedState) {
-        lastReportedState = currentState;
+      setGuideState(prev => {
+        if (prev === currentState) return prev;
         onGuideState?.(currentState);
-      }
+        return currentState;
+      });
     });
 
     return () => subscription.remove();
   }, [onTiltValid, onGuideState]);
 
-  const isTiltingUp = pitch > 15;
-  const isTiltingDown = pitch < -15;
-
   let message = 'Hold steady';
   let icon = 'checkmark.circle.fill';
   let color = '#00FF00';
 
-  if (isTiltingUp) {
+  // tilt_down/tilt_up name the instruction, not the phone's own motion --
+  // pitching the phone up is what earns the "tilt down" instruction back.
+  if (guideState === 'tilt_down') {
     message = 'Tilt phone down ↓';
     icon = 'arrow.down.circle.fill';
     color = '#FFCC00';
-  } else if (isTiltingDown) {
+  } else if (guideState === 'tilt_up') {
     message = 'Tilt phone up ↑';
     icon = 'arrow.up.circle.fill';
     color = '#FFCC00';

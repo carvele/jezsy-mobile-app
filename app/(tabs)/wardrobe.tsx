@@ -21,7 +21,7 @@ const OUTFIT_CARD_WIDTH = width - 40;
 type Tab = 'items' | 'outfits' | 'capsules';
 
 export default function WardrobeScreen() {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const { session } = useAuth();
   const router = useRouter();

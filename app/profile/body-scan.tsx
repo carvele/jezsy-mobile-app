@@ -206,11 +206,11 @@ export default function BodyScanScreen() {
     router.back();
   };
 
-  const handleTiltGuideState = (state: "tilt_down" | "tilt_up" | "hold_steady") => {
+  const handleTiltGuideState = useCallback((state: "tilt_down" | "tilt_up" | "hold_steady") => {
     if (isCapturing) return;
     if (state === "tilt_down") speakIfNew("Tilt phone down");
     else if (state === "tilt_up") speakIfNew("Tilt phone up");
-  };
+  }, [isCapturing, speakIfNew]);
 
   if (!consentGranted) {
     return (

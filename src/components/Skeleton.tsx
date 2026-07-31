@@ -13,7 +13,7 @@ interface SkeletonProps {
 
 /** A single shimmering placeholder block. */
 export function Skeleton({ width = '100%', height = 16, radius = 8, style }: SkeletonProps) {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const pulse = useSharedValue(0.4);
 

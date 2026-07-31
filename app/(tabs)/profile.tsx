@@ -23,7 +23,7 @@ export default function ProfileScreen() {
   const { wishlistIds } = useWishlist();
   const { itemCount } = useCart();
   
-  const theme = useColorScheme() ?? 'light';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   useEffect(() => {

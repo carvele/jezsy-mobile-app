@@ -11,6 +11,9 @@ type ThemeContextValue = {
   preference: ThemePreference;
   scheme: ResolvedScheme;
   setPreference: (next: ThemePreference) => void;
+  /** False until the stored preference has been read; lets callers hold off
+   * rendering rather than flashing the wrong scheme for a frame. */
+  loaded: boolean;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -20,6 +23,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function AppThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useSystemColorScheme();
   const [preference, setPreferenceState] = useState<ThemePreference>('system');
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -28,7 +32,8 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
           setPreferenceState(stored);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
 
   const setPreference = useCallback((next: ThemePreference) => {
@@ -38,11 +43,13 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
     void AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
   }, []);
 
-  const scheme: ResolvedScheme = preference === 'system' ? systemScheme ?? 'light' : preference;
+  // The app is dark-first by design; fall back to that, not 'light', when the
+  // OS gives no value.
+  const scheme: ResolvedScheme = preference === 'system' ? systemScheme ?? 'dark' : preference;
 
   const value = useMemo(
-    () => ({ preference, scheme, setPreference }),
-    [preference, scheme, setPreference],
+    () => ({ preference, scheme, setPreference, loaded }),
+    [preference, scheme, setPreference, loaded],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

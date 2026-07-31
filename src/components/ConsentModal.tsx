@@ -11,7 +11,7 @@ interface ConsentModalProps {
 }
 
 export function ConsentModal({ visible, onAccept, onDecline }: ConsentModalProps) {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   return (

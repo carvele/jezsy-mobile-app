@@ -24,7 +24,7 @@ const PUSH_FAILURE_MESSAGE: Record<string, string> = {
 
 export default function NotificationsSettingsScreen() {
   const { showToast } = useToast();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const router = useRouter();
   const { user } = useAuth();

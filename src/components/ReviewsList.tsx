@@ -20,7 +20,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 export function ReviewsList({ productId }: ReviewsListProps) {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   
   const [reviews, setReviews] = useState<any[]>([]);
@@ -35,10 +35,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
     try {
       const { data, error } = await supabase
         .from('reviews')
-        .select(`
-          *,
-          user:user_id(first_name, last_name)
-        `)
+        .select('*')
         .eq('product_id', productId)
         .order('created_at', { ascending: false });
         
@@ -184,7 +181,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
               <View style={styles.reviewHeader}>
                 <View style={styles.reviewerInfo}>
                   <Text style={[styles.reviewerName, { color: colors.text }]}>
-                    {review.user?.first_name || 'Anonymous'} {review.user?.last_name?.[0] ? `${review.user.last_name[0]}.` : ''}
+                    {review.reviewer_name || 'Anonymous'}
                   </Text>
                   {review.verified_purchase && (
                     <View style={styles.verifiedBadge}>

@@ -14,7 +14,7 @@ export default function InboxScreen() {
   const { conversations, loading: messagesLoading } = useMessages();
   const { user, profile } = useAuth();
   const router = useRouter();
-  const theme = useColorScheme() ?? 'light';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   const [activeTab, setActiveTab] = useState<'messages' | 'notifications'>('messages');
