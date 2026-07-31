@@ -42,7 +42,7 @@ export default function ChatScreen() {
   const { session } = useAuth();
   const { sendMessage, editMessage, toggleReaction, markAsRead } = useMessages();
   const router = useRouter();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   const [messages, setMessages] = useState<any[]>([]);

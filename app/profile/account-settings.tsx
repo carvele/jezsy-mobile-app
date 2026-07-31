@@ -22,7 +22,7 @@ import { useToast } from '@/src/context/ToastContext';
 
 export default function AccountSettingsScreen() {
   const { showToast } = useToast();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const router = useRouter();
   const { user } = useAuth();

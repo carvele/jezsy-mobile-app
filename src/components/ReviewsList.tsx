@@ -20,7 +20,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 export function ReviewsList({ productId }: ReviewsListProps) {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   
   const [reviews, setReviews] = useState<any[]>([]);

@@ -21,7 +21,7 @@ interface ReviewModalProps {
 
 export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewModalProps) {
   const { showToast } = useToast();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const { user } = useAuth();
   

@@ -29,7 +29,7 @@ export default function ReservationsScreen() {
   const [activeFilter, setActiveFilter] = useState<StatusFilter>(initialFilter);
 
   const router = useRouter();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   useEffect(() => {

@@ -16,7 +16,7 @@ const POLL_TIMEOUT_MS = 90000;
 export default function PaymentScreen() {
   const { paymentId, url } = useLocalSearchParams<{ paymentId: string; url: string }>();
   const router = useRouter();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   const [settling, setSettling] = useState(false);

@@ -29,7 +29,7 @@ const ICON: Record<ToastKind, Parameters<typeof IconSymbol>[0]['name']> = {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ToastState | null>(null);
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const insets = useSafeAreaInsets();
   const colors = Colors[theme];
 

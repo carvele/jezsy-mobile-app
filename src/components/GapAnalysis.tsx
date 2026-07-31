@@ -13,7 +13,7 @@ interface GapAnalysisProps {
 }
 
 export function GapAnalysis({ items }: GapAnalysisProps) {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const router = useRouter();
 

@@ -27,7 +27,7 @@ export default function WardrobeItemDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   const [item, setItem] = useState<WardrobeItem | null>(null);

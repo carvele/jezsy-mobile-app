@@ -22,7 +22,7 @@ const COLUMNS: { key: 'bust' | 'waist' | 'hips' | 'inseam' | 'length'; label: st
 ];
 
 export function SizeChartModal({ visible, measurements, sizes, recommendedSize, onClose }: SizeChartModalProps) {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   // Only show sizes the product actually lists, and only columns with data.

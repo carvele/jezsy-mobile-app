@@ -31,7 +31,7 @@ export default function OutfitDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
 
   const [outfit, setOutfit] = useState<SavedOutfit | null>(null);

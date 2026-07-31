@@ -63,7 +63,7 @@ const EMPTY_SLOTS: Slots = {
 
 export default function OutfitBuilderScreen() {
   const { showToast } = useToast();
-  const theme  = useColorScheme() ?? 'dark';
+  const theme  = useColorScheme();
   const colors = Colors[theme];
   const router = useRouter();
   const { session } = useAuth();

@@ -32,7 +32,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const theme = useColorScheme() ?? 'light';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const router = useRouter();
 

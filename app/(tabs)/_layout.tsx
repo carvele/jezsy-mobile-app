@@ -12,8 +12,8 @@ import { useAuth } from '@/src/context/AuthContext';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
-  const isDark = (colorScheme ?? 'light') === 'dark';
+  const colors = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
   const { unreadCount } = useMessages();
   const { session, isPasswordRecovery } = useAuth();
   const insets = useSafeAreaInsets();

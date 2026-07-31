@@ -26,7 +26,7 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 
 export default function WishlistScreen() {
-  const theme = useColorScheme() ?? 'dark';
+  const theme = useColorScheme();
   const colors = Colors[theme];
   const router = useRouter();
   const { user } = useAuth();

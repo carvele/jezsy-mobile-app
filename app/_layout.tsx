@@ -16,7 +16,7 @@ import { WishlistProvider } from '@/src/context/WishlistContext';
 import { CartProvider } from '@/src/context/CartContext';
 import { MessagesProvider } from '@/src/context/MessagesContext';
 import { ToastProvider } from '@/src/context/ToastContext';
-import { AppThemeProvider } from '@/src/context/ThemeContext';
+import { AppThemeProvider, useThemeContext } from '@/src/context/ThemeContext';
 import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
 
@@ -34,7 +34,8 @@ function InitialLayout() {
   const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'dark'];
+  const colors = Colors[colorScheme];
+  const themeLoaded = useThemeContext()?.loaded ?? false;
 
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
 
@@ -64,7 +65,7 @@ function InitialLayout() {
 
   // Gates the redirect effect on every run (same as before, so a later
   // refreshProfile() call still pauses redirects while it's in flight).
-  const flagsReady = !isLoading && !isProfileLoading && onboardingSeen !== null;
+  const flagsReady = !isLoading && !isProfileLoading && onboardingSeen !== null && themeLoaded;
 
   // Gates whether the Stack renders at all -- but only for the very first
   // cold-start bootstrap. Flips true once and never back to false, so a
