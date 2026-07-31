@@ -63,8 +63,9 @@ const EMPTY_SLOTS: Slots = {
 
 export default function OutfitBuilderScreen() {
   const { showToast } = useToast();
-  const theme  = useColorScheme();
+  const theme = useColorScheme();
   const colors = Colors[theme];
+  const isDark = theme === 'dark';
   const router = useRouter();
   const { session } = useAuth();
 
@@ -255,7 +256,13 @@ export default function OutfitBuilderScreen() {
 
         {item ? (
           <TouchableOpacity
-            style={styles.slotFilled}
+            style={[
+              styles.slotFilled,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+              },
+            ]}
             onPress={() => openPicker(slotKey)}
             activeOpacity={0.85}
             accessibilityRole="button"
@@ -592,9 +599,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     gap: 12,
     paddingRight: 12,
   },

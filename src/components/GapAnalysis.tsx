@@ -15,6 +15,7 @@ interface GapAnalysisProps {
 export function GapAnalysis({ items }: GapAnalysisProps) {
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const isDark = theme === 'dark';
   const router = useRouter();
 
   const analysis = useMemo(() => {
@@ -83,7 +84,7 @@ export function GapAnalysis({ items }: GapAnalysisProps) {
         {Object.entries(analysis.counts)
           .filter(([cat, count]) => count > 0 && cat !== 'Uncategorized')
           .map(([cat, count]) => (
-            <View key={cat} style={styles.statChip}>
+            <View key={cat} style={[styles.statChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)' }]}>
               <Text style={[styles.statValue, { color: colors.tint }]}>{count}</Text>
               <Text style={[styles.statLabel, { color: colors.secondaryText }]}>{cat}s</Text>
             </View>
@@ -97,7 +98,7 @@ export function GapAnalysis({ items }: GapAnalysisProps) {
       )}
 
       {analysis.gaps.length > 0 && (
-        <View style={styles.gapsContainer}>
+        <View style={[styles.gapsContainer, { borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
           <Text style={[styles.gapsTitle, { color: colors.text }]}>Suggestions</Text>
           {analysis.gaps.map((gap, index) => (
             <View key={index} style={[styles.gapItem, { backgroundColor: 'rgba(201, 169, 110, 0.1)' }]}>
@@ -150,7 +151,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   statValue: {
     fontSize: 18,
@@ -167,7 +167,6 @@ const styles = StyleSheet.create({
   },
   gapsContainer: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
     paddingTop: 16,
   },
   gapsTitle: {
