@@ -12,7 +12,7 @@ import { decode } from "base64-arraybuffer";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -41,6 +41,33 @@ export default function ReservationScreen() {
   // Date and Time selection
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [appointmentTime, setAppointmentTime] = useState<string | undefined>();
+  // Opening on today is wrong whenever today is unbookable -- past closing, or
+  // a day the boutique is shut. That left the picker disabled and Confirm dead
+  // with nothing on screen saying to try another date. Skip ahead until a date
+  // has slots, and stop the moment the customer picks a date themselves.
+  const [autoAdvanceDate, setAutoAdvanceDate] = useState(true);
+
+  const handleAvailabilityResolved = useCallback(
+    (hasAvailable: boolean) => {
+      if (hasAvailable || !autoAdvanceDate) return;
+      setSelectedDate((prev) => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() + 1);
+        // Stay inside the 14-day window the date strip offers.
+        const lastOffered = new Date();
+        lastOffered.setDate(lastOffered.getDate() + 13);
+        lastOffered.setHours(23, 59, 59, 999);
+        return next > lastOffered ? prev : next;
+      });
+    },
+    [autoAdvanceDate],
+  );
+
+  const selectDate = useCallback((d: Date) => {
+    setAutoAdvanceDate(false);
+    setSelectedDate(d);
+    setAppointmentTime(undefined); // Reset time when date changes
+  }, []);
 
   // Payment Receipt
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
@@ -339,10 +366,7 @@ export default function ReservationScreen() {
                     { borderColor: isSelected ? colors.tint : colors.border },
                     isSelected && { backgroundColor: colors.card },
                   ]}
-                  onPress={() => {
-                    setSelectedDate(d);
-                    setAppointmentTime(undefined); // Reset time when date changes
-                  }}
+                  onPress={() => selectDate(d)}
                   accessibilityRole="button"
                   accessibilityLabel={`${dayName} ${dateNum}`}
                   accessibilityHint={isSelected ? 'Currently selected date' : 'Select this date for your reservation'}
@@ -380,6 +404,7 @@ export default function ReservationScreen() {
             selectedDate={selectedDate}
             selectedSlot={appointmentTime}
             onSelectSlot={setAppointmentTime}
+            onAvailabilityResolved={handleAvailabilityResolved}
           />
         </View>
 

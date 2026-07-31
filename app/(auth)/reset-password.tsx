@@ -8,7 +8,6 @@ import {
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -75,7 +74,7 @@ export default function ResetPasswordScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         style={styles.flex}
       >
         <View style={styles.content}>

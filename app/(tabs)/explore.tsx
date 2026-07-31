@@ -25,6 +25,7 @@ import { CATEGORY_SELECT, WithCategoryEmbed } from '@/src/utils/categoryDisplay'
 import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
+import { recordCategoryVisit } from '@/src/utils/categoryAffinity';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
@@ -905,7 +906,10 @@ export default function ExploreScreen() {
                     key={cat.id}
                     category={cat}
                     variant="grid"
-                    onPress={() => setSelectedCategory(cat.name)}
+                    onPress={() => {
+                      recordCategoryVisit(cat.name);
+                      setSelectedCategory(cat.name);
+                    }}
                   />
                 ))}
               </View>
@@ -1561,7 +1565,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
+    // rowGap only. A horizontal `gap` is added on top of the two 48% cards, so
+    // 96% + 12px overflowed the row on narrower phones and every card wrapped
+    // onto its own line -- the two-column grid silently became one column.
+    rowGap: 12,
   },
   suggestionsContainer: {
     paddingHorizontal: 16,

@@ -20,6 +20,7 @@ import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/u
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
+import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -72,7 +73,10 @@ export default function HomeScreen() {
         setTrendingProducts(byPopularity.slice(0, 6));
       }
       if (categoriesRes.data) {
-        setTopCategories(categoriesRes.data);
+        // Ordered by what this device actually opens, falling back to the
+        // staff-set sort_order for anything not yet tapped.
+        const affinity = await getCategoryAffinity();
+        setTopCategories(sortByAffinity(categoriesRes.data, affinity));
       }
     } catch (err) {
       console.error(err);
@@ -181,9 +185,10 @@ export default function HomeScreen() {
                   key={cat.id}
                   category={cat}
                   variant="rail"
-                  onPress={() =>
-                    router.push(`/(tabs)/explore?category=${encodeURIComponent(cat.name)}` as any)
-                  }
+                  onPress={() => {
+                    recordCategoryVisit(cat.name);
+                    router.push(`/(tabs)/explore?category=${encodeURIComponent(cat.name)}` as any);
+                  }}
                 />
               ))}
             </ScrollView>

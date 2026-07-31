@@ -61,7 +61,7 @@ export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
         </Text>
         {/* Small navigational cue: these look like posters otherwise, with
             nothing saying they lead somewhere. */}
-        <IconSymbol name="chevron.right" size={isRail ? 18 : 15} color="rgba(255,255,255,0.85)" />
+        <IconSymbol name="chevron.right" size={isRail ? 14 : 12} color="rgba(255,255,255,0.85)" />
       </View>
     </TouchableOpacity>
   );
@@ -73,9 +73,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   // Aspect ratios rather than fixed pixel heights, so the shape holds on a
-  // narrow phone as well as a tablet.
-  cardGrid: { width: '48%', aspectRatio: 4 / 5 },
-  cardRail: { width: SCREEN_WIDTH * 0.62, aspectRatio: 3 / 4 },
+  // narrow phone as well as a tablet. Both are landscape-ish on purpose: as
+  // portrait posters, ten categories cost roughly three screens of scrolling
+  // before any product was visible.
+  cardGrid: { width: '48%', aspectRatio: 3 / 2 },
+  cardRail: { width: SCREEN_WIDTH * 0.42, aspectRatio: 4 / 3 },
   image: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
   textRow: {
@@ -88,8 +90,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  textRowGrid: { paddingHorizontal: 12, paddingBottom: 12 },
-  textRowRail: { paddingHorizontal: 16, paddingBottom: 16 },
+  textRowGrid: { paddingHorizontal: 10, paddingBottom: 10 },
+  textRowRail: { paddingHorizontal: 12, paddingBottom: 12 },
   // Left-aligned at the base, the editorial convention, instead of floated in
   // the dead centre of a dimmed rectangle.
   name: {
@@ -99,6 +101,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  nameGrid: { fontSize: 14 },
-  nameRail: { fontSize: 20, letterSpacing: 1.5 },
+  nameGrid: { fontSize: 12 },
+  nameRail: { fontSize: 14, letterSpacing: 1.2 },
 });
