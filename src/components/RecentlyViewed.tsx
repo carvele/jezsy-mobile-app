@@ -26,7 +26,9 @@ export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string
         const { data } = await supabase
           .from('products')
           .select(`*, ${CATEGORY_SELECT}`)
-          .in('id', ids);
+          .in('id', ids)
+          .eq('deleted', false)
+          .eq('visibility', 'public');
         if (!active) return;
         // Preserve most-recent-first order; the IN query returns arbitrary order.
         const byId = new Map((data || []).map(p => [p.id, p]));

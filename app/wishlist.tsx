@@ -50,7 +50,8 @@ export default function WishlistScreen() {
         .from('products')
         .select(`*, ${CATEGORY_SELECT}`)
         .in('id', ids)
-        .eq('deleted', false);
+        .eq('deleted', false)
+        .eq('visibility', 'public');
       if (!error && data) setItems(data);
     } catch (err) {
       console.error('Error fetching wishlist products:', err);
