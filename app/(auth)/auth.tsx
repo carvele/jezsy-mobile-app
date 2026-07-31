@@ -59,15 +59,23 @@ export default function AuthScreen() {
 
   const otpInputRef = useRef<TextInput>(null);
 
-  // Timer countdown handler for OTP resend
+  // Timer countdown handler for OTP resend. Depending on whether counting has
+  // started (rather than on `timer` itself) means this only fires once per
+  // countdown, instead of tearing down and recreating the interval every tick.
+  const isCounting = timer > 0;
   useEffect(() => {
-    if (timer > 0) {
-      const interval = setInterval(() => {
-        setTimer(t => t - 1);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [timer]);
+    if (!isCounting) return;
+    const interval = setInterval(() => {
+      setTimer(t => {
+        if (t <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isCounting]);
 
   // Focus the hidden OTP input when transitioning to 'otp_verify' step
   useEffect(() => {
