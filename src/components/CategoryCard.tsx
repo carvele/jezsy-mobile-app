@@ -6,7 +6,6 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
-const PLACEHOLDER = require('@/assets/images/partial-react-logo.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // The grid card needs BOTH dimensions as real numbers. Every child here is
@@ -46,11 +45,12 @@ export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
       accessibilityLabel={`Browse ${category.name}`}
       accessibilityHint="Opens this category"
     >
-      <Image
-        source={category.image_url ? { uri: category.image_url } : PLACEHOLDER}
-        style={styles.image}
-        contentFit="cover"
-      />
+      {/* No image is better than the wrong one: this used to fall back to the
+          Expo template's React logo, which read as a broken tile. A category
+          without a photo now shows a plain tinted card with its name. */}
+      {category.image_url ? (
+        <Image source={{ uri: category.image_url }} style={styles.image} contentFit="cover" />
+      ) : null}
 
       {/* A bottom-anchored gradient rather than a flat scrim over the whole
           card. The old 35% black wash muted the photograph everywhere and the

@@ -8,7 +8,6 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { getCategoryLabel } from '@/src/utils/categoryDisplay';
 
-const PLACEHOLDER = require('@/assets/images/partial-react-logo.png');
 
 // 'grid' fills half the row in a two-column list; 'rail' is a fixed width for
 // horizontal strips. Both share one set of internals -- the point of this
@@ -90,11 +89,15 @@ export function ProductCard({
         accessibilityHint="Opens product details"
       >
         <View style={[styles.imageWrap, { backgroundColor: colors.imagePlaceholder }]}>
-          <Image
-            source={product.image_url ? { uri: product.image_url } : PLACEHOLDER}
-            style={[styles.image, outOfStock && styles.imageDimmed]}
-            contentFit="cover"
-          />
+          {/* An imageless product shows the tinted placeholder colour rather
+              than the Expo template's React logo, which looked like a bug. */}
+          {product.image_url ? (
+            <Image
+              source={{ uri: product.image_url }}
+              style={[styles.image, outOfStock && styles.imageDimmed]}
+              contentFit="cover"
+            />
+          ) : null}
 
           {/* Left column of badges so they never collide with the heart. */}
           <View style={styles.badgeColumn}>

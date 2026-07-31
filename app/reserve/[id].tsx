@@ -75,6 +75,9 @@ export default function ReservationScreen() {
   // Gateway is the default; the manual receipt path stays for customers who
   // transfer directly.
   const [payMethod, setPayMethod] = useState<'gateway' | 'receipt'>('gateway');
+  // How much is due now. The figure is never sent to the server -- only which
+  // option was picked -- so the amount stays resolved from the product row.
+  const [payOption, setPayOption] = useState<'deposit' | 'full'>('deposit');
 
   const router = useRouter();
   const theme = useColorScheme() ?? "dark";
@@ -164,7 +167,12 @@ export default function ReservationScreen() {
     }
 
     if (payMethod === 'receipt' && (!receiptUri || !receiptBase64)) {
-      showToast("Please upload proof of payment for the reservation fee (50%).", 'info');
+      showToast(
+        payOption === 'full'
+          ? 'Please upload proof of payment for the full amount.'
+          : 'Please upload proof of payment for the reservation fee (50%).',
+        'info',
+      );
       return;
     }
 
@@ -192,6 +200,7 @@ export default function ReservationScreen() {
         // nullable. Regenerating types after the migration applies will not
         // change that, since Postgres has no notion of a non-null argument.
         _receipt_path: receiptPath as unknown as string,
+        _payment_option: payOption,
       });
 
       if (error) {
@@ -277,7 +286,8 @@ export default function ReservationScreen() {
   // both must agree, or the deposit shown here would misrepresent what
   // actually gets charged.
   const effectivePrice = product.on_sale && product.sale_price ? product.sale_price : (product.price || 0);
-  const depositRequired = effectivePrice * 0.5;
+  const amountDueNow = payOption === 'full' ? effectivePrice : effectivePrice * 0.5;
+  const balanceOnCollection = effectivePrice - amountDueNow;
 
   return (
     <SafeAreaView
@@ -418,13 +428,46 @@ export default function ReservationScreen() {
             Payment Info
           </Text>
           <Text style={[styles.paymentNote, { color: colors.secondaryText }]}>
-            A reservation fee of 50% secures this booking. You settle the balance
-            when you collect the item.
+            {payOption === 'full'
+              ? 'Paying in full now. Nothing left to settle when you collect the item.'
+              : 'A reservation fee of 50% secures this booking. You settle the balance when you collect the item.'}
           </Text>
+
+          <View style={styles.payMethodRow}>
+            {([
+              { key: 'deposit', label: 'Pay 50% now' },
+              { key: 'full', label: 'Pay in full' },
+            ] as const).map((option) => {
+              const isSelected = payOption === option.key;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[
+                    styles.payMethodChip,
+                    { borderColor: isSelected ? colors.tint : colors.border },
+                    isSelected && { backgroundColor: colors.card },
+                  ]}
+                  onPress={() => setPayOption(option.key)}
+                  accessibilityRole="radio"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected: isSelected, checked: isSelected }}
+                >
+                  <Text
+                    style={[
+                      styles.payMethodText,
+                      { color: isSelected ? colors.tint : colors.secondaryText },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              Reservation Fee
+              Item Price
             </Text>
             {product.on_sale && product.sale_price ? (
               <View style={styles.priceRow}>
@@ -444,10 +487,19 @@ export default function ReservationScreen() {
 
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              Reservation Fee (50%)
+              {payOption === 'full' ? 'Due now (full)' : 'Due now (50%)'}
             </Text>
             <Text style={[styles.rowValue, { color: colors.tint }]}>
-              ₱{depositRequired.toFixed(2)}
+              ₱{amountDueNow.toFixed(2)}
+            </Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
+              Balance on collection
+            </Text>
+            <Text style={[styles.rowValue, { color: colors.text }]}>
+              ₱{balanceOnCollection.toFixed(2)}
             </Text>
           </View>
 
@@ -487,7 +539,7 @@ export default function ReservationScreen() {
             <View style={styles.receiptStatus}>
               <IconSymbol name="checkmark.circle.fill" size={16} color={colors.tint} />
               <Text style={[styles.receiptStatusText, { color: colors.secondaryText }]}>
-                You will be taken to a secure page to pay ₱{depositRequired.toFixed(2)}
+                You will be taken to a secure page to pay ₱{amountDueNow.toFixed(2)}
               </Text>
             </View>
           ) : (
