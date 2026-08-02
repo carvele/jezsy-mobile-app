@@ -22,6 +22,7 @@ import { ConsentModal } from "@/src/components/ConsentModal";
 import { TiltGuide } from "@/src/components/TiltGuide";
 import { PoseLandmarkOverlay } from "@/src/components/PoseLandmarkOverlay";
 import { SilhouetteOverlay } from "@/src/components/SilhouetteOverlay";
+import { ScanPrep } from "@/src/components/ScanPrep";
 import {
   isPoseValid,
   getPoseConfidence,
@@ -51,6 +52,10 @@ export default function BodyScanScreen() {
 
   const [showConsent, setShowConsent] = useState(true);
   const [consentGranted, setConsentGranted] = useState(false);
+  // Preparation runs between consent and the camera. Everything that decides
+  // whether the scan is any good -- clothing, lighting, phone height, phone
+  // angle -- was previously one spoken sentence over a live camera.
+  const [prepDone, setPrepDone] = useState(false);
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("front");
 
@@ -78,15 +83,17 @@ export default function BodyScanScreen() {
     }
   }, [height, weight, router, showToast]);
 
+  // Held until prep is finished, so the intro is not spoken over the wizard
+  // (and not spoken at all if the customer backs out during it).
   useEffect(() => {
-    if (consentGranted && hasPermission) {
+    if (consentGranted && hasPermission && prepDone) {
       Speech.speak("Please stand about 2 meters from your device, and make sure your whole body is visible.");
       lastSpokenRef.current = "intro";
     }
     return () => {
       Speech.stop();
     };
-  }, [consentGranted, hasPermission]);
+  }, [consentGranted, hasPermission, prepDone]);
 
   useEffect(() => {
     isTiltValidRef.current = isTiltValid;
@@ -235,6 +242,13 @@ export default function BodyScanScreen() {
         </View>
       </SafeAreaView>
     );
+  }
+
+  // After permission so the wizard is not shown to someone who then declines
+  // the camera, and before the device check so a phone with no front camera
+  // still falls through to the manual-entry escape below.
+  if (!prepDone) {
+    return <ScanPrep onDone={() => setPrepDone(true)} onCancel={() => router.back()} />;
   }
 
   if (device == null) {
