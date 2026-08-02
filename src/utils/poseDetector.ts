@@ -80,6 +80,59 @@ export function isPoseValid(landmarks: Landmark[]): boolean {
   return true;
 }
 
+export type PoseOrientation = 'front' | 'side' | 'unknown';
+
+/**
+ * Whether the person is facing the camera or standing in profile.
+ *
+ * Uses shoulder separation relative to torso length rather than raw pixels,
+ * so it holds at any distance. Facing forward the shoulders are far apart
+ * horizontally; in profile one shoulder occludes the other and they collapse
+ * towards the same x. The band between the two thresholds is deliberately
+ * left 'unknown' -- a half-turn measures neither width nor depth honestly,
+ * and accepting it would quietly corrupt the result.
+ */
+export function getPoseOrientation(landmarks: Landmark[]): PoseOrientation {
+  if (landmarks.length < 33) return 'unknown';
+
+  const shoulderSpan = Math.abs(
+    landmarks[L.leftShoulder].x - landmarks[L.rightShoulder].x,
+  );
+  const midShoulderY = (landmarks[L.leftShoulder].y + landmarks[L.rightShoulder].y) / 2;
+  const midHipY = (landmarks[L.leftHip].y + landmarks[L.rightHip].y) / 2;
+  const torso = Math.abs(midHipY - midShoulderY);
+  if (torso < 0.05) return 'unknown';
+
+  const ratio = shoulderSpan / torso;
+  if (ratio > 0.55) return 'front';
+  if (ratio < 0.28) return 'side';
+  return 'unknown';
+}
+
+/**
+ * A profile pose hides the far half of the body, so the front check's
+ * demand that every joint be clearly visible can never be met. This asks
+ * only for the near-side chain plus a full head-to-ankle span.
+ */
+export function isSidePoseValid(landmarks: Landmark[]): boolean {
+  if (landmarks.length < 33) return false;
+  if (getPoseOrientation(landmarks) !== 'side') return false;
+
+  // Best-visible of each pair: whichever side is facing the camera.
+  const bestOf = (a: number, b: number) =>
+    Math.max(landmarks[a].visibility, landmarks[b].visibility);
+
+  const nearSideVisible =
+    bestOf(L.leftShoulder, L.rightShoulder) >= 0.8 &&
+    bestOf(L.leftHip, L.rightHip) >= 0.8 &&
+    bestOf(L.leftKnee, L.rightKnee) >= 0.7 &&
+    bestOf(L.leftAnkle, L.rightAnkle) >= 0.7;
+  if (!nearSideVisible) return false;
+
+  const ankleY = (landmarks[L.leftAnkle].y + landmarks[L.rightAnkle].y) / 2;
+  return Math.abs(ankleY - landmarks[L.nose].y) >= 0.5;
+}
+
 /**
  * Computes the overall pose confidence score (0-1).
  */
