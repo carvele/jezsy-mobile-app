@@ -4,13 +4,10 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { TimeSlotPicker } from "@/src/components/TimeSlotPicker";
 import { useAuth } from "@/src/context/AuthContext";
 import { supabase } from "@/src/lib/supabase";
-import { startReservationPayment } from "@/src/lib/payments";
 import { Database } from "@/src/types/database.types";
 import { formatLocalDate } from "@/src/utils/dateTime";
 import { scheduleReservationReminder } from "@/src/utils/pushNotifications";
-import { decode } from "base64-arraybuffer";
 import { Image } from "expo-image";
-import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -69,14 +66,9 @@ export default function ReservationScreen() {
     setAppointmentTime(undefined); // Reset time when date changes
   }, []);
 
-  // Payment Receipt
-  const [receiptUri, setReceiptUri] = useState<string | null>(null);
-  const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
-  // Gateway is the default; the manual receipt path stays for customers who
-  // transfer directly.
-  const [payMethod, setPayMethod] = useState<'gateway' | 'receipt'>('gateway');
-  // How much is due now. The figure is never sent to the server -- only which
-  // option was picked -- so the amount stays resolved from the product row.
+  // Which payment plan the customer is committing to. The figure is never sent
+  // to the server -- only the choice -- so the amount stays resolved from the
+  // product row. Paying itself happens later, once staff accept.
   const [payOption, setPayOption] = useState<'deposit' | 'full'>('deposit');
 
   const router = useRouter();
@@ -116,45 +108,6 @@ export default function ReservationScreen() {
     return dates;
   };
 
-  const pickReceipt = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const asset = result.assets[0];
-      if (!asset.base64) {
-        showToast("Could not read that image. Please pick another.", 'error');
-        return;
-      }
-      setReceiptUri(asset.uri);
-      setReceiptBase64(asset.base64);
-    }
-  };
-
-  // FormData uploads of a file:// uri fail with "Network request failed" on
-  // Android; the rest of the app uploads decoded base64 instead.
-  const uploadReceipt = async (uri: string, base64: string): Promise<string> => {
-    const userId = session?.user?.id;
-    if (!userId) throw new Error("User not authenticated");
-
-    const ext = uri.includes(".")
-      ? uri.substring(uri.lastIndexOf(".") + 1).split("?")[0]
-      : "jpg";
-    const fileName = `${userId}/${Date.now()}.${ext}`;
-
-    const { data, error } = await supabase.storage
-      .from("payment_receipts")
-      .upload(fileName, decode(base64), { upsert: false, contentType: `image/${ext}` });
-
-    if (error) throw error;
-
-    return data.path;
-  };
-
   const handleReserve = async () => {
     if (!session?.user || !product) {
       showToast("You must be logged in to make a reservation.", 'error');
@@ -166,25 +119,8 @@ export default function ReservationScreen() {
       return;
     }
 
-    if (payMethod === 'receipt' && (!receiptUri || !receiptBase64)) {
-      showToast(
-        payOption === 'full'
-          ? 'Please upload proof of payment for the full amount.'
-          : 'Please upload proof of payment for the reservation fee (50%).',
-        'info',
-      );
-      return;
-    }
-
     setSubmitting(true);
     try {
-      // A null receipt path tells create_reservation this fee is coming through
-      // the gateway instead. Upload uses decoded base64, not a FormData wrapper
-      // around a file:// uri -- the latter fails on Android.
-      const receiptPath =
-        payMethod === 'receipt' && receiptUri && receiptBase64
-          ? await uploadReceipt(receiptUri, receiptBase64)
-          : null;
       const reservationDate = formatLocalDate(selectedDate);
 
       // Price and deposit are computed server-side by create_reservation
@@ -196,10 +132,10 @@ export default function ReservationScreen() {
         _quantity: 1,
         _date: reservationDate,
         _appointment_time: appointmentTime,
-        // Cast: the DB signature is still `text`, but the generated type is not
-        // nullable. Regenerating types after the migration applies will not
-        // change that, since Postgres has no notion of a non-null argument.
-        _receipt_path: receiptPath as unknown as string,
+        // Nothing is paid at this point, so there is never a receipt to
+        // attach here. Cast: the DB signature is `text`, but the generated
+        // type is not nullable -- Postgres has no notion of a non-null arg.
+        _receipt_path: null as unknown as string,
         _payment_option: payOption,
       });
 
@@ -214,7 +150,6 @@ export default function ReservationScreen() {
       }
 
       const displayId = (data as any)?.display_id;
-      const reservationId = (data as any)?.id;
 
       await scheduleReservationReminder(
         displayId,
@@ -222,21 +157,13 @@ export default function ReservationScreen() {
         appointmentTime,
       );
 
-      if (payMethod === 'gateway') {
-        // The reservation exists before the payment does -- there has to be
-        // something for the deposit to settle against.
-        const { paymentId, checkoutUrl } = await startReservationPayment(reservationId);
-        router.replace({
-          pathname: '/payment/[paymentId]',
-          params: { paymentId, url: checkoutUrl },
-        } as any);
-        return;
-      }
-
+      // No payment here by design: staff vet the booking first, and only then
+      // does a payment window open. Taking money before acceptance would mean
+      // refunding through PayMongo every time staff turn a booking down.
       Alert.alert(
-        "Success",
-        "Reservation requested successfully! Our team will verify your payment.",
-        [{ text: "OK", onPress: () => router.replace("/(tabs)") }],
+        "Request sent",
+        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have 24 hours to do so.",
+        [{ text: "OK", onPress: () => router.replace("/reservations") }],
       );
     } catch (error: any) {
       console.error("Reservation error:", error);
@@ -246,8 +173,7 @@ export default function ReservationScreen() {
     }
   };
 
-  const needsReceipt = payMethod === 'receipt' && !receiptUri;
-  const canSubmit = !!appointmentTime && !needsReceipt && !submitting;
+  const canSubmit = !!appointmentTime && !submitting;
 
   if (loading) {
     return (
@@ -429,7 +355,7 @@ export default function ReservationScreen() {
           </Text>
           <Text style={[styles.paymentNote, { color: colors.secondaryText }]}>
             {payOption === 'full'
-              ? 'Paying in full now. Nothing left to settle when you collect the item.'
+              ? 'You have chosen to pay the full price. Nothing is left to settle at pickup.'
               : 'A reservation fee of 50% secures this booking. You settle the balance when you collect the item.'}
           </Text>
 
@@ -487,7 +413,7 @@ export default function ReservationScreen() {
 
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              {payOption === 'full' ? 'Due now (full)' : 'Due now (50%)'}
+              {payOption === 'full' ? 'To pay once accepted (full)' : 'To pay once accepted (50%)'}
             </Text>
             <Text style={[styles.rowValue, { color: colors.tint }]}>
               ₱{amountDueNow.toFixed(2)}
@@ -503,91 +429,12 @@ export default function ReservationScreen() {
             </Text>
           </View>
 
-          <View style={styles.payMethodRow}>
-            {([
-              { key: 'gateway', label: 'Pay with GCash' },
-              { key: 'receipt', label: 'Upload receipt' },
-            ] as const).map((option) => {
-              const isSelected = payMethod === option.key;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  style={[
-                    styles.payMethodChip,
-                    { borderColor: isSelected ? colors.tint : colors.border },
-                    isSelected && { backgroundColor: colors.card },
-                  ]}
-                  onPress={() => setPayMethod(option.key)}
-                  accessibilityRole="radio"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ selected: isSelected, checked: isSelected }}
-                >
-                  <Text
-                    style={[
-                      styles.payMethodText,
-                      { color: isSelected ? colors.tint : colors.secondaryText },
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.receiptStatus}>
+            <IconSymbol name="checkmark.circle.fill" size={16} color={colors.tint} />
+            <Text style={[styles.receiptStatusText, { color: colors.secondaryText }]}>
+              Nothing is charged now. You pay once we accept your request.
+            </Text>
           </View>
-
-          {payMethod === 'gateway' ? (
-            <View style={styles.receiptStatus}>
-              <IconSymbol name="checkmark.circle.fill" size={16} color={colors.tint} />
-              <Text style={[styles.receiptStatusText, { color: colors.secondaryText }]}>
-                You will be taken to a secure page to pay ₱{amountDueNow.toFixed(2)}
-              </Text>
-            </View>
-          ) : (
-          <>
-          <TouchableOpacity
-            style={[
-              styles.uploadButton,
-              { borderColor: receiptUri ? colors.tint : colors.border },
-            ]}
-            onPress={pickReceipt}
-            accessibilityRole="button"
-            accessibilityLabel={receiptUri ? 'Change payment receipt' : 'Upload payment receipt'}
-            accessibilityHint={receiptUri ? 'Tap to replace the uploaded receipt image' : 'Opens your photo library to select a receipt image'}
-          >
-            {receiptUri ? (
-              <Image
-                source={{ uri: receiptUri }}
-                style={styles.receiptPreview}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={styles.uploadPlaceholder}>
-                <IconSymbol
-                  name="camera"
-                  size={32}
-                  color={colors.secondaryText}
-                />
-                <Text
-                  style={[styles.uploadText, { color: colors.secondaryText }]}
-                >
-                  Upload Payment Receipt
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          {receiptUri ? (
-            <View style={styles.receiptStatus}>
-              <IconSymbol name="checkmark.circle.fill" size={16} color={colors.success} />
-              <Text style={[styles.receiptStatusText, { color: colors.success }]}>Receipt uploaded</Text>
-            </View>
-          ) : (
-            <View style={styles.receiptStatus}>
-              <IconSymbol name="exclamationmark.circle" size={16} color={colors.warning} />
-              <Text style={[styles.receiptStatusText, { color: colors.warning }]}>Receipt required to confirm reservation</Text>
-            </View>
-          )}
-          </>
-          )}
         </View>
       </ScrollView>
 
@@ -605,22 +452,18 @@ export default function ReservationScreen() {
           onPress={handleReserve}
           disabled={!canSubmit}
           accessibilityRole="button"
-          accessibilityLabel="Confirm Reservation"
+          accessibilityLabel="Send reservation request"
           accessibilityHint={
             !appointmentTime
               ? 'Select a pickup time to enable'
-              : needsReceipt
-                ? 'Upload a payment receipt to enable'
-                : payMethod === 'gateway'
-                  ? 'Creates the reservation and opens the payment page'
-                  : 'Submits your reservation request'
+              : 'Sends your reservation request for review. Nothing is charged now.'
           }
           accessibilityState={{ disabled: !canSubmit }}
         >
           {submitting ? (
             <ActivityIndicator color={colors.background} />
           ) : (
-            <Text style={styles.primaryActionText}>Confirm Reservation</Text>
+            <Text style={styles.primaryActionText}>Request Reservation</Text>
           )}
         </TouchableOpacity>
       </View>

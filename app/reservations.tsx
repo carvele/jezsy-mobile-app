@@ -15,6 +15,15 @@ import { formatTimeLabel } from '@/src/utils/dateTime';
 type Reservation = Database['public']['Tables']['reservations']['Row'];
 
 const STATUS_FILTERS = ['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const;
+
+// The admin dashboard writes 'To Pay' for an accepted-but-unpaid reservation,
+// which this screen had never heard of: it matched no filter tab, so those
+// reservations were invisible under everything except "All". Both labels mean
+// the same thing to a customer, so they fold into one bucket here.
+function normalizeStatus(status: string | null): string {
+  const s = (status || 'pending').toLowerCase();
+  return s === 'to pay' ? 'confirmed' : s;
+}
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 export default function ReservationsScreen() {
@@ -58,7 +67,7 @@ export default function ReservationsScreen() {
 
   const getStatusColor = (status: string | null) => {
     if (!status) return colors.warning;
-    switch (status.toLowerCase()) {
+    switch (normalizeStatus(status)) {
       case 'pending': return colors.warning;
       case 'confirmed': return colors.info;
       case 'completed': return colors.success;
@@ -69,7 +78,7 @@ export default function ReservationsScreen() {
 
   const filteredReservations = useMemo(() => {
     if (activeFilter === 'all') return reservations;
-    return reservations.filter((r) => (r.status || 'pending').toLowerCase() === activeFilter);
+    return reservations.filter((r) => normalizeStatus(r.status) === activeFilter);
   }, [reservations, activeFilter]);
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {

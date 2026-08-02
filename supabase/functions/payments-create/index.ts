@@ -66,16 +66,22 @@ serve(async (req) => {
       return json({ error: "This reservation is already paid." }, 409);
     }
 
-    // Payment happens while the reservation is still Pending; staff confirm
-    // afterwards. Anything already Cancelled or Completed must not be payable.
+    // Payment opens only AFTER staff accept, so Confirmed is the payable
+    // state. Pending means the request has not been reviewed yet -- charging
+    // there would mean refunding through PayMongo every time staff decline.
+    // 'To Pay' is what the admin dashboard writes for accepted-but-unpaid;
+    // accepted alongside 'Confirmed' so the flow works whichever label staff
+    // acceptance actually sets.
     const status = String(reservation.status ?? "").toLowerCase();
-    if (status !== "pending") {
+    if (status !== "confirmed" && status !== "to pay") {
       return json(
         {
           error:
             status === "cancelled"
               ? "This reservation was cancelled."
-              : "This reservation is no longer awaiting payment.",
+              : status === "pending"
+                ? "This reservation has not been accepted yet."
+                : "This reservation is no longer awaiting payment.",
         },
         409,
       );
