@@ -55,6 +55,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8c74360c-1d93-4a66-b20e-5507caad75b4"
+      }
+    },
+    "owner": "carvele"
   }
 }

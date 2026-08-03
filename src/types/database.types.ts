@@ -649,6 +649,7 @@ export type Database = {
           data: Json | null
           id: string
           is_read: boolean | null
+          pushed_at: string | null
           title: string
           type: string
           user_id: string
@@ -659,6 +660,7 @@ export type Database = {
           data?: Json | null
           id?: string
           is_read?: boolean | null
+          pushed_at?: string | null
           title: string
           type: string
           user_id: string
@@ -669,6 +671,7 @@ export type Database = {
           data?: Json | null
           id?: string
           is_read?: boolean | null
+          pushed_at?: string | null
           title?: string
           type?: string
           user_id?: string
@@ -1652,6 +1655,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      dispatch_pending_push: { Args: never; Returns: number }
       expire_unpaid_reservations: { Args: never; Returns: number }
       get_slot_booked_counts: {
         Args: { _date: string }
