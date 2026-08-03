@@ -26,12 +26,15 @@ interface TimeSlotPickerProps {
   selectedDate: Date;
   onSelectSlot: (time: string) => void;
   selectedSlot?: string;
+  /** Fires once per resolved date so the caller can skip unbookable days. */
+  onAvailabilityResolved?: (hasAvailable: boolean) => void;
 }
 
 export function TimeSlotPicker({
   selectedDate,
   onSelectSlot,
   selectedSlot,
+  onAvailabilityResolved,
 }: TimeSlotPickerProps) {
   const theme = useColorScheme() ?? "dark";
   const colors = Colors[theme];
@@ -105,6 +108,7 @@ export function TimeSlotPicker({
             reason: closedReason,
           },
         ]);
+        onAvailabilityResolved?.(false);
         setLoading(false);
         return;
       }
@@ -171,6 +175,7 @@ export function TimeSlotPicker({
       }
 
       setSlots(generatedSlots);
+      onAvailabilityResolved?.(generatedSlots.some((s) => s.isAvailable));
     } catch (error) {
       console.error("Error fetching time slots:", error);
       setSlots([
@@ -181,10 +186,12 @@ export function TimeSlotPicker({
           reason: "Failed to load schedule",
         },
       ]);
+      // A failed load is not an empty day; advancing the date would hide the error.
+      onAvailabilityResolved?.(true);
     } finally {
       setLoading(false);
     }
-  }, [selectedDate]);
+  }, [selectedDate, onAvailabilityResolved]);
 
   useEffect(() => {
     fetchSlots();

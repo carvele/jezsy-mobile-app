@@ -18,11 +18,31 @@ import type { BodyRatios } from './poseDetector';
 
 export type Gender = 'male' | 'female' | 'non-binary' | 'prefer_not_to_say';
 
+/**
+ * Body width and depth at each circumference site, both normalized to the
+ * same head-to-ankle span the ratios use. Width comes from the front scan's
+ * segmentation mask, depth from the side scan's.
+ */
+export interface CrossSection {
+  widthRatio: number;
+  depthRatio: number;
+}
+
 export interface MeasurementInput {
   bodyRatios: BodyRatios;
   heightCm: number;
   weightKg: number;
   gender: Gender;
+  /**
+   * Present only when a side scan was completed. Without it the estimate
+   * falls back to inferring depth from BMI, which is what the front-only
+   * pipeline has always done.
+   */
+  crossSections?: {
+    bust: CrossSection;
+    waist: CrossSection;
+    hips: CrossSection;
+  };
 }
 
 export interface EstimatedMeasurements {
@@ -86,6 +106,22 @@ function computeBMI(weightKg: number, heightCm: number): number {
 }
 
 /**
+ * Ramanujan's approximation of an ellipse perimeter, accurate to better than
+ * 1e-5 for human body eccentricities.
+ *
+ * With a measured depth the cross-section is a real ellipse, so this replaces
+ * the width x depth_multiplier shortcut entirely -- that multiplier existed
+ * only because depth was unknown.
+ */
+function ellipsePerimeter(widthCm: number, depthCm: number): number {
+  const a = widthCm / 2;
+  const b = depthCm / 2;
+  if (a <= 0 || b <= 0) return 0;
+  const h = ((a - b) ** 2) / ((a + b) ** 2);
+  return Math.PI * (a + b) * (1 + (3 * h) / (10 + Math.sqrt(4 - 3 * h)));
+}
+
+/**
  * Confidence for a linear measurement based on its ratio stability.
  * Returns higher confidence when the ratio is within expected human range.
  */
@@ -99,10 +135,36 @@ function ratioConfidence(ratio: number, expectedMin: number, expectedMax: number
 }
 
 /**
+ * Circumferences from measured cross-sections alone.
+ *
+ * Exposed so the scan can apply a side pass after the front burst has already
+ * been averaged, rather than re-running the whole estimate: the linear
+ * measurements are unaffected by depth and there is no reason to disturb
+ * their outlier rejection.
+ */
+export function circumferencesFromCrossSections(
+  crossSections: { bust: CrossSection; waist: CrossSection; hips: CrossSection },
+  heightCm: number,
+): { bust: number; waist: number; hips: number } {
+  const toCm = (r: number) => r * heightCm;
+  return {
+    bust: Math.round(
+      ellipsePerimeter(toCm(crossSections.bust.widthRatio), toCm(crossSections.bust.depthRatio)),
+    ),
+    waist: Math.round(
+      ellipsePerimeter(toCm(crossSections.waist.widthRatio), toCm(crossSections.waist.depthRatio)),
+    ),
+    hips: Math.round(
+      ellipsePerimeter(toCm(crossSections.hips.widthRatio), toCm(crossSections.hips.depthRatio)),
+    ),
+  };
+}
+
+/**
  * Computes all body measurements from pose ratios and biometric inputs.
  */
 export function computeMeasurements(input: MeasurementInput): EstimatedMeasurements {
-  const { bodyRatios, heightCm, weightKg, gender } = input;
+  const { bodyRatios, heightCm, weightKg, gender, crossSections } = input;
   const bmi = computeBMI(weightKg, heightCm);
   const bmiDelta = Math.max(0, bmi - 22); // deviation above normal BMI
 
@@ -123,13 +185,37 @@ export function computeMeasurements(input: MeasurementInput): EstimatedMeasureme
   const bma = BMI_ADJUSTMENTS[gender];
   const wr  = WAIST_RATIO[gender];
 
-  // --- Circumference estimates via elliptical cross-section model ---
-  // circumference ≈ π × (width + depth) / 2 × 2 = π(width + depth)
-  // where depth ≈ width × depth_multiplier_factor
-  // Simplified: circ ≈ width × dm + bmi_adjustment × bmiDelta
-  const bust  = Math.round(bustWidth  * dm.bust  + bma.bust  * bmiDelta);
-  const waist = Math.round(hipWidth * wr * dm.waist + bma.waist * bmiDelta);
-  const hips  = Math.round(hipWidth   * dm.hips   + bma.hips  * bmiDelta);
+  // --- Circumference estimates ---
+  // With a side scan the cross-section is measured: width from the front
+  // mask, depth from the side one, and the perimeter follows directly.
+  // Without one, depth is unknown and has to be inferred from width and BMI,
+  // which is the older and materially weaker path.
+  const measured = crossSections
+    ? {
+        bust: ellipsePerimeter(
+          crossSections.bust.widthRatio * cmPerUnit,
+          crossSections.bust.depthRatio * cmPerUnit,
+        ),
+        waist: ellipsePerimeter(
+          crossSections.waist.widthRatio * cmPerUnit,
+          crossSections.waist.depthRatio * cmPerUnit,
+        ),
+        hips: ellipsePerimeter(
+          crossSections.hips.widthRatio * cmPerUnit,
+          crossSections.hips.depthRatio * cmPerUnit,
+        ),
+      }
+    : null;
+
+  const bust = Math.round(
+    measured?.bust || bustWidth * dm.bust + bma.bust * bmiDelta,
+  );
+  const waist = Math.round(
+    measured?.waist || hipWidth * wr * dm.waist + bma.waist * bmiDelta,
+  );
+  const hips = Math.round(
+    measured?.hips || hipWidth * dm.hips + bma.hips * bmiDelta,
+  );
 
   // --- Confidence scores ---
   const confidence = {
@@ -138,10 +224,12 @@ export function computeMeasurements(input: MeasurementInput): EstimatedMeasureme
     torsoLength:   ratioConfidence(bodyRatios.torsoLengthRatio,   0.25, 0.40),
     legLength:     ratioConfidence(bodyRatios.legLengthRatio,     0.40, 0.58),
     inseam:        ratioConfidence(bodyRatios.inseamRatio,        0.35, 0.52),
-    // Circumferences inherit the confidence of the widths they derive from
-    bust:  ratioConfidence(bodyRatios.bustWidthRatio, 0.19, 0.38),
-    waist: ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.9, // slightly lower — indirect
-    hips:  ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28),
+    // A measured cross-section is a real perimeter rather than a regression
+    // on width alone, so it is scored higher. Without one the waist stays the
+    // weakest figure: it is not measured at all, only derived from hip width.
+    bust:  measured ? 0.95 : ratioConfidence(bodyRatios.bustWidthRatio, 0.19, 0.38),
+    waist: measured ? 0.95 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.9,
+    hips:  measured ? 0.95 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28),
   };
 
   const overallConfidence =

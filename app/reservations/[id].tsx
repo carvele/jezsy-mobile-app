@@ -14,6 +14,21 @@ import { resolveSignedStorageUrl } from '@/src/utils/signedStorageUrl';
 import { useMessages } from '@/src/context/MessagesContext';
 import { TimeSlotPicker } from '@/src/components/TimeSlotPicker';
 import { useToast } from '@/src/context/ToastContext';
+import * as ImagePicker from 'expo-image-picker';
+import { startReservationPayment } from '@/src/lib/payments';
+import { uploadPaymentReceipt } from '@/src/lib/receipts';
+import { useAuth } from '@/src/context/AuthContext';
+
+// Rounded up so a window of 59 minutes reads "1 hour left" rather than
+// "0 hours left".
+function formatRemaining(dueAt: string): string | null {
+  const ms = new Date(dueAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  const mins = Math.ceil(ms / 60000);
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} left to pay`;
+  const hours = Math.ceil(mins / 60);
+  return `${hours} hour${hours === 1 ? '' : 's'} left to pay`;
+}
 
 type Reservation = Database['public']['Tables']['reservations']['Row'];
 
@@ -32,6 +47,8 @@ export default function ReservationDetailScreen() {
   const [rescheduleSlot, setRescheduleSlot] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [payBusy, setPayBusy] = useState(false);
+  const { session } = useAuth();
 
   const fetchReservation = useCallback(async () => {
     if (!id) return;
@@ -126,6 +143,62 @@ export default function ReservationDetailScreen() {
     }
   };
 
+  // Opens the PayMongo checkout for an already-accepted reservation. This is
+  // the path that did not exist before: a customer who closed the checkout
+  // page had no way back to it, and simply lost the reservation.
+  const handlePayNow = async () => {
+    if (!id) return;
+    setPayBusy(true);
+    try {
+      const { paymentId, checkoutUrl } = await startReservationPayment(id);
+      router.push({
+        pathname: '/payment/[paymentId]',
+        params: { paymentId, url: checkoutUrl },
+      } as any);
+    } catch (err: any) {
+      showToast(err.message || 'Could not start the payment.', 'error');
+    } finally {
+      setPayBusy(false);
+    }
+  };
+
+  // Manual transfer path. Uploading only records the claim -- staff still have
+  // to verify it, which is what stops a junk image from holding the item.
+  const handleUploadReceipt = async () => {
+    const userId = session?.user?.id;
+    if (!id || !userId) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.length) return;
+
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      showToast('Could not read that image. Please pick another.', 'error');
+      return;
+    }
+
+    setPayBusy(true);
+    try {
+      const path = await uploadPaymentReceipt(userId, asset.uri, asset.base64);
+      const { error } = await supabase.rpc('submit_reservation_receipt' as any, {
+        _reservation_id: id,
+        _receipt_path: path,
+      });
+      if (error) throw error;
+      await fetchReservation();
+      showToast('Receipt sent. We will confirm once it has been checked.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Could not send the receipt.', 'error');
+    } finally {
+      setPayBusy(false);
+    }
+  };
+
   const getStatusColor = (status: string | null) => {
     if (!status) return colors.warning;
     switch (status.toLowerCase()) {
@@ -162,6 +235,17 @@ export default function ReservationDetailScreen() {
   const statusColor = getStatusColor(reservation.status);
   const balanceDue = (reservation.rental_price || 0) - (reservation.deposit || 0);
   const canReschedule = ['pending', 'confirmed'].includes((reservation.status || 'Pending').toLowerCase());
+
+  const paymentState = (reservation.payment_status || 'Pending').toLowerCase();
+  const rawState = (reservation.status || 'Pending').toLowerCase();
+  // The admin dashboard writes 'To Pay' for accepted-but-unpaid; treat it as
+  // the same state as 'Confirmed' rather than guessing which one is canonical.
+  const reservationState = rawState === 'to pay' ? 'confirmed' : rawState;
+  // Payment only opens once staff accept. Before that the customer owes
+  // nothing and there is no deadline running.
+  const awaitingPayment = reservationState === 'confirmed' && paymentState === 'pending';
+  const receiptUnderReview = paymentState === 'submitted';
+  const timeLeft = reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
@@ -306,14 +390,86 @@ export default function ReservationDetailScreen() {
           )}
         </View>
 
+        {reservationState === 'pending' && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Awaiting review</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
+              Nothing to pay yet. We will let you know once this is accepted, and you
+              will then have 24 hours to pay ₱{(reservation.deposit || 0).toFixed(2)}.
+            </Text>
+          </View>
+        )}
+
+        {awaitingPayment && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.tint }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment needed</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: 12 }]}>
+              Your request was accepted. Pay ₱{(reservation.deposit || 0).toFixed(2)} to keep this item.
+            </Text>
+
+            {/* The deadline was previously invisible -- the customer was on a
+                countdown nobody had told them about. */}
+            <View style={[styles.payDeadline, { borderColor: timeLeft ? colors.warning : colors.error }]}>
+              <IconSymbol
+                name={timeLeft ? 'exclamationmark.circle' : 'xmark'}
+                size={16}
+                color={timeLeft ? colors.warning : colors.error}
+              />
+              <Text style={[styles.payDeadlineText, { color: timeLeft ? colors.warning : colors.error }]}>
+                {timeLeft ?? 'The payment window has closed.'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy ? 0.6 : 1 }]}
+              onPress={handlePayNow}
+              disabled={payBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Pay with GCash"
+              accessibilityState={{ disabled: payBusy }}
+            >
+              {payBusy ? (
+                <ActivityIndicator color="#0D0D0D" />
+              ) : (
+                <Text style={styles.payPrimaryText}>Pay with GCash</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.paySecondary, { borderColor: colors.border }]}
+              onPress={handleUploadReceipt}
+              disabled={payBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Upload payment receipt"
+              accessibilityHint="Send proof of a manual transfer for staff to check"
+              accessibilityState={{ disabled: payBusy }}
+            >
+              <Text style={[styles.paySecondaryText, { color: colors.text }]}>
+                I paid by transfer - upload receipt
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {receiptUnderReview && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Receipt under review</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
+              We have your receipt and are checking it. Your reservation is held while we do.
+            </Text>
+          </View>
+        )}
+
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment</Text>
           <View style={styles.row}>
-            <Text style={[styles.rowText, { color: colors.secondaryText }]}>Reservation Fee</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>Item Price</Text>
             <Text style={[styles.rowValue, { color: colors.text }]}>₱{(reservation.rental_price || 0).toFixed(2)}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={[styles.rowText, { color: colors.secondaryText }]}>Reservation Fee</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
+              {(reservation.payment_type || 'Deposit') === 'Full' ? 'Amount to pay (full)' : 'Reservation Fee (50%)'}
+            </Text>
             <Text style={[styles.rowValue, { color: colors.success }]}>₱{(reservation.deposit || 0).toFixed(2)}</Text>
           </View>
           <View style={[styles.row, { marginBottom: 0 }]}>
@@ -346,6 +502,33 @@ export default function ReservationDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  payDeadline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  payDeadlineText: { fontSize: 13, fontWeight: '700', flex: 1 },
+  payPrimary: {
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  payPrimaryText: { color: '#0D0D0D', fontSize: 15, fontWeight: '700' },
+  paySecondary: {
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  paySecondaryText: { fontSize: 14, fontWeight: '600' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

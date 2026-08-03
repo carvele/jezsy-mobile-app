@@ -1639,6 +1639,7 @@ export type Database = {
           _appointment_time: string
           _color: string
           _date: string
+          _payment_option?: string
           _product_id: string
           _quantity: number
           _receipt_path: string

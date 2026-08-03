@@ -6,8 +6,18 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
-const PLACEHOLDER = require('@/assets/images/partial-react-logo.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// The grid card needs BOTH dimensions as real numbers. Every child here is
+// absolutely positioned, so the card has no in-flow content to give it a
+// height -- and aspectRatio does not resolve one inside the wrapping flex row
+// the grid uses, so the card collapsed and the whole Categories section
+// rendered blank. (The rail variant gets away with aspectRatio because it
+// lives in a horizontal ScrollView.) Height is derived from the width to keep
+// the intended 3:2 landscape shape.
+// 16 = the grid's page padding each side, 12 = the gutter between columns.
+const GRID_CARD_WIDTH = (SCREEN_WIDTH - 16 * 2 - 12) / 2;
+const GRID_CARD_HEIGHT = GRID_CARD_WIDTH / (3 / 2);
 
 export type CategoryCardVariant = 'grid' | 'rail';
 
@@ -35,11 +45,12 @@ export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
       accessibilityLabel={`Browse ${category.name}`}
       accessibilityHint="Opens this category"
     >
-      <Image
-        source={category.image_url ? { uri: category.image_url } : PLACEHOLDER}
-        style={styles.image}
-        contentFit="cover"
-      />
+      {/* No image is better than the wrong one: this used to fall back to the
+          Expo template's React logo, which read as a broken tile. A category
+          without a photo now shows a plain tinted card with its name. */}
+      {category.image_url ? (
+        <Image source={{ uri: category.image_url }} style={styles.image} contentFit="cover" />
+      ) : null}
 
       {/* A bottom-anchored gradient rather than a flat scrim over the whole
           card. The old 35% black wash muted the photograph everywhere and the
@@ -61,7 +72,7 @@ export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
         </Text>
         {/* Small navigational cue: these look like posters otherwise, with
             nothing saying they lead somewhere. */}
-        <IconSymbol name="chevron.right" size={isRail ? 18 : 15} color="rgba(255,255,255,0.85)" />
+        <IconSymbol name="chevron.right" size={isRail ? 14 : 12} color="rgba(255,255,255,0.85)" />
       </View>
     </TouchableOpacity>
   );
@@ -73,9 +84,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   // Aspect ratios rather than fixed pixel heights, so the shape holds on a
-  // narrow phone as well as a tablet.
-  cardGrid: { width: '48%', aspectRatio: 4 / 5 },
-  cardRail: { width: SCREEN_WIDTH * 0.62, aspectRatio: 3 / 4 },
+  // narrow phone as well as a tablet. Both are landscape-ish on purpose: as
+  // portrait posters, ten categories cost roughly three screens of scrolling
+  // before any product was visible.
+  cardGrid: { width: GRID_CARD_WIDTH, height: GRID_CARD_HEIGHT },
+  cardRail: { width: SCREEN_WIDTH * 0.42, aspectRatio: 4 / 3 },
   image: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
   textRow: {
@@ -88,8 +101,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  textRowGrid: { paddingHorizontal: 12, paddingBottom: 12 },
-  textRowRail: { paddingHorizontal: 16, paddingBottom: 16 },
+  textRowGrid: { paddingHorizontal: 10, paddingBottom: 10 },
+  textRowRail: { paddingHorizontal: 12, paddingBottom: 12 },
   // Left-aligned at the base, the editorial convention, instead of floated in
   // the dead centre of a dimmed rectangle.
   name: {
@@ -99,6 +112,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  nameGrid: { fontSize: 14 },
-  nameRail: { fontSize: 20, letterSpacing: 1.5 },
+  nameGrid: { fontSize: 12 },
+  nameRail: { fontSize: 14, letterSpacing: 1.2 },
 });

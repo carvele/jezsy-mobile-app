@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,6 +10,29 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { sanitizeForStorage } from '@/src/utils/measurementPrivacy';
 import { useToast } from '@/src/context/ToastContext';
+
+type LengthUnit = 'cm' | 'in';
+const UNIT_STORAGE_KEY = '@jezsy_length_unit';
+const CM_PER_IN = 2.54;
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+// Every length field is stored and typed in whatever `unit` currently is --
+// conversion only happens at explicit boundaries (toggle, load, save), never
+// on keystroke. A value re-derived from itself on every keystroke would
+// round mid-type and strip the decimal point the instant it's typed.
+function cmToUnit(cmValue: string, unit: LengthUnit): string {
+  if (!cmValue) return cmValue;
+  const n = parseFloat(cmValue);
+  if (isNaN(n)) return cmValue;
+  return unit === 'in' ? round1(n / CM_PER_IN).toString() : round1(n).toString();
+}
+
+function unitToCm(value: string, unit: LengthUnit): number | null {
+  if (!value) return null;
+  const n = parseFloat(value);
+  if (isNaN(n)) return null;
+  return unit === 'in' ? n * CM_PER_IN : n;
+}
 
 export default function MeasurementsScreen() {
   const { showToast } = useToast();
@@ -40,35 +64,74 @@ export default function MeasurementsScreen() {
   const [legLength, setLegLength] = useState<string>('');
 
   const [source, setSource] = useState<string>('manual');
-  
+
   // ML Confidence Tracking
   const [scanConfidence, setScanConfidence] = useState<number | null>(null);
   const [fieldConfidence, setFieldConfidence] = useState<any>({});
 
+  // Fields are stored and typed in whatever `unit` currently is; only cm ever
+  // reaches the DB or body-scan's math. Gated on unitReady so the persisted
+  // preference (loaded from AsyncStorage, necessarily async) is known before
+  // any cm value from a scan or from the DB gets converted for display --
+  // converting against the wrong starting unit would silently corrupt it.
+  const [unit, setUnit] = useState<LengthUnit>('cm');
+  const [unitReady, setUnitReady] = useState(false);
+
   const params = useLocalSearchParams();
 
   useEffect(() => {
+    AsyncStorage.getItem(UNIT_STORAGE_KEY).then((stored) => {
+      setUnit(stored === 'in' ? 'in' : 'cm');
+      setUnitReady(true);
+    });
+  }, []);
+
+  const toggleUnit = () => {
+    const nextUnit: LengthUnit = unit === 'cm' ? 'in' : 'cm';
+    const convert = (v: string) => cmToUnit(String(unitToCm(v, unit) ?? ''), nextUnit);
+    setHeight(convert);
+    setBust(convert);
+    setWaist(convert);
+    setHips(convert);
+    setInseam(convert);
+    setShoulderWidth(convert);
+    setArmLength(convert);
+    setTorsoLength(convert);
+    setLegLength(convert);
+    setUnit(nextUnit);
+    AsyncStorage.setItem(UNIT_STORAGE_KEY, nextUnit).catch(() => {});
+  };
+
+  // `unit` is read once this fires (gated by unitReady); it must NOT re-run
+  // when the user later toggles units, or it would re-derive from the
+  // original scan data and fight the plain field-by-field conversion
+  // toggleUnit already does.
+  useEffect(() => {
+    if (!unitReady) return;
     if (params.scanned === 'true' && params.scanData) {
       try {
         const scanData = JSON.parse(params.scanData as string);
-        
-        if (scanData.bust) setBust(scanData.bust.toString());
-        if (scanData.waist) setWaist(scanData.waist.toString());
-        if (scanData.hips) setHips(scanData.hips.toString());
-        if (scanData.inseam) setInseam(scanData.inseam.toString());
-        
-        if (scanData.shoulderWidth) setShoulderWidth(scanData.shoulderWidth.toString());
-        if (scanData.armLength) setArmLength(scanData.armLength.toString());
-        if (scanData.torsoLength) setTorsoLength(scanData.torsoLength.toString());
-        if (scanData.legLength) setLegLength(scanData.legLength.toString());
-        
+
+        if (scanData.bust) setBust(cmToUnit(scanData.bust.toString(), unit));
+        if (scanData.waist) setWaist(cmToUnit(scanData.waist.toString(), unit));
+        if (scanData.hips) setHips(cmToUnit(scanData.hips.toString(), unit));
+        if (scanData.inseam) setInseam(cmToUnit(scanData.inseam.toString(), unit));
+
+        if (scanData.shoulderWidth) setShoulderWidth(cmToUnit(scanData.shoulderWidth.toString(), unit));
+        if (scanData.armLength) setArmLength(cmToUnit(scanData.armLength.toString(), unit));
+        if (scanData.torsoLength) setTorsoLength(cmToUnit(scanData.torsoLength.toString(), unit));
+        if (scanData.legLength) setLegLength(cmToUnit(scanData.legLength.toString(), unit));
+
         if (scanData.overallConfidence) setScanConfidence(scanData.overallConfidence);
         if (scanData.confidence) setFieldConfidence(scanData.confidence);
 
         // Restore the height/weight entered before scanning (passed back as
         // params); the saved-measurements load is skipped on scan return, so
         // these fields would otherwise be blank on the remounted screen.
-        if (params.height) setHeight(String(params.height));
+        // Both travel as cm/kg regardless of display unit -- the Auto-Scan
+        // handoff below converts height to cm before navigating, since
+        // body-scan's measurement math assumes cm.
+        if (params.height) setHeight(cmToUnit(String(params.height), unit));
         if (params.weight) setWeight(String(params.weight));
 
         setSource('camera_scan');
@@ -77,12 +140,16 @@ export default function MeasurementsScreen() {
         console.error("Failed to parse scan data", e);
       }
     }
-  }, [params]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, unitReady]);
 
+  // Same reasoning as the scan-results effect above: `unit` must be read once
+  // at load, not re-applied every time the user toggles it afterward.
   useEffect(() => {
+    if (!unitReady) return;
     const fromScan = params.scanned === 'true';
     const fetchMeasurements = async () => {
-      if (!user) return;
+      if (!user) { setLoading(false); return; }
       try {
         // Fetch fit_preference and gender from profile
         const { data: profile } = await supabase
@@ -107,18 +174,20 @@ export default function MeasurementsScreen() {
           .maybeSingle();
 
         if (metrics) {
-          if (metrics.height) setHeight(metrics.height.toString());
+          // DB values are always cm/kg; convert for display against whatever
+          // unit the persisted preference resolved to.
+          if (metrics.height) setHeight(cmToUnit(metrics.height.toString(), unit));
           if (metrics.weight) setWeight(metrics.weight.toString());
           if (metrics.measurements) {
             const m = metrics.measurements as any;
-            if (m.bust) setBust(m.bust.toString());
-            if (m.waist) setWaist(m.waist.toString());
-            if (m.hips) setHips(m.hips.toString());
-            if (m.inseam) setInseam(m.inseam.toString());
-            if (m.shoulderWidth) setShoulderWidth(m.shoulderWidth.toString());
-            if (m.armLength) setArmLength(m.armLength.toString());
-            if (m.torsoLength) setTorsoLength(m.torsoLength.toString());
-            if (m.legLength) setLegLength(m.legLength.toString());
+            if (m.bust) setBust(cmToUnit(m.bust.toString(), unit));
+            if (m.waist) setWaist(cmToUnit(m.waist.toString(), unit));
+            if (m.hips) setHips(cmToUnit(m.hips.toString(), unit));
+            if (m.inseam) setInseam(cmToUnit(m.inseam.toString(), unit));
+            if (m.shoulderWidth) setShoulderWidth(cmToUnit(m.shoulderWidth.toString(), unit));
+            if (m.armLength) setArmLength(cmToUnit(m.armLength.toString(), unit));
+            if (m.torsoLength) setTorsoLength(cmToUnit(m.torsoLength.toString(), unit));
+            if (m.legLength) setLegLength(cmToUnit(m.legLength.toString(), unit));
           }
           if (metrics.scan_confidence) setScanConfidence(metrics.scan_confidence);
           if (metrics.per_field_confidence) setFieldConfidence(metrics.per_field_confidence);
@@ -131,7 +200,8 @@ export default function MeasurementsScreen() {
     };
 
     fetchMeasurements();
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, unitReady]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -145,15 +215,17 @@ export default function MeasurementsScreen() {
       if (profileError) throw profileError;
 
       // 2. Upsert Measurements
+      // Everything on screen is in `unit`; the DB (and body-scan's math) is
+      // cm-only, so this is the one place a display value is converted back.
       const rawMeasurements = {
-        bust: parseFloat(bust) || null,
-        waist: parseFloat(waist) || null,
-        hips: parseFloat(hips) || null,
-        inseam: parseFloat(inseam) || null,
-        shoulderWidth: parseFloat(shoulderWidth) || null,
-        armLength: parseFloat(armLength) || null,
-        torsoLength: parseFloat(torsoLength) || null,
-        legLength: parseFloat(legLength) || null,
+        bust: unitToCm(bust, unit),
+        waist: unitToCm(waist, unit),
+        hips: unitToCm(hips, unit),
+        inseam: unitToCm(inseam, unit),
+        shoulderWidth: unitToCm(shoulderWidth, unit),
+        armLength: unitToCm(armLength, unit),
+        torsoLength: unitToCm(torsoLength, unit),
+        legLength: unitToCm(legLength, unit),
         confidence: fieldConfidence,
         overallConfidence: scanConfidence ?? 0
       };
@@ -163,7 +235,7 @@ export default function MeasurementsScreen() {
 
       const payload = {
         user_id: user.id,
-        height: parseFloat(height) || null,
+        height: unitToCm(height, unit),
         weight: parseFloat(weight) || null,
         measurements: {
           bust: sanitized.bust,
@@ -218,7 +290,8 @@ export default function MeasurementsScreen() {
     );
   };
 
-  const renderInput = (label: string, value: string, setValue: (val: string) => void, fieldKey: string, placeholder: string = "e.g. 85") => {
+  const renderInput = (label: string, value: string, setValue: (val: string) => void, fieldKey: string, placeholderCm: number = 85) => {
+    const placeholder = `e.g. ${cmToUnit(String(placeholderCm), unit)}`;
     const conf = fieldConfidence[fieldKey];
     let confColor = 'transparent';
     if (conf) {
@@ -241,7 +314,7 @@ export default function MeasurementsScreen() {
           placeholderTextColor={colors.secondaryText}
           keyboardType="numeric"
           value={value}
-          accessibilityLabel={`${label} measurement in centimeters`}
+          accessibilityLabel={`${label} measurement in ${unit === 'in' ? 'inches' : 'centimeters'}`}
           onChangeText={(v) => {
             setValue(v);
             // Once manually edited, it is no longer AI derived purely
@@ -283,7 +356,7 @@ export default function MeasurementsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           
           {scanConfidence && (
@@ -308,13 +381,35 @@ export default function MeasurementsScreen() {
           </View>
 
           <View style={[styles.section, { borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>General Metrics</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>General Metrics</Text>
+              <View style={[styles.unitToggle, { borderColor: colors.border }]}>
+                <TouchableOpacity
+                  style={[styles.unitToggleOption, unit === 'cm' && { backgroundColor: colors.tint }]}
+                  onPress={() => unit !== 'cm' && toggleUnit()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Use centimeters"
+                  accessibilityState={{ selected: unit === 'cm' }}
+                >
+                  <Text style={[styles.unitToggleText, { color: unit === 'cm' ? '#0D0D0D' : colors.secondaryText }]}>cm</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.unitToggleOption, unit === 'in' && { backgroundColor: colors.tint }]}
+                  onPress={() => unit !== 'in' && toggleUnit()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Use inches"
+                  accessibilityState={{ selected: unit === 'in' }}
+                >
+                  <Text style={[styles.unitToggleText, { color: unit === 'in' ? '#0D0D0D' : colors.secondaryText }]}>in</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
             <View style={styles.row}>
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: colors.secondaryText }]}>Height (cm)</Text>
+                <Text style={[styles.label, { color: colors.secondaryText }]}>Height ({unit})</Text>
                 <TextInput
                   style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                  placeholder="165"
+                  placeholder={cmToUnit('165', unit)}
                   placeholderTextColor={colors.secondaryText}
                   keyboardType="numeric"
                   value={height}
@@ -337,7 +432,7 @@ export default function MeasurementsScreen() {
 
           <View style={[styles.section, { borderColor: colors.border, borderBottomWidth: 0 }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Measurements (cm)</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Measurements ({unit})</Text>
               
               <TouchableOpacity
                 style={[styles.scanBtn, { backgroundColor: colors.tint }]}
@@ -346,9 +441,11 @@ export default function MeasurementsScreen() {
                     showToast('Please enter your height and weight above before scanning.', 'info');
                     return;
                   }
+                  // body-scan's measurement math assumes cm regardless of
+                  // what's currently displayed here.
                   router.push({
                     pathname: '/profile/body-scan',
-                    params: { height, weight, gender }
+                    params: { height: String(unitToCm(height, unit) ?? ''), weight, gender }
                   });
                 }}
                 accessibilityRole="button"
@@ -458,6 +555,20 @@ const styles = StyleSheet.create({
   },
   scanBtnText: {
     color: '#0D0D0D',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  unitToggle: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  unitToggleOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  unitToggleText: {
     fontSize: 13,
     fontWeight: '700',
   },

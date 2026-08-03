@@ -20,6 +20,7 @@ import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/u
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
+import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -58,13 +59,30 @@ export default function HomeScreen() {
       const data = productsRes.data;
       if (data) {
         setAllProducts(data);
-        const featured = data.filter((p) => p.is_featured);
-        // Fallback to top 2 products for the editorial header if no featured items exist
-        setFeaturedProducts(featured.length >= 2 ? featured : data.slice(0, 2));
+
+        // Null stock means the item predates stock tracking, so treat it as
+        // available rather than hiding it (same reading as ProductCard).
+        const inStock = (p: Product) => p.stock == null || p.stock > 0;
+        const sellable = data.filter(inStock);
+        const featuredInStock = sellable.filter((p) => p.is_featured);
+
+        // The hero is the largest thing on the app's first screen, so it must
+        // never be a product nobody can reserve. Prefer featured and in stock,
+        // then anything in stock; fall back to the raw list only so the
+        // section does not vanish if the whole catalog is sold out.
+        const heroPool =
+          featuredInStock.length >= 2 ? featuredInStock
+          : sellable.length >= 2 ? sellable
+          : data;
+        setFeaturedProducts(heroPool.slice(0, 2));
 
         // Real popularity signal (same one Explore's "Most Popular" sort
-        // trusts), not just "newest" mislabeled as trending.
+        // trusts), not just "newest" mislabeled as trending. Sold-out items
+        // sort last rather than being removed: they still carry browse value
+        // and feed the back-in-stock notify flow.
         const byPopularity = [...data].sort((a, b) => {
+          const stockDiff = Number(inStock(b)) - Number(inStock(a));
+          if (stockDiff !== 0) return stockDiff;
           const reviewDiff = (b.review_count || 0) - (a.review_count || 0);
           if (reviewDiff !== 0) return reviewDiff;
           return (b.rating || 0) - (a.rating || 0);
@@ -72,7 +90,10 @@ export default function HomeScreen() {
         setTrendingProducts(byPopularity.slice(0, 6));
       }
       if (categoriesRes.data) {
-        setTopCategories(categoriesRes.data);
+        // Ordered by what this device actually opens, falling back to the
+        // staff-set sort_order for anything not yet tapped.
+        const affinity = await getCategoryAffinity();
+        setTopCategories(sortByAffinity(categoriesRes.data, affinity));
       }
     } catch (err) {
       console.error(err);
@@ -181,9 +202,10 @@ export default function HomeScreen() {
                   key={cat.id}
                   category={cat}
                   variant="rail"
-                  onPress={() =>
-                    router.push(`/(tabs)/explore?category=${encodeURIComponent(cat.name)}` as any)
-                  }
+                  onPress={() => {
+                    recordCategoryVisit(cat.name);
+                    router.push(`/(tabs)/explore?category=${encodeURIComponent(cat.name)}` as any);
+                  }}
                 />
               ))}
             </ScrollView>

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Opens a PayMongo Checkout Session for a reservation deposit and records it in
+// Opens a PayMongo Checkout Session for a reservation and records it in
 // public.payments.
 //
 // Deploy with verify_jwt: true -- the caller is the customer and we need their
@@ -56,7 +56,7 @@ serve(async (req) => {
     // Ownership and amount both come from the row itself.
     const { data: reservation, error: reservationError } = await admin
       .from("reservations")
-      .select("id, customer_id, deposit, display_id, product_name, payment_status, status, payment_due_at")
+      .select("id, customer_id, deposit, display_id, product_name, payment_status, status, payment_due_at, payment_type")
       .eq("id", reservationId)
       .maybeSingle();
 
@@ -66,16 +66,22 @@ serve(async (req) => {
       return json({ error: "This reservation is already paid." }, 409);
     }
 
-    // Payment happens while the reservation is still Pending; staff confirm
-    // afterwards. Anything already Cancelled or Completed must not be payable.
+    // Payment opens only AFTER staff accept, so Confirmed is the payable
+    // state. Pending means the request has not been reviewed yet -- charging
+    // there would mean refunding through PayMongo every time staff decline.
+    // 'To Pay' is what the admin dashboard writes for accepted-but-unpaid;
+    // accepted alongside 'Confirmed' so the flow works whichever label staff
+    // acceptance actually sets.
     const status = String(reservation.status ?? "").toLowerCase();
-    if (status !== "pending") {
+    if (status !== "confirmed" && status !== "to pay") {
       return json(
         {
           error:
             status === "cancelled"
               ? "This reservation was cancelled."
-              : "This reservation is no longer awaiting payment.",
+              : status === "pending"
+                ? "This reservation has not been accepted yet."
+                : "This reservation is no longer awaiting payment.",
         },
         409,
       );
@@ -98,7 +104,12 @@ serve(async (req) => {
     const amountCentavos = Math.round(amountPesos * 100);
     if (amountCentavos < 100) return json({ error: "Amount is below the minimum." }, 400);
 
-    const description = `Deposit for ${reservation.product_name ?? "reservation"} (${reservation.display_id})`;
+    // Wording follows what is actually being charged: a customer paying the
+    // whole price was still shown "Deposit for ..." on the checkout page.
+    const label = String(reservation.payment_type ?? "").toLowerCase() === "full"
+      ? "Full payment for"
+      : "Deposit for";
+    const description = `${label} ${reservation.product_name ?? "reservation"} (${reservation.display_id})`;
 
     // Reuse an open session rather than stacking them; the partial unique index
     // would reject a second one anyway.
@@ -118,6 +129,45 @@ serve(async (req) => {
 
       const url = session?.data?.attributes?.checkout_url;
       if (url) return json({ payment_id: existing.id, checkout_url: url, reused: true });
+    }
+
+    // Record the payment attempt BEFORE calling PayMongo, not after. The
+    // webhook is the sole authority for marking a payment paid and it looks
+    // up by provider_ref alone -- creating the session first and inserting
+    // second meant a failed insert left a live, payable session with nothing
+    // in `payments` pointing back at it. provider_ref starts null (the
+    // partial unique index only applies once it's set) and is attached once
+    // the session actually exists.
+    let paymentId: string;
+    if (existing) {
+      paymentId = existing.id;
+      const { error: resetError } = await admin
+        .from("payments")
+        .update({ provider_ref: null, amount_centavos: amountCentavos, status: "awaiting_payment" })
+        .eq("id", existing.id);
+      if (resetError) {
+        console.error("Could not reset payment row", resetError);
+        return json({ error: "Could not start the payment." }, 500);
+      }
+    } else {
+      const { data: inserted, error: insertError } = await admin
+        .from("payments")
+        .insert({
+          user_id: userId,
+          reservation_id: reservationId,
+          provider: "paymongo",
+          amount_centavos: amountCentavos,
+          currency: "PHP",
+          status: "awaiting_payment",
+        })
+        .select("id")
+        .single();
+
+      if (insertError || !inserted) {
+        console.error("Could not record payment", insertError);
+        return json({ error: "Could not start the payment." }, 500);
+      }
+      paymentId = inserted.id;
     }
 
     const returnUrl = Deno.env.get("PAYMONGO_RETURN_URL") ?? "jezsymobileapp://payment-return";
@@ -152,31 +202,17 @@ serve(async (req) => {
       return json({ error: "Could not start the payment." }, 502);
     }
 
-    // Supersede any stale open row so the partial unique index stays satisfied.
-    if (existing) {
-      await admin.from("payments").update({ status: "cancelled" }).eq("id", existing.id);
-    }
-
-    const { data: payment, error: insertError } = await admin
+    const { error: updateError } = await admin
       .from("payments")
-      .insert({
-        user_id: userId,
-        reservation_id: reservationId,
-        provider: "paymongo",
-        provider_ref: sessionId,
-        amount_centavos: amountCentavos,
-        currency: "PHP",
-        status: "awaiting_payment",
-      })
-      .select("id")
-      .single();
+      .update({ provider_ref: sessionId })
+      .eq("id", paymentId);
 
-    if (insertError) {
-      console.error("Could not record payment", insertError);
+    if (updateError) {
+      console.error("Could not link payment to session", updateError);
       return json({ error: "Could not start the payment." }, 500);
     }
 
-    return json({ payment_id: payment.id, checkout_url: checkoutUrl, reused: false });
+    return json({ payment_id: paymentId, checkout_url: checkoutUrl, reused: false });
   } catch (error) {
     console.error(error);
     return json({ error: "Unexpected error." }, 500);

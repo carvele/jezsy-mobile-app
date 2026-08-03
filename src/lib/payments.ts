@@ -36,6 +36,22 @@ export async function startReservationPayment(reservationId: string): Promise<St
   return { paymentId: data.payment_id, checkoutUrl: data.checkout_url };
 }
 
+// PayMongo's return URL carries no payment id, so the deep-link screen has to
+// find the attempt it just came back from. Newest row for this customer is
+// that attempt: payments-create reuses an open session rather than stacking
+// them, so a customer cannot have two in flight at once.
+export async function getLatestPayment(): Promise<{ id: string; status: PaymentStatus } | null> {
+  const { data } = await supabase
+    .from('payments' as any)
+    .select('id, status')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+  return { id: (data as any).id, status: (data as any).status as PaymentStatus };
+}
+
 // The webhook is what settles a payment, so the client can only observe. Reading
 // the row is the honest check -- returning from the checkout page proves nothing
 // about whether the money moved.

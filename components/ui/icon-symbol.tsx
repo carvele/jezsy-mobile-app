@@ -99,6 +99,15 @@ const MAPPING = {
   'archivebox': 'archive',
   'cloud.fill': 'cloud',
   'flame.fill': 'local-fire-department',
+
+  // Body scan preparation. An unmapped name resolves to undefined and renders
+  // nothing at all, so every icon used by ScanPrep has to be listed here.
+  'eyeglasses': 'face',
+  'square.grid.2x2': 'grid-on',
+  'shoe': 'directions-walk',
+  'lightbulb': 'lightbulb',
+  'speaker.wave.2.fill': 'volume-up',
+  'figure.stand': 'accessibility-new',
 } as IconMapping;
 
 /**

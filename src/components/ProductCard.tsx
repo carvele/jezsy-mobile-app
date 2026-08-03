@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { Colors } from '@/constants/theme';
@@ -8,7 +8,6 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { getCategoryLabel } from '@/src/utils/categoryDisplay';
 
-const PLACEHOLDER = require('@/assets/images/partial-react-logo.png');
 
 // 'grid' fills half the row in a two-column list; 'rail' is a fixed width for
 // horizontal strips. Both share one set of internals -- the point of this
@@ -17,6 +16,14 @@ export type ProductCardVariant = 'grid' | 'rail';
 
 const RAIL_WIDTH = 150;
 const LOW_STOCK_THRESHOLD = 5;
+
+// A percentage width does not resolve for this card in either grid it lives in
+// -- the FlatList column wrapper on Explore or the wrapping row on Home -- so
+// the card fell back to its content width, filling the row and pushing its
+// neighbour off screen. Both containers leave the same usable width (32px of
+// padding in total), so one computed value serves both.
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const GRID_CARD_WIDTH = (SCREEN_WIDTH - 32 - 12) / 2;
 
 type Props = {
   product: any;
@@ -70,20 +77,27 @@ export function ProductCard({
     .join(', ');
 
   return (
+    // Layout lives on this wrapper, not on the Touchable: <Link asChild>
+    // clones its child and passes its own style prop down, which silently
+    // discarded the card's width and margins entirely.
+    <View style={[styles.card, variant === 'rail' ? styles.cardRail : styles.cardGrid]}>
     <Link href={`/product/${product.id}`} asChild>
       <TouchableOpacity
-        style={[styles.card, variant === 'rail' ? styles.cardRail : styles.cardGrid]}
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint="Opens product details"
       >
         <View style={[styles.imageWrap, { backgroundColor: colors.imagePlaceholder }]}>
-          <Image
-            source={product.image_url ? { uri: product.image_url } : PLACEHOLDER}
-            style={[styles.image, outOfStock && styles.imageDimmed]}
-            contentFit="cover"
-          />
+          {/* An imageless product shows the tinted placeholder colour rather
+              than the Expo template's React logo, which looked like a bug. */}
+          {product.image_url ? (
+            <Image
+              source={{ uri: product.image_url }}
+              style={[styles.image, outOfStock && styles.imageDimmed]}
+              contentFit="cover"
+            />
+          ) : null}
 
           {/* Left column of badges so they never collide with the heart. */}
           <View style={styles.badgeColumn}>
@@ -168,12 +182,13 @@ export function ProductCard({
         </View>
       </TouchableOpacity>
     </Link>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: { marginBottom: 20 },
-  cardGrid: { width: '48%', maxWidth: '48%' },
+  cardGrid: { width: GRID_CARD_WIDTH },
   cardRail: { width: RAIL_WIDTH, marginRight: 14, marginBottom: 0 },
   imageWrap: {
     width: '100%',
