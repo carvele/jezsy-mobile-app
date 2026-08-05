@@ -3,7 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -76,7 +76,12 @@ function InitialLayout() {
     if (flagsReady && !hasBootstrapped) setHasBootstrapped(true);
   }, [flagsReady, hasBootstrapped]);
 
-  useEffect(() => {
+  // useLayoutEffect, not useEffect: the Stack's first paint after
+  // hasBootstrapped flips true otherwise shows whatever route it resolves by
+  // default for one frame before this redirect fires -- a visible flash
+  // (e.g. the onboarding carousel) before landing on the correct screen.
+  // Committing the redirect before paint eliminates that frame.
+  useLayoutEffect(() => {
     if (!flagsReady) return;
 
     const inAuthGroup = segments[0] === '(auth)';
