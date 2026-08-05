@@ -162,7 +162,7 @@ export default function ReservationScreen() {
       // refunding through PayMongo every time staff turn a booking down.
       Alert.alert(
         "Request sent",
-        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have 24 hours to do so.",
+        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).",
         [{ text: "OK", onPress: () => router.replace("/reservations") }],
       );
     } catch (error: any) {
@@ -525,19 +525,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  rowText: { fontSize: 15 },
+  rowText: { fontSize: 15, flexShrink: 1 },
   rowValue: { fontSize: 15, fontWeight: "600" },
-  uploadButton: {
-    marginTop: 20,
-    width: "100%",
-    height: 120,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   payMethodRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   payMethodChip: {
     flex: 1,
@@ -547,9 +536,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   payMethodText: { fontSize: 13, fontWeight: "700" },
-  uploadPlaceholder: { alignItems: "center" },
-  uploadText: { marginTop: 8, fontSize: 14, fontWeight: "500" },
-  receiptPreview: { width: "100%", height: "100%" },
   receiptStatus: {
     flexDirection: 'row',
     alignItems: 'center',

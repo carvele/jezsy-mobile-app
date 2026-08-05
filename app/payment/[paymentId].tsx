@@ -21,6 +21,11 @@ export default function PaymentScreen() {
 
   const [settling, setSettling] = useState(false);
   const [status, setStatus] = useState<PaymentStatus | null>(null);
+  // "A few seconds" is only true for the common case; the poll loop itself
+  // waits up to 90s for a slow webhook, so the copy needs to catch up once
+  // it's clearly not a few seconds anymore instead of overpromising the
+  // whole time.
+  const [secondsElapsed, setSecondsElapsed] = useState(0);
   const startedAt = useRef<number | null>(null);
 
   const finish = useCallback(
@@ -60,6 +65,7 @@ export default function PaymentScreen() {
       if (cancelled) return;
 
       setStatus(current);
+      setSecondsElapsed(Math.round((Date.now() - (startedAt.current ?? Date.now())) / 1000));
 
       if (current && TERMINAL_PAYMENT_STATUSES.includes(current)) {
         finish(current);
@@ -126,6 +132,8 @@ export default function PaymentScreen() {
           <Text style={[styles.settlingHint, { color: colors.secondaryText }]}>
             {status === 'processing'
               ? 'Your bank or wallet is still processing this.'
+              : secondsElapsed > 10
+              ? 'Still confirming — some banks and e-wallets take a minute or two. Please do not close the app.'
               : 'This usually takes a few seconds. Please do not close the app.'}
           </Text>
         </View>
