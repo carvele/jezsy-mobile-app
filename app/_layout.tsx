@@ -79,9 +79,10 @@ function InitialLayout() {
   useEffect(() => {
     if (!flagsReady) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-    const onProfileSetup = segments[1] === 'profile-setup';
-    const onResetPassword = (segments[1] as string) === 'reset-password';
+    const pathSegments = segments as string[];
+    const inAuthGroup = pathSegments[0] === '(auth)';
+    const onProfileSetup = pathSegments[1] === 'profile-setup';
+    const onResetPassword = pathSegments[1] === 'reset-password';
 
     // A recovery session is a real session, so without this the emailed reset
     // link would function as a full login: satisfy the branches below, reach
