@@ -9,6 +9,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { useToast } from '@/src/context/ToastContext';
 
 export default function InboxScreen() {
   const { conversations, loading: messagesLoading } = useMessages();
@@ -16,6 +17,7 @@ export default function InboxScreen() {
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'messages' | 'notifications'>('messages');
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -50,11 +52,13 @@ export default function InboxScreen() {
       );
       setNotifications(combined);
     } catch (err) {
+      // Rendered as an empty inbox indistinguishable from having no messages.
       console.error('Error fetching notifications:', err);
+      showToast('Could not load your messages. Please try again.', 'error');
     } finally {
       setNotificationsLoading(false);
     }
-  }, [user]);
+  }, [user, showToast]);
 
   useEffect(() => {
     fetchNotifications();

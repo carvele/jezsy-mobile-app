@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { Database } from '@/src/types/database.types';
 import { Capsule, CapsuleCard } from '@/src/components/CapsuleCard';
 import { GapAnalysis } from '@/src/components/GapAnalysis';
+import { useToast } from '@/src/context/ToastContext';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
@@ -23,6 +24,7 @@ type Tab = 'items' | 'outfits' | 'capsules';
 export default function WardrobeScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const { showToast } = useToast();
   const { session } = useAuth();
   const router = useRouter();
 
@@ -74,11 +76,16 @@ export default function WardrobeScreen() {
       }));
       setCapsules(mappedCapsules);
     } catch (error) {
+      // A failed fetch left items/outfits/capsules at whatever they were
+      // (empty on first load) with loading cleared, so the screen silently
+      // rendered "nothing here yet" indistinguishable from an actually empty
+      // wardrobe. Surface it instead of hiding a real failure as empty state.
       console.error('Error fetching wardrobe data:', error);
+      showToast('Could not load your wardrobe. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.id, showToast]);
 
   // useFocusEffect covers both the initial mount and re-focusing after
   // returning from item/outfit/capsule detail screens, so changes there

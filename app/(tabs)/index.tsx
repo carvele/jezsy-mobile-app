@@ -18,6 +18,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
+import { useToast } from '@/src/context/ToastContext';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
@@ -35,6 +36,7 @@ export default function HomeScreen() {
 
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const { showToast } = useToast();
   const router = useRouter();
 
   const fetchProducts = async () => {
@@ -96,7 +98,11 @@ export default function HomeScreen() {
         setTopCategories(sortByAffinity(categoriesRes.data, affinity));
       }
     } catch (err) {
+      // Left silent, a failed load rendered as an empty catalog rather than a
+      // visible failure -- indistinguishable from the store genuinely having
+      // nothing yet.
       console.error(err);
+      showToast('Could not load the latest products. Pull down to refresh.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);

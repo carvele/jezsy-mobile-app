@@ -18,6 +18,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { Database } from '@/src/types/database.types';
+import { useToast } from '@/src/context/ToastContext';
 import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
@@ -28,6 +29,7 @@ const CARD_WIDTH = (width - 48) / 2;
 export default function WishlistScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const { showToast } = useToast();
   const router = useRouter();
   const { user } = useAuth();
   const { wishlistIds, toggleWishlist } = useWishlist();
@@ -54,11 +56,14 @@ export default function WishlistScreen() {
         .eq('visibility', 'public');
       if (!error && data) setItems(data);
     } catch (err) {
+      // Rendered as an empty wishlist indistinguishable from actually
+      // having nothing saved.
       console.error('Error fetching wishlist products:', err);
+      showToast('Could not load your wishlist. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [user?.id, wishlistIds]);
+  }, [user?.id, wishlistIds, showToast]);
 
   useEffect(() => {
     fetchWishlistProducts();
