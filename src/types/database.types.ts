@@ -1012,6 +1012,60 @@ export type Database = {
         }
         Relationships: []
       }
+      reservation_items: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          product_id: string | null
+          product_name: string | null
+          quantity: number
+          reservation_id: string
+          size: string | null
+          unit_price: number
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          quantity?: number
+          reservation_id: string
+          size?: string | null
+          unit_price?: number
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          quantity?: number
+          reservation_id?: string
+          size?: string | null
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_items_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reservations: {
         Row: {
           appointment_time: string | null
@@ -1647,6 +1701,16 @@ export type Database = {
         }
         Returns: Json
       }
+      create_reservation_multi: {
+        Args: {
+          _appointment_time: string
+          _date: string
+          _items: Json
+          _payment_option?: string
+          _receipt_path?: string
+        }
+        Returns: Json
+      }
       create_reservations_from_cart: {
         Args: {
           _display_id: string
@@ -1666,6 +1730,10 @@ export type Database = {
         }[]
       }
       is_admin_or_owner: { Args: never; Returns: boolean }
+      is_awaiting_payment_status: {
+        Args: { _status: string }
+        Returns: boolean
+      }
       is_staff_or_admin: { Args: never; Returns: boolean }
       merge_message_reaction: {
         Args: { p_emoji: string; p_message_id: string; p_user_id: string }
@@ -1677,6 +1745,10 @@ export type Database = {
           _date: string
           _reservation_id: string
         }
+        Returns: Json
+      }
+      submit_reservation_receipt: {
+        Args: { _receipt_path: string; _reservation_id: string }
         Returns: Json
       }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
