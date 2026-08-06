@@ -22,6 +22,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
+import { useWishlist } from '@/src/context/WishlistContext';
 import { Database } from '@/src/types/database.types';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { evaluateColors } from '@/src/utils/colorMatcher';
@@ -35,7 +36,11 @@ type SlotKey = 'top' | 'bottom' | 'outerwear' | 'shoes' | 'accessory';
 // image_url is what the builder previews (may be a background-removed cutout);
 // original_image_url is the persistent remote URL saved to the DB, so saved
 // outfits never reference an ephemeral on-device file:// path.
-type SlotItem = { product_id: string | null; image_url: string; original_image_url: string; name: string; color_tags?: string[] | null };
+// `source` drives the "not yet owned" treatment: a wishlist piece is styling
+// the user cannot actually wear yet, so it has to be visually distinct from
+// something already hanging in their wardrobe.
+type ItemSource = 'wardrobe' | 'catalog' | 'wishlist';
+type SlotItem = { product_id: string | null; image_url: string; original_image_url: string; name: string; color_tags?: string[] | null; source: ItemSource };
 type Slots = Record<SlotKey, SlotItem | null>;
 
 const SLOT_LABELS: Record<SlotKey, string> = {
@@ -68,6 +73,7 @@ export default function OutfitBuilderScreen() {
   const isDark = theme === 'dark';
   const router = useRouter();
   const { session } = useAuth();
+  const { wishlistIds } = useWishlist();
 
   const [slots, setSlots]             = useState<Slots>(EMPTY_SLOTS);
   const [activeSlot, setActiveSlot]   = useState<SlotKey | null>(null);
@@ -77,9 +83,10 @@ export default function OutfitBuilderScreen() {
   const [saving, setSaving]               = useState(false);
 
   // Picker state
-  const [pickerTab, setPickerTab]         = useState<'wardrobe' | 'catalog'>('wardrobe');
+  const [pickerTab, setPickerTab]         = useState<ItemSource>('wardrobe');
   const [wardrobeItems, setWardrobeItems] = useState<WardrobeItem[]>([]);
   const [catalogItems, setCatalogItems]   = useState<Product[]>([]);
+  const [wishlistItems, setWishlistItems] = useState<Product[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
 
   const filledCount = SLOT_KEYS.filter((k) => slots[k] !== null).length;
@@ -115,6 +122,23 @@ export default function OutfitBuilderScreen() {
     }
   }, []);
 
+  const fetchWishlistItems = useCallback(async () => {
+    const ids = Array.from(wishlistIds);
+    if (ids.length === 0) { setWishlistItems([]); return; }
+    setPickerLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .in('id', ids)
+        .eq('visibility', 'public')
+        .eq('deleted', false);
+      if (!error) setWishlistItems(data || []);
+    } finally {
+      setPickerLoading(false);
+    }
+  }, [wishlistIds]);
+
   // Derive sorted items based on color harmony with already selected slots
   const sortedWardrobeItems = useMemo(() => {
     if (filledCount === 0) return wardrobeItems;
@@ -136,6 +160,16 @@ export default function OutfitBuilderScreen() {
     });
   }, [catalogItems, slots, filledCount]);
 
+  const sortedWishlistItems = useMemo(() => {
+    if (filledCount === 0) return wishlistItems;
+    const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
+    return [...wishlistItems].sort((a, b) => {
+      const scoreA = evaluateColors([...currentColors, ...(a.color ? [a.color] : [])]).score;
+      const scoreB = evaluateColors([...currentColors, ...(b.color ? [b.color] : [])]).score;
+      return scoreB - scoreA;
+    });
+  }, [wishlistItems, slots, filledCount]);
+
   const openPicker = useCallback((slot: SlotKey) => {
     setActiveSlot(slot);
     setPickerTab('wardrobe');
@@ -144,10 +178,10 @@ export default function OutfitBuilderScreen() {
   }, [fetchWardrobeItems]);
 
   useEffect(() => {
-    if (pickerVisible && pickerTab === 'catalog' && catalogItems.length === 0) {
-      fetchCatalogItems();
-    }
-  }, [pickerTab, pickerVisible, catalogItems.length, fetchCatalogItems]);
+    if (!pickerVisible) return;
+    if (pickerTab === 'catalog' && catalogItems.length === 0) fetchCatalogItems();
+    if (pickerTab === 'wishlist') fetchWishlistItems();
+  }, [pickerTab, pickerVisible, catalogItems.length, fetchCatalogItems, fetchWishlistItems]);
 
   const selectWardrobeItem = useCallback(async (item: WardrobeItem) => {
     if (!activeSlot) return;
@@ -172,6 +206,7 @@ export default function OutfitBuilderScreen() {
           original_image_url: item.image_url || '',
           name:       item.category || 'Item',
           color_tags: item.color_tags,
+          source:     'wardrobe',
         },
       }));
     } finally {
@@ -179,7 +214,7 @@ export default function OutfitBuilderScreen() {
     }
   }, [activeSlot]);
 
-  const selectCatalogItem = useCallback((item: Product) => {
+  const selectProduct = useCallback((item: Product, source: Exclude<ItemSource, 'wardrobe'>) => {
     if (!activeSlot) return;
     setSlots((prev) => ({
       ...prev,
@@ -189,6 +224,7 @@ export default function OutfitBuilderScreen() {
         original_image_url: item.image_url || '',
         name:       item.name,
         color_tags: item.color ? [item.color] : [],
+        source,
       },
     }));
     setPickerVisible(false);
@@ -213,6 +249,9 @@ export default function OutfitBuilderScreen() {
           image_url: s.original_image_url || s.image_url,
           name: s.name,
           color_tags: s.color_tags,
+          // Persisted so a saved look still shows which pieces the user would
+          // have to buy to actually wear it.
+          owned: s.source !== 'wishlist',
         };
       });
 
@@ -274,6 +313,12 @@ export default function OutfitBuilderScreen() {
               <Text style={[styles.slotItemName, { color: colors.text }]} numberOfLines={2}>
                 {item.name}
               </Text>
+              {item.source === 'wishlist' ? (
+                <View style={[styles.wishlistTag, { borderColor: colors.tint }]}>
+                  <IconSymbol name="heart.fill" size={11} color={colors.tint} />
+                  <Text style={[styles.wishlistTagText, { color: colors.tint }]}>Wishlist - not owned</Text>
+                </View>
+              ) : null}
               <Text style={[styles.slotChange, { color: colors.tint }]}>Tap to change</Text>
             </View>
             <TouchableOpacity
@@ -336,7 +381,12 @@ export default function OutfitBuilderScreen() {
         {SLOT_KEYS.map((k) => (
           <View key={k} style={styles.previewThumb}>
             {slots[k] ? (
-              <Image source={{ uri: slots[k]!.image_url }} style={styles.previewThumbImage} contentFit="cover" />
+              <>
+                <Image source={{ uri: slots[k]!.image_url }} style={styles.previewThumbImage} contentFit="cover" />
+                {slots[k]!.source === 'wishlist' ? (
+                  <View style={[styles.previewWishDot, { backgroundColor: colors.tint }]} />
+                ) : null}
+              </>
             ) : (
               <View style={[styles.previewThumbEmpty, { borderColor: colors.border }]}>
                 <IconSymbol name={SLOT_ICONS[k] as any} size={14} color={colors.icon} />
@@ -403,14 +453,16 @@ export default function OutfitBuilderScreen() {
 
           {/* Tab switcher */}
           <View style={[styles.tabRow, { borderColor: colors.border }]}>
-            {(['wardrobe', 'catalog'] as const).map((tab) => (
+            {(['wardrobe', 'wishlist', 'catalog'] as const).map((tab) => (
               <TouchableOpacity
                 key={tab}
                 style={[styles.tab, pickerTab === tab && { borderBottomColor: colors.tint, borderBottomWidth: 2 }]}
                 onPress={() => setPickerTab(tab)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: pickerTab === tab }}
               >
                 <Text style={[styles.tabText, { color: pickerTab === tab ? colors.tint : colors.secondaryText }]}>
-                  {tab === 'wardrobe' ? 'My Wardrobe' : 'Catalog'}
+                  {tab === 'wardrobe' ? 'My Wardrobe' : tab === 'wishlist' ? 'Wishlist' : 'Catalog'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -453,9 +505,16 @@ export default function OutfitBuilderScreen() {
                 )}
               />
             )
+          ) : pickerTab === 'wishlist' && wishlistItems.length === 0 ? (
+            <View style={styles.center}>
+              <IconSymbol name="heart" size={48} color={colors.icon} />
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                Your wishlist is empty. Save pieces you are considering and try them against your wardrobe here.
+              </Text>
+            </View>
           ) : (
             <FlatList
-              data={sortedCatalogItems}
+              data={pickerTab === 'wishlist' ? sortedWishlistItems : sortedCatalogItems}
               keyExtractor={(i) => i.id}
               numColumns={2}
               contentContainerStyle={styles.pickerGrid}
@@ -463,8 +522,12 @@ export default function OutfitBuilderScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[styles.pickerCard, { backgroundColor: colors.card }]}
-                  onPress={() => selectCatalogItem(item)}
+                  onPress={() => selectProduct(item, pickerTab === 'wishlist' ? 'wishlist' : 'catalog')}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    pickerTab === 'wishlist' ? `${item.name}, from your wishlist, not yet owned` : item.name
+                  }
                 >
                   <Image
                     source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
@@ -563,6 +626,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  previewWishDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   previewCount: { fontSize: 12, fontWeight: '600', marginLeft: 'auto' },
   colorHarmonyBadge: {
     marginHorizontal: 16,
@@ -607,6 +678,18 @@ const styles = StyleSheet.create({
   slotItemInfo: { flex: 1 },
   slotItemName: { fontSize: 14, fontWeight: '600', lineHeight: 20 },
   slotChange: { fontSize: 12, marginTop: 2 },
+  wishlistTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  wishlistTagText: { fontSize: 10, fontWeight: '700' },
   removeBtn: { padding: 4 },
   slotEmpty: {
     height: 72,
