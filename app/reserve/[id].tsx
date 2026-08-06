@@ -3,13 +3,14 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { TimeSlotPicker } from "@/src/components/TimeSlotPicker";
 import { useAuth } from "@/src/context/AuthContext";
+import { useCart } from "@/src/context/CartContext";
 import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
 import { formatLocalDate } from "@/src/utils/dateTime";
 import { scheduleReservationReminder } from "@/src/utils/pushNotifications";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -24,6 +25,21 @@ import { useToast } from '@/src/context/ToastContext';
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
+// One reservation can hold several products. Both entry points -- "Reserve
+// now" on a product, and "Reserve all" from the bag -- normalise into this
+// shape so the screen has a single rendering and submission path.
+type ReservationLine = {
+  key: string;
+  product: Product;
+  size?: string;
+  color?: string;
+  quantity: number;
+};
+
+// The bag reserves everything in it under one appointment, addressed as
+// /reserve/cart rather than a product id.
+const CART_ROUTE_ID = "cart";
+
 export default function ReservationScreen() {
   const { showToast } = useToast();
   const { id, size, color } = useLocalSearchParams<{
@@ -31,6 +47,8 @@ export default function ReservationScreen() {
     size: string;
     color: string;
   }>();
+  const isCartMode = id === CART_ROUTE_ID;
+  const { items: cartItems, clearCart } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -77,6 +95,12 @@ export default function ReservationScreen() {
   const { session } = useAuth();
 
   useEffect(() => {
+    // Cart mode already has its products in context; nothing to fetch.
+    if (isCartMode) {
+      setLoading(false);
+      return;
+    }
+
     const fetchProduct = async () => {
       try {
         const { data, error } = await supabase
@@ -95,7 +119,27 @@ export default function ReservationScreen() {
     };
 
     fetchProduct();
-  }, [id]);
+  }, [id, isCartMode]);
+
+  const lines: ReservationLine[] = useMemo(() => {
+    if (isCartMode) {
+      return cartItems.map((item) => ({
+        key: item.id,
+        product: item.product,
+        size: item.selectedSize || undefined,
+        color: item.selectedColor || undefined,
+        quantity: item.quantity,
+      }));
+    }
+    if (!product) return [];
+    return [{
+      key: product.id,
+      product,
+      size: size || undefined,
+      color: color || undefined,
+      quantity: 1,
+    }];
+  }, [isCartMode, cartItems, product, size, color]);
 
   const generateDates = () => {
     const dates = [];
@@ -109,7 +153,7 @@ export default function ReservationScreen() {
   };
 
   const handleReserve = async () => {
-    if (!session?.user || !product) {
+    if (!session?.user || lines.length === 0) {
       showToast("You must be logged in to make a reservation.", 'error');
       return;
     }
@@ -123,18 +167,19 @@ export default function ReservationScreen() {
     try {
       const reservationDate = formatLocalDate(selectedDate);
 
-      // Price and deposit are computed server-side by create_reservation
-      // from the current product price, not trusted from the client.
-      const { data, error } = await supabase.rpc("create_reservation", {
-        _product_id: product.id,
-        _size: size,
-        _color: color,
-        _quantity: 1,
+      // Every line's price and the resulting deposit are resolved
+      // server-side from the products table; only the selection is sent.
+      const { data, error } = await supabase.rpc("create_reservation_multi", {
+        _items: lines.map((line) => ({
+          product_id: line.product.id,
+          size: line.size ?? null,
+          color: line.color ?? null,
+          quantity: line.quantity,
+        })),
         _date: reservationDate,
         _appointment_time: appointmentTime,
         // Nothing is paid at this point, so there is never a receipt to
-        // attach here. Cast: the DB signature is `text`, but the generated
-        // type is not nullable -- Postgres has no notion of a non-null arg.
+        // attach here.
         _receipt_path: null as unknown as string,
         _payment_option: payOption,
       });
@@ -151,6 +196,12 @@ export default function ReservationScreen() {
 
       const displayId = (data as any)?.display_id;
 
+      // Only clear the bag once the reservation is actually on the server,
+      // so a failed submit does not silently empty it.
+      if (isCartMode) {
+        await clearCart();
+      }
+
       await scheduleReservationReminder(
         displayId,
         reservationDate,
@@ -162,7 +213,7 @@ export default function ReservationScreen() {
       // refunding through PayMongo every time staff turn a booking down.
       Alert.alert(
         "Request sent",
-        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have 24 hours to do so.",
+        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).",
         [{ text: "OK", onPress: () => router.replace("/reservations") }],
       );
     } catch (error: any) {
@@ -188,7 +239,7 @@ export default function ReservationScreen() {
     );
   }
 
-  if (!product) {
+  if (lines.length === 0) {
     return (
       <View
         style={[
@@ -196,7 +247,9 @@ export default function ReservationScreen() {
           { backgroundColor: colors.background },
         ]}
       >
-        <Text style={{ color: colors.text }}>Product not found.</Text>
+        <Text style={{ color: colors.text }}>
+          {isCartMode ? "Your bag is empty." : "Product not found."}
+        </Text>
         <TouchableOpacity
           onPress={() => router.back()}
           style={{ marginTop: 20 }}
@@ -208,12 +261,16 @@ export default function ReservationScreen() {
   }
 
   const days = generateDates();
-  // Mirrors the server-side create_reservation RPC's price resolution --
+  // Mirrors the server-side create_reservation_multi price resolution --
   // both must agree, or the deposit shown here would misrepresent what
-  // actually gets charged.
-  const effectivePrice = product.on_sale && product.sale_price ? product.sale_price : (product.price || 0);
-  const amountDueNow = payOption === 'full' ? effectivePrice : effectivePrice * 0.5;
-  const balanceOnCollection = effectivePrice - amountDueNow;
+  // actually gets charged. Per line: effective price x quantity.
+  const linePrice = (line: ReservationLine) =>
+    (line.product.on_sale && line.product.sale_price
+      ? line.product.sale_price
+      : (line.product.price || 0)) * line.quantity;
+  const subtotal = lines.reduce((sum, line) => sum + linePrice(line), 0);
+  const amountDueNow = payOption === 'full' ? subtotal : subtotal * 0.5;
+  const balanceOnCollection = subtotal - amountDueNow;
 
   return (
     <SafeAreaView
@@ -237,46 +294,56 @@ export default function ReservationScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View
-          style={[
-            styles.summaryCard,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <Image
-            source={
-              product.image_url
-                ? { uri: product.image_url }
-                : require("@/assets/images/partial-react-logo.png")
-            }
-            style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]}
-            contentFit="cover"
-          />
-          <View style={styles.productInfo}>
-            <Text style={[styles.productName, { color: colors.text }]}>
-              {product.name}
-            </Text>
-            <Text
-              style={[styles.productDetails, { color: colors.secondaryText }]}
-            >
-              Size: {size || "Standard"} • Color: {color || "Default"}
-            </Text>
-            {product.on_sale && product.sale_price ? (
-              <View style={styles.priceRow}>
-                <Text style={[styles.price, { color: colors.notification }]}>
-                  ₱{effectivePrice.toFixed(2)}
-                </Text>
-                <Text style={[styles.originalPrice, { color: colors.secondaryText }]}>
-                  ₱{(product.price || 0).toFixed(2)}
-                </Text>
-              </View>
-            ) : (
-              <Text style={[styles.price, { color: colors.tint }]}>
-                ₱{effectivePrice.toFixed(2)}
+        {lines.length > 1 && (
+          <Text style={[styles.linesHeading, { color: colors.secondaryText }]}>
+            {lines.length} items in this reservation
+          </Text>
+        )}
+
+        {lines.map((line) => (
+          <View
+            key={line.key}
+            style={[
+              styles.summaryCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Image
+              source={
+                line.product.image_url
+                  ? { uri: line.product.image_url }
+                  : require("@/assets/images/partial-react-logo.png")
+              }
+              style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]}
+              contentFit="cover"
+            />
+            <View style={styles.productInfo}>
+              <Text style={[styles.productName, { color: colors.text }]}>
+                {line.product.name}
               </Text>
-            )}
+              <Text
+                style={[styles.productDetails, { color: colors.secondaryText }]}
+              >
+                Size: {line.size || "Standard"} • Color: {line.color || "Default"}
+                {line.quantity > 1 ? ` • Qty ${line.quantity}` : ""}
+              </Text>
+              {line.product.on_sale && line.product.sale_price ? (
+                <View style={styles.priceRow}>
+                  <Text style={[styles.price, { color: colors.notification }]}>
+                    ₱{linePrice(line).toFixed(2)}
+                  </Text>
+                  <Text style={[styles.originalPrice, { color: colors.secondaryText }]}>
+                    ₱{((line.product.price || 0) * line.quantity).toFixed(2)}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[styles.price, { color: colors.tint }]}>
+                  ₱{linePrice(line).toFixed(2)}
+                </Text>
+              )}
+            </View>
           </View>
-        </View>
+        ))}
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -393,22 +460,11 @@ export default function ReservationScreen() {
 
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              Item Price
+              {lines.length > 1 ? `Subtotal (${lines.length} items)` : "Item Price"}
             </Text>
-            {product.on_sale && product.sale_price ? (
-              <View style={styles.priceRow}>
-                <Text style={[styles.rowValue, { color: colors.notification }]}>
-                  ₱{effectivePrice.toFixed(2)}
-                </Text>
-                <Text style={[styles.originalPriceSmall, { color: colors.secondaryText }]}>
-                  ₱{(product.price || 0).toFixed(2)}
-                </Text>
-              </View>
-            ) : (
-              <Text style={[styles.rowValue, { color: colors.text }]}>
-                ₱{effectivePrice.toFixed(2)}
-              </Text>
-            )}
+            <Text style={[styles.rowValue, { color: colors.text }]}>
+              ₱{subtotal.toFixed(2)}
+            </Text>
           </View>
 
           <View style={styles.row}>
@@ -498,7 +554,7 @@ const styles = StyleSheet.create({
   price: { fontSize: 16, fontWeight: "800" },
   priceRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   originalPrice: { fontSize: 13, textDecorationLine: "line-through" },
-  originalPriceSmall: { fontSize: 12, textDecorationLine: "line-through" },
+  linesHeading: { fontSize: 13, fontWeight: "600", marginBottom: 10 },
   section: { marginBottom: 32 },
   sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: 12 },
   dateScroll: { flexDirection: "row" },
@@ -525,19 +581,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 12,
   },
-  rowText: { fontSize: 15 },
+  rowText: { fontSize: 15, flexShrink: 1 },
   rowValue: { fontSize: 15, fontWeight: "600" },
-  uploadButton: {
-    marginTop: 20,
-    width: "100%",
-    height: 120,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    overflow: "hidden",
-    justifyContent: "center",
-    alignItems: "center",
-  },
   payMethodRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   payMethodChip: {
     flex: 1,
@@ -547,9 +592,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   payMethodText: { fontSize: 13, fontWeight: "700" },
-  uploadPlaceholder: { alignItems: "center" },
-  uploadText: { marginTop: 8, fontSize: 14, fontWeight: "500" },
-  receiptPreview: { width: "100%", height: "100%" },
   receiptStatus: {
     flexDirection: 'row',
     alignItems: 'center',

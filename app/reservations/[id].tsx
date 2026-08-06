@@ -31,6 +31,7 @@ function formatRemaining(dueAt: string): string | null {
 }
 
 type Reservation = Database['public']['Tables']['reservations']['Row'];
+type ReservationItem = Database['public']['Tables']['reservation_items']['Row'];
 
 export default function ReservationDetailScreen() {
   const { showToast } = useToast();
@@ -41,13 +42,16 @@ export default function ReservationDetailScreen() {
   const { getOrCreateConversation } = useMessages();
 
   const [reservation, setReservation] = useState<Reservation | null>(null);
+  const [items, setItems] = useState<ReservationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState<Date>(new Date());
   const [rescheduleSlot, setRescheduleSlot] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [receiptLoadFailed, setReceiptLoadFailed] = useState(false);
   const [payBusy, setPayBusy] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
 
   const fetchReservation = useCallback(async () => {
@@ -57,9 +61,22 @@ export default function ReservationDetailScreen() {
       const { data, error } = await supabase.from('reservations').select('*').eq('id', id).single();
       if (error) throw error;
       setReservation(data);
+
+      // Lines live in reservation_items. Every reservation has at least one
+      // (older rows were backfilled), so an empty result means the fetch
+      // failed rather than the reservation genuinely having no items -- fall
+      // back to the denormalised parent columns instead of showing nothing.
+      const { data: itemRows, error: itemsError } = await supabase
+        .from('reservation_items')
+        .select('*')
+        .eq('reservation_id', id)
+        .order('created_at', { ascending: true });
+      if (itemsError) throw itemsError;
+      setItems(itemRows ?? []);
     } catch (err) {
       console.error('Error fetching reservation:', err);
       setReservation(null);
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -74,12 +91,16 @@ export default function ReservationDetailScreen() {
     useCallback(() => {
       if (!receiptPath) {
         setReceiptUri(null);
+        setReceiptLoadFailed(false);
         return;
       }
 
       let cancelled = false;
+      setReceiptLoadFailed(false);
       resolveSignedStorageUrl('payment_receipts', receiptPath).then((url) => {
-        if (!cancelled) setReceiptUri(url);
+        if (cancelled) return;
+        setReceiptUri(url);
+        if (!url) setReceiptLoadFailed(true);
       });
 
       return () => {
@@ -182,7 +203,7 @@ export default function ReservationDetailScreen() {
       return;
     }
 
-    setPayBusy(true);
+    setUploadingReceipt(true);
     try {
       const path = await uploadPaymentReceipt(userId, asset.uri, asset.base64);
       const { error } = await supabase.rpc('submit_reservation_receipt' as any, {
@@ -195,7 +216,7 @@ export default function ReservationDetailScreen() {
     } catch (err: any) {
       showToast(err.message || 'Could not send the receipt.', 'error');
     } finally {
-      setPayBusy(false);
+      setUploadingReceipt(false);
     }
   };
 
@@ -247,6 +268,24 @@ export default function ReservationDetailScreen() {
   const receiptUnderReview = paymentState === 'submitted';
   const timeLeft = reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
 
+  // Falls back to the reservation's own denormalised product columns if the
+  // lines could not be read, so the screen still shows the item rather than
+  // an empty card.
+  const displayItems: Pick<
+    ReservationItem,
+    'id' | 'product_id' | 'product_name' | 'image_url' | 'size' | 'color' | 'quantity'
+  >[] = items.length > 0
+    ? items
+    : [{
+        id: reservation.id,
+        product_id: reservation.product_id,
+        product_name: reservation.product_name,
+        image_url: reservation.image_url,
+        size: reservation.size,
+        color: reservation.color,
+        quantity: reservation.quantity ?? 1,
+      }];
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
@@ -285,35 +324,49 @@ export default function ReservationDetailScreen() {
           </View>
         )}
 
-        <View style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Image
-            source={reservation.image_url ? { uri: reservation.image_url } : require('@/assets/images/partial-react-logo.png')}
-            style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]}
-            contentFit="cover"
-          />
-          <View style={styles.productInfo}>
-            <Text style={[styles.productName, { color: colors.text }]} numberOfLines={2}>
-              {reservation.product_name}
-            </Text>
-            <Text style={[styles.productDetails, { color: colors.secondaryText }]}>
-              Size: {reservation.size || 'Standard'} • Color: {reservation.color || 'Default'}
-            </Text>
-            {reservation.product_id && (
-              <Link href={`/product/${reservation.product_id}`} asChild>
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel="View product">
-                  <Text style={[styles.viewProductLink, { color: colors.tint }]}>View Product</Text>
-                </TouchableOpacity>
-              </Link>
-            )}
-            <TouchableOpacity
-              onPress={handleAskAboutReservation}
-              accessibilityRole="button"
-              accessibilityLabel="Ask the shop owner about this reservation"
-            >
-              <Text style={[styles.viewProductLink, { color: colors.tint }]}>Ask about this reservation</Text>
-            </TouchableOpacity>
+        {displayItems.length > 1 && (
+          <Text style={[styles.itemsHeading, { color: colors.secondaryText }]}>
+            {displayItems.length} items in this reservation
+          </Text>
+        )}
+
+        {displayItems.map((item, index) => (
+          <View
+            key={item.id ?? `${item.product_id}-${index}`}
+            style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Image
+              source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
+              style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]}
+              contentFit="cover"
+            />
+            <View style={styles.productInfo}>
+              <Text style={[styles.productName, { color: colors.text }]} numberOfLines={2}>
+                {item.product_name}
+              </Text>
+              <Text style={[styles.productDetails, { color: colors.secondaryText }]}>
+                Size: {item.size || 'Standard'} • Color: {item.color || 'Default'}
+                {(item.quantity ?? 1) > 1 ? ` • Qty ${item.quantity}` : ''}
+              </Text>
+              {item.product_id && (
+                <Link href={`/product/${item.product_id}`} asChild>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`View ${item.product_name}`}>
+                    <Text style={[styles.viewProductLink, { color: colors.tint }]}>View Product</Text>
+                  </TouchableOpacity>
+                </Link>
+              )}
+            </View>
           </View>
-        </View>
+        ))}
+
+        <TouchableOpacity
+          onPress={handleAskAboutReservation}
+          accessibilityRole="button"
+          accessibilityLabel="Ask the shop owner about this reservation"
+          style={styles.askRow}
+        >
+          <Text style={[styles.viewProductLink, { color: colors.tint }]}>Ask about this reservation</Text>
+        </TouchableOpacity>
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
@@ -395,7 +448,8 @@ export default function ReservationDetailScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Awaiting review</Text>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
               Nothing to pay yet. We will let you know once this is accepted, and you
-              will then have 24 hours to pay ₱{(reservation.deposit || 0).toFixed(2)}.
+              will then have up to 24 hours to pay ₱{(reservation.deposit || 0).toFixed(2)}
+              {' '}(less if your appointment is coming up soon).
             </Text>
           </View>
         )}
@@ -421,12 +475,12 @@ export default function ReservationDetailScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy ? 0.6 : 1 }]}
+              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
               onPress={handlePayNow}
-              disabled={payBusy}
+              disabled={payBusy || uploadingReceipt}
               accessibilityRole="button"
               accessibilityLabel="Pay with GCash"
-              accessibilityState={{ disabled: payBusy }}
+              accessibilityState={{ disabled: payBusy || uploadingReceipt }}
             >
               {payBusy ? (
                 <ActivityIndicator color="#0D0D0D" />
@@ -436,17 +490,21 @@ export default function ReservationDetailScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.paySecondary, { borderColor: colors.border }]}
+              style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
               onPress={handleUploadReceipt}
-              disabled={payBusy}
+              disabled={payBusy || uploadingReceipt}
               accessibilityRole="button"
               accessibilityLabel="Upload payment receipt"
               accessibilityHint="Send proof of a manual transfer for staff to check"
-              accessibilityState={{ disabled: payBusy }}
+              accessibilityState={{ disabled: payBusy || uploadingReceipt }}
             >
-              <Text style={[styles.paySecondaryText, { color: colors.text }]}>
-                I paid by transfer - upload receipt
-              </Text>
+              {uploadingReceipt ? (
+                <ActivityIndicator color={colors.text} />
+              ) : (
+                <Text style={[styles.paySecondaryText, { color: colors.text }]}>
+                  I paid by transfer - upload receipt
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -486,7 +544,14 @@ export default function ReservationDetailScreen() {
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment Receipt</Text>
             {receiptUri ? (
-              <Image source={{ uri: receiptUri }} style={styles.receiptImage} contentFit="cover" />
+              <Image source={{ uri: receiptUri }} style={styles.receiptImage} contentFit="contain" />
+            ) : receiptLoadFailed ? (
+              <View style={[styles.receiptImage, styles.receiptPlaceholder]}>
+                <IconSymbol name="exclamationmark.circle" size={20} color={colors.error} />
+                <Text style={[styles.rowText, { color: colors.error, marginTop: 8 }]}>
+                  Could not load your receipt. Pull to refresh, or try again later.
+                </Text>
+              </View>
             ) : (
               <View style={[styles.receiptImage, styles.receiptPlaceholder]}>
                 <ActivityIndicator color={colors.tint} />
@@ -575,6 +640,8 @@ const styles = StyleSheet.create({
   productName: { fontSize: 16, fontWeight: '700' },
   productDetails: { fontSize: 13 },
   viewProductLink: { fontSize: 13, fontWeight: '600', marginTop: 4 },
+  itemsHeading: { fontSize: 13, fontWeight: '600', marginBottom: 10 },
+  askRow: { marginBottom: 16 },
   sectionCard: {
     padding: 20,
     borderRadius: 16,
@@ -645,9 +712,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: 12,
+    backgroundColor: 'rgba(128,128,128,0.08)',
   },
   receiptPlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
 });

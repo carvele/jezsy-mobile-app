@@ -415,6 +415,9 @@ export default function BodyScanScreen() {
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={!isProcessing}
+        // MediaPipe's PoseLandmarker rejects anything but RGBA_8888; VisionCamera
+        // defaults to yuv on Android, which crashed every frame on device.
+        pixelFormat="rgb"
         frameProcessor={poseDetection.frameProcessor}
         onLayout={poseDetection.cameraViewLayoutChangeHandler}
       />

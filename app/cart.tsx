@@ -198,13 +198,24 @@ export default function CartScreen() {
                 ₱{(totalAmount * 0.5).toLocaleString()}
               </Text>
             </View>
-            {/* There is no single "reserve everything" action: each reservation
-                books its own pickup slot, and slot capacity is enforced per
-                appointment by validate_reservation_time. */}
+
+            <TouchableOpacity
+              style={[styles.reserveAllBtn, { backgroundColor: colors.tint }]}
+              onPress={() => router.push({ pathname: '/reserve/[id]', params: { id: 'cart' } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Reserve all ${itemCount} items`}
+              accessibilityHint="Books one pickup slot for everything in your bag"
+            >
+              <Text style={styles.reserveAllBtnText}>
+                Reserve all ({itemCount})
+              </Text>
+            </TouchableOpacity>
+
             <Text style={[styles.footerNote, { color: colors.secondaryText }]}>
-              Reserve items one at a time — each needs its own pickup date and
-              time. You pay a 50% deposit per item and settle the balance when
-              you collect it.
+              Everything in your bag is collected in one visit, under a single
+              pickup date and time. You pay a 50% deposit and settle the
+              balance when you collect. Use an item&apos;s own Reserve button
+              to book just that piece instead.
             </Text>
           </View>
         </>
@@ -369,5 +380,18 @@ const styles = StyleSheet.create({
     color: "#0D0D0D",
     fontSize: 14,
     fontWeight: "800",
+  },
+  reserveAllBtn: {
+    height: 52,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 14,
+  },
+  reserveAllBtnText: {
+    color: "#0D0D0D",
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: 0.3,
   },
 });

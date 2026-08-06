@@ -33,6 +33,7 @@ import { useToast } from '@/src/context/ToastContext';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
+const PAGE_SIZE = 20;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -92,6 +93,12 @@ export default function ExploreScreen() {
   // Products Loading State
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
+  // Pagination: filters/sort below run client-side over whatever's in
+  // `products` so far, not the whole catalog -- growing that set page by
+  // page as the user scrolls, same as any infinite-scroll grid.
+  const [productsPage, setProductsPage] = useState(0);
+  const [hasMoreProducts, setHasMoreProducts] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -259,74 +266,89 @@ export default function ExploreScreen() {
     }
   }, [searchQuery, isSearchActive]);
 
-  // Fetch products when subcategory is selected
+  // Builds the base query for whichever mode is active (category/subcategory
+  // drill-down or "Shop All"), shared by the initial fetch and loadMore so
+  // the two can never drift out of sync on filters or ordering.
+  const buildProductsQuery = useCallback(() => {
+    if (showAllProducts) {
+      return supabase
+        .from('products')
+        .select(PRODUCT_SELECT)
+        .eq('deleted', false)
+        .eq('visibility', 'public')
+        .order('created_at', { ascending: false });
+    }
+    if (!selectedCategory || !selectedSubCategory) return null;
+
+    let query = supabase
+      .from('products')
+      .select(PRODUCT_SELECT)
+      .eq('deleted', false)
+      .eq('visibility', 'public');
+
+    if (selectedSubCategory === 'View All') {
+      // category_id always points at a subcategory row, so "every
+      // product in this main category" means "in any of its subs".
+      const subIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
+      query = query.in('category_id', subIds);
+    } else {
+      const subId = subCategoryIdByName[selectedSubCategory];
+      if (!subId) return null;
+      query = query.eq('category_id', subId);
+    }
+
+    return query.order('created_at', { ascending: false });
+  }, [showAllProducts, selectedCategory, selectedSubCategory, subCategoriesByParent, subCategoryIdByName]);
+
+  // Fetch page 0 whenever the active category/subcategory/"Shop All" mode
+  // changes.
   useEffect(() => {
-    const fetchProductsForCategory = async () => {
-      if (!selectedCategory || !selectedSubCategory) return;
-      setLoading(true);
-      try {
-        let query = supabase
-          .from('products')
-          .select(PRODUCT_SELECT)
-          .eq('deleted', false)
-          .eq('visibility', 'public');
+    const query = buildProductsQuery();
+    if (!query) { setProducts([]); return; }
 
-        if (selectedSubCategory === 'View All') {
-          // category_id always points at a subcategory row, so "every
-          // product in this main category" means "in any of its subs".
-          const subIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
-          query = query.in('category_id', subIds);
-        } else {
-          const subId = subCategoryIdByName[selectedSubCategory];
-          if (!subId) { setProducts([]); setLoading(false); return; }
-          query = query.eq('category_id', subId);
-        }
+    let cancelled = false;
+    setLoading(true);
+    setProductsPage(0);
+    setHasMoreProducts(true);
 
-        const { data, error } = await query;
-        if (error) {
-          console.error('Error fetching products:', error);
-        } else if (data) {
-          setProducts(data);
-        }
-      } catch (err) {
-        // Rendered as "no products in this category" indistinguishable from
-        // an actually empty subcategory.
-        console.error(err);
+    // Rendered as "no products in this category" indistinguishable from an
+    // actually empty subcategory without the toast below.
+    query.range(0, PAGE_SIZE - 1).then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) {
+        console.error('Error fetching products:', error);
         showToast('Could not load products. Please try again.', 'error');
-      } finally {
-        setLoading(false);
+      } else if (data) {
+        setProducts(data);
+        setHasMoreProducts(data.length === PAGE_SIZE);
       }
-    };
+      setLoading(false);
+    });
 
-    fetchProductsForCategory();
-  }, [selectedCategory, selectedSubCategory, showToast]);
+    return () => { cancelled = true; };
+  }, [buildProductsQuery, showToast]);
 
-  // Fetch every active product for "Shop All" mode.
-  useEffect(() => {
-    if (!showAllProducts) return;
-    const fetchAllProducts = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('products')
-          .select(PRODUCT_SELECT)
-          .eq('deleted', false)
-          .eq('visibility', 'public')
-          .order('created_at', { ascending: false });
-        if (error) {
-          console.error('Error fetching all products:', error);
-        } else if (data) {
-          setProducts(data);
-        }
-      } catch (err) {
-        console.error(err);
-        showToast('Could not load products. Please try again.', 'error');
-      } finally {
-        setLoading(false);
+  const loadMoreProducts = useCallback(async () => {
+    if (loading || loadingMore || !hasMoreProducts) return;
+    const query = buildProductsQuery();
+    if (!query) return;
+
+    const nextPage = productsPage + 1;
+    setLoadingMore(true);
+    try {
+      const from = nextPage * PAGE_SIZE;
+      const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+      if (error) {
+        console.error('Error fetching more products:', error);
+      } else if (data) {
+        setProducts((prev) => [...prev, ...data]);
+        setProductsPage(nextPage);
+        setHasMoreProducts(data.length === PAGE_SIZE);
       }
-    };
-    fetchAllProducts();
-  }, [showAllProducts, showToast]);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [buildProductsQuery, loading, loadingMore, hasMoreProducts, productsPage]);
 
   // Fit-aware sizing: recommended size per product for the currently visible
   // list, computed from the user's stored measurements. Empty when the user
@@ -1116,6 +1138,15 @@ export default function ExploreScreen() {
                       <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No products found matching filters.</Text>
                     </View>
                   }
+                  onEndReached={loadMoreProducts}
+                  onEndReachedThreshold={0.5}
+                  ListFooterComponent={
+                    loadingMore ? (
+                      <View style={styles.loadMoreFooter}>
+                        <SkeletonList count={2}><ProductCardSkeleton /></SkeletonList>
+                      </View>
+                    ) : null
+                  }
                   stickyHeaderIndices={[0]}
                 />
               )}
@@ -1727,6 +1758,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
+  },
+  loadMoreFooter: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
   emptyText: {
     fontSize: 15,

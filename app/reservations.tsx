@@ -13,7 +13,16 @@ import { useAuth } from '@/src/context/AuthContext';
 import { formatTimeLabel } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
 
-type Reservation = Database['public']['Tables']['reservations']['Row'];
+// The embedded aggregate arrives as reservation_items: [{ count: n }].
+type Reservation = Database['public']['Tables']['reservations']['Row'] & {
+  reservation_items?: { count: number }[] | null;
+};
+
+// Lines beyond the first, which is the one the parent's product columns
+// already describe. 0 for single-item reservations and for rows fetched
+// without the aggregate.
+const extraItemCount = (reservation: Reservation): number =>
+  Math.max(0, (reservation.reservation_items?.[0]?.count ?? 1) - 1);
 
 const STATUS_FILTERS = ['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const;
 
@@ -48,9 +57,13 @@ export default function ReservationsScreen() {
       if (!session?.user) return;
       
       try {
+        // The embedded count turns "Tailored Blazer" into "Tailored Blazer
+        // + 2 more": the parent's product columns only ever describe the
+        // first line, so on its own a multi-item reservation reads as if it
+        // held a single item.
         const { data, error } = await supabase
           .from('reservations')
-          .select('*')
+          .select('*, reservation_items(count)')
           .eq('customer_id', session.user.id)
           .eq('deleted', false)
           .order('created_at', { ascending: false });
@@ -113,7 +126,10 @@ export default function ReservationsScreen() {
             contentFit="cover"
           />
           <View style={styles.productInfo}>
-            <Text style={[styles.productName, { color: colors.text }]} numberOfLines={1}>{item.product_name}</Text>
+            <Text style={[styles.productName, { color: colors.text }]} numberOfLines={1}>
+              {item.product_name}
+              {extraItemCount(item) > 0 ? ` + ${extraItemCount(item)} more` : ''}
+            </Text>
             <Text style={[styles.productDetails, { color: colors.secondaryText }]}>
               Size: {item.size || 'Standard'} • Color: {item.color || 'Default'}
             </Text>

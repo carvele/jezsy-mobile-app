@@ -38,6 +38,7 @@ yarn-error.*
 # local tooling and editor state
 .agents/
 .vs/
+supabase/.temp/
 
 # local diagnostics and generated artifacts
 skills-lock.json
