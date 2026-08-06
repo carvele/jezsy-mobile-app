@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, Dimensions } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '@/constants/theme';
@@ -12,6 +12,9 @@ import { useRouter } from 'expo-router';
 import { Database } from '@/src/types/database.types';
 import { Capsule, CapsuleCard } from '@/src/components/CapsuleCard';
 import { GapAnalysis } from '@/src/components/GapAnalysis';
+import { WardrobeStatsBar } from '@/src/components/WardrobeStatsBar';
+import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
+import { generateOutfits, computeStats, GeneratedOutfit } from '@/src/utils/outfitGenerator';
 import { useToast } from '@/src/context/ToastContext';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
@@ -20,6 +23,10 @@ const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
 
 type Tab = 'items' | 'outfits' | 'capsules';
+type WearFilter = 'all' | 'never' | 'neglected';
+
+const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'];
+const NEGLECT_MS = 60 * 86_400_000;
 
 export default function WardrobeScreen() {
   const theme = useColorScheme();
@@ -35,9 +42,14 @@ export default function WardrobeScreen() {
   const [capsules, setCapsules] = useState<Capsule[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [wearFilter, setWearFilter] = useState<WearFilter>('all');
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
   const fetchWardrobeData = useCallback(async () => {
     if (!session?.user?.id) return;
-    
+
     try {
       setLoading(true);
       const [itemsRes, outfitsRes, capsulesRes] = await Promise.all([
@@ -66,7 +78,7 @@ export default function WardrobeScreen() {
 
       setItems(itemsRes.data || []);
       setOutfits(outfitsRes.data || []);
-      
+
       const mappedCapsules = (capsulesRes.data || []).map(c => ({
         id: c.id,
         name: c.name,
@@ -95,6 +107,58 @@ export default function WardrobeScreen() {
       fetchWardrobeData();
     }, [fetchWardrobeData])
   );
+
+  const stats = useMemo(() => computeStats(items), [items]);
+  const suggestions = useMemo(() => generateOutfits(items), [items]);
+
+  const visibleItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((item) => {
+      if (typeFilter && item.garment_type !== typeFilter) return false;
+
+      if (wearFilter === 'never' && item.wear_count > 0) return false;
+      if (wearFilter === 'neglected') {
+        if (item.wear_count === 0) return false;
+        const worn = item.last_worn_at ? new Date(item.last_worn_at).getTime() : 0;
+        if (Date.now() - worn < NEGLECT_MS) return false;
+      }
+
+      if (!q) return true;
+      return [item.garment_type, item.category, item.sub_category, ...(item.color_tags || [])]
+        .some((f) => f?.toLowerCase().includes(q));
+    });
+  }, [items, search, typeFilter, wearFilter]);
+
+  const handleSaveSuggestion = useCallback(async (outfit: GeneratedOutfit) => {
+    if (!session?.user?.id) return;
+    setSavingKey(outfit.key);
+    try {
+      // Matches the shape outfit-builder writes, so both sources render
+      // identically on the outfit detail screen.
+      const payload = outfit.items.map((i) => ({
+        slot: (i.garment_type || 'accessory').toLowerCase(),
+        product_id: i.product_id,
+        image_url: i.image_url,
+        name: i.garment_type || i.category || 'Item',
+        color_tags: i.color_tags,
+      }));
+
+      const { error } = await supabase.from('saved_outfits').insert({
+        user_id: session.user.id,
+        name: `${outfit.label} look`,
+        items: payload,
+      });
+      if (error) throw error;
+
+      showToast('Outfit saved to your wardrobe.', 'success');
+      fetchWardrobeData();
+    } catch (err) {
+      console.error('Error saving suggested outfit:', err);
+      showToast('Could not save that outfit. Please try again.', 'error');
+    } finally {
+      setSavingKey(null);
+    }
+  }, [session?.user?.id, showToast, fetchWardrobeData]);
 
   const renderItem = useCallback(({ item }: { item: WardrobeItem }) => {
     return (
@@ -129,7 +193,7 @@ export default function WardrobeScreen() {
   const renderOutfitItem = useCallback(({ item }: { item: SavedOutfit }) => {
     // items is a JSON array
     const outfitItems: any[] = Array.isArray(item.items) ? item.items : [];
-    
+
     return (
       <TouchableOpacity
         style={[styles.outfitCard, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -157,6 +221,67 @@ export default function WardrobeScreen() {
       </TouchableOpacity>
     );
   }, [colors, router]);
+
+  // Search, stats and gap analysis scroll with the grid rather than eating
+  // fixed height above it.
+  const itemsHeader = (
+    <View>
+      <WardrobeStatsBar stats={stats} active={wearFilter} onSelect={setWearFilter} />
+
+      <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <IconSymbol name="magnifyingglass" size={18} color={colors.secondaryText} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholder="Search your wardrobe"
+          placeholderTextColor={colors.secondaryText}
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          accessibilityLabel="Search your wardrobe"
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Clear search">
+            <IconSymbol name="xmark" size={16} color={colors.secondaryText} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={{ gap: 8 }}>
+        {GARMENT_TYPES.map((type) => {
+          const active = typeFilter === type;
+          return (
+            <TouchableOpacity
+              key={type}
+              style={[styles.chip, { backgroundColor: active ? colors.tint : colors.card, borderColor: active ? colors.tint : colors.border }]}
+              onPress={() => setTypeFilter(active ? null : type)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[styles.chipText, { color: active ? '#0D0D0D' : colors.secondaryText }]}>{type}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      <GapAnalysis items={items} />
+    </View>
+  );
+
+  const outfitsHeader = suggestions.length > 0 ? (
+    <View style={styles.suggestBlock}>
+      <View style={styles.suggestHeader}>
+        <IconSymbol name="sparkles" size={18} color={colors.tint} />
+        <Text style={[styles.suggestTitle, { color: colors.text }]}>Suggested for you</Text>
+      </View>
+      <Text style={[styles.suggestSub, { color: colors.secondaryText }]}>
+        Built from your own pieces and scored on colour harmony, favouring items you have not reached for.
+      </Text>
+      {suggestions.map((o) => (
+        <SuggestedOutfitCard key={o.key} outfit={o} onSave={handleSaveSuggestion} saving={savingKey === o.key} />
+      ))}
+      <Text style={[styles.savedHeading, { color: colors.text }]}>Saved outfits</Text>
+    </View>
+  ) : null;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -186,6 +311,8 @@ export default function WardrobeScreen() {
             key={tab}
             style={[styles.tab, activeTab === tab && { borderBottomColor: colors.tint, borderBottomWidth: 2 }]}
             onPress={() => setActiveTab(tab)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === tab }}
           >
             <Text style={[styles.tabText, { color: activeTab === tab ? colors.tint : colors.secondaryText }]}>
               {tab === 'items' ? 'My Items' : tab === 'outfits' ? 'Saved Outfits' : 'Capsules'}
@@ -199,31 +326,49 @@ export default function WardrobeScreen() {
           <ActivityIndicator size="large" color={colors.tint} />
         </View>
       ) : activeTab === 'items' ? (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
-          <GapAnalysis items={items} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 16 }}>
-            {items.length > 0 ? items.map(item => (
-              <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
-            )) : (
-              <View style={styles.emptyState}>
-                <IconSymbol name="hanger" size={48} color={colors.secondaryText} />
-                <Text style={[styles.emptyText, { color: colors.secondaryText }]}>Your wardrobe is empty.</Text>
-              </View>
-            )}
-          </View>
-        </ScrollView>
+        <FlatList
+          data={visibleItems}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+          ListHeaderComponent={itemsHeader}
+          initialNumToRender={8}
+          windowSize={7}
+          removeClippedSubviews
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <IconSymbol name="hanger" size={48} color={colors.secondaryText} />
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                {items.length === 0
+                  ? 'Your wardrobe is empty.'
+                  : 'No items match this search or filter.'}
+              </Text>
+            </View>
+          }
+        />
       ) : activeTab === 'outfits' ? (
-        outfits.length > 0 ? (
+        outfits.length > 0 || suggestions.length > 0 ? (
           <FlatList
             data={outfits}
             renderItem={renderOutfitItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             initialNumToRender={4}
+            ListHeaderComponent={outfitsHeader}
+            ListEmptyComponent={
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                No saved outfits yet -- save one of the suggestions above, or build your own.
+              </Text>
+            }
             ListFooterComponent={
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
                 onPress={() => router.push('/outfit-builder')}
+                accessibilityRole="button"
+                accessibilityLabel="Create new outfit"
               >
                 <IconSymbol name="plus" size={20} color="#0D0D0D" />
                 <Text style={styles.createOutfitBtnText}>Create New Outfit</Text>
@@ -238,10 +383,10 @@ export default function WardrobeScreen() {
               </View>
               <Text style={[styles.emptyTitle, { color: colors.text }]}>No Saved Outfits</Text>
               <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                Mix and match your wardrobe items to build the perfect outfit for any occasion.
+                Add a few more items and suggestions will appear here automatically, or build a look yourself.
               </Text>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.actionButton, { backgroundColor: colors.tint }]}
                 onPress={() => router.push('/outfit-builder')}
               >
@@ -336,6 +481,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 44,
+    marginBottom: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    padding: 0,
+  },
+  chipRow: {
+    marginBottom: 16,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -381,6 +554,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
+  },
+  suggestBlock: {
+    marginBottom: 8,
+  },
+  suggestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  suggestTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  suggestSub: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  savedHeading: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 8,
+    marginBottom: 12,
   },
   emptyState: {
     alignItems: 'center',
@@ -461,9 +658,9 @@ const styles = StyleSheet.create({
   outfitMore: {
     width: (OUTFIT_CARD_WIDTH - 32 - 32) / 5,
     aspectRatio: 1,
-    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 8,
   },
   outfitMoreText: {
     fontWeight: '700',

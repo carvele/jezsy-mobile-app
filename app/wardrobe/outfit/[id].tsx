@@ -22,6 +22,7 @@ type OutfitSlotItem = {
 const SLOT_LABELS: Record<string, string> = {
   top: 'Top',
   bottom: 'Bottom',
+  dress: 'Dress',
   outerwear: 'Outerwear',
   shoes: 'Shoes',
   accessory: 'Accessory',
