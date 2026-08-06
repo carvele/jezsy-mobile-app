@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, ActivityIndicator, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '@/constants/theme';
@@ -15,6 +15,8 @@ import { GapAnalysis } from '@/src/components/GapAnalysis';
 import { WardrobeStatsBar } from '@/src/components/WardrobeStatsBar';
 import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
 import { generateOutfits, computeStats, GeneratedOutfit } from '@/src/utils/outfitGenerator';
+import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { tapLight } from '@/src/utils/haptics';
 import { useToast } from '@/src/context/ToastContext';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
@@ -46,12 +48,13 @@ export default function WardrobeScreen() {
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [wearFilter, setWearFilter] = useState<WearFilter>('all');
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchWardrobeData = useCallback(async () => {
+  const fetchWardrobeData = useCallback(async (isRefresh = false) => {
     if (!session?.user?.id) return;
 
     try {
-      setLoading(true);
+      if (!isRefresh) setLoading(true);
       const [itemsRes, outfitsRes, capsulesRes] = await Promise.all([
         supabase
           .from('wardrobe_items')
@@ -98,6 +101,12 @@ export default function WardrobeScreen() {
       setLoading(false);
     }
   }, [session?.user?.id, showToast]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchWardrobeData(true);
+    setRefreshing(false);
+  }, [fetchWardrobeData]);
 
   // useFocusEffect covers both the initial mount and re-focusing after
   // returning from item/outfit/capsule detail screens, so changes there
@@ -253,7 +262,7 @@ export default function WardrobeScreen() {
             <TouchableOpacity
               key={type}
               style={[styles.chip, { backgroundColor: active ? colors.tint : colors.card, borderColor: active ? colors.tint : colors.border }]}
-              onPress={() => setTypeFilter(active ? null : type)}
+              onPress={() => { tapLight(); setTypeFilter(active ? null : type); }}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
             >
@@ -310,7 +319,7 @@ export default function WardrobeScreen() {
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && { borderBottomColor: colors.tint, borderBottomWidth: 2 }]}
-            onPress={() => setActiveTab(tab)}
+            onPress={() => { tapLight(); setActiveTab(tab); }}
             accessibilityRole="tab"
             accessibilityState={{ selected: activeTab === tab }}
           >
@@ -322,9 +331,15 @@ export default function WardrobeScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.tint} />
-        </View>
+        // A skeleton grid keeps the layout stable while loading instead of
+        // collapsing to a centred spinner and then jumping.
+        <ScrollView contentContainerStyle={{ padding: 16 }} scrollEnabled={false}>
+          <View style={styles.skeletonRow}>
+            <SkeletonList count={6}>
+              <ProductCardSkeleton width={(width - 56) / 2} />
+            </SkeletonList>
+          </View>
+        </ScrollView>
       ) : activeTab === 'items' ? (
         <FlatList
           data={visibleItems}
@@ -338,6 +353,9 @@ export default function WardrobeScreen() {
           windowSize={7}
           removeClippedSubviews
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} colors={[colors.tint]} />
+          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <IconSymbol name="hanger" size={48} color={colors.secondaryText} />
@@ -358,6 +376,9 @@ export default function WardrobeScreen() {
             contentContainerStyle={styles.listContent}
             initialNumToRender={4}
             ListHeaderComponent={outfitsHeader}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} colors={[colors.tint]} />
+            }
             ListEmptyComponent={
               <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
                 No saved outfits yet -- save one of the suggestions above, or build your own.
@@ -524,6 +545,12 @@ const styles = StyleSheet.create({
   columnWrapper: {
     justifyContent: 'space-between',
     marginBottom: 16,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 16,
   },
   itemCard: {
     width: (width - 56) / 2,
