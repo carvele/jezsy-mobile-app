@@ -136,7 +136,9 @@ export function ProductCard({
               <IconSymbol
                 name={saved ? 'heart.fill' : 'heart'}
                 size={16}
-                color={saved ? '#E05C5C' : '#FFF'}
+                // Sits on a dark scrim over the product image, so the logo
+                // pink is the right variant regardless of app theme.
+                color={saved ? Colors.dark.blushFill : '#FFF'}
               />
             </View>
           </Pressable>

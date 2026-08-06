@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -16,6 +16,7 @@ import { WardrobeStatsBar } from '@/src/components/WardrobeStatsBar';
 import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
 import { generateOutfits, computeStats, GeneratedOutfit } from '@/src/utils/outfitGenerator';
 import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { FadeInView } from '@/src/components/FadeInView';
 import { tapLight } from '@/src/utils/haptics';
 import { useToast } from '@/src/context/ToastContext';
 
@@ -169,8 +170,9 @@ export default function WardrobeScreen() {
     }
   }, [session?.user?.id, showToast, fetchWardrobeData]);
 
-  const renderItem = useCallback(({ item }: { item: WardrobeItem }) => {
+  const renderItem = useCallback(({ item, index }: { item: WardrobeItem; index: number }) => {
     return (
+      <FadeInView index={index}>
       <TouchableOpacity
         style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         onPress={() => router.push(`/wardrobe/item/${item.id}` as any)}
@@ -196,6 +198,7 @@ export default function WardrobeScreen() {
           </Text>
         </View>
       </TouchableOpacity>
+      </FadeInView>
     );
   }, [colors, router]);
 
@@ -285,8 +288,10 @@ export default function WardrobeScreen() {
       <Text style={[styles.suggestSub, { color: colors.secondaryText }]}>
         Built from your own pieces and scored on colour harmony, favouring items you have not reached for.
       </Text>
-      {suggestions.map((o) => (
-        <SuggestedOutfitCard key={o.key} outfit={o} onSave={handleSaveSuggestion} saving={savingKey === o.key} />
+      {suggestions.map((o, i) => (
+        <FadeInView key={o.key} index={i}>
+          <SuggestedOutfitCard outfit={o} onSave={handleSaveSuggestion} saving={savingKey === o.key} />
+        </FadeInView>
       ))}
       <Text style={[styles.savedHeading, { color: colors.text }]}>Saved outfits</Text>
     </View>
@@ -471,21 +476,16 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    // 44pt keeps the primary add action at the minimum comfortable target.
+    width: 44,
+    height: 44,
+    borderRadius: Radius.pill,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    ...Elevation.sm,
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    ...Type.display,
   },
   tabRow: {
     flexDirection: 'row',
@@ -499,8 +499,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabText: {
+    ...Type.bodyStrong,
     fontSize: 16,
-    fontWeight: '600',
   },
   searchBar: {
     flexDirection: 'row',
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   itemCategory: {
-    fontSize: 12,
+    ...Type.label,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
@@ -592,19 +592,16 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   suggestTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   suggestSub: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 16,
+    ...Type.body,
+    marginBottom: Spacing.lg,
   },
   savedHeading: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 8,
-    marginBottom: 12,
+    ...Type.subtitle,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   emptyState: {
     alignItems: 'center',
@@ -619,16 +616,15 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   emptyTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 12,
+    ...Type.headline,
+    marginBottom: Spacing.md,
   },
   emptyText: {
-    fontSize: 15,
+    ...Type.bodyStrong,
+    fontWeight: '400',
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
-    paddingHorizontal: 20,
+    marginBottom: Spacing.xxxl,
+    paddingHorizontal: Spacing.xl,
   },
   actionButton: {
     height: 56,

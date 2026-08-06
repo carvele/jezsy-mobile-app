@@ -314,9 +314,9 @@ export default function OutfitBuilderScreen() {
                 {item.name}
               </Text>
               {item.source === 'wishlist' ? (
-                <View style={[styles.wishlistTag, { borderColor: colors.tint }]}>
-                  <IconSymbol name="heart.fill" size={11} color={colors.tint} />
-                  <Text style={[styles.wishlistTagText, { color: colors.tint }]}>Wishlist - not owned</Text>
+                <View style={[styles.wishlistTag, { borderColor: colors.blush }]}>
+                  <IconSymbol name="heart.fill" size={11} color={colors.blush} />
+                  <Text style={[styles.wishlistTagText, { color: colors.blush }]}>Wishlist - not owned</Text>
                 </View>
               ) : null}
               <Text style={[styles.slotChange, { color: colors.tint }]}>Tap to change</Text>
@@ -384,7 +384,7 @@ export default function OutfitBuilderScreen() {
               <>
                 <Image source={{ uri: slots[k]!.image_url }} style={styles.previewThumbImage} contentFit="cover" />
                 {slots[k]!.source === 'wishlist' ? (
-                  <View style={[styles.previewWishDot, { backgroundColor: colors.tint }]} />
+                  <View style={[styles.previewWishDot, { backgroundColor: colors.blush }]} />
                 ) : null}
               </>
             ) : (

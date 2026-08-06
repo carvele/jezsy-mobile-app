@@ -310,7 +310,7 @@ export default function ProductDetailScreen() {
             accessibilityLabel={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
             accessibilityHint={isInWishlist(product.id) ? "Removes this item from your favorites list" : "Saves this item to your favorites list"}
           >
-            <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? "#E05C5C" : "#FFF"} />
+            <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? Colors.dark.blushFill : "#FFF"} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.shareButton, { top: insets.top + 12, backgroundColor: "rgba(0,0,0,0.5)" }]}

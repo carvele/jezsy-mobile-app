@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { WardrobeStats } from '@/src/utils/outfitGenerator';
+import { tapLight } from '@/src/utils/haptics';
 
 interface Props {
   stats: WardrobeStats;
@@ -38,7 +39,7 @@ export function WardrobeStatsBar({ stats, onSelect, active = 'all' }: Props) {
                 borderColor: isActive ? colors.tint : colors.border,
               },
             ]}
-            onPress={() => onSelect?.(cell.key)}
+            onPress={() => { tapLight(); onSelect?.(cell.key); }}
             disabled={!onSelect}
             accessibilityRole="button"
             accessibilityState={{ selected: isActive }}
@@ -61,24 +62,26 @@ export function WardrobeStatsBar({ stats, onSelect, active = 'all' }: Props) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
   cell: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
     alignItems: 'center',
+    ...Elevation.sm,
   },
   value: {
-    fontSize: 20,
+    ...Type.title,
     fontWeight: '800',
   },
   label: {
-    fontSize: 11,
+    ...Type.label,
     fontWeight: '600',
-    marginTop: 2,
+    letterSpacing: 0.2,
+    marginTop: Spacing.xs / 2,
   },
 });

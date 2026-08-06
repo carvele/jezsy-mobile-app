@@ -140,7 +140,7 @@ export default function OutfitDetailScreen() {
                   </Text>
                   <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>{slotItem.name}</Text>
                   {slotItem.owned === false ? (
-                    <Text style={[styles.notOwned, { color: colors.tint }]}>Wishlist - not owned</Text>
+                    <Text style={[styles.notOwned, { color: colors.blush }]}>Wishlist - not owned</Text>
                   ) : null}
                 </View>
               </View>

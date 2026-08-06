@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { GeneratedOutfit } from '@/src/utils/outfitGenerator';
+import { tapMedium } from '@/src/utils/haptics';
 
 interface Props {
   outfit: GeneratedOutfit;
@@ -47,7 +48,7 @@ export function SuggestedOutfitCard({ outfit, onSave, saving = false }: Props) {
 
       <TouchableOpacity
         style={[styles.saveBtn, { backgroundColor: colors.tint, opacity: saving ? 0.6 : 1 }]}
-        onPress={() => onSave(outfit)}
+        onPress={() => { tapMedium(); onSave(outfit); }}
         disabled={saving}
         accessibilityRole="button"
         accessibilityLabel={`Save this ${outfit.items.length}-piece outfit`}
@@ -64,20 +65,21 @@ export function SuggestedOutfitCard({ outfit, onSave, saving = false }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    padding: 14,
-    marginBottom: 14,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    ...Elevation.sm,
   },
   thumbRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   thumb: {
     flex: 1,
     aspectRatio: 0.85,
-    borderRadius: 10,
+    borderRadius: Radius.sm,
     borderWidth: 1,
     overflow: 'hidden',
     maxWidth: 90,
@@ -88,32 +90,32 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.pill,
     borderWidth: 1,
   },
   badgeText: {
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: '700',
   },
   reason: {
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 14,
+    ...Type.body,
+    marginBottom: Spacing.lg,
   },
   saveBtn: {
+    // 44pt is the minimum comfortable touch target on both platforms.
     height: 44,
-    borderRadius: 22,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   saveBtnText: {
     color: '#0D0D0D',
-    fontSize: 15,
+    ...Type.bodyStrong,
     fontWeight: '700',
   },
 });
