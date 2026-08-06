@@ -47,7 +47,9 @@ export default function ReservationDetailScreen() {
   const [rescheduleSlot, setRescheduleSlot] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [receiptLoadFailed, setReceiptLoadFailed] = useState(false);
   const [payBusy, setPayBusy] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
 
   const fetchReservation = useCallback(async () => {
@@ -74,12 +76,16 @@ export default function ReservationDetailScreen() {
     useCallback(() => {
       if (!receiptPath) {
         setReceiptUri(null);
+        setReceiptLoadFailed(false);
         return;
       }
 
       let cancelled = false;
+      setReceiptLoadFailed(false);
       resolveSignedStorageUrl('payment_receipts', receiptPath).then((url) => {
-        if (!cancelled) setReceiptUri(url);
+        if (cancelled) return;
+        setReceiptUri(url);
+        if (!url) setReceiptLoadFailed(true);
       });
 
       return () => {
@@ -182,7 +188,7 @@ export default function ReservationDetailScreen() {
       return;
     }
 
-    setPayBusy(true);
+    setUploadingReceipt(true);
     try {
       const path = await uploadPaymentReceipt(userId, asset.uri, asset.base64);
       const { error } = await supabase.rpc('submit_reservation_receipt' as any, {
@@ -195,7 +201,7 @@ export default function ReservationDetailScreen() {
     } catch (err: any) {
       showToast(err.message || 'Could not send the receipt.', 'error');
     } finally {
-      setPayBusy(false);
+      setUploadingReceipt(false);
     }
   };
 
@@ -395,7 +401,8 @@ export default function ReservationDetailScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Awaiting review</Text>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
               Nothing to pay yet. We will let you know once this is accepted, and you
-              will then have 24 hours to pay ₱{(reservation.deposit || 0).toFixed(2)}.
+              will then have up to 24 hours to pay ₱{(reservation.deposit || 0).toFixed(2)}
+              {' '}(less if your appointment is coming up soon).
             </Text>
           </View>
         )}
@@ -421,12 +428,12 @@ export default function ReservationDetailScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy ? 0.6 : 1 }]}
+              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
               onPress={handlePayNow}
-              disabled={payBusy}
+              disabled={payBusy || uploadingReceipt}
               accessibilityRole="button"
               accessibilityLabel="Pay with GCash"
-              accessibilityState={{ disabled: payBusy }}
+              accessibilityState={{ disabled: payBusy || uploadingReceipt }}
             >
               {payBusy ? (
                 <ActivityIndicator color="#0D0D0D" />
@@ -436,17 +443,21 @@ export default function ReservationDetailScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.paySecondary, { borderColor: colors.border }]}
+              style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
               onPress={handleUploadReceipt}
-              disabled={payBusy}
+              disabled={payBusy || uploadingReceipt}
               accessibilityRole="button"
               accessibilityLabel="Upload payment receipt"
               accessibilityHint="Send proof of a manual transfer for staff to check"
-              accessibilityState={{ disabled: payBusy }}
+              accessibilityState={{ disabled: payBusy || uploadingReceipt }}
             >
-              <Text style={[styles.paySecondaryText, { color: colors.text }]}>
-                I paid by transfer - upload receipt
-              </Text>
+              {uploadingReceipt ? (
+                <ActivityIndicator color={colors.text} />
+              ) : (
+                <Text style={[styles.paySecondaryText, { color: colors.text }]}>
+                  I paid by transfer - upload receipt
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -486,7 +497,14 @@ export default function ReservationDetailScreen() {
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment Receipt</Text>
             {receiptUri ? (
-              <Image source={{ uri: receiptUri }} style={styles.receiptImage} contentFit="cover" />
+              <Image source={{ uri: receiptUri }} style={styles.receiptImage} contentFit="contain" />
+            ) : receiptLoadFailed ? (
+              <View style={[styles.receiptImage, styles.receiptPlaceholder]}>
+                <IconSymbol name="exclamationmark.circle" size={20} color={colors.error} />
+                <Text style={[styles.rowText, { color: colors.error, marginTop: 8 }]}>
+                  Could not load your receipt. Pull to refresh, or try again later.
+                </Text>
+              </View>
             ) : (
               <View style={[styles.receiptImage, styles.receiptPlaceholder]}>
                 <ActivityIndicator color={colors.tint} />
@@ -645,9 +663,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: 12,
+    backgroundColor: 'rgba(128,128,128,0.08)',
   },
   receiptPlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
 });
