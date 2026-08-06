@@ -11,7 +11,6 @@ import {
   Animated,
   StatusBar,
   ScrollView,
-  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,110 +20,21 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Colors } from '@/constants/theme';
 import { useToast } from '@/src/context/ToastContext';
-
-
-
-const GENDER_OPTIONS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
-
-type ProfileData = {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  gender: string;
-  dateOfBirth: string;
-  addressLine: string;
-  barangay: string;
-  city: string;
-  province: string;
-  zipCode: string;
-};
-
-type Country = {
-  code: string;
-  name: string;
-  dialCode: string;
-  flag: string;
-  format: string;
-  maxLength: number;
-  placeholder: string;
-  regex: RegExp;
-};
-
-const COUNTRIES: Country[] = [
-  {
-    code: 'PH',
-    name: 'Philippines',
-    dialCode: '+63',
-    flag: '🇵🇭',
-    format: '900 000 0000',
-    maxLength: 10,
-    placeholder: '912 345 6789',
-    regex: /^9\d{9}$/,
-  },
-  {
-    code: 'US',
-    name: 'United States',
-    dialCode: '+1',
-    flag: '🇺🇸',
-    format: '000 000 0000',
-    maxLength: 10,
-    placeholder: '201 555 0123',
-    regex: /^\d{10}$/,
-  },
-  {
-    code: 'SG',
-    name: 'Singapore',
-    dialCode: '+65',
-    flag: '🇸🇬',
-    format: '0000 0000',
-    maxLength: 8,
-    placeholder: '8123 4567',
-    regex: /^[89]\d{7}$/,
-  },
-  {
-    code: 'GB',
-    name: 'United Kingdom',
-    dialCode: '+44',
-    flag: '🇬🇧',
-    format: '0000 000000',
-    maxLength: 10,
-    placeholder: '7123 456789',
-    regex: /^7\d{9}$/,
-  },
-];
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
-const currentYear = new Date().getFullYear();
-const YEARS = Array.from({ length: currentYear - 1939 }, (_, i) => currentYear - i); // 2026 down to 1940
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
+import { CountryPickerModal } from '@/src/components/CountryPickerModal';
+import { DobPickerModal } from '@/src/components/DobPickerModal';
+import {
+  type ProfileData,
+  type Country,
+  GENDER_OPTIONS,
+  COUNTRIES,
+  formatPhoneForCountry,
+  parseDateOfBirth,
+  DOB_PATTERN,
+  matchCountryFromStoredPhone,
+  dbDateToFormDate,
+} from '@/src/utils/profileFields';
 
 const TOTAL_STEPS = 3;
-
-// Formats raw phone digits into the country's spaced display format. Shared by
-// live input handling and by prefill when loading an existing stored number.
-const formatPhoneForCountry = (digits: string, country: Country): string => {
-  let cleaned = digits.replace(/\D/g, '');
-  if (country.code === 'PH' && cleaned.startsWith('0')) {
-    cleaned = cleaned.substring(1);
-  }
-  cleaned = cleaned.substring(0, country.maxLength);
-
-  let formatted = '';
-  let formatIndex = 0;
-  for (let i = 0; i < cleaned.length; i++) {
-    while (formatIndex < country.format.length && country.format[formatIndex] === ' ') {
-      formatted += ' ';
-      formatIndex++;
-    }
-    formatted += cleaned[i];
-    formatIndex++;
-  }
-  return formatted;
-};
 
 const STEP_META = [
   { icon: User,    label: 'Name',    title: "What's your\nname?",    subtitle: 'Help us personalize your experience.' },
@@ -132,10 +42,7 @@ const STEP_META = [
   { icon: MapPin,  label: 'Address', title: 'Your delivery\naddress.',  subtitle: 'Where should we send your orders?' },
 ];
 
-// mode is supplied by app/profile/edit.tsx, which renders this same screen
-// outside the (auth) group. Expo Router renders routes with no props, hence
-// the defaults on both the prop and the object itself.
-export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' | 'edit' } = {}) {
+export default function ProfileSetupScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -163,15 +70,12 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
 
   // Custom DOB Selector state
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(1);
-  const [selectedMonth, setSelectedMonth] = useState(0);
-  const [selectedYear, setSelectedYear] = useState(2000);
 
-  // Prefill from the existing profile (this screen doubles as "Edit profile",
-  // reached from the profile tab), falling back to OAuth metadata for names on
-  // first-time setup. Without this, editing starts blank and the skip-address
-  // path would upsert null over a previously saved address. The `prev.x ||`
-  // guards keep anything the user has already typed from being overwritten.
+  // Prefill from the existing profile, falling back to OAuth metadata for
+  // names on first-time setup. Without this, a returning user hitting this
+  // screen mid-setup would start blank and the skip-address path would
+  // upsert null over a previously saved address. The `prev.x ||` guards
+  // keep anything the user has already typed from being overwritten.
   useEffect(() => {
     if (!user) return;
 
@@ -179,25 +83,11 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
     const fullName: string = meta.full_name ?? meta.name ?? '';
     const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
 
-    // Stored phone is "+<dial><local>"; recover the country and local digits.
-    let matchedCountry: Country | null = null;
-    let localPhone = '';
-    if (profile?.phone) {
-      const m = COUNTRIES.find(c => profile.phone!.startsWith(c.dialCode));
-      if (m) {
-        matchedCountry = m;
-        localPhone = profile.phone.slice(m.dialCode.length);
-      }
-    }
+    const { country: matchedCountry, localPhone } = matchCountryFromStoredPhone(profile?.phone);
     if (matchedCountry) setSelectedCountry(matchedCountry);
     const fmtCountry = matchedCountry ?? COUNTRIES[0];
 
-    // Stored DOB is YYYY-MM-DD; the form field uses MM/DD/YYYY.
-    let dob = '';
-    if (profile?.date_of_birth) {
-      const [y, m, d] = profile.date_of_birth.split('-');
-      if (y && m && d) dob = `${m}/${d}/${y}`;
-    }
+    const dob = dbDateToFormDate(profile?.date_of_birth);
 
     setData(prev => ({
       firstName:   prev.firstName   || profile?.first_name || nameParts[0] || '',
@@ -224,11 +114,6 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
     setTimeout(() => setStep(next), 140);
   };
 
-  // Helper to check how many days are in a month
-  const getDaysInMonth = (month: number, year: number): number => {
-    return new Date(year, month + 1, 0).getDate();
-  };
-
   const handlePhoneChange = (text: string) => {
     set('phone', formatPhoneForCountry(text, selectedCountry));
   };
@@ -243,60 +128,6 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
       formatted += cleaned[i];
     }
     set('dateOfBirth', formatted);
-  };
-
-  const openDatePicker = () => {
-    // Attempt to seed from input
-    const parts = data.dateOfBirth.split('/');
-    if (parts.length === 3) {
-      const m = parseInt(parts[0], 10) - 1;
-      const d = parseInt(parts[1], 10);
-      const y = parseInt(parts[2], 10);
-      if (!isNaN(m) && m >= 0 && m < 12) setSelectedMonth(m);
-      if (!isNaN(d) && d > 0 && d <= 31) setSelectedDay(d);
-      if (!isNaN(y) && y >= 1940 && y <= currentYear) setSelectedYear(y);
-    }
-    setShowDatePickerModal(true);
-  };
-
-  const handleMonthSelect = (mIndex: number) => {
-    setSelectedMonth(mIndex);
-    const maxDays = getDaysInMonth(mIndex, selectedYear);
-    if (selectedDay > maxDays) {
-      setSelectedDay(maxDays);
-    }
-  };
-
-  const handleYearSelect = (year: number) => {
-    setSelectedYear(year);
-    const maxDays = getDaysInMonth(selectedMonth, year);
-    if (selectedDay > maxDays) {
-      setSelectedDay(maxDays);
-    }
-  };
-
-  const confirmDatePicker = () => {
-    const mm = String(selectedMonth + 1).padStart(2, '0');
-    const dd = String(selectedDay).padStart(2, '0');
-    const yyyy = String(selectedYear);
-    set('dateOfBirth', `${mm}/${dd}/${yyyy}`);
-    setShowDatePickerModal(false);
-  };
-
-  const parseDateOfBirth = (): string | null => {
-    if (!data.dateOfBirth.trim()) return null;
-    const [month, day, year] = data.dateOfBirth.split('/').map(Number);
-    const parsed = new Date(year, month - 1, day);
-
-    if (
-      parsed.getFullYear() !== year ||
-      parsed.getMonth() !== month - 1 ||
-      parsed.getDate() !== day
-    ) {
-      return null;
-    }
-
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
   const validate = (): boolean => {
@@ -326,13 +157,12 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
       }
 
       // Check standard DOB format MM/DD/YYYY
-      const dobPattern = /^(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])\/(19|20)\d{2}$/;
-      if (!dobPattern.test(data.dateOfBirth.trim())) {
+      if (!DOB_PATTERN.test(data.dateOfBirth.trim())) {
         showToast('Please enter a valid date in MM/DD/YYYY format.', 'error');
         return false;
       }
 
-      if (!parseDateOfBirth()) {
+      if (!parseDateOfBirth(data.dateOfBirth)) {
         showToast('Please enter a real calendar date.', 'error');
         return false;
       }
@@ -379,7 +209,7 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
     try {
       const cleanedPhone = data.phone.replace(/\D/g, '');
       const fullPhone = cleanedPhone ? `${selectedCountry.dialCode}${cleanedPhone}` : null;
-      const dateOfBirth = parseDateOfBirth();
+      const dateOfBirth = parseDateOfBirth(data.dateOfBirth);
 
       const { error } = await supabase
         .from('profiles')
@@ -403,10 +233,7 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
 
       // Refresh profile in context so root layout re-routes to (tabs)
       await refreshProfile();
-      // Editing was reached by a push from the profile tab, so return there
-      // rather than dropping the user on Home.
-      if (mode === 'edit' && router.canGoBack()) router.back();
-      else router.replace('/(tabs)');
+      router.replace('/(tabs)');
     } catch (err: any) {
       showToast(err.message ?? 'Could not save profile. Please try again.', 'error');
     } finally {
@@ -488,7 +315,7 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
               />
               <TouchableOpacity
                 style={styles.calendarBtn}
-                onPress={openDatePicker}
+                onPress={() => setShowDatePickerModal(true)}
                 activeOpacity={0.7}
               >
                 <Calendar size={20} color={Colors.dark.tint} />
@@ -672,171 +499,26 @@ export default function ProfileSetupScreen({ mode = 'setup' }: { mode?: 'setup' 
         </View>
       </KeyboardAvoidingView>
 
-      {/* ── Modal 1: Country Selector ────────────────────────────────── */}
-      <Modal
+      <CountryPickerModal
         visible={showCountryModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCountryModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowCountryModal(false)}
-        >
-          <TouchableOpacity
-            style={styles.bottomSheet}
-            activeOpacity={1}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Country</Text>
-              <TouchableOpacity
-                onPress={() => setShowCountryModal(false)}
-                style={styles.modalCloseBtn}
-              >
-                <Text style={styles.modalCloseText}>Done</Text>
-              </TouchableOpacity>
-            </View>
+        selectedCountry={selectedCountry}
+        onSelect={(c) => {
+          setSelectedCountry(c);
+          set('phone', ''); // clear input for new format
+          setShowCountryModal(false);
+        }}
+        onClose={() => setShowCountryModal(false)}
+      />
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.countryList}>
-              {COUNTRIES.map((c) => (
-                <TouchableOpacity
-                  key={c.code}
-                  style={[
-                    styles.countryItem,
-                    selectedCountry.code === c.code && styles.countryItemActive
-                  ]}
-                  onPress={() => {
-                    setSelectedCountry(c);
-                    set('phone', ''); // clear input for new format
-                    setShowCountryModal(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.countryItemLeft}>
-                    <Text style={styles.countryItemFlag}>{c.flag}</Text>
-                    <Text style={styles.countryItemName}>{c.name}</Text>
-                  </View>
-                  <Text style={styles.countryItemDialCode}>{c.dialCode}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* ── Modal 2: DOB Date Picker ─────────────────────────────────── */}
-      <Modal
+      <DobPickerModal
         visible={showDatePickerModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowDatePickerModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDatePickerModal(false)}
-        >
-          <TouchableOpacity
-            style={styles.bottomSheet}
-            activeOpacity={1}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Date of Birth</Text>
-              <TouchableOpacity
-                onPress={() => setShowDatePickerModal(false)}
-                style={styles.modalCloseBtn}
-              >
-                <Text style={styles.modalCloseText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Custom columns layout */}
-            <View style={styles.pickerColumnsRow}>
-              {/* MONTH Column */}
-              <View style={styles.pickerColumn}>
-                <Text style={styles.pickerColumnLabel}>MONTH</Text>
-                <ScrollView showsVerticalScrollIndicator={false} style={styles.pickerColumnList}>
-                  {MONTH_NAMES.map((name, idx) => (
-                    <TouchableOpacity
-                      key={name}
-                      style={[
-                        styles.pickerItem,
-                        selectedMonth === idx && styles.pickerItemActive
-                      ]}
-                      onPress={() => handleMonthSelect(idx)}
-                    >
-                      <Text style={[
-                        styles.pickerItemText,
-                        selectedMonth === idx && styles.pickerItemTextActive
-                      ]}>
-                        {name.substring(0, 3)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* DAY Column */}
-              <View style={styles.pickerColumn}>
-                <Text style={styles.pickerColumnLabel}>DAY</Text>
-                <ScrollView showsVerticalScrollIndicator={false} style={styles.pickerColumnList}>
-                  {DAYS.slice(0, getDaysInMonth(selectedMonth, selectedYear)).map((day) => (
-                    <TouchableOpacity
-                      key={day}
-                      style={[
-                        styles.pickerItem,
-                        selectedDay === day && styles.pickerItemActive
-                      ]}
-                      onPress={() => setSelectedDay(day)}
-                    >
-                      <Text style={[
-                        styles.pickerItemText,
-                        selectedDay === day && styles.pickerItemTextActive
-                      ]}>
-                        {day}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* YEAR Column */}
-              <View style={styles.pickerColumn}>
-                <Text style={styles.pickerColumnLabel}>YEAR</Text>
-                <ScrollView showsVerticalScrollIndicator={false} style={styles.pickerColumnList}>
-                  {YEARS.map((yr) => (
-                    <TouchableOpacity
-                      key={yr}
-                      style={[
-                        styles.pickerItem,
-                        selectedYear === yr && styles.pickerItemActive
-                      ]}
-                      onPress={() => handleYearSelect(yr)}
-                    >
-                      <Text style={[
-                        styles.pickerItemText,
-                        selectedYear === yr && styles.pickerItemTextActive
-                      ]}>
-                        {yr}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-
-            {/* Confirm button */}
-            <TouchableOpacity
-              style={styles.pickerConfirmBtn}
-              onPress={confirmDatePicker}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.pickerConfirmBtnText}>Confirm Date</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        value={data.dateOfBirth}
+        onConfirm={(dob) => {
+          set('dateOfBirth', dob);
+          setShowDatePickerModal(false);
+        }}
+        onClose={() => setShowDatePickerModal(false)}
+      />
     </View>
   );
 }
@@ -1009,140 +691,4 @@ const styles = StyleSheet.create({
   },
   skipBtn: { alignSelf: 'center', paddingVertical: 6 },
   skipText: { color: 'rgba(255,255,255,0.3)', fontSize: 13 },
-
-  // Modal / Bottom Sheet styling
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'flex-end',
-  },
-  bottomSheet: {
-    backgroundColor: '#141414',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 24,
-    maxHeight: '75%',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  modalCloseBtn: {
-    padding: 4,
-  },
-  modalCloseText: {
-    color: Colors.dark.tint,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  countryList: {
-    gap: 8,
-  },
-  countryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  countryItemActive: {
-    borderColor: `${Colors.dark.tint}4D`,
-    backgroundColor: 'rgba(201, 169, 110, 0.06)',
-  },
-  countryItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  countryItemFlag: {
-    fontSize: 20,
-  },
-  countryItemName: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  countryItemDialCode: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Custom DOB Date Picker modal styling
-  pickerColumnsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    height: 220,
-    marginBottom: 20,
-    gap: 8,
-  },
-  pickerColumn: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  pickerColumnLabel: {
-    color: 'rgba(255,255,255,0.3)',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginBottom: 10,
-  },
-  pickerColumnList: {
-    flex: 1,
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  pickerItem: {
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.01)',
-  },
-  pickerItemActive: {
-    backgroundColor: 'rgba(201, 169, 110, 0.08)',
-  },
-  pickerItemText: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  pickerItemTextActive: {
-    color: Colors.dark.tint,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  pickerConfirmBtn: {
-    height: 50,
-    backgroundColor: Colors.dark.tint,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  pickerConfirmBtnText: {
-    color: '#0D0D0D',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
 });
