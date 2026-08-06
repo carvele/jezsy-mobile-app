@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -9,6 +9,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Database } from '@/src/types/database.types';
+import { generateOutfits, GeneratedOutfit } from '@/src/utils/outfitGenerator';
+import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
+import { FadeInView } from '@/src/components/FadeInView';
+import { FlourishDivider } from '@/src/components/BrandFlourish';
 import { useToast } from '@/src/context/ToastContext';
 
 type Capsule = Database['public']['Tables']['capsules']['Row'];
@@ -31,6 +35,36 @@ export default function CapsuleDetailScreen() {
   const [allItems, setAllItems] = useState<WardrobeItem[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  const capsuleCombinations = useMemo(() => generateOutfits(capsuleItems, 4), [capsuleItems]);
+
+  const handleSaveCombination = useCallback(async (outfit: GeneratedOutfit) => {
+    if (!session?.user?.id) return;
+    setSavingKey(outfit.key);
+    try {
+      const payload = outfit.items.map((i) => ({
+        slot: (i.garment_type || 'accessory').toLowerCase(),
+        product_id: i.product_id,
+        image_url: i.image_url,
+        name: i.garment_type || i.category || 'Item',
+        color_tags: i.color_tags,
+        owned: true,
+      }));
+      const { error } = await supabase.from('saved_outfits').insert({
+        user_id: session.user.id,
+        name: `${capsule?.name || 'Capsule'} look`,
+        items: payload,
+      });
+      if (error) throw error;
+      showToast('Look saved to your outfits.', 'success');
+    } catch (err) {
+      console.error('Error saving capsule look:', err);
+      showToast('Could not save that look. Please try again.', 'error');
+    } finally {
+      setSavingKey(null);
+    }
+  }, [session?.user?.id, capsule?.name, showToast]);
 
   const fetchCapsule = useCallback(async () => {
     if (!id) return;
@@ -226,6 +260,28 @@ export default function CapsuleDetailScreen() {
             ))}
           </View>
         )}
+
+        {/* The point of a capsule is how many looks a small set yields, so the
+            combinations it unlocks belong here rather than only in the
+            wardrobe tab. */}
+        {capsuleCombinations.length > 0 && (
+          <View style={styles.combinationsBlock}>
+            <View style={styles.dividerWrap}>
+              <FlourishDivider color={colors.tint} width={140} />
+            </View>
+            <Text style={[styles.combinationsTitle, { color: colors.text }]}>
+              {capsuleCombinations.length} look{capsuleCombinations.length === 1 ? '' : 's'} from these pieces
+            </Text>
+            <Text style={[styles.combinationsSub, { color: colors.secondaryText }]}>
+              Scored on colour harmony within the capsule.
+            </Text>
+            {capsuleCombinations.map((o, i) => (
+              <FadeInView key={o.key} index={i}>
+                <SuggestedOutfitCard outfit={o} onSave={handleSaveCombination} saving={savingKey === o.key} />
+              </FadeInView>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       <Modal visible={pickerVisible} animationType="slide" onRequestClose={() => setPickerVisible(false)}>
@@ -313,6 +369,10 @@ const styles = StyleSheet.create({
   },
   addButtonText: { fontSize: 15, fontWeight: '700' },
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 12 },
+  combinationsBlock: { marginTop: 8 },
+  dividerWrap: { alignItems: 'center', marginBottom: 16 },
+  combinationsTitle: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
+  combinationsSub: { fontSize: 14, lineHeight: 21, marginBottom: 16 },
   emptyText: { fontSize: 15, textAlign: 'center' },
   grid: {
     flexDirection: 'row',

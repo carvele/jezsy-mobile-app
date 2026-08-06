@@ -17,6 +17,8 @@ import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
 import { generateOutfits, computeStats, GeneratedOutfit } from '@/src/utils/outfitGenerator';
 import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { FadeInView } from '@/src/components/FadeInView';
+import { BrandEmptyState } from '@/src/components/BrandEmptyState';
+import { FlourishDivider } from '@/src/components/BrandFlourish';
 import { tapLight } from '@/src/utils/haptics';
 import { useToast } from '@/src/context/ToastContext';
 
@@ -293,6 +295,9 @@ export default function WardrobeScreen() {
           <SuggestedOutfitCard outfit={o} onSave={handleSaveSuggestion} saving={savingKey === o.key} />
         </FadeInView>
       ))}
+      <View style={styles.dividerWrap}>
+        <FlourishDivider color={colors.tint} width={140} />
+      </View>
       <Text style={[styles.savedHeading, { color: colors.text }]}>Saved outfits</Text>
     </View>
   ) : null;
@@ -403,22 +408,13 @@ export default function WardrobeScreen() {
           />
         ) : (
           <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 }]}>
-            <View style={styles.emptyState}>
-              <View style={[styles.iconContainer, { backgroundColor: colors.card }]}>
-                <IconSymbol name="sparkles" size={56} color={colors.icon} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Saved Outfits</Text>
-              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                Add a few more items and suggestions will appear here automatically, or build a look yourself.
-              </Text>
-
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: colors.tint }]}
-                onPress={() => router.push('/outfit-builder')}
-              >
-                <Text style={styles.actionButtonText}>Create First Outfit</Text>
-              </TouchableOpacity>
-            </View>
+            <BrandEmptyState
+              icon="sparkles"
+              title="No Saved Outfits"
+              message="Add a few more items and suggestions will appear here automatically, or style a look yourself."
+              actionLabel="Create First Outfit"
+              onAction={() => router.push('/outfit-builder')}
+            />
           </ScrollView>
         )
       ) : (
@@ -441,21 +437,13 @@ export default function WardrobeScreen() {
               </TouchableOpacity>
             </>
           ) : (
-            <View style={styles.emptyState}>
-              <View style={[styles.iconContainer, { backgroundColor: colors.card }]}>
-                <IconSymbol name="archivebox" size={56} color={colors.icon} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No Capsules Yet</Text>
-              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                Build a focused capsule collection for a season, trip, or purpose from your wardrobe items.
-              </Text>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: colors.tint }]}
-                onPress={() => router.push('/wardrobe/create-capsule' as any)}
-              >
-                <Text style={styles.actionButtonText}>Create First Capsule</Text>
-              </TouchableOpacity>
-            </View>
+            <BrandEmptyState
+              icon="archivebox"
+              title="No Capsules Yet"
+              message="Build a focused capsule for a season, a trip, or a purpose -- fewer pieces, more looks."
+              actionLabel="Create First Capsule"
+              onAction={() => router.push('/wardrobe/create-capsule' as any)}
+            />
           )}
         </ScrollView>
       )}
@@ -603,21 +591,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     marginBottom: Spacing.md,
   },
+  dividerWrap: {
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
-  },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  emptyTitle: {
-    ...Type.headline,
-    marginBottom: Spacing.md,
   },
   emptyText: {
     ...Type.bodyStrong,
@@ -625,23 +605,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: Spacing.xxxl,
     paddingHorizontal: Spacing.xl,
-  },
-  actionButton: {
-    height: 56,
-    paddingHorizontal: 32,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#C9A96E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  actionButtonText: {
-    color: '#0D0D0D', // Dark text on gold background
-    fontSize: 16,
-    fontWeight: '700',
   },
   outfitCard: {
     width: OUTFIT_CARD_WIDTH,
