@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 
@@ -25,6 +25,7 @@ interface Props {
 export function LevelIndicator({ onLevelChange }: Props) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isLevel, setIsLevel] = useState(false);
+  const prevLevelRef = useRef(false);
 
   useEffect(() => {
     Accelerometer.setUpdateInterval(50);
@@ -43,10 +44,11 @@ export function LevelIndicator({ onLevelChange }: Props) {
 
       const level =
         Math.abs(normalizedPitch) <= TOLERANCE_DEG && Math.abs(roll) <= TOLERANCE_DEG;
-      setIsLevel((prev) => {
-        if (prev !== level) onLevelChange?.(level);
-        return level;
-      });
+      setIsLevel(level);
+      if (prevLevelRef.current !== level) {
+        prevLevelRef.current = level;
+        onLevelChange?.(level);
+      }
     });
 
     return () => subscription.remove();
