@@ -29,6 +29,7 @@ import { recordCategoryVisit } from '@/src/utils/categoryAffinity';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
+import { useToast } from '@/src/context/ToastContext';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
@@ -61,6 +62,7 @@ const SORT_OPTIONS = [
 export default function ExploreScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const { showToast } = useToast();
   const { itemCount } = useCart();
   const { measurements: sizingMeasurements, fitPreference, ready: sizingReady, needsSetup: needsSizingSetup } = useSizingProfile();
   const [sizingNudgeDismissed, setSizingNudgeDismissed] = useState(false);
@@ -250,7 +252,10 @@ export default function ExploreScreen() {
         setSearchResults(data);
       }
     } catch (err) {
+      // No screen-level indication a search had failed vs. genuinely returned
+      // nothing -- both rendered as an empty results list.
       console.error(err);
+      showToast('Search failed. Please try again.', 'error');
     }
   };
 
@@ -306,10 +311,13 @@ export default function ExploreScreen() {
     setProductsPage(0);
     setHasMoreProducts(true);
 
+    // Rendered as "no products in this category" indistinguishable from an
+    // actually empty subcategory without the toast below.
     query.range(0, PAGE_SIZE - 1).then(({ data, error }) => {
       if (cancelled) return;
       if (error) {
         console.error('Error fetching products:', error);
+        showToast('Could not load products. Please try again.', 'error');
       } else if (data) {
         setProducts(data);
         setHasMoreProducts(data.length === PAGE_SIZE);
@@ -318,7 +326,7 @@ export default function ExploreScreen() {
     });
 
     return () => { cancelled = true; };
-  }, [buildProductsQuery]);
+  }, [buildProductsQuery, showToast]);
 
   const loadMoreProducts = useCallback(async () => {
     if (loading || loadingMore || !hasMoreProducts) return;

@@ -11,6 +11,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { formatTimeLabel } from '@/src/utils/dateTime';
+import { useToast } from '@/src/context/ToastContext';
 
 // The embedded aggregate arrives as reservation_items: [{ count: n }].
 type Reservation = Database['public']['Tables']['reservations']['Row'] & {
@@ -49,6 +50,7 @@ export default function ReservationsScreen() {
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const { showToast } = useToast();
 
   useEffect(() => {
     const fetchReservations = async () => {
@@ -69,14 +71,18 @@ export default function ReservationsScreen() {
         if (error) throw error;
         setReservations(data || []);
       } catch (err) {
+        // Rendered as "no reservations" indistinguishable from actually
+        // having none -- including the confirm-then-pay ones now waiting on
+        // a payment deadline, which is the worst screen for this to go quiet on.
         console.error('Error fetching reservations:', err);
+        showToast('Could not load your reservations. Please try again.', 'error');
       } finally {
         setLoading(false);
       }
     };
 
     fetchReservations();
-  }, [session]);
+  }, [session, showToast]);
 
   const getStatusColor = (status: string | null) => {
     if (!status) return colors.warning;
