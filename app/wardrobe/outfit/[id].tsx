@@ -17,11 +17,15 @@ type OutfitSlotItem = {
   image_url: string;
   name: string;
   color_tags?: string[];
+  // Absent on outfits saved before wishlist mixing existed, which were all
+  // built from owned pieces -- so undefined means owned.
+  owned?: boolean;
 };
 
 const SLOT_LABELS: Record<string, string> = {
   top: 'Top',
   bottom: 'Bottom',
+  dress: 'Dress',
   outerwear: 'Outerwear',
   shoes: 'Shoes',
   accessory: 'Accessory',
@@ -135,6 +139,9 @@ export default function OutfitDetailScreen() {
                     {SLOT_LABELS[slotItem.slot] || slotItem.slot}
                   </Text>
                   <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>{slotItem.name}</Text>
+                  {slotItem.owned === false ? (
+                    <Text style={[styles.notOwned, { color: colors.blush }]}>Wishlist - not owned</Text>
+                  ) : null}
                 </View>
               </View>
             );
@@ -195,5 +202,10 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  notOwned: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 4,
   },
 });

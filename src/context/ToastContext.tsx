@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { notifySuccess, notifyError, tapLight } from '@/src/utils/haptics';
 
 export type ToastKind = 'success' | 'error' | 'info';
 
@@ -48,6 +49,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback((message: string, kind: ToastKind = 'info') => {
     if (timer.current) clearTimeout(timer.current);
+    // Every success and failure in the app already routes through here, so one
+    // hook-up gives the whole app tactile confirmation rather than touching
+    // every call site.
+    if (kind === 'success') notifySuccess();
+    else if (kind === 'error') notifyError();
+    else tapLight();
     setToast({ message, kind });
     opacity.value = withTiming(1, { duration: 180 });
     translateY.value = withTiming(0, { duration: 180 });

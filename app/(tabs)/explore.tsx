@@ -12,6 +12,7 @@ import {
   Platform,
   Dimensions,
   Pressable,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
@@ -99,6 +100,7 @@ export default function ExploreScreen() {
   const [productsPage, setProductsPage] = useState(0);
   const [hasMoreProducts, setHasMoreProducts] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -326,6 +328,27 @@ export default function ExploreScreen() {
     });
 
     return () => { cancelled = true; };
+  }, [buildProductsQuery, showToast]);
+
+  // Re-runs page 0 for whatever category is active, so a pull always reflects
+  // the current filters rather than resetting the user's place.
+  const onRefreshProducts = useCallback(async () => {
+    const query = buildProductsQuery();
+    if (!query) return;
+    setRefreshing(true);
+    try {
+      const { data, error } = await query.range(0, PAGE_SIZE - 1);
+      if (error) {
+        console.error('Error refreshing products:', error);
+        showToast('Could not refresh products. Please try again.', 'error');
+      } else if (data) {
+        setProducts(data);
+        setProductsPage(0);
+        setHasMoreProducts(data.length === PAGE_SIZE);
+      }
+    } finally {
+      setRefreshing(false);
+    }
   }, [buildProductsQuery, showToast]);
 
   const loadMoreProducts = useCallback(async () => {
@@ -1140,6 +1163,14 @@ export default function ExploreScreen() {
                   }
                   onEndReached={loadMoreProducts}
                   onEndReachedThreshold={0.5}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={onRefreshProducts}
+                      tintColor={colors.tint}
+                      colors={[colors.tint]}
+                    />
+                  }
                   ListFooterComponent={
                     loadingMore ? (
                       <View style={styles.loadMoreFooter}>

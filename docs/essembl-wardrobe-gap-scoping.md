@@ -59,7 +59,7 @@ Research only, no code changes.
 | Feature | Status | Needed | Size |
 |---|---|---|---|
 | Selfie color analysis | Not present -- vision-camera only used for body-scan pose today; `color_options` is a static manual list | New skin-tone/palette CV or an external API call; new camera flow; real privacy questions (biometric-adjacent selfie data) | Medium-Large |
-| Outfit check & grading (color harmony / fit / texture) | **Color harmony partially exists** (live score in the builder); **fit could reuse** the existing sizing profile from body-scan (compare outfit's garment measurements against the user's, same data `ar-tryon` already uses) | Texture has no data source today (nothing captures fabric/texture on items) -- would need new tagging or CV; fit-scoring is a natural extension of data already collected | Medium overall (texture is the new part; harmony + fit are mostly wiring existing data) |
+| Outfit check & grading (color harmony / fit / texture) | **Colour harmony is done** (real hue-geometry scoring, surfaced on suggestions). Fit and texture both have **no data source** -- see correction below | Both need a schema change plus a capture flow, not just wiring | Medium each, and neither is "wiring existing data" |
 | Style education (explain AI pairings) | Not present as UI, but the rule-based matcher already has explicit, nameable rules (e.g. "complementary colors," "neutral base") | Surface the matcher's own rule outcome as explanatory text -- cheap because the logic is already deterministic and inspectable, unlike a black-box model | Small |
 | Purchase recommendations | **Exists** (`GapAnalysis.tsx` "Shop {X}s" -> catalog) | -- | Done |
 
@@ -68,6 +68,31 @@ Research only, no code changes.
 | Feature | Status |
 |---|---|
 | Cross-platform (iOS + Android) | **Exists** -- standard Expo app |
+
+## Correction: fit scoring is not buildable from existing data
+
+An earlier version of this doc said fit scoring could reuse the body-scan sizing profile and was
+"mostly wiring existing data". That was wrong, and it matters because it made fit look cheaper
+than texture when the two are the same size of job.
+
+`analyzeFit()` in `src/utils/sizeRecommender.ts` does exist and works -- but it needs two inputs,
+and the wardrobe only has one of them:
+
+- **Body measurements: available.** `useSizingProfile` supplies these from the body scan.
+- **Garment measurements: unavailable.** `wardrobe_items` has no measurements column. Items
+  linked to a catalog product (`product_id`) could borrow `products.measurements`, but items the
+  user photographed themselves have nothing at all.
+- **Which size the user owns: not captured anywhere.** `wardrobe_items` has no `size` column, and
+  `app/wardrobe/add-item.tsx` never asks for one. Without it there is no way to pick a row from a
+  size chart, so even a catalog-linked item cannot be scored. The outfit builder's `SlotItem`
+  does not carry a size either.
+
+So fit scoring needs, at minimum: a `size` column on `wardrobe_items`, a field in the add-item
+flow to capture it, and a fallback for items with no linked product. That is the same shape of
+work as texture -- schema plus capture flow -- not an afternoon of wiring.
+
+Both belong in one migration if either is picked up, since they touch the same table and the same
+add-item form.
 
 ## Bottom line
 
@@ -80,8 +105,8 @@ to be rebuilt.
 Genuinely new work, ranked cheapest to most involved:
 1. **Style education text** and **background removal at add-item time** -- small, wire up what
    already exists elsewhere in the app.
-2. **Rule-based AI outfit generator** and **outfit grading (harmony + fit)** -- small/medium,
-   built from data and logic already in the app (color matcher, sizing profile), no new deps.
+2. **Rule-based AI outfit generator** -- shipped. Outfit grading on **colour** is shipped with it;
+   grading on **fit or texture** is not cheap, see the correction above.
 3. **Fashion inspiration grids** and **context-aware (occasion/weather) recommendations** --
    medium, mostly new UI/content plus one small external integration (weather API) for the latter.
 4. **Selfie color analysis** and **magic multi-item upload** -- the two features needing

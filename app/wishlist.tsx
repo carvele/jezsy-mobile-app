@@ -93,7 +93,7 @@ export default function WishlistScreen() {
           accessibilityLabel={`Remove ${item.name} from wishlist`}
           accessibilityHint="Removes this item from your saved wishlist"
         >
-          <IconSymbol name="heart.fill" size={20} color="#E05C5C" />
+          <IconSymbol name="heart.fill" size={20} color={colors.blush} />
         </TouchableOpacity>
         {item.on_sale && (
           <View style={[styles.saleBadge, { backgroundColor: colors.notification }]}>

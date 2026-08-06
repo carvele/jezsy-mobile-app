@@ -12,6 +12,12 @@ import { Platform } from 'react-native';
 const tintColorLight = '#8A6D3B'; // Deep antique gold — AA-compliant on white
 const tintColorDark = '#C9A96E';  // Luxury Gold
 
+// Blush, from the brand mark's pink heart and bow. Split the same way as gold
+// and for the same reason: the soft logo pink (~1.6:1 on white) is only usable
+// as a fill, so text and icons on light backgrounds use a deepened rose.
+const blushFill = '#E8B4C4';      // Decorative fills, badges, dark-mode icons
+const blushTextLight = '#A94F66'; // Deepened rose — AA-compliant on white
+
 export const Colors = {
   light: {
     text: '#11181C',
@@ -25,6 +31,10 @@ export const Colors = {
     notification: '#F72585',
     secondaryText: '#6B7280',
     accent: '#C9A96E', // Brighter gold kept for decorative fills (not text)
+    // Brand blush. `blush` is safe as text/icon on light; `blushFill` is the
+    // logo pink, for fills and backgrounds only.
+    blush: blushTextLight,
+    blushFill,
     surface: '#F9FAFB',
     // Semantic status colors (AA-compliant as text on light backgrounds)
     success: '#0F8A5F',
@@ -45,6 +55,10 @@ export const Colors = {
     notification: '#F72585', // Vibrant pink for badges/sales
     secondaryText: '#9CA3AF',
     accent: '#E8D5B7', // Soft Champagne
+    // On near-black the logo pink has ample contrast, so it is used directly --
+    // this is the palette the brand mark itself sits in.
+    blush: blushFill,
+    blushFill,
     surface: '#16213E', // Elevated surfaces
     // Semantic status colors (tuned for contrast on dark backgrounds)
     success: '#06D6A0',
@@ -81,18 +95,57 @@ export const Radius = {
 } as const;
 
 /**
- * Type scale (size + a sensible default weight). Screens may override weight,
- * but sizes should come from here to avoid the current 10/11/13/18/20/24/32 drift.
+ * Type scale: size, weight, line height and tracking together, because a size
+ * on its own is not a typographic style. Line heights follow the usual ratios
+ * -- roughly 1.5x for body copy so paragraphs breathe, tightening toward 1.15x
+ * for display sizes where generous leading reads as loose rather than airy.
+ *
+ * Tracking moves the other way: negative on large text (big type set at normal
+ * spacing looks gappy), positive on small uppercase labels, where letterforms
+ * need room to stay legible.
  */
 export const Type = {
-  caption: { fontSize: 12, fontWeight: '500' as const },
-  label: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 1 },
-  body: { fontSize: 14, fontWeight: '400' as const },
-  bodyStrong: { fontSize: 15, fontWeight: '600' as const },
-  subtitle: { fontSize: 18, fontWeight: '700' as const },
-  title: { fontSize: 20, fontWeight: '700' as const },
-  headline: { fontSize: 24, fontWeight: '800' as const },
-  display: { fontSize: 32, fontWeight: '800' as const },
+  caption: { fontSize: 12, fontWeight: '500' as const, lineHeight: 16, letterSpacing: 0 },
+  label: { fontSize: 11, fontWeight: '700' as const, lineHeight: 14, letterSpacing: 1 },
+  body: { fontSize: 14, fontWeight: '400' as const, lineHeight: 21, letterSpacing: 0 },
+  bodyStrong: { fontSize: 15, fontWeight: '600' as const, lineHeight: 22, letterSpacing: 0 },
+  subtitle: { fontSize: 18, fontWeight: '700' as const, lineHeight: 24, letterSpacing: -0.2 },
+  title: { fontSize: 20, fontWeight: '700' as const, lineHeight: 26, letterSpacing: -0.3 },
+  headline: { fontSize: 24, fontWeight: '800' as const, lineHeight: 30, letterSpacing: -0.4 },
+  display: { fontSize: 32, fontWeight: '800' as const, lineHeight: 37, letterSpacing: -0.6 },
+} as const;
+
+/**
+ * Elevation. Shadows were previously written inline per screen with differing
+ * opacities and radii, so cards at the same conceptual depth cast different
+ * shadows. Android reads `elevation` only; iOS reads the shadow triple.
+ */
+export const Elevation = {
+  none: Platform.select({ ios: {}, default: { elevation: 0 } }),
+  sm: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3 },
+    default: { elevation: 2 },
+  }),
+  md: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8 },
+    default: { elevation: 5 },
+  }),
+  lg: Platform.select({
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 16 },
+    default: { elevation: 10 },
+  }),
+} as const;
+
+/**
+ * Motion. Durations short enough to feel responsive rather than animated --
+ * anything past ~300ms on a tap reads as lag, not polish.
+ */
+export const Motion = {
+  fast: 140,
+  base: 220,
+  slow: 320,
+  /** Per-item delay for staggered list entrances; kept small so long lists do not crawl. */
+  stagger: 40,
 } as const;
 
 export const Fonts = Platform.select({
