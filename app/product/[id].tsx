@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Colors } from "@/constants/theme";
+import { Colors, Radius, Spacing, Type } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ReviewsList } from "@/src/components/ReviewsList";
 import { RelatedProducts } from "@/src/components/RelatedProducts";
@@ -447,10 +447,10 @@ export default function ProductDetailScreen() {
                         <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{s}</Text>
                       </TouchableOpacity>
                       {stock !== null && stock > 0 && stock <= 5 && (
-                        <Text style={{ fontSize: 12, color: '#E05C5C', marginTop: 4 }}>Only {stock} left</Text>
+                        <Text style={[Type.caption, { color: colors.warning, marginTop: Spacing.xs }]}>Only {stock} left</Text>
                       )}
                       {isOutOfStock && (
-                        <Text style={{ fontSize: 12, color: colors.secondaryText, marginTop: 4 }}>Out of stock</Text>
+                        <Text style={[Type.caption, { color: colors.secondaryText, marginTop: Spacing.xs }]}>Out of stock</Text>
                       )}
                     </View>
                   );
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
     width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   dot: {
     width: 8,
@@ -702,52 +702,54 @@ const styles = StyleSheet.create({
   },
   arButton: {
     position: "absolute", bottom: 60, right: 20, flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, gap: 8,
+    paddingHorizontal: Spacing.lg, paddingVertical: 10, borderRadius: 20, gap: Spacing.sm,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
   },
   arButtonText: { fontWeight: "700", fontSize: 14 },
-  contentContainer: { padding: 24, borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
+  contentContainer: { padding: Spacing.xxl, borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
   // One clear step down at each level: 26/800 name, 20/700 price, 16/700
   // section headings, 12/700 eyebrow. Previously the name was 26/800 and the
   // price 24/800, which read as two headings.
-  title: { fontSize: 26, fontWeight: "800", marginBottom: 6 },
+  // 26 has no slot; headline is 24/800, same weight two points down.
+  title: { ...Type.headline, marginBottom: 6 },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
   ratingValue: { fontSize: 13, fontWeight: "700" },
   ratingCount: { fontSize: 13 },
-  priceRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 20 },
-  price: { fontSize: 20, fontWeight: "700" },
+  priceRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.xl },
+  price: { ...Type.title },
   priceOriginal: { fontSize: 14, textDecorationLine: 'line-through', fontWeight: '500' },
   priceSale: { fontSize: 20, fontWeight: "800" },
   discountBadge: { backgroundColor: '#E05C5C', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   discountText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-  category: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2, marginBottom: 6 },
-  section: { marginTop: 24 },
-  sizeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  recBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  // Uppercase eyebrow: exactly what Type.label's tracking exists for.
+  category: { ...Type.label, marginBottom: 6 },
+  section: { marginTop: Spacing.xxl },
+  sizeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.lg },
+  recBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: Radius.md, gap: Spacing.xs },
   recText: { fontSize: 12, fontWeight: "700" },
-  sizeHeaderActions: { flexDirection: "row", alignItems: "center", gap: 12 },
+  sizeHeaderActions: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
   sizeChartLink: { fontSize: 13, fontWeight: "700", textDecorationLine: "underline" },
-  sectionTitle: { fontSize: 16, fontWeight: "700", letterSpacing: 0.2, marginBottom: 12 },
+  sectionTitle: { ...Type.bodyLargeStrong, marginBottom: Spacing.md },
   description: { fontSize: 15, lineHeight: 24 },
-  optionsList: { gap: 12, paddingRight: 20 },
-  optionButton: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
+  optionsList: { gap: Spacing.md, paddingRight: Spacing.xl },
+  optionButton: { paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
   optionText: { fontSize: 15, fontWeight: "600" },
-  quantityRow: { flexDirection: "row", alignItems: "center", gap: 16 },
+  quantityRow: { flexDirection: "row", alignItems: "center", gap: Spacing.lg },
   quantityBtn: {
     width: 40, height: 40, borderRadius: 20, borderWidth: 1,
     justifyContent: "center", alignItems: "center",
   },
   quantityValue: { fontSize: 18, fontWeight: "700", minWidth: 24, textAlign: "center" },
-  quantityHint: { fontSize: 13, marginLeft: 4 },
+  quantityHint: { fontSize: 13, marginLeft: Spacing.xs },
   notifyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
     borderWidth: 1,
-    borderRadius: 24,
-    marginTop: 24,
-    gap: 8,
+    borderRadius: Radius.xl,
+    marginTop: Spacing.xxl,
+    gap: Spacing.sm,
   },
   notifyBtnText: {
     fontSize: 16,
@@ -755,13 +757,13 @@ const styles = StyleSheet.create({
   },
   detailsSection: {
     borderWidth: 1,
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 32,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginTop: Spacing.xxxl,
   },
   detailRow: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
@@ -778,11 +780,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
     borderWidth: 1,
-    borderRadius: 24,
-    marginTop: 24,
-    gap: 8,
+    borderRadius: Radius.xl,
+    marginTop: Spacing.xxl,
+    gap: Spacing.sm,
   },
   messageButtonText: {
     fontSize: 16,
@@ -790,19 +792,19 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     position: "absolute", bottom: 0, left: 0, right: 0,
-    paddingHorizontal: 24, paddingVertical: Platform.OS === "ios" ? 32 : 20,
+    paddingHorizontal: Spacing.xxl, paddingVertical: Platform.OS === "ios" ? 32 : 20,
     borderTopWidth: 1, flexDirection: "row", alignItems: "center",
   },
-  actionButtons: { flexDirection: "row", flex: 1, gap: 16 },
+  actionButtons: { flexDirection: "row", flex: 1, gap: Spacing.lg },
   iconAction: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, justifyContent: "center", alignItems: "center" },
   primaryAction: {
     flex: 1, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center",
     shadowColor: "#C9A96E", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
   },
-  primaryActionText: { fontSize: 18, fontWeight: "700" },
+  primaryActionText: { ...Type.subtitle },
   addedToast: {
     position: 'absolute', top: -40, left: 0, right: 0, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: Spacing.sm, borderRadius: 20,
   },
   addedToastText: { fontWeight: '700', fontSize: 14 },
 });
