@@ -15,7 +15,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -1450,11 +1450,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   breadcrumbText: {
-    fontSize: 14,
-    letterSpacing: 0.2,
+    ...Type.body,
   },
   breadcrumbSeparator: {
-    fontSize: 14,
+    ...Type.body,
   },
   scrollContent: {
     // Feeds gridCardWidth via GRID_GUTTER; changing it resizes the cards to match.
@@ -1482,8 +1481,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
     marginBottom: Spacing.lg,
   },
   categoriesGrid: {
@@ -1688,8 +1686,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   filterSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
     marginBottom: Spacing.md,
   },
   filterSectionSubTitle: {

@@ -13,7 +13,7 @@ import { Link, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
@@ -341,9 +341,7 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    ...Type.title,
     paddingHorizontal: Spacing.xl,
     marginBottom: Spacing.lg,
   },
@@ -365,7 +363,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   emptyProductsText: {
-    fontSize: 14,
+    ...Type.body,
     textAlign: 'center',
   },
   editsScrollContainer: {
