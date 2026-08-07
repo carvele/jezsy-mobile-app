@@ -193,8 +193,8 @@ export default function ProfileScreen() {
           accessibilityRole="button"
           accessibilityLabel="Sign out of your account"
         >
-          <IconSymbol name="arrow.left" size={18} color="#F72585" style={{ marginRight: 8 }} />
-          <Text style={styles.signOutText}>Sign Out</Text>
+          <IconSymbol name="arrow.left" size={18} color={colors.error} style={{ marginRight: 8 }} />
+          <Text style={[styles.signOutText, { color: colors.error }]}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -320,7 +320,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   signOutText: {
-    color: '#F72585', // Using notification color for destructive action
     fontSize: 16,
     fontWeight: '700',
   },

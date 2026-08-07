@@ -253,7 +253,15 @@ export default function EditProfileScreen() {
                   onPress={() => set('gender', g)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.chipText, { color: colors.secondaryText }, data.gender === g && styles.chipTextActive, { color: colors.onTint }]}>{g}</Text>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      { color: data.gender === g ? colors.onTint : colors.secondaryText },
+                      data.gender === g && styles.chipTextActive,
+                    ]}
+                  >
+                    {g}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
