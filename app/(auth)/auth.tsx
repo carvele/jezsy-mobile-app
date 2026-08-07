@@ -445,7 +445,7 @@ export default function AuthScreen() {
             {/* Email Field (visible on all screens except otp_verify) */}
             {mode !== 'otp_verify' && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>EMAIL</Text>
+                <Text style={styles.label}>Email</Text>
                 <View style={styles.inputRow}>
                   <Mail size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
                   <TextInput
@@ -467,7 +467,7 @@ export default function AuthScreen() {
             {/* Password Field (login & signup) */}
             {(mode === 'login' || mode === 'signup') && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>PASSWORD</Text>
+                <Text style={styles.label}>Password</Text>
                 <View style={styles.inputRow}>
                   <Lock size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
                   <TextInput
@@ -500,7 +500,7 @@ export default function AuthScreen() {
             {/* Confirm Password (signup only) */}
             {mode === 'signup' && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>CONFIRM PASSWORD</Text>
+                <Text style={styles.label}>Confirm password</Text>
                 <View style={styles.inputRow}>
                   <Lock size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
                   <TextInput
@@ -701,6 +701,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(255,255,255,0.4)',
     letterSpacing: 1.5,
+    // Caps live here, not in the string: a screen reader spells out literal
+    // all-caps text letter by letter.
+    textTransform: 'uppercase',
   },
   inputRow: {
     flexDirection: 'row',

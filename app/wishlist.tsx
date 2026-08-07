@@ -142,7 +142,7 @@ export default function WishlistScreen() {
             onPress={() => router.push('/(tabs)/explore')}
             activeOpacity={0.85}
           >
-            <Text style={[styles.browseBtnText, { color: colors.onTint }]}>Browse Catalog</Text>
+            <Text style={[styles.browseBtnText, { color: colors.onTint }]}>Explore Catalog</Text>
           </TouchableOpacity>
         </View>
       ) : (
