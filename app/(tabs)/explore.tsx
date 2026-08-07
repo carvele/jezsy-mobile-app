@@ -30,6 +30,7 @@ import { recordCategoryVisit } from '@/src/utils/categoryAffinity';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { GRID_GUTTER, GRID_COLUMN_GAP } from '@/src/utils/layout';
+import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
@@ -506,6 +507,17 @@ export default function ExploreScreen() {
       result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     } else if (selectedSort === 'popular') {
       result.sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
+    } else {
+      // 'recommended' -- the default -- previously did no sorting at all, so a
+      // sold-out item could outrank one the customer can actually reserve on
+      // the main browse surface. Home already demotes them; this matches it.
+      // Sort is stable, so the fetch order survives within each group.
+      //
+      // Only here: the five options above are explicit user choices, and
+      // demoting a sold-out item below a cheaper one would contradict what
+      // "Price: Low to High" says it does. Sold out is shown, not hidden --
+      // those items still feed the back-in-stock notify flow.
+      result.sort((a, b) => Number(isInStock(b)) - Number(isInStock(a)));
     }
 
     return result;

@@ -21,6 +21,7 @@ import { useToast } from '@/src/context/ToastContext';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
 import { GRID_GUTTER } from '@/src/utils/layout';
+import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 
@@ -63,10 +64,7 @@ export default function HomeScreen() {
       if (data) {
         setAllProducts(data);
 
-        // Null stock means the item predates stock tracking, so treat it as
-        // available rather than hiding it (same reading as ProductCard).
-        const inStock = (p: Product) => p.stock == null || p.stock > 0;
-        const sellable = data.filter(inStock);
+        const sellable = data.filter(isInStock);
         const featuredInStock = sellable.filter((p) => p.is_featured);
 
         // The hero is the largest thing on the app's first screen, so it must
@@ -84,7 +82,7 @@ export default function HomeScreen() {
         // sort last rather than being removed: they still carry browse value
         // and feed the back-in-stock notify flow.
         const byPopularity = [...data].sort((a, b) => {
-          const stockDiff = Number(inStock(b)) - Number(inStock(a));
+          const stockDiff = Number(isInStock(b)) - Number(isInStock(a));
           if (stockDiff !== 0) return stockDiff;
           const reviewDiff = (b.review_count || 0) - (a.review_count || 0);
           if (reviewDiff !== 0) return reviewDiff;
