@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useWishlist } from '@/src/context/WishlistContext';
+import { gridCardWidth } from '@/src/utils/layout';
 import { getCategoryLabel } from '@/src/utils/categoryDisplay';
 
 
@@ -20,10 +21,10 @@ const LOW_STOCK_THRESHOLD = 5;
 // A percentage width does not resolve for this card in either grid it lives in
 // -- the FlatList column wrapper on Explore or the wrapping row on Home -- so
 // the card fell back to its content width, filling the row and pushing its
-// neighbour off screen. Both containers leave the same usable width (32px of
-// padding in total), so one computed value serves both.
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const GRID_CARD_WIDTH = (SCREEN_WIDTH - 32 - 12) / 2;
+// neighbour off screen. Both containers leave the same usable width, which
+// gridCardWidth derives from the shared grid tokens rather than restating the
+// screens' padding as literals here.
+const GRID_CARD_WIDTH = gridCardWidth();
 
 type Props = {
   product: any;

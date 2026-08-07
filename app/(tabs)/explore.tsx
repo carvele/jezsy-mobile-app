@@ -29,12 +29,16 @@ import { CategoryCard } from '@/src/components/CategoryCard';
 import { recordCategoryVisit } from '@/src/utils/categoryAffinity';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
+import { GRID_GUTTER, GRID_COLUMN_GAP } from '@/src/utils/layout';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
 const PAGE_SIZE = 20;
+// The product grid splits its page inset between the list and the row; the two
+// must still add up to GRID_GUTTER.
+const PRODUCT_ROW_INSET = 4;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -1608,7 +1612,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    // Feeds gridCardWidth via GRID_GUTTER; changing it resizes the cards to match.
+    paddingHorizontal: GRID_GUTTER,
     paddingBottom: 120,
   },
   welcomeTitle: {
@@ -1643,7 +1648,7 @@ const styles = StyleSheet.create({
     // rowGap only. A horizontal `gap` is added on top of the two 48% cards, so
     // 96% + 12px overflowed the row on narrower phones and every card wrapped
     // onto its own line -- the two-column grid silently became one column.
-    rowGap: 12,
+    rowGap: GRID_COLUMN_GAP,
   },
   suggestionsContainer: {
     paddingHorizontal: 16,
@@ -1745,13 +1750,16 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   productList: {
-    paddingHorizontal: 12,
+    // This and productRow together must sum to GRID_GUTTER per side, which is
+    // the inset gridCardWidth assumes. Split across two containers because the
+    // FlatList pads the page and the row pads between columns.
+    paddingHorizontal: GRID_GUTTER - PRODUCT_ROW_INSET,
     paddingBottom: 120,
   },
   productRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
+    paddingHorizontal: PRODUCT_ROW_INSET,
   },
   sizingNudge: {
     flexDirection: 'row',
