@@ -40,6 +40,9 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarShowLabel: true,
+        // Not Type.caption: that is 12/500 and these labels are 600. Navigator
+        // config rather than app styles, and no slot matches exactly, so the
+        // literals stay rather than lightening every tab label to fit one.
         tabBarLabelStyle: {
           fontSize: 12,
           fontWeight: '600',
@@ -47,6 +50,8 @@ export default function TabLayout() {
         },
         // Badge sized to sit on a 58pt pill rather than a full-width bar, where
         // the default overflowed the rounded edge.
+        // Not Type.label either: same size, but label carries the tracking that
+        // makes uppercase eyebrows legible, and this is a number in a circle.
         tabBarBadgeStyle: {
           fontSize: 11,
           lineHeight: 14,
