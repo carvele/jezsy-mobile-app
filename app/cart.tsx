@@ -1,5 +1,5 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Colors } from "@/constants/theme";
+import { Colors, Radius, Spacing, Type } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCart } from "@/src/context/CartContext";
 import { Image } from "expo-image";
@@ -230,16 +230,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  backBtn: { padding: 8 },
+  backBtn: { padding: Spacing.sm },
   headerTitle: { fontSize: 18, fontWeight: "700" },
   emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 32,
+    padding: Spacing.xxxl,
   },
   emptyIconBg: {
     width: 120,
@@ -247,22 +247,22 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   emptyTitle: {
     fontSize: 22,
     fontWeight: "700",
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   emptySubtitle: {
     fontSize: 15,
     textAlign: "center",
     lineHeight: 22,
-    marginBottom: 32,
+    marginBottom: Spacing.xxxl,
   },
   shopBtn: {
-    paddingHorizontal: 32,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xxxl,
+    paddingVertical: Spacing.lg,
     borderRadius: 30,
     shadowColor: "#C9A96E",
     shadowOffset: { width: 0, height: 4 },
@@ -275,22 +275,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   listContent: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl,
   },
   cartItem: {
     flexDirection: "row",
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     overflow: "hidden",
-    marginBottom: 16,
-    padding: 12,
-    gap: 16,
+    marginBottom: Spacing.lg,
+    padding: Spacing.md,
+    gap: Spacing.lg,
   },
   itemImage: {
     width: 80,
     height: 100,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     backgroundColor: "#2A2A2A",
   },
   itemInfo: {
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 15,
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   itemPrice: {
     fontSize: 16,
@@ -308,8 +308,8 @@ const styles = StyleSheet.create({
   },
   variants: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 4,
+    gap: Spacing.md,
+    marginTop: Spacing.xs,
   },
   variantText: {
     fontSize: 12,
@@ -318,29 +318,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
   quantityControl: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     overflow: "hidden",
   },
   qtyBtn: {
-    padding: 8,
-    paddingHorizontal: 12,
+    padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
   },
   qtyText: {
     fontSize: 14,
     fontWeight: "600",
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
   },
   removeBtn: {
-    padding: 8,
+    padding: Spacing.sm,
   },
   footer: {
-    padding: 24,
+    padding: Spacing.xxl,
     borderTopWidth: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -353,17 +353,17 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   summaryLabel: { fontSize: 14 },
   summaryValue: { fontSize: 14, fontWeight: "500" },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 8,
-    paddingTop: 16,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.lg,
     borderTopWidth: 1,
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   totalLabel: { fontSize: 16, fontWeight: "700" },
   totalValue: { fontSize: 20, fontWeight: "800" },
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
   reserveBtnText: {
     fontSize: 14,

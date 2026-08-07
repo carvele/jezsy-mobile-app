@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -175,24 +175,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  backBtn: { padding: 8 },
+  backBtn: { padding: Spacing.sm },
   headerTitle: { fontSize: 18, fontWeight: '700', letterSpacing: 0.3 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
-  emptyTitle: { fontSize: 20, fontWeight: '700', marginTop: 8 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xxxl, gap: Spacing.md },
+  emptyTitle: { fontSize: 20, fontWeight: '700', marginTop: Spacing.sm },
   emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   browseBtn: {
-    marginTop: 8,
+    marginTop: Spacing.sm,
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 14,
   },
   browseBtnText: { fontWeight: '800', fontSize: 15 },
-  list: { paddingHorizontal: 16, paddingBottom: 100 },
-  row: { justifyContent: 'space-between', marginBottom: 16 },
-  countText: { fontSize: 13, marginBottom: 12, marginTop: 4 },
+  list: { paddingHorizontal: Spacing.lg, paddingBottom: 100 },
+  row: { justifyContent: 'space-between', marginBottom: Spacing.lg },
+  countText: { fontSize: 13, marginBottom: Spacing.md, marginTop: Spacing.xs },
   card: {
     width: CARD_WIDTH,
     borderRadius: 14,
