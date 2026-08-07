@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -96,10 +96,10 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg}}>
             <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>My Reservations</Text>
             <TouchableOpacity onPress={() => router.push('/reservations')}>
-              <Text style={{color: colors.tint, fontSize: 14}}>View All</Text>
+              <Text style={[Type.body, { color: colors.tint }]}>View All</Text>
             </TouchableOpacity>
           </View>
           <View style={[styles.ordersContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -202,8 +202,8 @@ export default function ProfileScreen() {
           accessibilityRole="button"
           accessibilityLabel="Sign out of your account"
         >
-          <IconSymbol name="arrow.left" size={18} color="#F72585" style={{ marginRight: 8 }} />
-          <Text style={styles.signOutText}>Sign Out</Text>
+          <IconSymbol name="arrow.left" size={18} color={colors.error} style={{ marginRight: Spacing.sm }} />
+          <Text style={[styles.signOutText, { color: colors.error }]}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -215,24 +215,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 20,
+    padding: Spacing.xl,
     paddingBottom: 120,
   },
   header: {
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    ...Type.display,
   },
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    marginBottom: 32,
+    marginBottom: Spacing.xxxl,
   },
   avatar: {
     width: 60,
@@ -240,26 +238,24 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: Spacing.lg,
   },
   avatarText: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...Type.headline,
   },
   profileInfo: {
     flex: 1,
   },
   profileName: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...Type.subtitle,
+    marginBottom: Spacing.xs,
   },
   profileEmail: {
-    fontSize: 14,
+    ...Type.body,
   },
   editButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     borderRadius: 20,
     borderWidth: 1,
   },
@@ -268,36 +264,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   section: {
-    marginBottom: 32,
+    marginBottom: Spacing.xxxl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
+    ...Type.subtitle,
+    marginBottom: Spacing.lg,
   },
   ordersContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 20,
-    borderRadius: 16,
+    paddingVertical: Spacing.xl,
+    borderRadius: Radius.lg,
     borderWidth: 1,
   },
   orderStatus: {
     alignItems: 'center',
   },
   orderStatusText: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 8,
+    ...Type.caption,
+    marginTop: Spacing.sm,
   },
   settingsGroup: {
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   settingIconContainer: {
@@ -306,32 +300,29 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: Spacing.lg,
   },
   settingTextContainer: {
     flex: 1,
   },
   settingTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
+    ...Type.bodyLarge,
+    marginBottom: Spacing.xs,
   },
   settingSubtitle: {
-    fontSize: 13,
+    ...Type.caption,
   },
   signOutButton: {
-    marginTop: 16,
+    marginTop: Spacing.lg,
     height: 56,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
   },
   signOutText: {
-    color: '#F72585', // Using notification color for destructive action
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
 });
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -142,18 +142,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  backBtn: { padding: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
+  backBtn: { padding: Spacing.sm },
+  headerTitle: { ...Type.subtitle },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { padding: 20 },
+  content: { padding: Spacing.xl },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     gap: 14,
   },
@@ -165,12 +165,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rowText: { flex: 1 },
-  rowTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  rowTitle: { ...Type.bodyStrong, marginBottom: 2 },
   rowSubtitle: { fontSize: 12, lineHeight: 17 },
   footnote: {
     fontSize: 12,
     lineHeight: 18,
-    marginTop: 16,
-    paddingHorizontal: 4,
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.xs,
   },
 });

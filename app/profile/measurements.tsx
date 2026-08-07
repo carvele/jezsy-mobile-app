@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -364,7 +364,7 @@ export default function MeasurementsScreen() {
               <IconSymbol name="checkmark.circle.fill" size={20} color="#00FF00" />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.infoText, { color: colors.text, fontWeight: 'bold' }]}>Scan Successful</Text>
-                <Text style={[styles.infoText, { color: colors.secondaryText, marginTop: 4 }]}>
+                <Text style={[styles.infoText, { color: colors.secondaryText, marginTop: Spacing.xs }]}>
                   Quality: {Math.round(scanConfidence * 100)}%. AI derived measurements are indicated with a colored dot. You can adjust them manually.
                 </Text>
               </View>
@@ -381,7 +381,7 @@ export default function MeasurementsScreen() {
           </View>
 
           <View style={[styles.section, { borderColor: colors.border }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg }}>
               <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>General Metrics</Text>
               <View style={[styles.unitToggle, { borderColor: colors.border }]}>
                 <TouchableOpacity
@@ -431,7 +431,7 @@ export default function MeasurementsScreen() {
           </View>
 
           <View style={[styles.section, { borderColor: colors.border, borderBottomWidth: 0 }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg }}>
               <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Measurements ({unit})</Text>
               
               <TouchableOpacity
@@ -480,7 +480,7 @@ export default function MeasurementsScreen() {
             </TouchableOpacity>
 
             {showAdvanced && (
-              <View style={{ marginTop: 16 }}>
+              <View style={{ marginTop: Spacing.lg }}>
                 <View style={styles.row}>
                   {renderInput("Shoulder", shoulderWidth, setShoulderWidth, 'shoulderWidth')}
                   {renderInput("Arm", armLength, setArmLength, 'armLength')}
@@ -524,34 +524,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  backBtn: { padding: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  content: { padding: 20 },
+  backBtn: { padding: Spacing.sm },
+  headerTitle: { ...Type.subtitle },
+  content: { padding: Spacing.xl },
   infoCard: {
     flexDirection: 'row',
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    gap: Spacing.md,
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: Spacing.xl,
   },
   infoText: { fontSize: 13, lineHeight: 18, flex: 1 },
   section: {
-    paddingBottom: 24,
-    marginBottom: 24,
+    paddingBottom: Spacing.xxl,
+    marginBottom: Spacing.xxl,
     borderBottomWidth: 1,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16 },
+  sectionTitle: { ...Type.bodyLargeStrong, marginBottom: Spacing.lg },
   scanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.lg,
   },
   scanBtnText: {
     fontSize: 13,
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
   },
   unitToggle: {
     flexDirection: 'row',
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
   },
   fitOptionsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
   },
   fitOption: {
     flex: 1,
@@ -584,14 +584,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   fitOptionText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.bodyStrong,
     textTransform: 'capitalize',
   },
   row: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
+    gap: Spacing.lg,
+    marginBottom: Spacing.lg,
   },
   inputGroup: {
     flex: 1,
@@ -600,11 +599,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '500',
+    ...Type.caption,
   },
   confDot: {
     width: 8,
@@ -613,17 +611,19 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 52,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
+    // Size only, not Type.bodyLarge: a lineHeight on a fixed-height Android
+    // TextInput shifts the baseline off centre.
     fontSize: 16,
   },
   advancedToggle: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
   },
   footer: {
-    padding: 20,
+    padding: Spacing.xl,
     borderTopWidth: 1,
   },
   saveBtn: {
@@ -633,7 +633,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
 });

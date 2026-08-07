@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown, Calendar } from 'lucide-react-native';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useToast } from '@/src/context/ToastContext';
 import { CountryPickerModal } from '@/src/components/CountryPickerModal';
@@ -198,7 +198,7 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: 24 }]}>PERSONAL INFO</Text>
+          <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>PERSONAL INFO</Text>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Mobile number</Text>
             <View style={styles.phoneRow}>
@@ -222,7 +222,7 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          <View style={[styles.fieldGroup, { marginTop: 16 }]}>
+          <View style={[styles.fieldGroup, { marginTop: Spacing.lg }]}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Date of birth</Text>
             <View style={styles.dobRow}>
               <TextInput
@@ -239,7 +239,7 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          <View style={{ marginTop: 16 }}>
+          <View style={{ marginTop: Spacing.lg }}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Gender</Text>
             <View style={styles.chipGrid}>
               {GENDER_OPTIONS.map((g) => (
@@ -253,13 +253,21 @@ export default function EditProfileScreen() {
                   onPress={() => set('gender', g)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.chipText, { color: colors.secondaryText }, data.gender === g && styles.chipTextActive, { color: colors.onTint }]}>{g}</Text>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      { color: data.gender === g ? colors.onTint : colors.secondaryText },
+                      data.gender === g && styles.chipTextActive,
+                    ]}
+                  >
+                    {g}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
 
-          <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: 24 }]}>ADDRESS</Text>
+          <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>ADDRESS</Text>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Street address</Text>
             <TextInput
@@ -270,7 +278,7 @@ export default function EditProfileScreen() {
               placeholderTextColor={colors.secondaryText}
             />
           </View>
-          <View style={[styles.fieldGroup, { marginTop: 16 }]}>
+          <View style={[styles.fieldGroup, { marginTop: Spacing.lg }]}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Barangay</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
@@ -280,7 +288,7 @@ export default function EditProfileScreen() {
               placeholderTextColor={colors.secondaryText}
             />
           </View>
-          <View style={[styles.row, { marginTop: 16 }]}>
+          <View style={[styles.row, { marginTop: Spacing.lg }]}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>City / Municipality</Text>
               <TextInput
@@ -292,7 +300,7 @@ export default function EditProfileScreen() {
               />
             </View>
           </View>
-          <View style={[styles.row, { marginTop: 16 }]}>
+          <View style={[styles.row, { marginTop: Spacing.lg }]}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>Province</Text>
               <TextInput
@@ -350,18 +358,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerAction: { fontSize: 16 },
-  headerTitle: { fontSize: 17, fontWeight: '700' },
-  body: { padding: 20, paddingBottom: 48 },
-  sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginBottom: 12 },
+  headerAction: { ...Type.bodyLarge },
+  headerTitle: { ...Type.subtitle },
+  body: { padding: Spacing.xl, paddingBottom: 48 },
+  sectionLabel: { ...Type.label, marginBottom: Spacing.md },
   row: { flexDirection: 'row' },
   fieldGroup: { gap: 6 },
   label: { fontSize: 12, fontWeight: '600' },
   input: {
+    // Size only, not Type.bodyLarge: a lineHeight on an Android TextInput
+    // shifts the baseline against the underline.
     fontSize: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
@@ -371,10 +381,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 44,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     borderRadius: 10,
     borderWidth: 1,
-    marginRight: 12,
+    marginRight: Spacing.md,
     gap: 6,
   },
   countryFlag: { fontSize: 16 },
@@ -383,8 +393,8 @@ const styles = StyleSheet.create({
   dobRow: { flexDirection: 'row', alignItems: 'center' },
   dobInput: { flex: 1 },
   calendarBtn: { position: 'absolute', right: 0, padding: 10 },
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100, borderWidth: 1 },
+  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginTop: Spacing.sm },
+  chip: { paddingHorizontal: Spacing.lg, paddingVertical: 10, borderRadius: 100, borderWidth: 1 },
   chipText: { fontSize: 14, fontWeight: '500' },
   chipTextActive: { fontWeight: '700' },
 });
