@@ -61,7 +61,7 @@ export function SizeChartModal({ visible, measurements, sizes, recommendedSize, 
                     accessibilityRole="button"
                     accessibilityLabel={`Show measurements in ${u === 'cm' ? 'centimetres' : 'inches'}`}
                   >
-                    <Text style={[styles.unitOptionText, { color: unit === u ? '#0D0D0D' : colors.secondaryText }]}>
+                    <Text style={[styles.unitOptionText, { color: unit === u ? colors.onTint : colors.secondaryText }]}>
                       {u.toUpperCase()}
                     </Text>
                   </TouchableOpacity>

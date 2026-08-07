@@ -45,9 +45,9 @@ export function WardrobeStatsBar({ stats, onSelect, active = 'all' }: Props) {
             accessibilityState={{ selected: isActive }}
             accessibilityLabel={`${cell.value} ${cell.label}`}
           >
-            <Text style={[styles.value, { color: isActive ? '#0D0D0D' : colors.text }]}>{cell.value}</Text>
+            <Text style={[styles.value, { color: isActive ? colors.onTint : colors.text }]}>{cell.value}</Text>
             <Text
-              style={[styles.label, { color: isActive ? '#0D0D0D' : colors.secondaryText }]}
+              style={[styles.label, { color: isActive ? colors.onTint : colors.secondaryText }]}
               numberOfLines={1}
             >
               {cell.label}
