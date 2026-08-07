@@ -12,6 +12,13 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { formatTimeLabel } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
+import {
+  STATUS_FILTERS,
+  type StatusFilter,
+  statusBucket,
+  statusLabel,
+  filterLabel,
+} from '@/src/utils/reservationStatus';
 
 // The embedded aggregate arrives as reservation_items: [{ count: n }].
 type Reservation = Database['public']['Tables']['reservations']['Row'] & {
@@ -24,17 +31,6 @@ type Reservation = Database['public']['Tables']['reservations']['Row'] & {
 const extraItemCount = (reservation: Reservation): number =>
   Math.max(0, (reservation.reservation_items?.[0]?.count ?? 1) - 1);
 
-const STATUS_FILTERS = ['all', 'pending', 'confirmed', 'completed', 'cancelled'] as const;
-
-// The admin dashboard writes 'To Pay' for an accepted-but-unpaid reservation,
-// which this screen had never heard of: it matched no filter tab, so those
-// reservations were invisible under everything except "All". Both labels mean
-// the same thing to a customer, so they fold into one bucket here.
-function normalizeStatus(status: string | null): string {
-  const s = (status || 'pending').toLowerCase();
-  return s === 'to pay' ? 'confirmed' : s;
-}
-type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 export default function ReservationsScreen() {
   const { session } = useAuth();
@@ -85,19 +81,19 @@ export default function ReservationsScreen() {
   }, [session, showToast]);
 
   const getStatusColor = (status: string | null) => {
-    if (!status) return colors.warning;
-    switch (normalizeStatus(status)) {
+    switch (statusBucket(status)) {
       case 'pending': return colors.warning;
-      case 'confirmed': return colors.info;
+      // Money is owed: the same attention colour the deadline copy uses.
+      case 'toPay': return colors.notification;
+      case 'ready': return colors.info;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
-      default: return colors.text;
     }
   };
 
   const filteredReservations = useMemo(() => {
     if (activeFilter === 'all') return reservations;
-    return reservations.filter((r) => normalizeStatus(r.status) === activeFilter);
+    return reservations.filter((r) => statusBucket(r.status) === activeFilter);
   }, [reservations, activeFilter]);
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {
@@ -108,14 +104,14 @@ export default function ReservationsScreen() {
         style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         accessible={true}
         accessibilityRole="button"
-        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${item.status || 'Pending'}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
+        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${statusLabel(item.status)}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
         accessibilityHint="View reservation details"
         onPress={() => router.push(`/reservations/${item.id}` as any)}
       >
         <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
           <Text style={[styles.reservationId, { color: colors.secondaryText }]}>ID: {item.display_id || item.id.substring(0,8)}</Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20', borderColor: getStatusColor(item.status) }]}>
-            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{item.status || 'Pending'}</Text>
+            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{statusLabel(item.status)}</Text>
           </View>
         </View>
         
@@ -169,7 +165,7 @@ export default function ReservationsScreen() {
           contentContainerStyle={styles.filterRowContent}
           renderItem={({ item: filter }) => {
             const isActive = activeFilter === filter;
-            const label = filter.charAt(0).toUpperCase() + filter.slice(1);
+            const label = filterLabel(filter);
             return (
               <TouchableOpacity
                 onPress={() => setActiveFilter(filter)}
@@ -220,7 +216,12 @@ export default function ReservationsScreen() {
       ) : filteredReservations.length === 0 ? (
         <View style={styles.centerContainer}>
           <IconSymbol name="calendar.badge.exclamationmark" size={64} color={colors.border} />
-          <Text style={[styles.emptyText, { color: colors.text }]}>No {activeFilter} reservations</Text>
+          {/* Quoting the filter's own label rather than interpolating the key:
+              the keys are camelCase now, so the old copy would have read
+              "No toPay reservations". */}
+          <Text style={[styles.emptyText, { color: colors.text }]}>
+            Nothing under &ldquo;{filterLabel(activeFilter)}&rdquo;
+          </Text>
           <Text style={[styles.emptySubtext, { color: colors.secondaryText }]}>
             Try a different filter to see your other reservations.
           </Text>

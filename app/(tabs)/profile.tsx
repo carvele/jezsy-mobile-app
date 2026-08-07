@@ -114,12 +114,21 @@ export default function ProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.orderStatus}
-              onPress={() => router.push('/reservations?status=confirmed')}
+              onPress={() => router.push('/reservations?status=toPay')}
               accessibilityRole="button"
-              accessibilityLabel="View confirmed reservations"
+              accessibilityLabel="View reservations awaiting payment"
+            >
+              <IconSymbol name="creditcard" size={24} color={colors.icon} />
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>To pay</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=ready')}
+              accessibilityRole="button"
+              accessibilityLabel="View reservations ready to collect"
             >
               <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
-              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Confirmed</Text>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Ready</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.orderStatus}

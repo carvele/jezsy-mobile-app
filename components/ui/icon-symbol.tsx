@@ -90,6 +90,9 @@ const MAPPING = {
   'sun.max.fill': 'light-mode',
   'circle.lefthalf.filled': 'contrast',
 
+  // Payment
+  'creditcard': 'credit-card',
+
   // Misc
   'heart': 'favorite-border',
   'heart.fill': 'favorite',
