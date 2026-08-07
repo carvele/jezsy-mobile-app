@@ -221,7 +221,7 @@ export default function ARTryOnScreen() {
           accessibilityLabel={mode === '3d' ? 'Switch to 2D camera overlay' : 'Switch to 3D model view'}
           accessibilityHint={mode === '3d' ? 'Uses your camera to overlay the item image' : 'Shows the rotatable 3D model'}
         >
-          <Text style={styles.modeToggleText}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
+          <Text style={[styles.modeToggleText, { color: colors.onTint }]}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -409,7 +409,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   modeToggleText: {
-    color: '#0D0D0D',
     fontWeight: '700',
     fontSize: 12,
   },

@@ -319,7 +319,7 @@ export default function AddWardrobeItemScreen() {
                     accessibilityRole="button"
                     accessibilityState={{ selected: isSelected }}
                   >
-                    <Text style={[styles.chipText, { color: isSelected ? '#0D0D0D' : colors.text }]}>
+                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
                       {type}
                     </Text>
                   </TouchableOpacity>
@@ -343,7 +343,7 @@ export default function AddWardrobeItemScreen() {
                     ]}
                     onPress={() => setCategory(cat)}
                   >
-                    <Text style={[styles.chipText, { color: isSelected ? '#0D0D0D' : colors.text }]}>
+                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
                       {cat}
                     </Text>
                   </TouchableOpacity>
@@ -410,11 +410,11 @@ export default function AddWardrobeItemScreen() {
         >
           {saving ? (
             <View style={styles.loadingRow}>
-              <ActivityIndicator color="#0D0D0D" size="small" />
-              <Text style={styles.saveButtonText}>{statusMessage || 'Saving...'}</Text>
+              <ActivityIndicator color={colors.onTint} size="small" />
+              <Text style={[styles.saveButtonText, { color: colors.onTint }]}>{statusMessage || 'Saving...'}</Text>
             </View>
           ) : (
-            <Text style={styles.saveButtonText}>Add to Wardrobe</Text>
+            <Text style={[styles.saveButtonText, { color: colors.onTint }]}>Add to Wardrobe</Text>
           )}
         </TouchableOpacity>
         
@@ -582,7 +582,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   saveButtonText: {
-    color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '800',
   },

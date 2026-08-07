@@ -76,7 +76,7 @@ export default function ProfileScreen() {
 
         <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.avatar, { backgroundColor: colors.tint }]}>
-            <Text style={styles.avatarText}>
+            <Text style={[styles.avatarText, { color: colors.onTint }]}>
               {profile?.first_name ? profile.first_name[0].toUpperCase() : (user?.email?.[0].toUpperCase() || 'J')}
             </Text>
           </View>
@@ -236,7 +236,6 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#0D0D0D',
   },
   profileInfo: {
     flex: 1,

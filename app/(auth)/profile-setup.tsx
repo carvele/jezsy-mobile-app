@@ -335,7 +335,7 @@ export default function ProfileSetupScreen() {
                   onPress={() => set('gender', g)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.chipText, data.gender === g && styles.chipTextActive]}>{g}</Text>
+                  <Text style={[styles.chipText, data.gender === g && styles.chipTextActive, { color: colors.onTint }]}>{g}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.tint,
   },
   chipText: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '500' },
-  chipTextActive: { color: '#0D0D0D', fontWeight: '700' },
+  chipTextActive: { fontWeight: '700' },
 
   helperText: {
     fontSize: 12,

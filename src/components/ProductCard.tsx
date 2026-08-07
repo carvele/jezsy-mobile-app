@@ -104,20 +104,20 @@ export function ProductCard({
           <View style={styles.badgeColumn}>
             {product.is_new_arrival && (
               <View style={[styles.badge, { backgroundColor: colors.tint }]}>
-                <Text style={styles.badgeText}>NEW</Text>
+                <Text style={[styles.badgeText, { color: colors.onTint }]}>NEW</Text>
               </View>
             )}
             {onSale && (
               <View style={[styles.badge, { backgroundColor: colors.notification }]}>
-                <Text style={styles.badgeText}>
+                <Text style={[styles.badgeText, { color: colors.onNotification }]}>
                   {product.discount_percentage ? `-${product.discount_percentage}%` : 'SALE'}
                 </Text>
               </View>
             )}
             {product.model_3d_url && (
               <View style={[styles.badge, styles.badgeRow, { backgroundColor: 'rgba(201,169,110,0.92)' }]}>
-                <IconSymbol name="cube.transparent" size={10} color="#0D0D0D" />
-                <Text style={styles.badgeText}>AR</Text>
+                <IconSymbol name="cube.transparent" size={10} color={Colors.dark.onTint} />
+                <Text style={[styles.badgeText, { color: Colors.dark.onTint }]}>AR</Text>
               </View>
             )}
           </View>
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   badgeColumn: { position: 'absolute', top: 8, left: 8, gap: 4, alignItems: 'flex-start' },
   badge: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  badgeText: { fontSize: 12, fontWeight: '800', color: '#0D0D0D' },
+  badgeText: { fontSize: 12, fontWeight: '800' },
   heart: { position: 'absolute', top: 6, right: 6 },
   heartBg: {
     width: 30,

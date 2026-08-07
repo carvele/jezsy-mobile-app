@@ -129,6 +129,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   acceptText: {
-    color: '#0D0D0D',
+    
   }
 });

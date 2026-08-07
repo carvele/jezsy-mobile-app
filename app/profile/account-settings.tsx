@@ -214,9 +214,9 @@ export default function AccountSettingsScreen() {
               accessibilityState={{ disabled: submitting }}
             >
               {submitting ? (
-                <ActivityIndicator color="#0D0D0D" />
+                <ActivityIndicator color={colors.onTint} />
               ) : (
-                <Text style={styles.submitButtonText}>Update Password</Text>
+                <Text style={[styles.submitButtonText, { color: colors.onTint }]}>Update Password</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -331,7 +331,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonText: {
-    color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '700',
   },

@@ -328,7 +328,7 @@ export default function ProductDetailScreen() {
               accessibilityLabel="Try on in Augmented Reality"
               accessibilityHint="Launches the AR viewer to see this clothing item on your camera feed"
             >
-              <IconSymbol name="cube.transparent" size={24} color="#0D0D0D" />
+              <IconSymbol name="cube.transparent" size={24} color={colors.onTint} />
               <Text style={styles.arButtonText}>Try in AR</Text>
             </TouchableOpacity>
           )}
@@ -622,8 +622,8 @@ export default function ProductDetailScreen() {
 
           {addedToBag && (
             <View style={[styles.addedToast, { backgroundColor: colors.tint }]}>
-              <IconSymbol name="checkmark" size={14} color="#0D0D0D" />
-              <Text style={styles.addedToastText}>Added to Bag!</Text>
+              <IconSymbol name="checkmark" size={14} color={colors.onTint} />
+              <Text style={[styles.addedToastText, { color: colors.onTint }]}>Added to Bag!</Text>
             </View>
           )}
 
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, gap: 8,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
   },
-  arButtonText: { color: "#0D0D0D", fontWeight: "700", fontSize: 14 },
+  arButtonText: { fontWeight: "700", fontSize: 14 },
   contentContainer: { padding: 24, borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
   // One clear step down at each level: 26/800 name, 20/700 price, 16/700
   // section headings, 12/700 eyebrow. Previously the name was 26/800 and the
@@ -799,10 +799,10 @@ const styles = StyleSheet.create({
     flex: 1, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center",
     shadowColor: "#C9A96E", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
   },
-  primaryActionText: { color: "#0D0D0D", fontSize: 18, fontWeight: "700" },
+  primaryActionText: { fontSize: 18, fontWeight: "700" },
   addedToast: {
     position: 'absolute', top: -40, left: 0, right: 0, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 20,
   },
-  addedToastText: { color: '#0D0D0D', fontWeight: '700', fontSize: 14 },
+  addedToastText: { fontWeight: '700', fontSize: 14 },
 });

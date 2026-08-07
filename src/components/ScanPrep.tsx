@@ -126,7 +126,7 @@ export function ScanPrep({ onDone, onCancel }: Props) {
           accessibilityHint={!canContinue ? 'Hold the phone upright to continue' : undefined}
           accessibilityState={{ disabled: !canContinue }}
         >
-          <Text style={styles.primaryText}>{step === TOTAL - 1 ? 'Start scan' : 'Continue'}</Text>
+          <Text style={[styles.primaryText, { color: colors.onTint }]}>{step === TOTAL - 1 ? 'Start scan' : 'Continue'}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.secondary, { borderColor: colors.border }]}
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   primary: { flex: 1, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
-  primaryText: { color: '#0D0D0D', fontSize: 15, fontWeight: '700' },
+  primaryText: {  fontSize: 15, fontWeight: '700' },
   secondary: {
     flex: 1,
     height: 52,

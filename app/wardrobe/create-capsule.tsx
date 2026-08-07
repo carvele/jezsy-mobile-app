@@ -108,7 +108,7 @@ export default function CreateCapsuleScreen() {
             onPress={handleSave}
             disabled={saving}
           >
-            {saving ? <ActivityIndicator color="#0D0D0D" /> : <Text style={styles.saveButtonText}>Create Capsule</Text>}
+            {saving ? <ActivityIndicator color={colors.onTint} /> : <Text style={[styles.saveButtonText, { color: colors.onTint }]}>Create Capsule</Text>}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -146,7 +146,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   saveButtonText: {
-    color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '800',
   },

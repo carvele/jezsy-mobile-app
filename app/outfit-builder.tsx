@@ -372,7 +372,7 @@ export default function OutfitBuilderScreen() {
           accessibilityHint={filledCount === 0 ? "Add at least one item to save" : "Opens the save dialog to name and store this outfit"}
           accessibilityState={{ disabled: filledCount === 0 }}
         >
-          <Text style={styles.saveHeaderBtnText}>Save</Text>
+          <Text style={[styles.saveHeaderBtnText, { color: colors.onTint }]}>Save</Text>
         </TouchableOpacity>
       </View>
 
@@ -575,9 +575,9 @@ export default function OutfitBuilderScreen() {
                 disabled={saving}
               >
                 {saving ? (
-                  <ActivityIndicator color="#0D0D0D" />
+                  <ActivityIndicator color={colors.onTint} />
                 ) : (
-                  <Text style={styles.confirmBtnText}>Save Outfit</Text>
+                  <Text style={[styles.confirmBtnText, { color: colors.onTint }]}>Save Outfit</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
   },
-  saveHeaderBtnText: { color: '#0D0D0D', fontWeight: '800', fontSize: 14 },
+  saveHeaderBtnText: { fontWeight: '800', fontSize: 14 },
   previewStrip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  confirmBtnText: { color: '#0D0D0D', fontWeight: '800', fontSize: 15 },
+  confirmBtnText: { fontWeight: '800', fontSize: 15 },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.55)',

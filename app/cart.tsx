@@ -271,7 +271,6 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   shopBtnText: {
-    color: "#0D0D0D",
     fontWeight: "800",
     fontSize: 16,
   },
@@ -377,7 +376,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   reserveBtnText: {
-    color: "#0D0D0D",
     fontSize: 14,
     fontWeight: "800",
   },
@@ -389,7 +387,6 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   reserveAllBtnText: {
-    color: "#0D0D0D",
     fontSize: 16,
     fontWeight: "800",
     letterSpacing: 0.3,
