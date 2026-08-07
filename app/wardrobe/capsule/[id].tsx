@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors, Spacing, Radius } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -351,10 +351,10 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   iconBtn: { padding: Spacing.xs },
-  headerTitle: { fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' },
+  headerTitle: { ...Type.subtitle, fontWeight: '700', flex: 1, textAlign: 'center' },
   content: { padding: Spacing.xl, paddingBottom: 60 },
-  description: { fontSize: 14, marginBottom: Spacing.lg, lineHeight: 20 },
-  progressLabel: { fontSize: 15, fontWeight: '700', marginBottom: Spacing.sm },
+  description: { ...Type.body, marginBottom: Spacing.lg, lineHeight: 20 },
+  progressLabel: { ...Type.bodyStrong, fontWeight: '700', marginBottom: Spacing.sm },
   progressTrack: { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: Spacing.xl },
   progressFill: { height: '100%', borderRadius: 4 },
   addButton: {
@@ -367,13 +367,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: Spacing.xxl,
   },
-  addButtonText: { fontSize: 15, fontWeight: '700' },
+  addButtonText: { ...Type.bodyStrong, fontWeight: '700' },
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: Spacing.md },
   combinationsBlock: { marginTop: Spacing.sm },
   dividerWrap: { alignItems: 'center', marginBottom: Spacing.lg },
-  combinationsTitle: { fontSize: 18, fontWeight: '700', marginBottom: Spacing.xs },
-  combinationsSub: { fontSize: 14, lineHeight: 21, marginBottom: Spacing.lg },
-  emptyText: { fontSize: 15, textAlign: 'center' },
+  combinationsTitle: { ...Type.subtitle, fontWeight: '700', marginBottom: Spacing.xs },
+  combinationsSub: { ...Type.body, lineHeight: 21, marginBottom: Spacing.lg },
+  emptyText: { ...Type.bodyStrong, textAlign: 'center' },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   },
   itemImage: { width: '100%', height: 160 },
   itemInfo: { padding: 10 },
-  itemLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase' },
+  itemLabel: { ...Type.caption, fontWeight: '600', textTransform: 'uppercase' },
   removeBtn: {
     position: 'absolute',
     top: 8,

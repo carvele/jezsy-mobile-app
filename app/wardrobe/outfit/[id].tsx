@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Link } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors, Spacing, Radius } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -171,9 +171,9 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   iconBtn: { padding: Spacing.xs },
-  headerTitle: { fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' },
+  headerTitle: { ...Type.subtitle, fontWeight: '700', flex: 1, textAlign: 'center' },
   content: { padding: Spacing.xl, paddingBottom: 60 },
-  itemCount: { fontSize: 14, marginBottom: Spacing.lg },
+  itemCount: { ...Type.body, marginBottom: Spacing.lg },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -194,17 +194,17 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
   },
   slotLabel: {
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: '700',
     textTransform: 'uppercase',
     marginBottom: Spacing.xs,
   },
   itemName: {
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '600',
   },
   notOwned: {
-    fontSize: 11,
+    ...Type.caption,
     fontWeight: '700',
     marginTop: Spacing.xs,
   },

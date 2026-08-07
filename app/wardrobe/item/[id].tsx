@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors, Spacing, Radius } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: Spacing.xs },
   deleteButton: { padding: Spacing.xs },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerTitle: { ...Type.subtitle, fontWeight: '700' },
   content: { padding: Spacing.xl, paddingBottom: 60 },
   image: {
     width: '100%',
@@ -238,11 +238,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
   },
   tagText: {
-    fontSize: 13,
+    ...Type.caption,
     fontWeight: '700',
   },
   subCategory: {
-    fontSize: 14,
+    ...Type.body,
     marginBottom: Spacing.lg,
   },
   colorsRow: {
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   colorChipText: {
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: '600',
   },
   wearCard: {
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   wearLabel: {
-    fontSize: 15,
+    ...Type.bodyStrong,
     fontWeight: '600',
     flex: 1,
   },
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   logButtonText: {
-    fontSize: 16,
+    ...Type.bodyStrong,
     fontWeight: '700',
   },
 });

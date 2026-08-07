@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Colors, Spacing, Radius } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   headerTitle: {
-    fontSize: 18,
+    ...Type.subtitle,
     fontWeight: '700',
   },
   content: {
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
   },
   processingText: {
     marginTop: Spacing.md,
-    fontSize: 16,
+    ...Type.bodyStrong,
     fontWeight: '600',
   },
   pickerButtons: {
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   },
   pickerBtnText: {
     marginTop: Spacing.md,
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '600',
   },
   form: {
@@ -523,11 +523,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   label: {
-    fontSize: 16,
+    ...Type.bodyStrong,
     fontWeight: '700',
   },
   subLabel: {
-    fontSize: 12,
+    ...Type.caption,
     marginTop: 2,
   },
   input: {
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
     paddingHorizontal: Spacing.lg,
-    fontSize: 15,
+    ...Type.bodyStrong,
   },
   chipRow: {
     paddingVertical: Spacing.xs,
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipText: {
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '600',
   },
   colorPalette: {
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   saveButtonText: {
-    fontSize: 16,
+    ...Type.bodyStrong,
     fontWeight: '800',
   },
   loadingRow: {
