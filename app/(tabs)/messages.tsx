@@ -135,8 +135,8 @@ export default function InboxScreen() {
               {item.last_message || 'Start a conversation...'}
             </Text>
             {item.unread_count > 0 && !isStaff && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.unread_count}</Text>
+              <View style={[styles.badge, { backgroundColor: colors.notification }]}>
+                <Text style={[styles.badgeText, { color: colors.onNotification }]}>{item.unread_count}</Text>
               </View>
             )}
           </View>
@@ -162,7 +162,7 @@ export default function InboxScreen() {
         <View style={styles.notificationContent}>
           <View style={styles.notificationHeader}>
             <Text style={[styles.notificationTitle, { color: colors.text }]}>{item.title}</Text>
-            {!item.is_read && <View style={styles.unreadDot} />}
+            {!item.is_read && <View style={[styles.unreadDot, { backgroundColor: colors.notification }]} />}
           </View>
           <Text style={[styles.notificationBody, { color: colors.secondaryText }]}>{item.body}</Text>
           <Text style={[styles.notificationDate, { color: colors.secondaryText }]}>
@@ -349,7 +349,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   badge: {
-    backgroundColor: '#ff3b30',
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -358,7 +357,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   badgeText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -413,7 +411,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF3B30',
     marginTop: 6,
     marginLeft: 8,
   },
