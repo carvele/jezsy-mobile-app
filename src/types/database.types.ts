@@ -1070,6 +1070,9 @@ export type Database = {
         Row: {
           appointment_time: string | null
           assigned_staff_id: string | null
+          balance_method: string | null
+          balance_settled_at: string | null
+          balance_settled_by: string | null
           color: string | null
           countdown: boolean | null
           created_at: string
@@ -1092,6 +1095,9 @@ export type Database = {
           quantity: number | null
           receipt_url: string | null
           rental_price: number | null
+          reschedule_requested_at: string | null
+          reschedule_requested_at_time: string | null
+          reschedule_requested_date: string | null
           return_date: string | null
           size: string | null
           staff_id: string | null
@@ -1101,6 +1107,9 @@ export type Database = {
         Insert: {
           appointment_time?: string | null
           assigned_staff_id?: string | null
+          balance_method?: string | null
+          balance_settled_at?: string | null
+          balance_settled_by?: string | null
           color?: string | null
           countdown?: boolean | null
           created_at?: string
@@ -1123,6 +1132,9 @@ export type Database = {
           quantity?: number | null
           receipt_url?: string | null
           rental_price?: number | null
+          reschedule_requested_at?: string | null
+          reschedule_requested_at_time?: string | null
+          reschedule_requested_date?: string | null
           return_date?: string | null
           size?: string | null
           staff_id?: string | null
@@ -1132,6 +1144,9 @@ export type Database = {
         Update: {
           appointment_time?: string | null
           assigned_staff_id?: string | null
+          balance_method?: string | null
+          balance_settled_at?: string | null
+          balance_settled_by?: string | null
           color?: string | null
           countdown?: boolean | null
           created_at?: string
@@ -1154,6 +1169,9 @@ export type Database = {
           quantity?: number | null
           receipt_url?: string | null
           rental_price?: number | null
+          reschedule_requested_at?: string | null
+          reschedule_requested_at_time?: string | null
+          reschedule_requested_date?: string | null
           return_date?: string | null
           size?: string | null
           staff_id?: string | null
@@ -1458,19 +1476,25 @@ export type Database = {
           close_time: string
           day_of_week: number
           is_closed: boolean | null
+          max_daily_bookings: number | null
           open_time: string
+          slot_capacity: number
         }
         Insert: {
           close_time: string
           day_of_week: number
           is_closed?: boolean | null
+          max_daily_bookings?: number | null
           open_time: string
+          slot_capacity?: number
         }
         Update: {
           close_time?: string
           day_of_week?: number
           is_closed?: boolean | null
+          max_daily_bookings?: number | null
           open_time?: string
+          slot_capacity?: number
         }
         Relationships: []
       }
@@ -1687,6 +1711,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assert_bookable_slot: {
+        Args: {
+          _appointment: string
+          _check_capacity?: boolean
+          _date: string
+          _exclude_reservation?: string
+        }
+        Returns: undefined
+      }
       check_email_exists: { Args: { lookup_email: string }; Returns: boolean }
       create_reservation: {
         Args: {
@@ -1739,12 +1772,28 @@ export type Database = {
         Args: { p_emoji: string; p_message_id: string; p_user_id: string }
         Returns: Json
       }
+      request_reschedule: {
+        Args: {
+          _appointment_time: string
+          _date: string
+          _reservation_id: string
+        }
+        Returns: Json
+      }
       reschedule_reservation: {
         Args: {
           _appointment_time: string
           _date: string
           _reservation_id: string
         }
+        Returns: Json
+      }
+      resolve_reschedule: {
+        Args: { _approve: boolean; _reservation_id: string }
+        Returns: Json
+      }
+      settle_reservation_balance: {
+        Args: { _method?: string; _reservation_id: string }
         Returns: Json
       }
       submit_reservation_receipt: {

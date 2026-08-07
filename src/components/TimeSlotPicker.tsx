@@ -20,7 +20,11 @@ import {
     View,
 } from "react-native";
 
-const SLOT_CAPACITY = 3;
+// Only a fallback for a weekday with no store_hours row. The real number is
+// store_hours.slot_capacity, which assert_bookable_slot reads too -- this used
+// to be a second hardcoded 3, so changing the server's cap would have left the
+// picker offering slots the server then refused.
+const DEFAULT_SLOT_CAPACITY = 3;
 
 interface TimeSlotPickerProps {
   selectedDate: Date;
@@ -74,6 +78,11 @@ export function TimeSlotPicker({
       }
 
       let isOpen = true;
+      // Both read from store_hours below. assert_bookable_slot reads the same
+      // row, so the picker and the server agree without either restating the
+      // number.
+      let slotCapacity = DEFAULT_SLOT_CAPACITY;
+      let maxDailyBookings: number | null = null;
       let openTime = "10:00:00";
       // Fallback only, for a day with no store_hours row. Kept in step with the
       // table, which closes at 17:00 -- validate_reservation_time is the real
@@ -97,6 +106,14 @@ export function TimeSlotPicker({
           openTime = hoursData.open_time;
           closeTime = hoursData.close_time;
         }
+      }
+
+      // Capacity comes from the weekday row even on a date with a custom
+      // closure: a closure changes the hours, not how many people can be seen
+      // in one slot.
+      if (hoursData) {
+        slotCapacity = hoursData.slot_capacity ?? DEFAULT_SLOT_CAPACITY;
+        maxDailyBookings = hoursData.max_daily_bookings ?? null;
       }
 
       if (!isOpen) {
@@ -137,6 +154,11 @@ export function TimeSlotPicker({
         });
       }
 
+      // A day at its ceiling has no bookable slots left, whatever the per-slot
+      // count says.
+      const bookedToday = Object.values(bookedCounts).reduce((sum, n) => sum + n, 0);
+      const dayIsFull = maxDailyBookings !== null && bookedToday >= maxDailyBookings;
+
       // Generate 30 min slots
       const generatedSlots = [];
       const [openH, openM] = openTime.split(":").map(Number);
@@ -157,7 +179,7 @@ export function TimeSlotPicker({
         // Ensure it's not in the past
         const isPast = current < now;
         const count = bookedCounts[timeValue] || 0;
-        const isAvailable = !isPast && count < SLOT_CAPACITY;
+        const isAvailable = !isPast && count < slotCapacity && !dayIsFull;
 
         generatedSlots.push({
           value: timeValue,
