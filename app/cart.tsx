@@ -158,10 +158,10 @@ export default function CartScreen() {
             style={[styles.shopBtn, { backgroundColor: colors.tint }]}
             onPress={() => router.push("/(tabs)/explore")}
             accessibilityRole="button"
-            accessibilityLabel="Start Shopping"
+            accessibilityLabel="Explore Catalog"
             accessibilityHint="Opens the product catalog"
           >
-            <Text style={styles.shopBtnText}>Start Shopping</Text>
+            <Text style={styles.shopBtnText}>Explore Catalog</Text>
           </TouchableOpacity>
         </View>
       ) : (

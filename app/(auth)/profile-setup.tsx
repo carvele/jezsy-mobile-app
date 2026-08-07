@@ -249,7 +249,7 @@ export default function ProfileSetupScreen() {
     (
       <View key="name" style={styles.fields}>
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>FIRST NAME</Text>
+          <Text style={styles.label}>First name</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. Maria"
@@ -261,7 +261,7 @@ export default function ProfileSetupScreen() {
           />
         </View>
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>LAST NAME</Text>
+          <Text style={styles.label}>Last name</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. Santos"
@@ -283,7 +283,7 @@ export default function ProfileSetupScreen() {
       <ScrollView key="personal_info" showsVerticalScrollIndicator={false}>
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>MOBILE NUMBER</Text>
+            <Text style={styles.label}>Mobile number</Text>
             <View style={styles.phoneInputRow}>
               <TouchableOpacity
                 style={styles.countrySelectorBtn}
@@ -306,7 +306,7 @@ export default function ProfileSetupScreen() {
             </View>
           </View>
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { marginTop: 8 }]}>DATE OF BIRTH</Text>
+            <Text style={[styles.label, { marginTop: 8 }]}>Date of birth</Text>
             <View style={styles.dobInputRow}>
               <TextInput
                 style={[styles.input, styles.dobInput]}
@@ -326,7 +326,7 @@ export default function ProfileSetupScreen() {
             </View>
           </View>
           <View style={{ marginTop: 8 }}>
-            <Text style={styles.label}>GENDER</Text>
+            <Text style={styles.label}>Gender</Text>
             <View style={styles.chipGrid}>
               {GENDER_OPTIONS.map(g => (
                 <TouchableOpacity
@@ -349,7 +349,7 @@ export default function ProfileSetupScreen() {
       <ScrollView key="address" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>STREET ADDRESS</Text>
+            <Text style={styles.label}>Street address</Text>
             <TextInput
               style={styles.input}
               placeholder="House/unit no., building, street name"
@@ -361,7 +361,7 @@ export default function ProfileSetupScreen() {
             />
           </View>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>BARANGAY</Text>
+            <Text style={styles.label}>Barangay</Text>
             <TextInput
               style={styles.input}
               placeholder="e.g. Brgy. San Jose"
@@ -386,7 +386,7 @@ export default function ProfileSetupScreen() {
           </View>
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.label}>PROVINCE</Text>
+              <Text style={styles.label}>Province</Text>
               <TextInput
                 style={styles.input}
                 placeholder="e.g. Cebu"
@@ -398,7 +398,7 @@ export default function ProfileSetupScreen() {
             </View>
             <View style={{ width: 16 }} />
             <View style={[styles.fieldGroup, { width: 110 }]}>
-              <Text style={styles.label}>ZIP CODE</Text>
+              <Text style={styles.label}>Zip code</Text>
               <TextInput
                 style={styles.input}
                 placeholder="0000"
@@ -582,6 +582,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(255,255,255,0.38)',
     letterSpacing: 1.6,
+    // Caps live here, not in the string: a screen reader spells out literal
+    // all-caps text letter by letter.
+    textTransform: 'uppercase',
   },
   input: {
     fontSize: 16,
