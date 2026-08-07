@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { getPaymentStatus, TERMINAL_PAYMENT_STATUSES, PaymentStatus } from '@/src/lib/payments';
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backBtn: { padding: Spacing.xs, width: 32 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerTitle: { ...Type.subtitle },
   settlingText: { fontSize: 16, fontWeight: '700', marginTop: Spacing.lg },
   settlingHint: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: Spacing.sm },
 });

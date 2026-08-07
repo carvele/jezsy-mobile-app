@@ -1,5 +1,5 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Colors, Radius, Spacing } from "@/constants/theme";
+import { Colors, Radius, Spacing, Type } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { TimeSlotPicker } from "@/src/components/TimeSlotPicker";
 import { useAuth } from "@/src/context/AuthContext";
@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
   },
   backButton: { padding: Spacing.xs },
-  headerTitle: { fontSize: 18, fontWeight: "700" },
+  headerTitle: { ...Type.subtitle },
   content: { padding: Spacing.xxl, paddingBottom: 60 },
   summaryCard: {
     flexDirection: "row",
@@ -570,13 +570,13 @@ const styles = StyleSheet.create({
   productImage: { width: 100, height: 120 },
   productInfo: { flex: 1, padding: Spacing.lg, justifyContent: "center" },
   productName: { fontSize: 16, fontWeight: "700", marginBottom: Spacing.xs },
-  productDetails: { fontSize: 14, marginBottom: Spacing.sm },
+  productDetails: { ...Type.body, marginBottom: Spacing.sm },
   price: { fontSize: 16, fontWeight: "800" },
   priceRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
   originalPrice: { fontSize: 13, textDecorationLine: "line-through" },
   linesHeading: { fontSize: 13, fontWeight: "600", marginBottom: 10 },
   section: { marginBottom: Spacing.xxxl },
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginBottom: Spacing.md },
+  sectionTitle: { ...Type.subtitle, marginBottom: Spacing.md },
   dateScroll: { flexDirection: "row" },
   dateBox: {
     width: 64,
@@ -601,6 +601,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: Spacing.md,
   },
+  // Not Type.bodyStrong, even though 15/600 matches it exactly. Only rowValue
+  // matches -- rowText is 15/400, which the scale has no slot for -- so
+  // converting one would give the label and its amount different line heights
+  // in the same row and pull the deposit/total/balance figures out of line.
   rowText: { fontSize: 15, flexShrink: 1 },
   rowValue: { fontSize: 15, fontWeight: "600" },
   payMethodRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
