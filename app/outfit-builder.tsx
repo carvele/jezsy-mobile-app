@@ -441,7 +441,7 @@ export default function OutfitBuilderScreen() {
       ]);
     } catch (err) {
       console.error('Error saving outfit:', err);
-      showToast('Failed to save outfit. Try again.', 'error');
+      showToast('Could not save that outfit. Please try again.', 'error');
     } finally {
       setSaving(false);
     }

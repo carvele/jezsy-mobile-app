@@ -163,7 +163,7 @@ export default function AddWardrobeItemScreen() {
       }
     } catch (e) {
       console.error('Error picking image:', e);
-      showToast('Unable to open photos. Try again.', 'error');
+      showToast('Could not open your photos. Please try again.', 'error');
     }
   };
 
