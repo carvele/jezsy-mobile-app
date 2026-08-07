@@ -417,10 +417,10 @@ export default function ChatScreen() {
                   <Text style={[styles.productCardEyebrow, { color: isMe ? 'rgba(0,0,0,0.55)' : colors.secondaryText }]}>
                     Question about
                   </Text>
-                  <Text style={[styles.productCardName, { color: isMe ? '#0D0D0D' : colors.text }]} numberOfLines={2}>
+                  <Text style={[styles.productCardName, { color: isMe ? colors.onTint : colors.text }]} numberOfLines={2}>
                     {productPreview.name}
                   </Text>
-                  <Text style={[styles.productCardPrice, { color: isMe ? '#0D0D0D' : colors.tint }]}>
+                  <Text style={[styles.productCardPrice, { color: isMe ? colors.onTint : colors.tint }]}>
                     ₱{productPreview.on_sale && productPreview.sale_price ? productPreview.sale_price : productPreview.price}
                   </Text>
                 </View>
@@ -428,7 +428,7 @@ export default function ChatScreen() {
               </TouchableOpacity>
             ) : item.context_label ? (
               <View style={[styles.contextChip, { backgroundColor: isMe ? 'rgba(0,0,0,0.12)' : colors.background, borderColor: isMe ? 'transparent' : colors.border }]}>
-                <Text style={[styles.contextChipText, { color: isMe ? '#0D0D0D' : colors.secondaryText }]} numberOfLines={1}>
+                <Text style={[styles.contextChipText, { color: isMe ? colors.onTint : colors.secondaryText }]} numberOfLines={1}>
                   Re: {item.context_label}
                 </Text>
               </View>
@@ -437,7 +437,7 @@ export default function ChatScreen() {
               <Image source={{ uri: resolvedImageUrls[item.id] }} style={styles.messageImage} resizeMode="cover" />
             ) : null}
             {item.text ? (
-              <Text style={[styles.messageText, { color: isMe ? '#0D0D0D' : colors.text }]}>
+              <Text style={[styles.messageText, { color: isMe ? colors.onTint : colors.text }]}>
                 {item.text}
               </Text>
             ) : null}
@@ -663,7 +663,7 @@ export default function ChatScreen() {
             <IconSymbol
               name={editingId ? 'checkmark' : 'arrow.up.circle.fill'}
               size={22}
-              color={inputText.trim() ? '#0D0D0D' : colors.secondaryText}
+              color={inputText.trim() ? colors.onTint : colors.secondaryText}
             />
           </TouchableOpacity>
         </View>

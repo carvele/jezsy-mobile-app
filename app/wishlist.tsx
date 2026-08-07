@@ -142,7 +142,7 @@ export default function WishlistScreen() {
             onPress={() => router.push('/(tabs)/explore')}
             activeOpacity={0.85}
           >
-            <Text style={styles.browseBtnText}>Browse Catalog</Text>
+            <Text style={[styles.browseBtnText, { color: colors.onTint }]}>Browse Catalog</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 14,
   },
-  browseBtnText: { color: '#0D0D0D', fontWeight: '800', fontSize: 15 },
+  browseBtnText: { fontWeight: '800', fontSize: 15 },
   list: { paddingHorizontal: 16, paddingBottom: 100 },
   row: { justifyContent: 'space-between', marginBottom: 16 },
   countText: { fontSize: 13, marginBottom: 12, marginTop: 4 },

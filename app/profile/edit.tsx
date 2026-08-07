@@ -253,7 +253,7 @@ export default function EditProfileScreen() {
                   onPress={() => set('gender', g)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.chipText, { color: colors.secondaryText }, data.gender === g && styles.chipTextActive]}>{g}</Text>
+                  <Text style={[styles.chipText, { color: colors.secondaryText }, data.gender === g && styles.chipTextActive, { color: colors.onTint }]}>{g}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -386,5 +386,5 @@ const styles = StyleSheet.create({
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100, borderWidth: 1 },
   chipText: { fontSize: 14, fontWeight: '500' },
-  chipTextActive: { color: '#0D0D0D', fontWeight: '700' },
+  chipTextActive: { fontWeight: '700' },
 });

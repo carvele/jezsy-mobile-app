@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 22, fontWeight: "700", marginBottom: 12, textAlign: "center" },
   cardBody: { fontSize: 15, lineHeight: 22, textAlign: "center", marginBottom: 24 },
   actionButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 999 },
-  actionText: { color: "#0D0D0D", fontSize: 14, fontWeight: "700" },
+  actionText: { fontSize: 14, fontWeight: "700" },
   controls: {
     alignItems: "center",
     paddingBottom: 60,

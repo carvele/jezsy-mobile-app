@@ -317,7 +317,7 @@ export default function CapsuleDetailScreen() {
                     <Image source={{ uri: item.image_url || undefined }} style={[styles.itemImage, { backgroundColor: colors.surface }]} contentFit="cover" />
                     {inCapsule && (
                       <View style={[styles.checkOverlay, { backgroundColor: colors.tint }]}>
-                        <IconSymbol name="checkmark" size={16} color="#0D0D0D" />
+                        <IconSymbol name="checkmark" size={16} color={colors.onTint} />
                       </View>
                     )}
                     <View style={styles.itemInfo}>

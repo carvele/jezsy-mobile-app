@@ -214,7 +214,7 @@ export default function ReservationsScreen() {
             accessibilityLabel="Explore Catalog"
             accessibilityHint="Opens the product catalog to browse items"
           >
-            <Text style={styles.exploreButtonText}>Explore Catalog</Text>
+            <Text style={[styles.exploreButtonText, { color: colors.onTint }]}>Explore Catalog</Text>
           </TouchableOpacity>
         </View>
       ) : filteredReservations.length === 0 ? (
@@ -230,7 +230,7 @@ export default function ReservationsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Show all reservations"
           >
-            <Text style={styles.exploreButtonText}>Show All</Text>
+            <Text style={[styles.exploreButtonText, { color: colors.onTint }]}>Show All</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -287,7 +287,6 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   exploreButtonText: {
-    color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '700',
   },

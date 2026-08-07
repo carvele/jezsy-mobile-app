@@ -110,7 +110,7 @@ export function DobPickerModal({ visible, value, onConfirm, onClose }: Props) {
           </View>
 
           <TouchableOpacity style={styles.confirmBtn} onPress={confirm} activeOpacity={0.8}>
-            <Text style={styles.confirmBtnText}>Confirm Date</Text>
+            <Text style={[styles.confirmBtnText, { color: Colors.dark.onTint }]}>Confirm Date</Text>
           </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -150,5 +150,5 @@ const styles = StyleSheet.create({
   itemText: { color: 'rgba(255,255,255,0.45)', fontSize: 15, fontWeight: '500' },
   itemTextActive: { color: Colors.dark.tint, fontSize: 16, fontWeight: '700' },
   confirmBtn: { height: 50, backgroundColor: Colors.dark.tint, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
-  confirmBtnText: { color: '#0D0D0D', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
+  confirmBtnText: {  fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
 });

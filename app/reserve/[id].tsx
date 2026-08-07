@@ -634,5 +634,5 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  primaryActionText: { color: "#0D0D0D", fontSize: 16, fontWeight: "700" },
+  primaryActionText: { fontSize: 16, fontWeight: "700" },
 });

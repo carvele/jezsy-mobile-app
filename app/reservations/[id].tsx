@@ -309,16 +309,16 @@ export default function ReservationDetailScreen() {
         {(reservation.status || '').toLowerCase() === 'confirmed' && (
           <View style={[styles.pickupCard, { backgroundColor: colors.tint }]}>
             <View style={styles.pickupHeader}>
-              <IconSymbol name="checkmark.circle.fill" size={18} color="#0D0D0D" />
-              <Text style={styles.pickupTitle}>PICKUP PASS</Text>
+              <IconSymbol name="checkmark.circle.fill" size={18} color={colors.onTint} />
+              <Text style={[styles.pickupTitle, { color: colors.onTint }]}>PICKUP PASS</Text>
             </View>
             {reservation.pickup_token && (
               <View style={styles.pickupQrWrap}>
                 <QRCode value={`jezsy-pickup:${reservation.pickup_token}`} size={140} backgroundColor="#FFFFFF" color="#0D0D0D" />
               </View>
             )}
-            <Text style={styles.pickupRef}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
-            <Text style={styles.pickupHint}>
+            <Text style={[styles.pickupRef, { color: colors.onTint }]}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
+            <Text style={[styles.pickupHint, { color: colors.onTint }]}>
               Show this code at the boutique to collect your item. Bring a valid ID and your remaining balance.
             </Text>
           </View>
@@ -436,7 +436,7 @@ export default function ReservationDetailScreen() {
                   accessibilityLabel="Confirm new appointment"
                   accessibilityState={{ disabled: !rescheduleSlot || submitting }}
                 >
-                  {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={{ color: '#0D0D0D', fontWeight: '700' }}>Confirm</Text>}
+                  {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={{ fontWeight: '700' }}>Confirm</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -483,9 +483,9 @@ export default function ReservationDetailScreen() {
               accessibilityState={{ disabled: payBusy || uploadingReceipt }}
             >
               {payBusy ? (
-                <ActivityIndicator color="#0D0D0D" />
+                <ActivityIndicator color={colors.onTint} />
               ) : (
-                <Text style={styles.payPrimaryText}>Pay with GCash</Text>
+                <Text style={[styles.payPrimaryText, { color: colors.onTint }]}>Pay with GCash</Text>
               )}
             </TouchableOpacity>
 
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  payPrimaryText: { color: '#0D0D0D', fontSize: 15, fontWeight: '700' },
+  payPrimaryText: { fontSize: 15, fontWeight: '700' },
   paySecondary: {
     height: 46,
     borderRadius: 23,
@@ -624,10 +624,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   pickupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  pickupTitle: { fontSize: 13, fontWeight: '800', color: '#0D0D0D', letterSpacing: 1 },
+  pickupTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1 },
   pickupQrWrap: { alignSelf: 'center', padding: 12, borderRadius: 12, backgroundColor: '#FFFFFF', marginBottom: 16 },
-  pickupRef: { fontSize: 28, fontWeight: '900', color: '#0D0D0D', letterSpacing: 2, marginBottom: 8, textAlign: 'center' },
-  pickupHint: { fontSize: 12, lineHeight: 17, color: '#0D0D0D' },
+  pickupRef: { fontSize: 28, fontWeight: '900', letterSpacing: 2, marginBottom: 8, textAlign: 'center' },
+  pickupHint: { fontSize: 12, lineHeight: 17 },
   productCard: {
     flexDirection: 'row',
     borderRadius: 16,

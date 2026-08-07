@@ -123,7 +123,7 @@ export default function InboxScreen() {
         accessibilityLabel={`Conversation with ${displayName}. ${item.last_message || 'No messages yet'}`}
       >
         <View style={[styles.avatar, { backgroundColor: colors.tint }]}>
-          <Text style={styles.avatarText}>{displayName.charAt(0).toUpperCase()}</Text>
+          <Text style={[styles.avatarText, { color: colors.onTint }]}>{displayName.charAt(0).toUpperCase()}</Text>
         </View>
         <View style={styles.itemContent}>
           <View style={styles.itemHeader}>
@@ -318,7 +318,6 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   avatarText: {
-    color: '#0D0D0D',
     fontSize: 20,
     fontWeight: '700',
   },

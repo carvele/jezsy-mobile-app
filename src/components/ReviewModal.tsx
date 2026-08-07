@@ -180,9 +180,9 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
               disabled={submitting}
             >
               {submitting ? (
-                <ActivityIndicator color="#0D0D0D" />
+                <ActivityIndicator color={colors.onTint} />
               ) : (
-                <Text style={styles.submitBtnText}>Submit Review</Text>
+                <Text style={[styles.submitBtnText, { color: colors.onTint }]}>Submit Review</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitBtnText: {
-    color: '#0D0D0D',
+    
     fontSize: 16,
     fontWeight: '700',
   },

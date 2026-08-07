@@ -56,7 +56,7 @@ export function SuggestedOutfitCard({ outfit, onSave, saving = false }: Props) {
         {saving ? (
           <ActivityIndicator size="small" color={colors.onTint} />
         ) : (
-          <Text style={styles.saveBtnText}>Save Outfit</Text>
+          <Text style={[styles.saveBtnText, { color: colors.onTint }]}>Save Outfit</Text>
         )}
       </TouchableOpacity>
     </View>
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveBtnText: {
-    color: '#0D0D0D',
+    
     ...Type.bodyStrong,
     fontWeight: '700',
   },

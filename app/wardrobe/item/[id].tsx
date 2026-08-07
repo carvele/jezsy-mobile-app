@@ -156,7 +156,7 @@ export default function WardrobeItemDetailScreen() {
         <View style={styles.tagsRow}>
           {item.garment_type && (
             <View style={[styles.tag, { backgroundColor: colors.tint }]}>
-              <Text style={styles.tagText}>{item.garment_type}</Text>
+              <Text style={[styles.tagText, { color: colors.onTint }]}>{item.garment_type}</Text>
             </View>
           )}
           {item.category && (
@@ -193,11 +193,11 @@ export default function WardrobeItemDetailScreen() {
           accessibilityLabel="Log a wear for this item"
         >
           {logging ? (
-            <ActivityIndicator color="#0D0D0D" size="small" />
+            <ActivityIndicator color={colors.onTint} size="small" />
           ) : (
             <>
-              <IconSymbol name="checkmark" size={18} color="#0D0D0D" />
-              <Text style={styles.logButtonText}>Log Wear (Wearing Today)</Text>
+              <IconSymbol name="checkmark" size={18} color={colors.onTint} />
+              <Text style={[styles.logButtonText, { color: colors.onTint }]}>Log Wear (Wearing Today)</Text>
             </>
           )}
         </TouchableOpacity>
@@ -240,7 +240,6 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#0D0D0D',
   },
   subCategory: {
     fontSize: 14,
@@ -285,7 +284,6 @@ const styles = StyleSheet.create({
     borderRadius: 28,
   },
   logButtonText: {
-    color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '700',
   },

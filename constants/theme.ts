@@ -33,7 +33,11 @@ export const Colors = {
     tabIconSelected: tintColorLight,
     card: '#F3F4F6',
     border: '#E5E7EB',
-    notification: '#F72585',
+    // Deepened from #F72585, which measured 3.78:1 against the white badge text
+    // it carries and so failed AA in both schemes. This passes at 5.03:1 while
+    // staying the closest vivid magenta to the original.
+    notification: '#D6156B',
+    onNotification: '#FFFFFF',
     secondaryText: '#6B7280',
     accent: '#C9A96E', // Brighter gold kept for decorative fills (not text)
     // Brand blush. `blush` is safe as text/icon on light; `blushFill` is the
@@ -63,7 +67,11 @@ export const Colors = {
     tabIconSelected: tintColorDark,
     card: '#1A1A2E', // Deep Navy card bg
     border: '#2D2D44',
-    notification: '#F72585', // Vibrant pink for badges/sales
+    // Deepened from #F72585, which measured 3.78:1 against the white badge text
+    // it carries and so failed AA in both schemes. This passes at 5.03:1 while
+    // staying the closest vivid magenta to the original.
+    notification: '#D6156B', // Sale/badge accent, same value both schemes
+    onNotification: '#FFFFFF',
     secondaryText: '#9CA3AF',
     accent: '#E8D5B7', // Soft Champagne
     // On near-black the logo pink has ample contrast, so it is used directly --

@@ -391,7 +391,7 @@ export default function MeasurementsScreen() {
                   accessibilityLabel="Use centimeters"
                   accessibilityState={{ selected: unit === 'cm' }}
                 >
-                  <Text style={[styles.unitToggleText, { color: unit === 'cm' ? '#0D0D0D' : colors.secondaryText }]}>cm</Text>
+                  <Text style={[styles.unitToggleText, { color: unit === 'cm' ? colors.onTint : colors.secondaryText }]}>cm</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.unitToggleOption, unit === 'in' && { backgroundColor: colors.tint }]}
@@ -400,7 +400,7 @@ export default function MeasurementsScreen() {
                   accessibilityLabel="Use inches"
                   accessibilityState={{ selected: unit === 'in' }}
                 >
-                  <Text style={[styles.unitToggleText, { color: unit === 'in' ? '#0D0D0D' : colors.secondaryText }]}>in</Text>
+                  <Text style={[styles.unitToggleText, { color: unit === 'in' ? colors.onTint : colors.secondaryText }]}>in</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -452,8 +452,8 @@ export default function MeasurementsScreen() {
                 accessibilityLabel="Auto-scan measurements with camera"
                 accessibilityHint="Opens the camera body scanner to estimate your measurements"
               >
-                <IconSymbol name="camera.viewfinder" size={16} color="#0D0D0D" />
-                <Text style={styles.scanBtnText}>Auto-Scan</Text>
+                <IconSymbol name="camera.viewfinder" size={16} color={colors.onTint} />
+                <Text style={[styles.scanBtnText, { color: colors.onTint }]}>Auto-Scan</Text>
               </TouchableOpacity>
             </View>
             
@@ -507,9 +507,9 @@ export default function MeasurementsScreen() {
           accessibilityState={{ disabled: saving }}
         >
           {saving ? (
-            <ActivityIndicator color="#0D0D0D" />
+            <ActivityIndicator color={colors.onTint} />
           ) : (
-            <Text style={styles.saveBtnText}>Save Profile</Text>
+            <Text style={[styles.saveBtnText, { color: colors.onTint }]}>Save Profile</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -554,7 +554,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   scanBtnText: {
-    color: '#0D0D0D',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -634,7 +633,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveBtnText: {
-    color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '700',
   },

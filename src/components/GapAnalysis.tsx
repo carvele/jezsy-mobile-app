@@ -107,7 +107,7 @@ export function GapAnalysis({ items }: GapAnalysisProps) {
                 style={[styles.actionBtn, { backgroundColor: colors.tint }]}
                 onPress={() => router.push('/(tabs)/explore')}
               >
-                <Text style={styles.actionText}>Shop {gap.suggest}s</Text>
+                <Text style={[styles.actionText, { color: colors.onTint }]}>Shop {gap.suggest}s</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   actionText: {
-    color: '#0D0D0D',
+    
     fontSize: 12,
     fontWeight: '700',
   }
