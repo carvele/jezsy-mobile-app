@@ -196,6 +196,23 @@ export default function ReservationScreen() {
 
       const displayId = (data as any)?.display_id;
 
+      // The server re-resolves every price at submit time, so a sale ending
+      // while this screen was open means the customer agreed to one figure and
+      // the reservation records another. Say so rather than letting them find
+      // out at the payment step.
+      const serverTotal = Number((data as any)?.rental_price);
+      const clientTotal = lines.reduce(
+        (sum, line) =>
+          sum +
+          (line.product.on_sale && line.product.sale_price
+            ? line.product.sale_price
+            : line.product.price || 0) *
+            line.quantity,
+        0,
+      );
+      const priceChanged =
+        Number.isFinite(serverTotal) && Math.abs(serverTotal - clientTotal) >= 0.01;
+
       // Only clear the bag once the reservation is actually on the server,
       // so a failed submit does not silently empty it.
       if (isCartMode) {
@@ -213,7 +230,10 @@ export default function ReservationScreen() {
       // refunding through PayMongo every time staff turn a booking down.
       Alert.alert(
         "Request sent",
-        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).",
+        (priceChanged
+          ? `Pricing for one or more items changed while you were booking. Your reservation total is ₱${serverTotal.toFixed(2)}.\n\n`
+          : "") +
+          "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).",
         [{ text: "OK", onPress: () => router.replace("/reservations") }],
       );
     } catch (error: any) {
