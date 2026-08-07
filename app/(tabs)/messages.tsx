@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMessages } from '@/src/context/MessagesContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -210,7 +210,7 @@ export default function InboxScreen() {
       {/* Messages Tab */}
       {activeTab === 'messages' && (
         messagesLoading ? (
-          <View style={{ paddingHorizontal: 16 }}>
+          <View style={{ paddingHorizontal: Spacing.lg }}>
             <SkeletonList count={5}><ListRowSkeleton /></SkeletonList>
           </View>
         ) : conversations.length === 0 ? (
@@ -234,7 +234,7 @@ export default function InboxScreen() {
       {/* Notifications Tab */}
       {activeTab === 'notifications' && (
         notificationsLoading ? (
-          <View style={{ paddingHorizontal: 16 }}>
+          <View style={{ paddingHorizontal: Spacing.lg }}>
             <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
           </View>
         ) : notifications.length === 0 ? (
@@ -270,21 +270,21 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 16,
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.lg,
     letterSpacing: 0.5,
   },
   segmentedControl: {
     flexDirection: 'row',
-    marginHorizontal: 16,
+    marginHorizontal: Spacing.lg,
     padding: 2,
-    borderRadius: 8,
-    marginBottom: 16,
+    borderRadius: Radius.sm,
+    marginBottom: Spacing.lg,
   },
   segment: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
     alignItems: 'center',
     borderRadius: 6,
   },
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   list: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: 120, // clears the floating tab bar at its largest bottom inset
   },
   conversationItem: {
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
     alignItems: 'center',
   },
   name: {
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   lastMessage: {
     fontSize: 14,
     flex: 1,
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   badge: {
     borderRadius: 10,
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: Spacing.xs,
   },
   badgeText: {
     fontSize: 12,
@@ -365,12 +365,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    gap: 12,
+    gap: Spacing.md,
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    marginTop: 8,
+    marginTop: Spacing.sm,
   },
   emptyText: {
     fontSize: 15,
@@ -380,11 +380,11 @@ const styles = StyleSheet.create({
   // Notifications styles
   notificationCard: {
     flexDirection: 'row',
-    padding: 16,
+    padding: Spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 16,
-    borderRadius: 12,
-    marginBottom: 8,
+    gap: Spacing.lg,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.sm,
   },
   iconContainer: {
     width: 48,
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   notificationTitle: {
     fontSize: 16,
@@ -412,18 +412,18 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginTop: 6,
-    marginLeft: 8,
+    marginLeft: Spacing.sm,
   },
   notificationBody: {
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   notificationDate: {
     fontSize: 12,
   },
   dismissButton: {
-    padding: 4,
+    padding: Spacing.xs,
     alignSelf: 'flex-start',
   },
 });

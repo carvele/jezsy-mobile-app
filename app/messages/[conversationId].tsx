@@ -10,7 +10,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useMessages, MessageContext } from '@/src/context/MessagesContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
@@ -680,12 +680,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    padding: 4,
+    padding: Spacing.xs,
     width: 32,
   },
   headerTitle: {
@@ -696,12 +696,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl,
   },
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   messageRowMe: {
     justifyContent: 'flex-end',
@@ -718,7 +718,7 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
   },
   messageBubble: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 10,
     borderRadius: 20,
     overflow: 'hidden',
@@ -732,8 +732,8 @@ const styles = StyleSheet.create({
   messageImage: {
     width: 200,
     height: 200,
-    borderRadius: 12,
-    marginBottom: 8,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.sm,
     marginTop: -4,
     marginHorizontal: -8,
   },
@@ -743,9 +743,9 @@ const styles = StyleSheet.create({
   },
   metaContainer: {
     flexDirection: 'row',
-    marginTop: 4,
+    marginTop: Spacing.xs,
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: Spacing.xs,
   },
   timestampText: {
     fontSize: 12,
@@ -754,7 +754,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  reactionRow: { flexDirection: 'row', gap: 4, marginTop: 4 },
+  reactionRow: { flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.xs },
   reactionRowMe: { justifyContent: 'flex-end' },
   reactionRowThem: { justifyContent: 'flex-start' },
   reactionPill: {
@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
   },
   reactionEmoji: { fontSize: 13 },
@@ -776,14 +776,14 @@ const styles = StyleSheet.create({
   actionSheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 16,
+    paddingTop: Spacing.lg,
     paddingBottom: Platform.OS === 'ios' ? 36 : 16,
   },
   emojiRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 12,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.lg,
   },
   emojiButton: {
     width: 46,
@@ -798,16 +798,16 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   actionRowText: { fontSize: 15, fontWeight: '600' },
   dateSeparator: {
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 16,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.lg,
   },
   dateSeparatorText: {
     fontSize: 12,
@@ -819,10 +819,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     width: 220,
-    padding: 8,
-    borderRadius: 12,
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
     // Cancels the bubble's own horizontal padding so the card reads as a
     // distinct panel inset in the bubble rather than a floating box.
     marginHorizontal: -8,
@@ -831,7 +831,7 @@ const styles = StyleSheet.create({
   productCardImage: {
     width: 44,
     height: 56,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     backgroundColor: 'rgba(127,127,127,0.15)',
   },
   productCardBody: {
@@ -854,9 +854,9 @@ const styles = StyleSheet.create({
   },
   contextChip: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 6,
     maxWidth: 220,
@@ -868,9 +868,9 @@ const styles = StyleSheet.create({
   contextBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   contextBannerText: {
@@ -880,7 +880,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 12,
+    padding: Spacing.md,
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     alignItems: 'flex-end',
@@ -890,18 +890,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 40,
     width: 40,
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   input: {
     flex: 1,
     borderRadius: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingTop: 10,
     paddingBottom: 10,
     minHeight: 40,
     maxHeight: 120,
     fontSize: 16,
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   sendButton: {
     justifyContent: 'center',
