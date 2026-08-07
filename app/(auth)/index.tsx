@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: 'rgba(255,255,255,0.3)',
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   activeDot: {
     backgroundColor: c.tint,

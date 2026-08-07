@@ -20,7 +20,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
@@ -655,12 +655,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 24,
     zIndex: 10,
-    padding: 8,
+    padding: Spacing.sm,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'flex-end',
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.xxl,
     paddingBottom: 40,
   },
   headingWrapper: {
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   subtitle: {
-    marginTop: 8,
+    marginTop: Spacing.sm,
     fontSize: 15,
     color: 'rgba(255,255,255,0.55)',
     fontWeight: '400',
@@ -682,10 +682,10 @@ const styles = StyleSheet.create({
   },
   glassCard: {
     backgroundColor: GLASS_BG,
-    borderRadius: 24,
+    borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: GLASS_BORDER,
-    padding: 24,
+    padding: Spacing.xxl,
     gap: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -718,16 +718,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#fff',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
   },
   inputWithAction: {
     flex: 1,
     fontSize: 16,
     color: '#fff',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
   },
   eyeBtn: {
-    padding: 8,
+    padding: Spacing.sm,
   },
   linksRow: {
     flexDirection: 'row',
@@ -748,7 +748,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 6,
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -777,7 +777,7 @@ const styles = StyleSheet.create({
   otpBox: {
     width: (width - 48 - 48 - 40) / 6,
     height: 54,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: GLASS_BORDER,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
   },
   resendRow: {
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: Spacing.sm,
   },
   resendText: {
     color: c.tint,
