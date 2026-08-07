@@ -49,7 +49,14 @@ export default function HomeScreen() {
           .select(`*, ${CATEGORY_SELECT}`)
           .eq('visibility', 'public')
           .eq('deleted', false)
-          .order('created_at', { ascending: false }),
+          // id as a tiebreak: rows seeded in the same batch share one
+          // created_at, and Postgres does not promise a stable order for
+          // ties on that alone -- the hero section could silently swap
+          // which of two featured products got the large slot between
+          // loads. id is unique per row, so this makes every consumer of
+          // `data` (hero pool, trending sort, search) deterministic.
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true }),
         supabase
           .from('categories')
           .select('*')
