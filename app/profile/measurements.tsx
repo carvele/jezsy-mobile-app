@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   backBtn: { padding: Spacing.sm },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerTitle: { ...Type.subtitle },
   content: { padding: Spacing.xl },
   infoCard: {
     flexDirection: 'row',
@@ -584,8 +584,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   fitOptionText: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.bodyStrong,
     textTransform: 'capitalize',
   },
   row: {
@@ -603,8 +602,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '500',
+    ...Type.caption,
   },
   confDot: {
     width: 8,

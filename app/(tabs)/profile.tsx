@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -99,7 +99,7 @@ export default function ProfileScreen() {
           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg}}>
             <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>My Reservations</Text>
             <TouchableOpacity onPress={() => router.push('/reservations')}>
-              <Text style={{color: colors.tint, fontSize: 14}}>View All</Text>
+              <Text style={[Type.body, { color: colors.tint }]}>View All</Text>
             </TouchableOpacity>
           </View>
           <View style={[styles.ordersContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -213,9 +213,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxl,
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    ...Type.display,
   },
   profileCard: {
     flexDirection: 'row',
@@ -234,19 +232,17 @@ const styles = StyleSheet.create({
     marginRight: Spacing.lg,
   },
   avatarText: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...Type.headline,
   },
   profileInfo: {
     flex: 1,
   },
   profileName: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
     marginBottom: Spacing.xs,
   },
   profileEmail: {
-    fontSize: 14,
+    ...Type.body,
   },
   editButton: {
     paddingHorizontal: Spacing.lg,
@@ -262,8 +258,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxxl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
     marginBottom: Spacing.lg,
   },
   ordersContainer: {
@@ -277,8 +272,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   orderStatusText: {
-    fontSize: 12,
-    fontWeight: '500',
+    ...Type.caption,
     marginTop: Spacing.sm,
   },
   settingsGroup: {
@@ -308,7 +302,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   settingSubtitle: {
-    fontSize: 13,
+    ...Type.caption,
   },
   signOutButton: {
     marginTop: Spacing.lg,

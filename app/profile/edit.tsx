@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown, Calendar } from 'lucide-react-native';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useToast } from '@/src/context/ToastContext';
 import { CountryPickerModal } from '@/src/components/CountryPickerModal';
@@ -363,9 +363,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerAction: { fontSize: 16 },
-  headerTitle: { fontSize: 17, fontWeight: '700' },
+  headerTitle: { ...Type.subtitle },
   body: { padding: Spacing.xl, paddingBottom: 48 },
-  sectionLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginBottom: Spacing.md },
+  sectionLabel: { ...Type.label, marginBottom: Spacing.md },
   row: { flexDirection: 'row' },
   fieldGroup: { gap: 6 },
   label: { fontSize: 12, fontWeight: '600' },

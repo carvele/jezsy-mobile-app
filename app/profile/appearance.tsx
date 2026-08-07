@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemePreference, ThemePreference } from '@/src/context/ThemeContext';
@@ -87,9 +87,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   backBtn: { padding: Spacing.sm },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerTitle: { ...Type.subtitle },
   content: { padding: Spacing.xl },
-  intro: { fontSize: 14, lineHeight: 20, marginBottom: Spacing.xl },
+  intro: { ...Type.body, marginBottom: Spacing.xl },
   group: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
   row: {
     flexDirection: 'row',
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rowText: { flex: 1 },
-  rowLabel: { fontSize: 15, fontWeight: '600' },
-  rowHint: { fontSize: 12, marginTop: 2 },
+  rowLabel: { ...Type.bodyStrong },
+  rowHint: { ...Type.caption, marginTop: 2 },
   emptyCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1 },
 });

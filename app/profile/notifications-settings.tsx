@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   backBtn: { padding: Spacing.sm },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerTitle: { ...Type.subtitle },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { padding: Spacing.xl },
   row: {
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rowText: { flex: 1 },
-  rowTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  rowTitle: { ...Type.bodyStrong, marginBottom: 2 },
   rowSubtitle: { fontSize: 12, lineHeight: 17 },
   footnote: {
     fontSize: 12,
