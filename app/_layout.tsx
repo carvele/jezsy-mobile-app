@@ -3,8 +3,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
-import { useEffect, useLayoutEffect, useState } from 'react';
-import { View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
@@ -32,7 +32,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 function InitialLayout() {
   const { session, isLoading, isProfileLoading, profile, isPasswordRecovery, beginPasswordRecovery } = useAuth();
   const segments = useSegments();
-  const router = useRouter();
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
   const themeLoaded = useThemeContext()?.loaded ?? false;
@@ -76,12 +76,21 @@ function InitialLayout() {
     if (flagsReady && !hasBootstrapped) setHasBootstrapped(true);
   }, [flagsReady, hasBootstrapped]);
 
-  // useLayoutEffect, not useEffect: the Stack's first paint after
-  // hasBootstrapped flips true otherwise shows whatever route it resolves by
-  // default for one frame before this redirect fires -- a visible flash
-  // (e.g. the onboarding carousel) before landing on the correct screen.
-  // Committing the redirect before paint eliminates that frame.
-  useLayoutEffect(() => {
+  // Flips once the redirect effect has picked a route. Latches true so a later
+  // refreshProfile cannot drop the cover back over a screen the user is on.
+  const [routeSettled, setRouteSettled] = useState(false);
+
+  // Deliberately useEffect, not useLayoutEffect. Layout effects run before the
+  // Stack below has registered with expo-router, so redirecting from one threw
+  // "Attempted to navigate before mounting the Root Layout component" -- on
+  // cold start and again on sign-out. useRootNavigationState is not a usable
+  // guard for it either: it reports expo-router's own root navigator, which
+  // exists well before this Stack does, so its key is already truthy while
+  // assertIsReady still fails.
+  //
+  // The flash that motivated useLayoutEffect is instead handled by the overlay
+  // below, which stays up until this has settled on a route.
+  useEffect(() => {
     if (!flagsReady) return;
 
     const pathSegments = segments as string[];
@@ -95,10 +104,7 @@ function InitialLayout() {
     // updateUser succeeds (or they sign out from the screen itself).
     if (isPasswordRecovery) {
       if (!onResetPassword) router.replace('/(auth)/reset-password' as any);
-      return;
-    }
-
-    if (!session) {
+    } else if (!session) {
       if (!inAuthGroup) {
         // Returning (or already-onboarded) users skip straight past the
         // marketing carousel to the login/welcome screen.
@@ -115,6 +121,10 @@ function InitialLayout() {
         }
       }
     }
+
+    // Whichever branch ran, the correct route is now committed, so the cover
+    // can come down without exposing the default route for a frame.
+    setRouteSettled(true);
   }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery]);
 
   useEffect(() => {
@@ -123,12 +133,6 @@ function InitialLayout() {
     }
   }, [hasBootstrapped]);
 
-  if (!hasBootstrapped) {
-    // Bare, theme-matched placeholder -- shown for at most a frame or two
-    // beneath the still-visible native splash, never the tabs/Home screen.
-    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
-  }
-
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
@@ -136,6 +140,14 @@ function InitialLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
       </Stack>
+      {/* Covers the Stack rather than replacing it. Returning a bare View here
+          meant the root layout rendered no navigator on its first pass, so the
+          redirect below threw "Attempted to navigate before mounting the Root
+          Layout component". Overlaying keeps the same guarantee -- the tabs are
+          never visible for a frame -- while the navigator still mounts. */}
+      {!routeSettled && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
+      )}
       <StatusBar style="auto" />
     </ThemeProvider>
   );
