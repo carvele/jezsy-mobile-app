@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { getPaymentStatus, TERMINAL_PAYMENT_STATUSES, PaymentStatus } from '@/src/lib/payments';
@@ -156,17 +156,17 @@ export default function PaymentScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flexOne: { flex: 1 },
-  center: { justifyContent: 'center', alignItems: 'center', padding: 24 },
+  center: { justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  settlingText: { fontSize: 16, fontWeight: '700', marginTop: 16 },
-  settlingHint: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 },
+  backBtn: { padding: Spacing.xs, width: 32 },
+  headerTitle: { ...Type.subtitle },
+  settlingText: { fontSize: 16, fontWeight: '700', marginTop: Spacing.lg },
+  settlingHint: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: Spacing.sm },
 });
