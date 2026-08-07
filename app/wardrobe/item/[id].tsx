@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -116,7 +116,7 @@ export default function WardrobeItemDetailScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>Item not found.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: Spacing.xl }}>
           <Text style={{ color: colors.tint }}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -213,65 +213,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
   },
-  backButton: { padding: 4 },
-  deleteButton: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  content: { padding: 20, paddingBottom: 60 },
+  backButton: { padding: Spacing.xs },
+  deleteButton: { padding: Spacing.xs },
+  headerTitle: { ...Type.subtitle, fontWeight: '700' },
+  content: { padding: Spacing.xl, paddingBottom: 60 },
   image: {
     width: '100%',
     height: 380,
-    borderRadius: 16,
-    marginBottom: 20,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.xl,
   },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   tag: {
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
   },
   tagText: {
-    fontSize: 13,
+    ...Type.caption,
     fontWeight: '700',
   },
   subCategory: {
-    fontSize: 14,
-    marginBottom: 16,
+    ...Type.body,
+    marginBottom: Spacing.lg,
   },
   colorsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 24,
+    gap: Spacing.sm,
+    marginBottom: Spacing.xxl,
   },
   colorChip: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.md,
     borderWidth: 1,
   },
   colorChipText: {
-    fontSize: 12,
+    ...Type.caption,
     fontWeight: '600',
   },
   wearCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: Spacing.xl,
   },
   wearLabel: {
-    fontSize: 15,
+    ...Type.bodyStrong,
     fontWeight: '600',
     flex: 1,
   },
@@ -279,12 +279,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.pill,
   },
   logButtonText: {
-    fontSize: 16,
+    ...Type.bodyStrong,
     fontWeight: '700',
   },
 });

@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -288,7 +288,7 @@ export default function AddWardrobeItemScreen() {
         <View style={styles.form}>
           {/* Background Removal toggle */}
           <View style={[styles.formRow, styles.switchRow]}>
-            <View style={{ flex: 1, paddingRight: 16 }}>
+            <View style={{ flex: 1, paddingRight: Spacing.lg }}>
               <Text style={[styles.label, { color: colors.text }]}>Remove Background</Text>
               <Text style={[styles.subLabel, { color: colors.secondaryText }]}>
                 Cut out the clothing item automatically using on-device ML
@@ -432,20 +432,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
   },
   backButton: {
-    padding: 8,
+    padding: Spacing.sm,
     borderRadius: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   headerTitle: {
-    fontSize: 18,
+    ...Type.subtitle,
     fontWeight: '700',
   },
   content: {
-    padding: 20,
+    padding: Spacing.xl,
   },
   imageContainer: {
     height: width * 0.9,
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   previewContainer: {
     width: '100%',
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    padding: 8,
+    padding: Spacing.sm,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
@@ -482,21 +482,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 16,
+    borderRadius: Radius.lg,
   },
   processingText: {
-    marginTop: 12,
-    fontSize: 16,
+    marginTop: Spacing.md,
+    ...Type.bodyStrong,
     fontWeight: '600',
   },
   pickerButtons: {
     flexDirection: 'row',
-    gap: 20,
+    gap: Spacing.xl,
   },
   pickerBtn: {
     width: 120,
     height: 120,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 2,
@@ -506,16 +506,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   pickerBtnText: {
-    marginTop: 12,
-    fontSize: 14,
+    marginTop: Spacing.md,
+    ...Type.body,
     fontWeight: '600',
   },
   form: {
-    gap: 20,
-    marginBottom: 32,
+    gap: Spacing.xl,
+    marginBottom: Spacing.xxxl,
   },
   formRow: {
-    gap: 8,
+    gap: Spacing.sm,
   },
   switchRow: {
     flexDirection: 'row',
@@ -523,56 +523,56 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   label: {
-    fontSize: 16,
+    ...Type.bodyStrong,
     fontWeight: '700',
   },
   subLabel: {
-    fontSize: 12,
+    ...Type.caption,
     marginTop: 2,
   },
   input: {
     height: 52,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    fontSize: 15,
+    paddingHorizontal: Spacing.lg,
+    ...Type.bodyStrong,
   },
   chipRow: {
-    paddingVertical: 4,
-    gap: 8,
+    paddingVertical: Spacing.xs,
+    gap: Spacing.sm,
   },
   chipWrapRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 4,
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   chip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
   },
   chipText: {
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '600',
   },
   colorPalette: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-    marginTop: 4,
+    gap: Spacing.lg,
+    marginTop: Spacing.xs,
   },
   colorCircle: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: Radius.pill,
     justifyContent: 'center',
     alignItems: 'center',
   },
   saveButton: {
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.pill,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 4,
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   saveButtonText: {
-    fontSize: 16,
+    ...Type.bodyStrong,
     fontWeight: '800',
   },
   loadingRow: {
