@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemePreference, ThemePreference } from '@/src/context/ThemeContext';
@@ -83,20 +83,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  backBtn: { padding: 8 },
+  backBtn: { padding: Spacing.sm },
   headerTitle: { fontSize: 18, fontWeight: '700' },
-  content: { padding: 20 },
-  intro: { fontSize: 14, lineHeight: 20, marginBottom: 20 },
-  group: { borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  content: { padding: Spacing.xl },
+  intro: { fontSize: 14, lineHeight: 20, marginBottom: Spacing.xl },
+  group: { borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLast: { borderBottomWidth: 0 },

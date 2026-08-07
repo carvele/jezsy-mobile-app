@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -252,7 +252,7 @@ export default function AccountSettingsScreen() {
               </>
             ) : (
               <>
-                <Text style={[styles.noticeText, { color: colors.secondaryText, marginBottom: 16 }]}>
+                <Text style={[styles.noticeText, { color: colors.secondaryText, marginBottom: Spacing.lg }]}>
                   Deletion is handled by hand so we can settle any active reservations
                   first. Requesting it does not sign you out or remove anything straight
                   away.
@@ -288,23 +288,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
-  backBtn: { padding: 8 },
+  backBtn: { padding: Spacing.sm },
   headerTitle: { fontSize: 18, fontWeight: '700' },
-  content: { padding: 20 },
+  content: { padding: Spacing.xl },
   section: {
-    paddingBottom: 24,
-    marginBottom: 24,
+    paddingBottom: Spacing.xxl,
+    marginBottom: Spacing.xxl,
     borderBottomWidth: 1,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: Spacing.lg },
   readOnlyValue: {
     height: 52,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     fontSize: 15,
     textAlignVertical: 'center',
     lineHeight: 52,
@@ -313,10 +313,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingHorizontal: 14,
     height: 52,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
     gap: 10,
   },
   input: {
@@ -339,9 +339,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     padding: 14,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   noticeText: {
     flex: 1,
