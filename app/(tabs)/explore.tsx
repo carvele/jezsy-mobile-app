@@ -30,6 +30,7 @@ import { recordCategoryVisit } from '@/src/utils/categoryAffinity';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { GRID_GUTTER, GRID_COLUMN_GAP } from '@/src/utils/layout';
+import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
 
@@ -863,10 +864,11 @@ export default function ExploreScreen() {
                   </View>
                 }
                 ListEmptyComponent={
-                  <View style={styles.centerContainer}>
-                    <IconSymbol name="bag.fill" size={48} color={colors.icon} />
-                    <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No products match your search or filters.</Text>
-                  </View>
+                  <BrandEmptyState
+                    icon="bag.fill"
+                    title="No matches"
+                    message="Nothing matches this search and filter combination. Try widening it."
+                  />
                 }
                 stickyHeaderIndices={[0]}
               />
@@ -994,10 +996,11 @@ export default function ExploreScreen() {
                     </View>
                   }
                   ListEmptyComponent={
-                    <View style={styles.centerContainer}>
-                      <IconSymbol name="bag.fill" size={48} color={colors.icon} />
-                      <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No products found matching filters.</Text>
-                    </View>
+                    <BrandEmptyState
+                      icon="bag.fill"
+                      title="No matches"
+                      message="Nothing in this category matches your filters. Try clearing a few."
+                    />
                   }
                   onEndReached={loadMoreProducts}
                   onEndReachedThreshold={0.5}
@@ -1423,10 +1426,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   breadcrumbWrapper: {
-    paddingHorizontal: 16,
+    paddingHorizontal: GRID_GUTTER,
     paddingVertical: 10,
+    // The border is invisible but load-bearing: its 1pt still occupies layout,
+    // so the width stays and only the dead colour declaration goes.
     borderBottomWidth: 1,
-    borderBottomColor: 'transparent',
   },
   breadcrumbsContainer: {
     flexDirection: 'row',
@@ -1617,13 +1621,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 80,
-    gap: 12,
-  },
   skeletonGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1636,12 +1633,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 12,
-  },
-  emptyText: {
-    fontSize: 15,
-    fontWeight: '500',
-    textAlign: 'center',
-    paddingHorizontal: 40,
   },
   modalOverlay: {
     flex: 1,
@@ -1703,7 +1694,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    // 12 rather than 8 so the chip clears 44pt without hitSlop, which would
+    // have overlapped the neighbouring chip across the row's 8pt gap.
+    paddingVertical: 12,
     borderRadius: 20,
     borderWidth: 1,
   },
@@ -1713,7 +1706,7 @@ const styles = StyleSheet.create({
   },
   sizeChip: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderRadius: 20,
     borderWidth: 1,
     minWidth: 48,
@@ -1727,7 +1720,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderRadius: 20,
     borderWidth: 1,
     gap: 6,
