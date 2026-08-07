@@ -52,7 +52,7 @@ export function BrandEmptyState({ icon, title, message, actionLabel, onAction }:
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
         >
-          <Text style={styles.actionText}>{actionLabel}</Text>
+          <Text style={[styles.actionText, { color: colors.onTint }]}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
     </View>
@@ -115,7 +115,6 @@ const styles = StyleSheet.create({
     ...Elevation.md,
   },
   actionText: {
-    color: '#0D0D0D',
     ...Type.bodyStrong,
     fontWeight: '700',
   },

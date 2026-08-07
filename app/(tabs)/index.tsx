@@ -226,6 +226,7 @@ export default function HomeScreen() {
             {allProducts.length > 6 && (
               <TouchableOpacity
                 onPress={() => router.push('/(tabs)/explore?all=1' as any)}
+                hitSlop={10}
                 accessibilityRole="button"
                 accessibilityLabel="See all products"
               >

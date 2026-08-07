@@ -23,6 +23,11 @@ export const Colors = {
     text: '#11181C',
     background: '#FFFFFF',
     tint: tintColorLight,
+    // Text and icons sitting ON a tint-filled surface. Near-black on the
+    // light gold measures 4.01:1 and fails AA; white measures 4.85:1 and
+    // passes. Dark mode is the reverse, hence a per-scheme token rather than
+    // one hardcoded value.
+    onTint: '#FFFFFF',
     icon: '#687076',
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
@@ -47,6 +52,7 @@ export const Colors = {
     text: '#F5F5F5',
     background: '#0D0D0D', // Spotify-like Rich Black
     tint: tintColorDark,
+    onTint: '#0D0D0D', // 8.70:1 on the brighter dark-mode gold
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,

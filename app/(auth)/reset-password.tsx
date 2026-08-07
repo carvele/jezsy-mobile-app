@@ -98,6 +98,7 @@ export default function ResetPasswordScreen() {
             />
             <TouchableOpacity
               onPress={() => setShowPassword((v) => !v)}
+              hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
             >
@@ -133,9 +134,9 @@ export default function ResetPasswordScreen() {
             accessibilityLabel="Update password"
           >
             {submitting ? (
-              <ActivityIndicator color={colors.background} />
+              <ActivityIndicator color={colors.onTint} />
             ) : (
-              <Text style={styles.submitButtonText}>Update Password</Text>
+              <Text style={[styles.submitButtonText, { color: colors.onTint }]}>Update Password</Text>
             )}
           </TouchableOpacity>
 
@@ -197,7 +198,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   submitButtonText: {
-    color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '700',
   },
