@@ -36,7 +36,7 @@ export default function ResetPasswordScreen() {
       return;
     }
     if (password !== confirmPassword) {
-      showToast('Please re-enter matching passwords.', 'error');
+      showToast('Passwords do not match.', 'error');
       return;
     }
 

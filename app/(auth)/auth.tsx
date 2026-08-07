@@ -107,11 +107,11 @@ export default function AuthScreen() {
       return;
     }
     if (password.length < 8) {
-      showToast('Password must be at least 8 characters.', 'error');
+      showToast('Please use at least 8 characters.', 'error');
       return;
     }
     if (password !== confirmPassword) {
-      showToast('Passwords do not match. Please try again.', 'error');
+      showToast('Passwords do not match.', 'error');
       return;
     }
 

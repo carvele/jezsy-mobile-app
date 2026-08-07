@@ -344,15 +344,15 @@ export default function ChatScreen() {
            setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
         } else {
            setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-           showToast("Failed to send image message.", 'error');
+           showToast('Could not send that photo. Please try again.', 'error');
         }
       } else {
         setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-        showToast("Could not upload the image to storage.", 'error');
+        showToast('Could not upload that photo. Please try again.', 'error');
       }
     } catch (e) {
       console.error('Error picking/uploading image:', e);
-      showToast("An unexpected error occurred while picking the image.", 'error');
+      showToast('Could not open your photos. Please try again.', 'error');
     }
   };
 
