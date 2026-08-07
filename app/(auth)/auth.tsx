@@ -20,7 +20,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
@@ -445,7 +445,7 @@ export default function AuthScreen() {
             {/* Email Field (visible on all screens except otp_verify) */}
             {mode !== 'otp_verify' && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>EMAIL</Text>
+                <Text style={styles.label}>Email</Text>
                 <View style={styles.inputRow}>
                   <Mail size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
                   <TextInput
@@ -467,7 +467,7 @@ export default function AuthScreen() {
             {/* Password Field (login & signup) */}
             {(mode === 'login' || mode === 'signup') && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>PASSWORD</Text>
+                <Text style={styles.label}>Password</Text>
                 <View style={styles.inputRow}>
                   <Lock size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
                   <TextInput
@@ -500,7 +500,7 @@ export default function AuthScreen() {
             {/* Confirm Password (signup only) */}
             {mode === 'signup' && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>CONFIRM PASSWORD</Text>
+                <Text style={styles.label}>Confirm password</Text>
                 <View style={styles.inputRow}>
                   <Lock size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
                   <TextInput
@@ -655,12 +655,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 24,
     zIndex: 10,
-    padding: 8,
+    padding: Spacing.sm,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'flex-end',
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.xxl,
     paddingBottom: 40,
   },
   headingWrapper: {
@@ -674,7 +674,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   subtitle: {
-    marginTop: 8,
+    marginTop: Spacing.sm,
     fontSize: 15,
     color: 'rgba(255,255,255,0.55)',
     fontWeight: '400',
@@ -682,10 +682,10 @@ const styles = StyleSheet.create({
   },
   glassCard: {
     backgroundColor: GLASS_BG,
-    borderRadius: 24,
+    borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: GLASS_BORDER,
-    padding: 24,
+    padding: Spacing.xxl,
     gap: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -701,6 +701,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(255,255,255,0.4)',
     letterSpacing: 1.5,
+    // Caps live here, not in the string: a screen reader spells out literal
+    // all-caps text letter by letter.
+    textTransform: 'uppercase',
   },
   inputRow: {
     flexDirection: 'row',
@@ -715,16 +718,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#fff',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
   },
   inputWithAction: {
     flex: 1,
     fontSize: 16,
     color: '#fff',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
   },
   eyeBtn: {
-    padding: 8,
+    padding: Spacing.sm,
   },
   linksRow: {
     flexDirection: 'row',
@@ -745,7 +748,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 6,
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -774,7 +777,7 @@ const styles = StyleSheet.create({
   otpBox: {
     width: (width - 48 - 48 - 40) / 6,
     height: 54,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: GLASS_BORDER,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
@@ -798,7 +801,7 @@ const styles = StyleSheet.create({
   },
   resendRow: {
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: Spacing.sm,
   },
   resendText: {
     color: c.tint,

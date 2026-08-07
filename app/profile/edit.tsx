@@ -173,7 +173,7 @@ export default function EditProfileScreen() {
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.sectionLabel, { color: colors.secondaryText }]}>NAME</Text>
+          <Text style={[styles.sectionLabel, { color: colors.secondaryText }]}>Name</Text>
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>First name</Text>
@@ -198,7 +198,7 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>PERSONAL INFO</Text>
+          <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>Personal info</Text>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Mobile number</Text>
             <View style={styles.phoneRow}>
@@ -267,7 +267,7 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>ADDRESS</Text>
+          <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>Address</Text>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Street address</Text>
             <TextInput
@@ -365,7 +365,9 @@ const styles = StyleSheet.create({
   headerAction: { ...Type.bodyLarge },
   headerTitle: { ...Type.subtitle },
   body: { padding: Spacing.xl, paddingBottom: 48 },
-  sectionLabel: { ...Type.label, marginBottom: Spacing.md },
+  // textTransform rather than caps in the string, so a screen reader reads
+  // "Personal info" instead of spelling it out.
+  sectionLabel: { ...Type.label, textTransform: 'uppercase', marginBottom: Spacing.md },
   row: { flexDirection: 'row' },
   fieldGroup: { gap: 6 },
   label: { fontSize: 12, fontWeight: '600' },

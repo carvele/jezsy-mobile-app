@@ -618,13 +618,19 @@ const styles = StyleSheet.create({
   payMethodText: { fontSize: 13, fontWeight: "700" },
   receiptStatus: {
     flexDirection: 'row',
-    alignItems: 'center',
+    // flex-start, not centre: the text wraps to two lines, and centring it
+    // against a 16pt icon floats the icon into the gap between them.
+    alignItems: 'flex-start',
     gap: 6,
     marginTop: Spacing.sm,
   },
   receiptStatusText: {
     fontSize: 13,
     fontWeight: '600',
+    // Without this the Text takes its intrinsic width inside the row and runs
+    // past the card's padding instead of wrapping into the space left beside
+    // the icon.
+    flex: 1,
   },
   bottomBar: { padding: Spacing.xxl, borderTopWidth: 1 },
   primaryAction: {

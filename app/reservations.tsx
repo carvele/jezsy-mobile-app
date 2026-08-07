@@ -6,7 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { Database } from '@/src/types/database.types';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -255,56 +255,53 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
   },
   backButton: {
-    padding: 4,
+    padding: Spacing.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Spacing.xl,
   },
   emptyText: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 16,
-    marginBottom: 8,
+    ...Type.title,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   emptySubtext: {
-    fontSize: 14,
+    ...Type.body,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   exploreButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.xl,
   },
   exploreButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
   filterRow: {
     flexGrow: 0,
     flexShrink: 0,
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   filterRowContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    gap: 8,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.pill,
     borderWidth: 1,
   },
   filterChipText: {
@@ -312,36 +309,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listContent: {
-    padding: 20,
-    paddingTop: 8,
+    padding: Spacing.xl,
+    paddingTop: Spacing.sm,
   },
   reservationCard: {
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 16,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 12,
+    marginBottom: Spacing.md,
+    paddingBottom: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   reservationId: {
-    fontSize: 12,
-    fontWeight: '500',
+    ...Type.caption,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.md,
     borderWidth: 1,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '700',
+    // Type.label exists for exactly this: uppercase eyebrow text, where its
+    // letterSpacing stops the capitals crowding.
+    ...Type.label,
     textTransform: 'uppercase',
   },
   cardBody: {
@@ -350,27 +347,27 @@ const styles = StyleSheet.create({
   productImage: {
     width: 80,
     height: 100,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
   },
   productInfo: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: Spacing.lg,
     justifyContent: 'center',
   },
   productName: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...Type.bodyLargeStrong,
+    marginBottom: Spacing.xs,
   },
   productDetails: {
-    fontSize: 13,
-    marginBottom: 8,
+    ...Type.caption,
+    marginBottom: Spacing.sm,
   },
   appointmentDetails: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 8,
+    ...Type.caption,
+    marginBottom: Spacing.sm,
   },
+  // Not bodyLargeStrong: that is 700 and this is 800. A price is the loudest
+  // thing on the card by intent, and the scale has no 16/800.
   price: {
     fontSize: 16,
     fontWeight: '800',

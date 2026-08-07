@@ -16,7 +16,7 @@ import {
 import * as Speech from "expo-speech";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Colors } from "@/constants/theme";
+import { Colors, Radius, Spacing, Type } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ConsentModal } from "@/src/components/ConsentModal";
 import { TiltGuide } from "@/src/components/TiltGuide";
@@ -477,8 +477,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     zIndex: 20,
   },
   iconBtn: {
@@ -487,18 +487,18 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20,
   },
   iconBtnText: {
-    paddingHorizontal: 12, paddingVertical: 8,
-    backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 16,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    backgroundColor: "rgba(0,0,0,0.5)", borderRadius: Radius.lg,
   },
-  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  headerTitle: { ...Type.subtitle, color: "#fff" },
   skipText: { color: "#fff", fontWeight: "600" },
   centerCard: {
     flex: 1, justifyContent: "center", alignItems: "center",
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.xxl,
   },
-  cardTitle: { fontSize: 22, fontWeight: "700", marginBottom: 12, textAlign: "center" },
-  cardBody: { fontSize: 15, lineHeight: 22, textAlign: "center", marginBottom: 24 },
-  actionButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 999 },
+  cardTitle: { fontSize: 22, fontWeight: "700", marginBottom: Spacing.md, textAlign: "center" },
+  cardBody: { fontSize: 15, lineHeight: 22, textAlign: "center", marginBottom: Spacing.xxl },
+  actionButton: { paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: Radius.pill },
   actionText: { fontSize: 14, fontWeight: "700" },
   controls: {
     alignItems: "center",
@@ -509,22 +509,22 @@ const styles = StyleSheet.create({
     color: "#FFCC00",
     fontWeight: "600",
     backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
+    borderRadius: Radius.lg,
     fontSize: 16,
     textAlign: "center",
   },
   countdownBadge: {
     backgroundColor: "rgba(0,255,0,0.8)",
-    paddingHorizontal: 24, paddingVertical: 12,
-    borderRadius: 24,
+    paddingHorizontal: Spacing.xxl, paddingVertical: Spacing.md,
+    borderRadius: Radius.xl,
   },
   countdownText: { color: "#000", fontSize: 20, fontWeight: "700" },
   processingBadge: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.8)",
-    paddingHorizontal: 20, paddingVertical: 12,
-    borderRadius: 24, gap: 12,
+    paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md,
+    borderRadius: Radius.xl, gap: Spacing.md,
   },
   processingText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 });

@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, ArrowRight, Check, User, Phone, MapPin, Calendar, ChevronDown } from 'lucide-react-native';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { useToast } from '@/src/context/ToastContext';
@@ -249,7 +249,7 @@ export default function ProfileSetupScreen() {
     (
       <View key="name" style={styles.fields}>
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>FIRST NAME</Text>
+          <Text style={styles.label}>First name</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. Maria"
@@ -261,7 +261,7 @@ export default function ProfileSetupScreen() {
           />
         </View>
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>LAST NAME</Text>
+          <Text style={styles.label}>Last name</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. Santos"
@@ -283,7 +283,7 @@ export default function ProfileSetupScreen() {
       <ScrollView key="personal_info" showsVerticalScrollIndicator={false}>
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>MOBILE NUMBER</Text>
+            <Text style={styles.label}>Mobile number</Text>
             <View style={styles.phoneInputRow}>
               <TouchableOpacity
                 style={styles.countrySelectorBtn}
@@ -306,7 +306,7 @@ export default function ProfileSetupScreen() {
             </View>
           </View>
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { marginTop: 8 }]}>DATE OF BIRTH</Text>
+            <Text style={[styles.label, { marginTop: 8 }]}>Date of birth</Text>
             <View style={styles.dobInputRow}>
               <TextInput
                 style={[styles.input, styles.dobInput]}
@@ -326,7 +326,7 @@ export default function ProfileSetupScreen() {
             </View>
           </View>
           <View style={{ marginTop: 8 }}>
-            <Text style={styles.label}>GENDER</Text>
+            <Text style={styles.label}>Gender</Text>
             <View style={styles.chipGrid}>
               {GENDER_OPTIONS.map(g => (
                 <TouchableOpacity
@@ -349,7 +349,7 @@ export default function ProfileSetupScreen() {
       <ScrollView key="address" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>STREET ADDRESS</Text>
+            <Text style={styles.label}>Street address</Text>
             <TextInput
               style={styles.input}
               placeholder="House/unit no., building, street name"
@@ -361,7 +361,7 @@ export default function ProfileSetupScreen() {
             />
           </View>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>BARANGAY</Text>
+            <Text style={styles.label}>Barangay</Text>
             <TextInput
               style={styles.input}
               placeholder="e.g. Brgy. San Jose"
@@ -386,7 +386,7 @@ export default function ProfileSetupScreen() {
           </View>
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.label}>PROVINCE</Text>
+              <Text style={styles.label}>Province</Text>
               <TextInput
                 style={styles.input}
                 placeholder="e.g. Cebu"
@@ -398,7 +398,7 @@ export default function ProfileSetupScreen() {
             </View>
             <View style={{ width: 16 }} />
             <View style={[styles.fieldGroup, { width: 110 }]}>
-              <Text style={styles.label}>ZIP CODE</Text>
+              <Text style={styles.label}>Zip code</Text>
               <TextInput
                 style={styles.input}
                 placeholder="0000"
@@ -524,9 +524,9 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    gap: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.md,
+    gap: Spacing.md,
   },
   backBtn: { padding: 6 },
   progressPills: { flex: 1, flexDirection: 'row', gap: 6 },
@@ -543,14 +543,14 @@ const styles = StyleSheet.create({
 
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.xxl,
     paddingBottom: 36,
   },
-  header: { marginBottom: 28, marginTop: 16 },
+  header: { marginBottom: 28, marginTop: Spacing.lg },
   iconBadge: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     backgroundColor: `${Colors.dark.tint}18`,
     borderWidth: 1,
     borderColor: `${Colors.dark.tint}33`,
@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     lineHeight: 42,
     letterSpacing: -0.5,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   subtitle: {
     fontSize: 14,
@@ -574,14 +574,17 @@ const styles = StyleSheet.create({
 
   slideContent: { flex: 1 },
 
-  fields: { gap: 16 },
+  fields: { gap: Spacing.lg },
   row: { flexDirection: 'row' },
-  fieldGroup: { gap: 8 },
+  fieldGroup: { gap: Spacing.sm },
   label: {
     fontSize: 12,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.38)',
     letterSpacing: 1.6,
+    // Caps live here, not in the string: a screen reader spells out literal
+    // all-caps text letter by letter.
+    textTransform: 'uppercase',
   },
   input: {
     fontSize: 16,
@@ -600,12 +603,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 44,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
-    marginRight: 12,
+    marginRight: Spacing.md,
     gap: 6,
   },
   countryFlag: {
@@ -636,11 +639,11 @@ const styles = StyleSheet.create({
   chipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Spacing.sm,
     marginTop: 10,
   },
   chip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 10,
     borderRadius: 100,
     borderWidth: 1,
@@ -660,7 +663,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  footer: { gap: 10, paddingTop: 16 },
+  footer: { gap: 10, paddingTop: Spacing.lg },
   // Geometry and colour now live in PrimaryButton; only the gold glow is
   // specific to this screen. Not an Elevation token -- those cast black.
   nextBtnGlow: {
