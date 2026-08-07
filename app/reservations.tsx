@@ -262,8 +262,7 @@ const styles = StyleSheet.create({
     padding: Spacing.xs,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   centerContainer: {
     flex: 1,
@@ -272,13 +271,12 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
   },
   emptyText: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...Type.title,
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
   },
   emptySubtext: {
-    fontSize: 14,
+    ...Type.body,
     textAlign: 'center',
     marginBottom: Spacing.xxl,
   },
@@ -288,8 +286,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
   },
   exploreButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
   filterRow: {
     flexGrow: 0,
@@ -330,8 +327,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   reservationId: {
-    fontSize: 12,
-    fontWeight: '500',
+    ...Type.caption,
   },
   statusBadge: {
     paddingHorizontal: Spacing.sm,
@@ -340,8 +336,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '700',
+    // Type.label exists for exactly this: uppercase eyebrow text, where its
+    // letterSpacing stops the capitals crowding.
+    ...Type.label,
     textTransform: 'uppercase',
   },
   cardBody: {
@@ -358,19 +355,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   productName: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
     marginBottom: Spacing.xs,
   },
   productDetails: {
-    fontSize: 13,
+    ...Type.caption,
     marginBottom: Spacing.sm,
   },
   appointmentDetails: {
-    fontSize: 13,
-    fontWeight: '500',
+    ...Type.caption,
     marginBottom: Spacing.sm,
   },
+  // Not bodyLargeStrong: that is 700 and this is 800. A price is the loudest
+  // thing on the card by intent, and the scale has no 16/800.
   price: {
     fontSize: 16,
     fontWeight: '800',

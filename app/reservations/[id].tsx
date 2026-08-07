@@ -605,7 +605,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
   },
   backButton: { padding: Spacing.xs },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerTitle: { ...Type.subtitle },
   content: { padding: Spacing.xl, paddingBottom: 60 },
   statusRow: {
     flexDirection: 'row',
@@ -613,14 +613,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.xl,
   },
-  displayId: { fontSize: 13, fontWeight: '500' },
+  displayId: { ...Type.caption },
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: Radius.md,
     borderWidth: 1,
   },
-  statusText: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  // Type.label is the uppercase eyebrow slot; its tracking is why it exists.
+  statusText: { ...Type.label, textTransform: 'uppercase' },
   pickupCard: {
     borderRadius: Radius.lg,
     padding: Spacing.xl,
@@ -640,8 +641,8 @@ const styles = StyleSheet.create({
   },
   productImage: { width: 100, height: 120 },
   productInfo: { flex: 1, padding: Spacing.lg, justifyContent: 'center', gap: Spacing.xs },
-  productName: { fontSize: 16, fontWeight: '700' },
-  productDetails: { fontSize: 13 },
+  productName: { ...Type.bodyLargeStrong },
+  productDetails: { ...Type.caption },
   viewProductLink: { fontSize: 13, fontWeight: '600', marginTop: Spacing.xs },
   itemsHeading: { fontSize: 13, fontWeight: '600', marginBottom: 10 },
   askRow: { marginBottom: Spacing.lg },
@@ -651,7 +652,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: Spacing.xl,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: Spacing.lg },
+  sectionTitle: { ...Type.bodyLargeStrong, marginBottom: Spacing.lg },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   infoText: { fontSize: 15, fontWeight: '500' },
   sectionHeaderRow: {
@@ -702,6 +703,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: Spacing.md,
   },
+  // The price breakdown, left as literals for the same reason as reserve/[id]:
+  // rowText is an exact Type.body match but rowValue is 14/600, which the scale
+  // has no slot for. Converting only the label would give it a lineHeight its
+  // amount does not have and pull the two off a shared baseline.
   rowText: { fontSize: 14 },
   rowValue: { fontSize: 14, fontWeight: '600' },
   paymentStatusRow: {
