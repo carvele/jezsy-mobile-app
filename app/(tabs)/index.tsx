@@ -21,6 +21,7 @@ import { RecentlyViewed } from '@/src/components/RecentlyViewed';
 import { useToast } from '@/src/context/ToastContext';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
+import { GRID_GUTTER } from '@/src/utils/layout';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
@@ -382,7 +383,8 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
+    // Feeds gridCardWidth via GRID_GUTTER, same as Explore's grid.
+    paddingHorizontal: GRID_GUTTER,
     justifyContent: 'space-between',
   },
 });

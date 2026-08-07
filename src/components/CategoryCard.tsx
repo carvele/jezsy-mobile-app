@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { gridCardWidth } from '@/src/utils/layout';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -15,8 +16,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // rendered blank. (The rail variant gets away with aspectRatio because it
 // lives in a horizontal ScrollView.) Height is derived from the width to keep
 // the intended 3:2 landscape shape.
-// 16 = the grid's page padding each side, 12 = the gutter between columns.
-const GRID_CARD_WIDTH = (SCREEN_WIDTH - 16 * 2 - 12) / 2;
+// Page padding and column gutter come from the shared grid tokens rather than
+// being restated here, so retokenising the screen's padding resizes the card
+// instead of breaking the two-column layout.
+const GRID_CARD_WIDTH = gridCardWidth();
 const GRID_CARD_HEIGHT = GRID_CARD_WIDTH / (3 / 2);
 
 export type CategoryCardVariant = 'grid' | 'rail';
