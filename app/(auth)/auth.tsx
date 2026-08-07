@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ActivityIndicator,
   LayoutAnimation,
   UIManager,
   Dimensions,
@@ -24,6 +23,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Colors } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
+import { PrimaryButton } from '@/src/components/PrimaryButton';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -598,18 +598,13 @@ export default function AuthScreen() {
             )}
 
             {/* Primary CTA Button */}
-            <TouchableOpacity
-              style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
-              activeOpacity={0.85}
+            <PrimaryButton
+              label={getButtonText()}
               onPress={handleSubmit}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#0D0D0D" />
-              ) : (
-                <Text style={styles.primaryBtnText}>{getButtonText()}</Text>
-              )}
-            </TouchableOpacity>
+              loading={loading}
+              dark
+              style={styles.primaryBtnGlow}
+            />
 
             {/* Switch between Log In and Sign Up */}
             {(mode === 'login' || mode === 'signup') && (
@@ -648,8 +643,13 @@ export default function AuthScreen() {
 const GLASS_BG = 'rgba(255,255,255,0.07)';
 const GLASS_BORDER = 'rgba(255,255,255,0.13)';
 
+// Deliberately not theme-aware. The background is a full-bleed photograph under a dark gradient scrim,
+// so white text on it is correct whatever the system theme is -- lightening
+// it would make that text unreadable.
+const c = Colors.dark;
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0A' },
+  root: { flex: 1, backgroundColor: c.background },
   flex: { flex: 1 },
   backBtn: {
     position: 'absolute',
@@ -732,31 +732,20 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   linkText: {
-    color: Colors.dark.tint,
+    color: c.tint,
     fontSize: 13,
     fontWeight: '600',
   },
-  primaryBtn: {
-    height: 56,
-    backgroundColor: Colors.dark.tint,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: Colors.dark.tint,
+  // Geometry, colour and the disabled state now live in PrimaryButton; what
+  // remains is this screen's gold glow, which is not an Elevation token
+  // because those cast black.
+  primaryBtnGlow: {
+    shadowColor: c.tint,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 6,
     marginTop: 4,
-  },
-  primaryBtnDisabled: {
-    opacity: 0.5,
-  },
-  primaryBtnText: {
-    color: '#0D0D0D',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.3,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -771,7 +760,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   toggleLink: {
-    color: Colors.dark.tint,
+    color: c.tint,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -793,7 +782,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   otpBoxActive: {
-    borderColor: Colors.dark.tint,
+    borderColor: c.tint,
     backgroundColor: 'rgba(201, 169, 110, 0.08)',
   },
   otpBoxText: {
@@ -812,7 +801,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   resendText: {
-    color: Colors.dark.tint,
+    color: c.tint,
     fontSize: 14,
     fontWeight: '600',
   },

@@ -54,7 +54,7 @@ export function SuggestedOutfitCard({ outfit, onSave, saving = false }: Props) {
         accessibilityLabel={`Save this ${outfit.items.length}-piece outfit`}
       >
         {saving ? (
-          <ActivityIndicator size="small" color="#0D0D0D" />
+          <ActivityIndicator size="small" color={colors.onTint} />
         ) : (
           <Text style={styles.saveBtnText}>Save Outfit</Text>
         )}

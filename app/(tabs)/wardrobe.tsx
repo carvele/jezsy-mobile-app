@@ -189,7 +189,7 @@ export default function WardrobeScreen() {
             contentFit="cover"
           />
           <View style={[styles.wearBadge, { backgroundColor: item.wear_count > 0 ? 'rgba(0,0,0,0.6)' : colors.tint }]}>
-            <Text style={[styles.wearBadgeText, { color: item.wear_count > 0 ? '#fff' : '#0D0D0D' }]}>
+            <Text style={[styles.wearBadgeText, { color: item.wear_count > 0 ? '#fff' : colors.onTint }]}>
               {item.wear_count > 0 ? `Worn ${item.wear_count}x` : 'Never worn'}
             </Text>
           </View>
@@ -271,7 +271,7 @@ export default function WardrobeScreen() {
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
             >
-              <Text style={[styles.chipText, { color: active ? '#0D0D0D' : colors.secondaryText }]}>{type}</Text>
+              <Text style={[styles.chipText, { color: active ? colors.onTint : colors.secondaryText }]}>{type}</Text>
             </TouchableOpacity>
           );
         })}
@@ -320,7 +320,7 @@ export default function WardrobeScreen() {
             activeTab === 'capsules' ? 'Create capsule' : activeTab === 'outfits' ? 'Create outfit' : 'Add wardrobe item'
           }
         >
-          <IconSymbol name="plus" size={20} color="#0D0D0D" />
+          <IconSymbol name="plus" size={20} color={colors.onTint} />
         </TouchableOpacity>
       </View>
 
@@ -401,8 +401,8 @@ export default function WardrobeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Create new outfit"
               >
-                <IconSymbol name="plus" size={20} color="#0D0D0D" />
-                <Text style={styles.createOutfitBtnText}>Create New Outfit</Text>
+                <IconSymbol name="plus" size={20} color={colors.onTint} />
+                <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Outfit</Text>
               </TouchableOpacity>
             }
           />
@@ -432,8 +432,8 @@ export default function WardrobeScreen() {
                 style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
                 onPress={() => router.push('/wardrobe/create-capsule' as any)}
               >
-                <IconSymbol name="plus" size={20} color="#0D0D0D" />
-                <Text style={styles.createOutfitBtnText}>Create New Capsule</Text>
+                <IconSymbol name="plus" size={20} color={colors.onTint} />
+                <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Capsule</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -661,7 +661,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   createOutfitBtnText: {
-    color: '#0D0D0D',
     fontSize: 16,
     fontWeight: '700',
   }

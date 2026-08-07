@@ -15,13 +15,13 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
 import { useToast } from '@/src/context/ToastContext';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
 import { GRID_GUTTER } from '@/src/utils/layout';
+import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
@@ -237,12 +237,11 @@ export default function HomeScreen() {
           </View>
 
           {trendingProducts.length === 0 ? (
-            <View style={styles.emptyProductsState}>
-              <IconSymbol name="bag.fill" size={40} color={colors.secondaryText} />
-              <Text style={[styles.emptyProductsText, { color: colors.secondaryText }]}>
-                No products available yet. Check back soon.
-              </Text>
-            </View>
+            <BrandEmptyState
+              icon="bag.fill"
+              title="Nothing here yet"
+              message="New pieces are on their way. Check back soon."
+            />
           ) : (
             <View style={styles.gridContainer}>
               {trendingProducts.map((item) => (
@@ -253,9 +252,6 @@ export default function HomeScreen() {
         </View>
 
         <RecentlyViewed />
-
-        {/* Footer padding to not overlap with bottom tabs */}
-        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
