@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
@@ -155,26 +155,26 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.xxl,
   },
   title: {
-    fontSize: 26,
-    fontWeight: '800',
-    marginBottom: 8,
+    // 26 has no slot; headline is 24/800, the same weight two points down.
+    ...Type.headline,
+    marginBottom: Spacing.sm,
   },
   subtitle: {
     fontSize: 15,
-    marginBottom: 32,
+    marginBottom: Spacing.xxxl,
     lineHeight: 21,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingHorizontal: 14,
     height: 52,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
     gap: 10,
   },
   input: {
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
   cancelButtonText: {
     fontSize: 14,

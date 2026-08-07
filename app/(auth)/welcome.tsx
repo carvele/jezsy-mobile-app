@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
@@ -224,8 +224,8 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 28,
     paddingBottom: 50,
-    paddingTop: 20,
-    gap: 12,
+    paddingTop: Spacing.xl,
+    gap: Spacing.md,
   },
   googleButton: {
     flexDirection: 'row',
@@ -250,8 +250,8 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 4,
-    gap: 12,
+    marginVertical: Spacing.xs,
+    gap: Spacing.md,
   },
   dividerLine: {
     flex: 1,
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: 'rgba(255,255,255,0.35)',
     fontSize: 12,
-    marginTop: 8,
+    marginTop: Spacing.sm,
     lineHeight: 18,
   },
   termsLink: {
