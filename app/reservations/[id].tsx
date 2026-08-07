@@ -7,6 +7,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors } from '@/constants/theme';
+import { statusBucket, statusLabel, isAwaitingPayment, canReschedule } from '@/src/utils/reservationStatus';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { formatTimeLabel, formatLocalDate } from '@/src/utils/dateTime';
@@ -221,13 +222,12 @@ export default function ReservationDetailScreen() {
   };
 
   const getStatusColor = (status: string | null) => {
-    if (!status) return colors.warning;
-    switch (status.toLowerCase()) {
+    switch (statusBucket(status)) {
       case 'pending': return colors.warning;
-      case 'confirmed': return colors.info;
+      case 'toPay': return colors.notification;
+      case 'ready': return colors.info;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
-      default: return colors.text;
     }
   };
 
@@ -255,16 +255,16 @@ export default function ReservationDetailScreen() {
     : 'N/A';
   const statusColor = getStatusColor(reservation.status);
   const balanceDue = (reservation.rental_price || 0) - (reservation.deposit || 0);
-  const canReschedule = ['pending', 'confirmed'].includes((reservation.status || 'Pending').toLowerCase());
+  // Matches the dashboard's CAN_RESCHEDULE_STATUSES. The old list stopped at
+  // 'confirmed', so a customer whose item was already waiting for collection
+  // could not move the appointment even though staff could.
+  const canRescheduleNow = canReschedule(reservation.status);
 
   const paymentState = (reservation.payment_status || 'Pending').toLowerCase();
-  const rawState = (reservation.status || 'Pending').toLowerCase();
-  // The admin dashboard writes 'To Pay' for accepted-but-unpaid; treat it as
-  // the same state as 'Confirmed' rather than guessing which one is canonical.
-  const reservationState = rawState === 'to pay' ? 'confirmed' : rawState;
+  const reservationState = statusBucket(reservation.status);
   // Payment only opens once staff accept. Before that the customer owes
   // nothing and there is no deadline running.
-  const awaitingPayment = reservationState === 'confirmed' && paymentState === 'pending';
+  const awaitingPayment = isAwaitingPayment(reservation.status) && paymentState === 'pending';
   const receiptUnderReview = paymentState === 'submitted';
   const timeLeft = reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
 
@@ -302,11 +302,14 @@ export default function ReservationDetailScreen() {
             {reservation.display_id || reservation.id.substring(0, 8)}
           </Text>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
-            <Text style={[styles.statusText, { color: statusColor }]}>{reservation.status || 'Pending'}</Text>
+            <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel(reservation.status)}</Text>
           </View>
         </View>
 
-        {(reservation.status || '').toLowerCase() === 'confirmed' && (
+        {/* Gated on 'ready', not 'confirmed'. Stored 'Confirmed' means approved
+            and still unpaid, so this was showing a pickup pass to customers who
+            owed money and hiding it from the ones who had paid. */}
+        {reservationState === 'ready' && (
           <View style={[styles.pickupCard, { backgroundColor: colors.tint }]}>
             <View style={styles.pickupHeader}>
               <IconSymbol name="checkmark.circle.fill" size={18} color={colors.onTint} />
@@ -371,7 +374,7 @@ export default function ReservationDetailScreen() {
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Appointment</Text>
-            {canReschedule && !showReschedule && (
+            {canRescheduleNow && !showReschedule && (
               <TouchableOpacity
                 onPress={() => {
                   setRescheduleDate(reservation.date ? new Date(reservation.date) : new Date());
