@@ -594,21 +594,23 @@ export default function ExploreScreen() {
     );
   };
 
-  const removeSizeFilter = (size: string) => {
+  // Memoised because activeFilterChips depends on them; as plain functions they
+  // were rebuilt every render and the memo never held.
+  const removeSizeFilter = useCallback((size: string) => {
     setSelectedSizes((prev) => prev.filter((s) => s !== size));
-  };
+  }, []);
 
-  const removeColorFilter = (color: string) => {
+  const removeColorFilter = useCallback((color: string) => {
     setSelectedColors((prev) => prev.filter((c) => c !== color));
-  };
+  }, []);
 
-  const removeFitFilter = (fit: string) => {
+  const removeFitFilter = useCallback((fit: string) => {
     setSelectedFits((prev) => prev.filter((f) => f !== fit));
-  };
+  }, []);
 
-  const removeMaterialFilter = (material: string) => {
+  const removeMaterialFilter = useCallback((material: string) => {
     setSelectedMaterials((prev) => prev.filter((m) => m !== material));
-  };
+  }, []);
 
   // Breadcrumbs renderer (e.g. Tops > Knits & Sweaters)
   const renderBreadcrumbs = () => {
@@ -661,17 +663,102 @@ export default function ExploreScreen() {
     />
   ), [recommendedSizes]);
 
-  const activeFiltersCount =
-    selectedSizes.length +
-    selectedColors.length +
-    (selectedPriceRange ? 1 : 0) +
-    (customMinPrice || customMaxPrice ? 1 : 0) +
-    (selectedNewArrivalsOnly ? 1 : 0) +
-    (selectedSaleOnly ? 1 : 0) +
-    (selectedArOnly ? 1 : 0) +
-    (selectedMySizeOnly ? 1 : 0) +
-    selectedFits.length +
-    selectedMaterials.length;
+  // One description of every active filter, rendered by the header and counted
+  // for the badge. These were previously eight hand-written JSX blocks plus a
+  // separately maintained sum, duplicated across the search and browse headers
+  // -- four places that had to agree. a11y labels are carried explicitly
+  // because they do not follow the visible label uniformly.
+  const activeFilterChips = useMemo(() => {
+    const chips: { key: string; label: string; a11y: string; onRemove: () => void }[] = [];
+    if (selectedNewArrivalsOnly) chips.push({ key: 'new-arrivals', label: 'New Arrivals', a11y: 'Remove New Arrivals filter', onRemove: () => setSelectedNewArrivalsOnly(false) });
+    if (selectedSaleOnly) chips.push({ key: 'on-sale', label: 'On Sale', a11y: 'Remove On Sale filter', onRemove: () => setSelectedSaleOnly(false) });
+    if (selectedArOnly) chips.push({ key: 'ar', label: 'Try in AR', a11y: 'Remove Try in AR filter', onRemove: () => setSelectedArOnly(false) });
+    if (selectedMySizeOnly) chips.push({ key: 'my-size', label: 'My Size', a11y: 'Remove My Size filter', onRemove: () => setSelectedMySizeOnly(false) });
+    selectedSizes.forEach((size) => chips.push({ key: `size-${size}`, label: `Size: ${size}`, a11y: `Remove Size ${size} filter`, onRemove: () => removeSizeFilter(size) }));
+    selectedColors.forEach((color) => chips.push({ key: `color-${color}`, label: `Color: ${color}`, a11y: `Remove Color ${color} filter`, onRemove: () => removeColorFilter(color) }));
+    selectedFits.forEach((fit) => chips.push({ key: `fit-${fit}`, label: `Fit: ${fit}`, a11y: `Remove Fit ${fit} filter`, onRemove: () => removeFitFilter(fit) }));
+    selectedMaterials.forEach((mat) => chips.push({ key: `material-${mat}`, label: `Material: ${mat}`, a11y: `Remove Material ${mat} filter`, onRemove: () => removeMaterialFilter(mat) }));
+    if (selectedPriceRange) {
+      const label = selectedPriceRange === 'under1000' ? 'Under ₱1k' : selectedPriceRange === '1000to2000' ? '₱1k - ₱2k' : selectedPriceRange === '2000to4000' ? '₱2k - ₱4k' : '₱4k+';
+      chips.push({ key: 'price-range', label: `Price: ${label}`, a11y: 'Remove price range filter', onRemove: () => setSelectedPriceRange(null) });
+    }
+    if (customMinPrice || customMaxPrice) {
+      chips.push({ key: 'custom-price', label: `Price: ₱${customMinPrice || '0'}-₱${customMaxPrice || '∞'}`, a11y: 'Remove custom price filter', onRemove: () => { setCustomMinPrice(''); setCustomMaxPrice(''); } });
+    }
+    return chips;
+  }, [
+    selectedNewArrivalsOnly, selectedSaleOnly, selectedArOnly, selectedMySizeOnly,
+    selectedSizes, selectedColors, selectedFits, selectedMaterials,
+    selectedPriceRange, customMinPrice, customMaxPrice,
+    removeSizeFilter, removeColorFilter, removeFitFilter, removeMaterialFilter,
+  ]);
+
+  const activeFiltersCount = activeFilterChips.length;
+
+  // The search and browse grids render an identical header differing only in
+  // their results count and sort label. It used to be copy-pasted, so every
+  // edit had to be made twice or the two drifted. A local function rather than
+  // a component because it closes over ~20 pieces of filter state, which as
+  // props would be a 30-entry interface.
+  const renderGridHeader = (resultsLabel: string, sortLabel: string, sortA11y: string) => (
+    <>
+      {/* Sticky Controls Panel */}
+      <View style={[styles.gridHeader, { backgroundColor: colors.background, borderBottomWidth: activeFiltersCount > 0 ? 0 : 1, borderBottomColor: colors.border }]}>
+        <Text style={[styles.resultsCountText, { color: colors.secondaryText }]}>{resultsLabel}</Text>
+        <View style={styles.controlsRow}>
+          <TouchableOpacity
+            style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            onPress={openFilterModal}
+            accessibilityRole="button"
+            accessibilityLabel={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} active` : 'Open filters'}
+          >
+            <IconSymbol name="slider.horizontal.3" size={14} color={colors.tint} />
+            <Text style={[styles.filterTriggerText, { color: colors.text }]}>Filter</Text>
+            {activeFiltersCount > 0 && (
+              <View style={[styles.badge, { backgroundColor: colors.tint }]}>
+                <Text style={[styles.badgeText, { color: colors.onTint }]}>{activeFiltersCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            onPress={() => setIsSortModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={sortA11y}
+          >
+            <IconSymbol name="arrow.up.arrow.down" size={14} color={colors.tint} />
+            <Text style={[styles.filterTriggerText, { color: colors.text }]}>{sortLabel}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Active Filter Tags */}
+      {activeFiltersCount > 0 && (
+        <View style={[styles.activeFiltersWrapper, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeFiltersScroll}>
+            <TouchableOpacity
+              onPress={clearAllFiltersDirectly}
+              style={[styles.clearAllTag, { borderColor: colors.border }]}
+              accessibilityRole="button"
+              accessibilityLabel="Clear all filters"
+            >
+              <Text style={[styles.clearAllTagText, { color: colors.notification }]}>Clear All</Text>
+            </TouchableOpacity>
+            {activeFilterChips.map((chip) => (
+              <View key={chip.key} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.filterTagText, { color: colors.text }]}>{chip.label}</Text>
+                <TouchableOpacity onPress={chip.onRemove} hitSlop={8} accessibilityRole="button" accessibilityLabel={chip.a11y}>
+                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </>
+  );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -768,138 +855,10 @@ export default function ExploreScreen() {
                 removeClippedSubviews={true}
                 ListHeaderComponent={
                   <View style={{ backgroundColor: colors.background }}>
-                    {/* Sticky Controls Panel */}
-                    <View style={[styles.gridHeader, { backgroundColor: colors.background, borderBottomWidth: activeFiltersCount > 0 ? 0 : 1, borderBottomColor: colors.border }]}>
-                      <Text style={[styles.resultsCountText, { color: colors.secondaryText }]}>
-                        {processedProducts.length} results found for &quot;{searchQuery}&quot;
-                      </Text>
-                      <View style={styles.controlsRow}>
-                        <TouchableOpacity
-                          style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
-                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                          onPress={openFilterModal}
-                          accessibilityRole="button"
-                          accessibilityLabel={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} active` : 'Open filters'}
-                        >
-                          <IconSymbol name="slider.horizontal.3" size={14} color={colors.tint} />
-                          <Text style={[styles.filterTriggerText, { color: colors.text }]}>Filter</Text>
-                          {activeFiltersCount > 0 && (
-                            <View style={[styles.badge, { backgroundColor: colors.tint }]}>
-                              <Text style={[styles.badgeText, { color: colors.onTint }]}>{activeFiltersCount}</Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
-                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                          onPress={() => setIsSortModalOpen(true)}
-                          accessibilityRole="button"
-                          accessibilityLabel="Open sort options"
-                        >
-                          <IconSymbol name="arrow.up.arrow.down" size={14} color={colors.tint} />
-                          <Text style={[styles.filterTriggerText, { color: colors.text }]}>Sort</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {/* Active Filter Tags */}
-                    {activeFiltersCount > 0 && (
-                      <View style={[styles.activeFiltersWrapper, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeFiltersScroll}>
-                          <TouchableOpacity
-                            onPress={clearAllFiltersDirectly}
-                            style={[styles.clearAllTag, { borderColor: colors.border }]}
-                            accessibilityRole="button"
-                            accessibilityLabel="Clear all filters"
-                          >
-                            <Text style={[styles.clearAllTagText, { color: colors.notification }]}>Clear All</Text>
-                          </TouchableOpacity>
-                          {selectedNewArrivalsOnly && (
-                            <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>New Arrivals</Text>
-                              <TouchableOpacity onPress={() => setSelectedNewArrivalsOnly(false)} accessibilityRole="button" accessibilityLabel="Remove New Arrivals filter">
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                          {selectedSaleOnly && (
-                            <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>On Sale</Text>
-                              <TouchableOpacity onPress={() => setSelectedSaleOnly(false)} accessibilityRole="button" accessibilityLabel="Remove On Sale filter">
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                          {selectedArOnly && (
-                            <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>Try in AR</Text>
-                              <TouchableOpacity onPress={() => setSelectedArOnly(false)} accessibilityRole="button" accessibilityLabel="Remove Try in AR filter">
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                          {selectedMySizeOnly && (
-                            <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>My Size</Text>
-                              <TouchableOpacity onPress={() => setSelectedMySizeOnly(false)} accessibilityRole="button" accessibilityLabel="Remove My Size filter">
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                          {selectedSizes.map(size => (
-                            <View key={`size-${size}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>Size: {size}</Text>
-                              <TouchableOpacity onPress={() => removeSizeFilter(size)} accessibilityRole="button" accessibilityLabel={`Remove Size ${size} filter`}>
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          ))}
-                          {selectedColors.map(color => (
-                            <View key={`color-${color}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>Color: {color}</Text>
-                              <TouchableOpacity onPress={() => removeColorFilter(color)} accessibilityRole="button" accessibilityLabel={`Remove Color ${color} filter`}>
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          ))}
-                          {selectedFits.map(fit => (
-                            <View key={`fit-${fit}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>Fit: {fit}</Text>
-                              <TouchableOpacity onPress={() => removeFitFilter(fit)} accessibilityRole="button" accessibilityLabel={`Remove Fit ${fit} filter`}>
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          ))}
-                          {selectedMaterials.map(mat => (
-                            <View key={`material-${mat}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>Material: {mat}</Text>
-                              <TouchableOpacity onPress={() => removeMaterialFilter(mat)} accessibilityRole="button" accessibilityLabel={`Remove Material ${mat} filter`}>
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          ))}
-                          {selectedPriceRange && (
-                            <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>
-                                Price: {selectedPriceRange === 'under1000' ? 'Under ₱1k' : selectedPriceRange === '1000to2000' ? '₱1k - ₱2k' : selectedPriceRange === '2000to4000' ? '₱2k - ₱4k' : '₱4k+'}
-                              </Text>
-                              <TouchableOpacity onPress={() => setSelectedPriceRange(null)} accessibilityRole="button" accessibilityLabel="Remove price range filter">
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                          {(customMinPrice || customMaxPrice) && (
-                            <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                              <Text style={[styles.filterTagText, { color: colors.text }]}>
-                                Price: ₱{customMinPrice || '0'}-₱{customMaxPrice || '∞'}
-                              </Text>
-                              <TouchableOpacity onPress={() => { setCustomMinPrice(''); setCustomMaxPrice(''); }} accessibilityRole="button" accessibilityLabel="Remove custom price filter">
-                                <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                        </ScrollView>
-                      </View>
+                    {renderGridHeader(
+                      `${processedProducts.length} results found for "${searchQuery}"`,
+                      'Sort',
+                      'Open sort options',
                     )}
                   </View>
                 }
@@ -1027,140 +986,10 @@ export default function ExploreScreen() {
                   removeClippedSubviews={true}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
-                      {/* Sticky Controls Panel */}
-                      <View style={[styles.gridHeader, { backgroundColor: colors.background, borderBottomWidth: activeFiltersCount > 0 ? 0 : 1, borderBottomColor: colors.border }]}>
-                        <Text style={[styles.resultsCountText, { color: colors.secondaryText }]}>
-                          {processedProducts.length} items found
-                        </Text>
-                        <View style={styles.controlsRow}>
-                          <TouchableOpacity
-                            style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
-                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                            onPress={openFilterModal}
-                            accessibilityRole="button"
-                            accessibilityLabel={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} active` : 'Open filters'}
-                          >
-                            <IconSymbol name="slider.horizontal.3" size={14} color={colors.tint} />
-                            <Text style={[styles.filterTriggerText, { color: colors.text }]}>Filter</Text>
-                            {activeFiltersCount > 0 && (
-                              <View style={[styles.badge, { backgroundColor: colors.tint }]}>
-                                <Text style={[styles.badgeText, { color: colors.onTint }]}>{activeFiltersCount}</Text>
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
-                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                            onPress={() => setIsSortModalOpen(true)}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Sort by ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`}
-                          >
-                            <IconSymbol name="arrow.up.arrow.down" size={14} color={colors.tint} />
-                            <Text style={[styles.filterTriggerText, { color: colors.text }]}>
-                              Sort: {SORT_OPTIONS.find(o => o.id === selectedSort)?.label}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-
-                      {/* Active Filter Tags */}
-                      {activeFiltersCount > 0 && (
-                        <View style={[styles.activeFiltersWrapper, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-                          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeFiltersScroll}>
-                            <TouchableOpacity
-                              onPress={clearAllFiltersDirectly}
-                              style={[styles.clearAllTag, { borderColor: colors.border }]}
-                              accessibilityRole="button"
-                              accessibilityLabel="Clear all filters"
-                            >
-                              <Text style={[styles.clearAllTagText, { color: colors.notification }]}>Clear All</Text>
-                            </TouchableOpacity>
-                            {selectedNewArrivalsOnly && (
-                              <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>New Arrivals</Text>
-                                <TouchableOpacity onPress={() => setSelectedNewArrivalsOnly(false)} accessibilityRole="button" accessibilityLabel="Remove New Arrivals filter">
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                            {selectedSaleOnly && (
-                              <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>On Sale</Text>
-                                <TouchableOpacity onPress={() => setSelectedSaleOnly(false)} accessibilityRole="button" accessibilityLabel="Remove On Sale filter">
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                            {selectedArOnly && (
-                              <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>Try in AR</Text>
-                                <TouchableOpacity onPress={() => setSelectedArOnly(false)} accessibilityRole="button" accessibilityLabel="Remove Try in AR filter">
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                            {selectedMySizeOnly && (
-                              <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>My Size</Text>
-                                <TouchableOpacity onPress={() => setSelectedMySizeOnly(false)} accessibilityRole="button" accessibilityLabel="Remove My Size filter">
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                            {selectedSizes.map(size => (
-                              <View key={`size-${size}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>Size: {size}</Text>
-                                <TouchableOpacity onPress={() => removeSizeFilter(size)} accessibilityRole="button" accessibilityLabel={`Remove Size ${size} filter`}>
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            ))}
-                            {selectedColors.map(color => (
-                              <View key={`color-${color}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>Color: {color}</Text>
-                                <TouchableOpacity onPress={() => removeColorFilter(color)} accessibilityRole="button" accessibilityLabel={`Remove Color ${color} filter`}>
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            ))}
-                            {selectedFits.map(fit => (
-                              <View key={`fit-${fit}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>Fit: {fit}</Text>
-                                <TouchableOpacity onPress={() => removeFitFilter(fit)} accessibilityRole="button" accessibilityLabel={`Remove Fit ${fit} filter`}>
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            ))}
-                            {selectedMaterials.map(mat => (
-                              <View key={`material-${mat}`} style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>Material: {mat}</Text>
-                                <TouchableOpacity onPress={() => removeMaterialFilter(mat)} accessibilityRole="button" accessibilityLabel={`Remove Material ${mat} filter`}>
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            ))}
-                            {selectedPriceRange && (
-                              <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>
-                                  Price: {selectedPriceRange === 'under1000' ? 'Under ₱1k' : selectedPriceRange === '1000to2000' ? '₱1k - ₱2k' : selectedPriceRange === '2000to4000' ? '₱2k - ₱4k' : '₱4k+'}
-                                </Text>
-                                <TouchableOpacity onPress={() => setSelectedPriceRange(null)} accessibilityRole="button" accessibilityLabel="Remove price range filter">
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                            {(customMinPrice || customMaxPrice) && (
-                              <View style={[styles.filterTag, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                                <Text style={[styles.filterTagText, { color: colors.text }]}>
-                                  Price: ₱{customMinPrice || '0'}-₱{customMaxPrice || '∞'}
-                                </Text>
-                                <TouchableOpacity onPress={() => { setCustomMinPrice(''); setCustomMaxPrice(''); }} accessibilityRole="button" accessibilityLabel="Remove custom price filter">
-                                  <IconSymbol name="xmark" size={12} color={colors.secondaryText} style={styles.filterTagClose} />
-                                </TouchableOpacity>
-                              </View>
-                            )}
-                          </ScrollView>
-                        </View>
+                      {renderGridHeader(
+                        `${processedProducts.length} items found`,
+                        `Sort: ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
+                        `Sort by ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
                       )}
                     </View>
                   }
