@@ -297,8 +297,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingTitle: {
-    fontSize: 16,
-    fontWeight: '500',
+    ...Type.bodyLarge,
     marginBottom: Spacing.xs,
   },
   settingSubtitle: {
@@ -314,8 +313,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   signOutText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
 });
 

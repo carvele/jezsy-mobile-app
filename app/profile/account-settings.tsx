@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxl,
     borderBottomWidth: 1,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: Spacing.lg },
+  sectionTitle: { ...Type.bodyLargeStrong, marginBottom: Spacing.lg },
   readOnlyValue: {
     height: 52,
     borderRadius: Radius.md,
@@ -331,8 +331,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
   noticeBox: {
     flexDirection: 'row',

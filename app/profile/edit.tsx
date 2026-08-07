@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerAction: { fontSize: 16 },
+  headerAction: { ...Type.bodyLarge },
   headerTitle: { ...Type.subtitle },
   body: { padding: Spacing.xl, paddingBottom: 48 },
   sectionLabel: { ...Type.label, marginBottom: Spacing.md },
@@ -370,6 +370,8 @@ const styles = StyleSheet.create({
   fieldGroup: { gap: 6 },
   label: { fontSize: 12, fontWeight: '600' },
   input: {
+    // Size only, not Type.bodyLarge: a lineHeight on an Android TextInput
+    // shifts the baseline against the underline.
     fontSize: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,

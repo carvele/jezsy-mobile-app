@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxl,
     borderBottomWidth: 1,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: Spacing.lg },
+  sectionTitle: { ...Type.bodyLargeStrong, marginBottom: Spacing.lg },
   scanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -614,6 +614,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
     paddingHorizontal: Spacing.lg,
+    // Size only, not Type.bodyLarge: a lineHeight on a fixed-height Android
+    // TextInput shifts the baseline off centre.
     fontSize: 16,
   },
   advancedToggle: {
@@ -631,7 +633,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
 });

@@ -130,6 +130,13 @@ export const Type = {
   label: { fontSize: 11, fontWeight: '700' as const, lineHeight: 14, letterSpacing: 1 },
   body: { fontSize: 14, fontWeight: '400' as const, lineHeight: 21, letterSpacing: 0 },
   bodyStrong: { fontSize: 15, fontWeight: '600' as const, lineHeight: 22, letterSpacing: 0 },
+  // 16pt was the most-used size in the app while having no slot here, which
+  // read as screen drift but was a gap in the scale: it is the natural size
+  // for a settings row title, a primary button and a small section heading.
+  // Two weights because those roles genuinely split 400 and 700, and snapping
+  // either to the other changes how a button or an input reads.
+  bodyLarge: { fontSize: 16, fontWeight: '400' as const, lineHeight: 24, letterSpacing: 0 },
+  bodyLargeStrong: { fontSize: 16, fontWeight: '700' as const, lineHeight: 22, letterSpacing: 0 },
   subtitle: { fontSize: 18, fontWeight: '700' as const, lineHeight: 24, letterSpacing: -0.2 },
   title: { fontSize: 20, fontWeight: '700' as const, lineHeight: 26, letterSpacing: -0.3 },
   headline: { fontSize: 24, fontWeight: '800' as const, lineHeight: 30, letterSpacing: -0.4 },
