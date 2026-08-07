@@ -1476,19 +1476,25 @@ export type Database = {
           close_time: string
           day_of_week: number
           is_closed: boolean | null
+          max_daily_bookings: number | null
           open_time: string
+          slot_capacity: number
         }
         Insert: {
           close_time: string
           day_of_week: number
           is_closed?: boolean | null
+          max_daily_bookings?: number | null
           open_time: string
+          slot_capacity?: number
         }
         Update: {
           close_time?: string
           day_of_week?: number
           is_closed?: boolean | null
+          max_daily_bookings?: number | null
           open_time?: string
+          slot_capacity?: number
         }
         Relationships: []
       }
