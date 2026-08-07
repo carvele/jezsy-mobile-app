@@ -13,7 +13,7 @@ import { Link, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
@@ -270,8 +270,8 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   
   // Editorial Section
   editorialSection: {
-    paddingHorizontal: 20,
+    paddingHorizontal: Spacing.xl,
     marginTop: 10,
     marginBottom: 40,
     flexDirection: 'row',
@@ -298,16 +298,16 @@ const styles = StyleSheet.create({
   mainFeatureImage: {
     width: '100%',
     aspectRatio: 3 / 4,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
   },
   mainFeatureTextContainer: {
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
   featureBrand: {
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.5,
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   featureName: {
     fontSize: 18,
@@ -321,15 +321,15 @@ const styles = StyleSheet.create({
   secondaryFeatureImage: {
     width: '100%',
     aspectRatio: 3 / 4,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
   },
   secondaryFeatureTextContainer: {
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
   featureNameSmall: {
     fontSize: 13,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   featurePrice: {
     fontSize: 13,
@@ -344,15 +344,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: 0.5,
-    paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingHorizontal: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   seeAllText: {
     fontSize: 14,
@@ -360,17 +360,17 @@ const styles = StyleSheet.create({
   },
   emptyProductsState: {
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingVertical: Spacing.xxxl,
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.md,
   },
   emptyProductsText: {
     fontSize: 14,
     textAlign: 'center',
   },
   editsScrollContainer: {
-    paddingHorizontal: 20,
-    gap: 16,
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.lg,
   },
 
   // Trending Grid

@@ -15,7 +15,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -1373,10 +1373,10 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+    gap: Spacing.sm,
   },
   backButton: {
     width: 40,
@@ -1394,11 +1394,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 44,
     borderRadius: 22,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     borderWidth: 1,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   searchInput: {
     flex: 1,
@@ -1407,19 +1407,19 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   cancelButton: {
-    paddingLeft: 8,
-    paddingVertical: 8,
+    paddingLeft: Spacing.sm,
+    paddingVertical: Spacing.sm,
   },
   cancelText: {
     fontSize: 16,
     fontWeight: '500',
   },
   cartBtn: {
-    marginLeft: 12,
+    marginLeft: Spacing.md,
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 4,
+    padding: Spacing.xs,
   },
   cartBadge: {
     position: 'absolute',
@@ -1430,7 +1430,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: Spacing.xs,
   },
   cartBadgeText: {
     color: '#fff',
@@ -1465,17 +1465,17 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     letterSpacing: 0.5,
-    marginTop: 16,
-    marginBottom: 20,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
   shopAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     height: 52,
     borderRadius: 26,
-    marginTop: 16,
+    marginTop: Spacing.lg,
   },
   shopAllButtonText: {
     fontSize: 15,
@@ -1484,7 +1484,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   categoriesGrid: {
     flexDirection: 'row',
@@ -1496,19 +1496,19 @@ const styles = StyleSheet.create({
     rowGap: GRID_COLUMN_GAP,
   },
   suggestionsContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Spacing.sm,
   },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: 20,
     borderWidth: 1,
   },
@@ -1523,8 +1523,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   resultsCountText: {
     fontSize: 13,
@@ -1533,16 +1533,16 @@ const styles = StyleSheet.create({
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   filterTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    gap: 4,
+    gap: Spacing.xs,
   },
   filterTriggerText: {
     fontSize: 12,
@@ -1551,7 +1551,7 @@ const styles = StyleSheet.create({
   badge: {
     width: 16,
     height: 16,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1565,8 +1565,8 @@ const styles = StyleSheet.create({
   activeFiltersScroll: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    gap: 8,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
   },
   clearAllTag: {
     paddingHorizontal: 10,
@@ -1609,15 +1609,15 @@ const styles = StyleSheet.create({
   sizingNudge: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-    padding: 16,
-    borderRadius: 16,
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     // Both this card's border and the Shop All button above it are drawn in
     // colors.tint; with no gap the two tinted edges meet and read as one
     // overlapping element.
-    marginTop: 16,
-    marginBottom: 20,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
   sizingNudgeTitle: {
     fontSize: 14,
@@ -1627,7 +1627,7 @@ const styles = StyleSheet.create({
   sizingNudgeBody: {
     fontSize: 12,
     lineHeight: 17,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   sizingNudgeAction: {
     fontSize: 13,
@@ -1637,14 +1637,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
   },
   loadMoreFooter: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
   modalOverlay: {
     flex: 1,
@@ -1664,14 +1664,14 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 2.5,
     alignSelf: 'center',
-    marginVertical: 12,
+    marginVertical: Spacing.md,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.lg,
   },
   modalTitle: {
     fontSize: 20,
@@ -1682,25 +1682,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   modalScroll: {
-    paddingHorizontal: 20,
+    paddingHorizontal: Spacing.xl,
   },
   filterSection: {
-    marginBottom: 20,
+    marginBottom: Spacing.xl,
   },
   filterSectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   filterSectionSubTitle: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   filterOptionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Spacing.sm,
   },
   chipButton: {
     flexDirection: 'row',
@@ -1708,7 +1708,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     // 12 rather than 8 so the chip clears 44pt without hitSlop, which would
     // have overlapped the neighbouring chip across the row's 8pt gap.
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderRadius: 20,
     borderWidth: 1,
   },
@@ -1717,8 +1717,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sizeChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderRadius: 20,
     borderWidth: 1,
     minWidth: 48,
@@ -1731,8 +1731,8 @@ const styles = StyleSheet.create({
   colorChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
     borderRadius: 20,
     borderWidth: 1,
     gap: 6,
@@ -1750,13 +1750,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: Spacing.sm,
   },
   pricePresetCard: {
     width: '48%',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.md,
     borderWidth: 1,
     alignItems: 'center',
   },
@@ -1771,15 +1771,15 @@ const styles = StyleSheet.create({
   customPriceInput: {
     flex: 1,
     height: 44,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     fontSize: 14,
   },
   modalFooter: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xxl,
     borderTopWidth: 1,
   },
   footerButton: {
@@ -1794,14 +1794,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   sortListContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.lg,
   },
   sortOptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
     borderBottomWidth: 1,
   },
   sortOptionLabel: {
