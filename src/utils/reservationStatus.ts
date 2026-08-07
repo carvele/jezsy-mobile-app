@@ -92,6 +92,14 @@ export const statusLabel = (status: string | null): string => BADGE_LABEL[status
 export const isAwaitingPayment = (status: string | null): boolean =>
   statusBucket(status) === 'toPay';
 
-/** Reschedulable while the booking has not been handed over or called off. */
+/**
+ * Reschedulable states, deliberately matching what reschedule_reservation
+ * actually accepts -- it raises on anything outside ('pending', 'confirmed').
+ *
+ * The dashboard's CAN_RESCHEDULE_STATUSES also includes 'To Pickup', so staff
+ * can move an appointment in a state the customer cannot. Widening this to
+ * 'ready' without also changing the RPC would just offer a button the server
+ * then rejects, so the gap is recorded here rather than papered over.
+ */
 export const canReschedule = (status: string | null): boolean =>
-  ['pending', 'toPay', 'ready'].includes(statusBucket(status));
+  ['pending', 'toPay'].includes(statusBucket(status));
