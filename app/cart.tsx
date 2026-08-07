@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   backBtn: { padding: Spacing.sm },
-  headerTitle: { fontSize: 18, fontWeight: "700" },
+  headerTitle: { ...Type.subtitle },
   emptyState: {
     flex: 1,
     justifyContent: "center",
@@ -355,6 +355,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: Spacing.md,
   },
+  // The bag's money rows, left as literals for the same reason as the reserve
+  // and reservation screens: the label matches a token but the amount beside it
+  // does not, so converting one gives it a lineHeight the other lacks and pulls
+  // the pair off a shared baseline.
   summaryLabel: { fontSize: 14 },
   summaryValue: { fontSize: 14, fontWeight: "500" },
   totalRow: {

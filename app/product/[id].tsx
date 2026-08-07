@@ -447,10 +447,10 @@ export default function ProductDetailScreen() {
                         <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{s}</Text>
                       </TouchableOpacity>
                       {stock !== null && stock > 0 && stock <= 5 && (
-                        <Text style={{ fontSize: 12, color: '#E05C5C', marginTop: 4 }}>Only {stock} left</Text>
+                        <Text style={[Type.caption, { color: colors.warning, marginTop: Spacing.xs }]}>Only {stock} left</Text>
                       )}
                       {isOutOfStock && (
-                        <Text style={{ fontSize: 12, color: colors.secondaryText, marginTop: 4 }}>Out of stock</Text>
+                        <Text style={[Type.caption, { color: colors.secondaryText, marginTop: Spacing.xs }]}>Out of stock</Text>
                       )}
                     </View>
                   );
@@ -710,24 +710,26 @@ const styles = StyleSheet.create({
   // One clear step down at each level: 26/800 name, 20/700 price, 16/700
   // section headings, 12/700 eyebrow. Previously the name was 26/800 and the
   // price 24/800, which read as two headings.
-  title: { fontSize: 26, fontWeight: "800", marginBottom: 6 },
+  // 26 has no slot; headline is 24/800, same weight two points down.
+  title: { ...Type.headline, marginBottom: 6 },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
   ratingValue: { fontSize: 13, fontWeight: "700" },
   ratingCount: { fontSize: 13 },
   priceRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.xl },
-  price: { fontSize: 20, fontWeight: "700" },
+  price: { ...Type.title },
   priceOriginal: { fontSize: 14, textDecorationLine: 'line-through', fontWeight: '500' },
   priceSale: { fontSize: 20, fontWeight: "800" },
   discountBadge: { backgroundColor: '#E05C5C', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   discountText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
-  category: { fontSize: 12, fontWeight: "700", letterSpacing: 1.2, marginBottom: 6 },
+  // Uppercase eyebrow: exactly what Type.label's tracking exists for.
+  category: { ...Type.label, marginBottom: 6 },
   section: { marginTop: Spacing.xxl },
   sizeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.lg },
   recBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: Radius.md, gap: Spacing.xs },
   recText: { fontSize: 12, fontWeight: "700" },
   sizeHeaderActions: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
   sizeChartLink: { fontSize: 13, fontWeight: "700", textDecorationLine: "underline" },
-  sectionTitle: { fontSize: 16, fontWeight: "700", letterSpacing: 0.2, marginBottom: Spacing.md },
+  sectionTitle: { ...Type.bodyLargeStrong, marginBottom: Spacing.md },
   description: { fontSize: 15, lineHeight: 24 },
   optionsList: { gap: Spacing.md, paddingRight: Spacing.xl },
   optionButton: { paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
@@ -799,7 +801,7 @@ const styles = StyleSheet.create({
     flex: 1, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center",
     shadowColor: "#C9A96E", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
   },
-  primaryActionText: { fontSize: 18, fontWeight: "700" },
+  primaryActionText: { ...Type.subtitle },
   addedToast: {
     position: 'absolute', top: -40, left: 0, right: 0, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: Spacing.sm, borderRadius: 20,

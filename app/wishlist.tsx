@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -179,10 +179,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   backBtn: { padding: Spacing.sm },
-  headerTitle: { fontSize: 18, fontWeight: '700', letterSpacing: 0.3 },
+  headerTitle: { ...Type.subtitle },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xxxl, gap: Spacing.md },
-  emptyTitle: { fontSize: 20, fontWeight: '700', marginTop: Spacing.sm },
-  emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { ...Type.title, marginTop: Spacing.sm },
+  emptySubtitle: { ...Type.body, textAlign: 'center' },
   browseBtn: {
     marginTop: Spacing.sm,
     paddingHorizontal: 28,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   browseBtnText: { fontWeight: '800', fontSize: 15 },
   list: { paddingHorizontal: Spacing.lg, paddingBottom: 100 },
   row: { justifyContent: 'space-between', marginBottom: Spacing.lg },
-  countText: { fontSize: 13, marginBottom: Spacing.md, marginTop: Spacing.xs },
+  countText: { ...Type.caption, marginBottom: Spacing.md, marginTop: Spacing.xs },
   card: {
     width: CARD_WIDTH,
     borderRadius: 14,
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   },
   saleBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   info: { padding: 10, gap: 2 },
-  category: { fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
+  category: { ...Type.label },
   name: { fontSize: 14, fontWeight: '600' },
   price: { fontSize: 14, fontWeight: '700' },
 });
