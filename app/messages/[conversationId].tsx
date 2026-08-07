@@ -10,7 +10,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useMessages, MessageContext } from '@/src/context/MessagesContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
@@ -689,8 +689,7 @@ const styles = StyleSheet.create({
     width: 32,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   container: {
     flex: 1,
@@ -738,8 +737,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -8,
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 22,
+    ...Type.bodyLarge,
   },
   metaContainer: {
     flexDirection: 'row',
@@ -748,7 +746,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xs,
   },
   timestampText: {
-    fontSize: 12,
+    ...Type.caption,
   },
   readReceiptText: {
     fontSize: 12,
@@ -803,7 +801,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  actionRowText: { fontSize: 15, fontWeight: '600' },
+  actionRowText: { ...Type.bodyStrong },
   dateSeparator: {
     alignItems: 'center',
     marginTop: Spacing.xs,
@@ -900,6 +898,8 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     minHeight: 40,
     maxHeight: 120,
+    // Size only, not Type.bodyLarge: a lineHeight on an Android TextInput
+    // shifts the baseline, and this one grows as you type.
     fontSize: 16,
     marginRight: Spacing.sm,
   },

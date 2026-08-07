@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMessages } from '@/src/context/MessagesContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -268,12 +268,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
+    // 28 was the odd one out: wardrobe and profile both set their page title
+    // from Type.display, so this aligns the three rather than keeping a
+    // fourth size for one screen.
+    ...Type.display,
     marginHorizontal: Spacing.xl,
     marginTop: Spacing.sm,
     marginBottom: Spacing.lg,
-    letterSpacing: 0.5,
   },
   segmentedControl: {
     flexDirection: 'row',
@@ -318,8 +319,7 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   avatarText: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...Type.title,
   },
   itemContent: {
     flex: 1,
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   time: {
-    fontSize: 12,
+    ...Type.caption,
   },
   footer: {
     flexDirection: 'row',
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lastMessage: {
-    fontSize: 14,
+    ...Type.body,
     flex: 1,
     marginRight: Spacing.sm,
   },
@@ -368,8 +368,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...Type.title,
     marginTop: Spacing.sm,
   },
   emptyText: {
@@ -415,12 +414,11 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.sm,
   },
   notificationBody: {
-    fontSize: 14,
-    lineHeight: 20,
+    ...Type.body,
     marginBottom: Spacing.sm,
   },
   notificationDate: {
-    fontSize: 12,
+    ...Type.caption,
   },
   dismissButton: {
     padding: Spacing.xs,
