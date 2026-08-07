@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-rout
 import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { statusBucket, statusLabel, isAwaitingPayment, canReschedule } from '@/src/utils/reservationStatus';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -146,9 +146,11 @@ export default function ReservationDetailScreen() {
     }
     setSubmitting(true);
     try {
-      // Server-side reschedule_reservation re-checks slot capacity via the
-      // validate_reservation_time trigger.
-      const { error } = await supabase.rpc('reschedule_reservation', {
+      // A request, not a change. The booking only moves once staff accept, so
+      // nobody arrives to a day that shifted under them. request_reschedule
+      // still checks the slot now rather than at approval, so asking for a
+      // closed day is refused immediately.
+      const { error } = await supabase.rpc('request_reschedule', {
         _reservation_id: id,
         _date: formatLocalDate(rescheduleDate),
         _appointment_time: rescheduleSlot,
@@ -157,9 +159,9 @@ export default function ReservationDetailScreen() {
       setShowReschedule(false);
       setRescheduleSlot(undefined);
       await fetchReservation();
-      showToast('Your appointment has been updated.', 'success');
+      showToast('Request sent. We will confirm once it has been reviewed.', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Could not reschedule. Please try again.', 'error');
+      showToast(err.message || 'Could not send your request. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -259,6 +261,10 @@ export default function ReservationDetailScreen() {
   // 'confirmed', so a customer whose item was already waiting for collection
   // could not move the appointment even though staff could.
   const canRescheduleNow = canReschedule(reservation.status);
+  // One outstanding request at a time. While it is pending the live booking is
+  // still the one to show, so the proposal appears beside it rather than
+  // replacing it -- the customer has not moved anything yet.
+  const reschedulePending = Boolean(reservation.reschedule_requested_at);
 
   const paymentState = (reservation.payment_status || 'Pending').toLowerCase();
   const reservationState = statusBucket(reservation.status);
@@ -374,7 +380,7 @@ export default function ReservationDetailScreen() {
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Appointment</Text>
-            {canRescheduleNow && !showReschedule && (
+            {canRescheduleNow && !showReschedule && !reschedulePending && (
               <TouchableOpacity
                 onPress={() => {
                   setRescheduleDate(reservation.date ? new Date(reservation.date) : new Date());
@@ -382,10 +388,10 @@ export default function ReservationDetailScreen() {
                   setShowReschedule(true);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel="Reschedule appointment"
-                accessibilityHint="Choose a new date and time for this reservation"
+                accessibilityLabel="Request a new appointment time"
+                accessibilityHint="Suggests a new date and time for the shop to approve"
               >
-                <Text style={[styles.rescheduleLink, { color: colors.tint }]}>Reschedule</Text>
+                <Text style={[styles.rescheduleLink, { color: colors.tint }]}>Request new time</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -395,6 +401,20 @@ export default function ReservationDetailScreen() {
               {dateStr} at {formatTimeLabel(reservation.appointment_time)}
             </Text>
           </View>
+
+          {reschedulePending && (
+            <View style={[styles.pendingRequest, { borderColor: colors.border }]}>
+              <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.warning} />
+              <Text style={[styles.pendingRequestText, { color: colors.secondaryText }]}>
+                You asked to move this to{' '}
+                <Text style={{ color: colors.text, fontWeight: '700' }}>
+                  {formatLocalDate(new Date(reservation.reschedule_requested_date as string))} at{' '}
+                  {formatTimeLabel(reservation.reschedule_requested_at_time)}
+                </Text>
+                . The time above still stands until the shop confirms.
+              </Text>
+            </View>
+          )}
 
           {showReschedule && (
             <View style={[styles.reschedulePanel, { borderTopColor: colors.border }]}>
@@ -660,6 +680,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   rescheduleLink: { fontSize: 14, fontWeight: '700' },
+  pendingRequest: {
+    flexDirection: 'row',
+    // flex-start, not centre: this wraps to two or three lines and centring
+    // would float the icon into the middle of them.
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  // flex so the copy wraps inside the card instead of running past its padding.
+  pendingRequestText: { ...Type.caption, flex: 1 },
   reschedulePanel: {
     marginTop: 16,
     paddingTop: 16,
