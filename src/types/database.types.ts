@@ -1070,6 +1070,9 @@ export type Database = {
         Row: {
           appointment_time: string | null
           assigned_staff_id: string | null
+          balance_method: string | null
+          balance_settled_at: string | null
+          balance_settled_by: string | null
           color: string | null
           countdown: boolean | null
           created_at: string
@@ -1101,6 +1104,9 @@ export type Database = {
         Insert: {
           appointment_time?: string | null
           assigned_staff_id?: string | null
+          balance_method?: string | null
+          balance_settled_at?: string | null
+          balance_settled_by?: string | null
           color?: string | null
           countdown?: boolean | null
           created_at?: string
@@ -1132,6 +1138,9 @@ export type Database = {
         Update: {
           appointment_time?: string | null
           assigned_staff_id?: string | null
+          balance_method?: string | null
+          balance_settled_at?: string | null
+          balance_settled_by?: string | null
           color?: string | null
           countdown?: boolean | null
           created_at?: string
@@ -1745,6 +1754,10 @@ export type Database = {
           _date: string
           _reservation_id: string
         }
+        Returns: Json
+      }
+      settle_reservation_balance: {
+        Args: { _method?: string; _reservation_id: string }
         Returns: Json
       }
       submit_reservation_receipt: {
