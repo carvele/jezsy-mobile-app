@@ -577,7 +577,7 @@ export default function AuthScreen() {
                   {timer > 0 ? (
                     <Text style={styles.timerText}>Resend code in {timer}s</Text>
                   ) : (
-                    <TouchableOpacity onPress={handleResendCode} disabled={loading}>
+                    <TouchableOpacity onPress={handleResendCode} disabled={loading} hitSlop={10}>
                       <Text style={styles.resendText}>Resend Code</Text>
                     </TouchableOpacity>
                   )}
@@ -588,10 +588,10 @@ export default function AuthScreen() {
             {/* Login helper buttons (forgot password / OTP switch) */}
             {mode === 'login' && (
               <View style={styles.linksRow}>
-                <TouchableOpacity onPress={() => transitionMode('otp_request')}>
+                <TouchableOpacity onPress={() => transitionMode('otp_request')} hitSlop={10}>
                   <Text style={styles.linkText}>Log in with code instead</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => transitionMode('forgot')}>
+                <TouchableOpacity onPress={() => transitionMode('forgot')} hitSlop={10}>
                   <Text style={styles.linkText}>Forgot password?</Text>
                 </TouchableOpacity>
               </View>
@@ -619,6 +619,7 @@ export default function AuthScreen() {
                 </Text>
                 <TouchableOpacity
                   onPress={() => transitionMode(mode === 'login' ? 'signup' : 'login')}
+                  hitSlop={10}
                 >
                   <Text style={styles.toggleLink}>
                     {mode === 'login' ? 'Sign Up' : 'Log In'}

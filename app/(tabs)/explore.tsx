@@ -711,6 +711,7 @@ export default function ExploreScreen() {
           <TouchableOpacity
             onPress={() => router.push('/cart')}
             style={styles.cartBtn}
+            hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={itemCount > 0 ? `Cart, ${itemCount} items` : 'Cart, empty'}
           >
@@ -771,6 +772,7 @@ export default function ExploreScreen() {
                       <View style={styles.controlsRow}>
                         <TouchableOpacity
                           style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
+                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                           onPress={openFilterModal}
                           accessibilityRole="button"
                           accessibilityLabel={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} active` : 'Open filters'}
@@ -779,12 +781,13 @@ export default function ExploreScreen() {
                           <Text style={[styles.filterTriggerText, { color: colors.text }]}>Filter</Text>
                           {activeFiltersCount > 0 && (
                             <View style={[styles.badge, { backgroundColor: colors.tint }]}>
-                              <Text style={styles.badgeText}>{activeFiltersCount}</Text>
+                              <Text style={[styles.badgeText, { color: colors.onTint }]}>{activeFiltersCount}</Text>
                             </View>
                           )}
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
+                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                           onPress={() => setIsSortModalOpen(true)}
                           accessibilityRole="button"
                           accessibilityLabel="Open sort options"
@@ -921,8 +924,8 @@ export default function ExploreScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Browse all products"
               >
-                <IconSymbol name="bag.fill" size={18} color="#0D0D0D" />
-                <Text style={styles.shopAllButtonText}>Shop All Products</Text>
+                <IconSymbol name="bag.fill" size={18} color={colors.onTint} />
+                <Text style={[styles.shopAllButtonText, { color: colors.onTint }]}>Shop All Products</Text>
               </TouchableOpacity>
 
               {needsSizingSetup && !sizingNudgeDismissed && (
@@ -1028,6 +1031,7 @@ export default function ExploreScreen() {
                         <View style={styles.controlsRow}>
                           <TouchableOpacity
                             style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
+                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                             onPress={openFilterModal}
                             accessibilityRole="button"
                             accessibilityLabel={activeFiltersCount > 0 ? `Filters, ${activeFiltersCount} active` : 'Open filters'}
@@ -1036,12 +1040,13 @@ export default function ExploreScreen() {
                             <Text style={[styles.filterTriggerText, { color: colors.text }]}>Filter</Text>
                             {activeFiltersCount > 0 && (
                               <View style={[styles.badge, { backgroundColor: colors.tint }]}>
-                                <Text style={styles.badgeText}>{activeFiltersCount}</Text>
+                                <Text style={[styles.badgeText, { color: colors.onTint }]}>{activeFiltersCount}</Text>
                               </View>
                             )}
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
+                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                             onPress={() => setIsSortModalOpen(true)}
                             accessibilityRole="button"
                             accessibilityLabel={`Sort by ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`}
@@ -1226,8 +1231,8 @@ export default function ExploreScreen() {
                       ]}
                       onPress={() => setTempNewArrivalsOnly(!tempNewArrivalsOnly)}
                     >
-                      <IconSymbol name="flame.fill" size={14} color={tempNewArrivalsOnly ? '#0D0D0D' : colors.tint} style={{ marginRight: 6 }} />
-                      <Text style={[styles.chipButtonText, { color: tempNewArrivalsOnly ? '#0D0D0D' : colors.text }]}>New Arrivals</Text>
+                      <IconSymbol name="flame.fill" size={14} color={tempNewArrivalsOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
+                      <Text style={[styles.chipButtonText, { color: tempNewArrivalsOnly ? colors.onTint : colors.text }]}>New Arrivals</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -1240,8 +1245,8 @@ export default function ExploreScreen() {
                       ]}
                       onPress={() => setTempSaleOnly(!tempSaleOnly)}
                     >
-                      <IconSymbol name="tag.fill" size={14} color={tempSaleOnly ? '#0D0D0D' : colors.notification} style={{ marginRight: 6 }} />
-                      <Text style={[styles.chipButtonText, { color: tempSaleOnly ? '#0D0D0D' : colors.text }]}>On Sale</Text>
+                      <IconSymbol name="tag.fill" size={14} color={tempSaleOnly ? colors.onTint : colors.notification} style={{ marginRight: 6 }} />
+                      <Text style={[styles.chipButtonText, { color: tempSaleOnly ? colors.onTint : colors.text }]}>On Sale</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -1254,8 +1259,8 @@ export default function ExploreScreen() {
                       ]}
                       onPress={() => setTempArOnly(!tempArOnly)}
                     >
-                      <IconSymbol name="cube.transparent" size={14} color={tempArOnly ? '#0D0D0D' : colors.tint} style={{ marginRight: 6 }} />
-                      <Text style={[styles.chipButtonText, { color: tempArOnly ? '#0D0D0D' : colors.text }]}>Try in AR</Text>
+                      <IconSymbol name="cube.transparent" size={14} color={tempArOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
+                      <Text style={[styles.chipButtonText, { color: tempArOnly ? colors.onTint : colors.text }]}>Try in AR</Text>
                     </TouchableOpacity>
 
                     {sizingReady && (
@@ -1269,8 +1274,8 @@ export default function ExploreScreen() {
                         ]}
                         onPress={() => setTempMySizeOnly(!tempMySizeOnly)}
                       >
-                        <IconSymbol name="checkmark.circle.fill" size={14} color={tempMySizeOnly ? '#0D0D0D' : colors.tint} style={{ marginRight: 6 }} />
-                        <Text style={[styles.chipButtonText, { color: tempMySizeOnly ? '#0D0D0D' : colors.text }]}>My Size</Text>
+                        <IconSymbol name="checkmark.circle.fill" size={14} color={tempMySizeOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
+                        <Text style={[styles.chipButtonText, { color: tempMySizeOnly ? colors.onTint : colors.text }]}>My Size</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -1294,7 +1299,7 @@ export default function ExploreScreen() {
                           ]}
                           onPress={() => toggleTempSize(size)}
                         >
-                          <Text style={[styles.sizeChipText, { color: isSelected ? '#0D0D0D' : colors.text }]}>
+                          <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
                             {size}
                           </Text>
                         </TouchableOpacity>
@@ -1321,7 +1326,7 @@ export default function ExploreScreen() {
                           ]}
                           onPress={() => toggleTempFit(fit)}
                         >
-                          <Text style={[styles.sizeChipText, { color: isSelected ? '#0D0D0D' : colors.text }]}>
+                          <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
                             {fit}
                           </Text>
                         </TouchableOpacity>
@@ -1348,7 +1353,7 @@ export default function ExploreScreen() {
                           ]}
                           onPress={() => toggleTempMaterial(mat)}
                         >
-                          <Text style={[styles.sizeChipText, { color: isSelected ? '#0D0D0D' : colors.text }]}>
+                          <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
                             {mat}
                           </Text>
                         </TouchableOpacity>
@@ -1381,7 +1386,7 @@ export default function ExploreScreen() {
                               { backgroundColor: color.hex, borderColor: color.border, borderWidth: color.name === 'White' ? 1 : 0 },
                             ]}
                           />
-                          <Text style={[styles.colorChipText, { color: isSelected ? '#0D0D0D' : colors.text }]}>
+                          <Text style={[styles.colorChipText, { color: isSelected ? colors.onTint : colors.text }]}>
                             {color.name}
                           </Text>
                         </TouchableOpacity>
@@ -1413,7 +1418,7 @@ export default function ExploreScreen() {
                           ]}
                           onPress={() => setTempPriceRange(isSelected ? null : preset.id)}
                         >
-                          <Text style={[styles.pricePresetLabel, { color: isSelected ? '#0D0D0D' : colors.text }]}>
+                          <Text style={[styles.pricePresetLabel, { color: isSelected ? colors.onTint : colors.text }]}>
                             {preset.label}
                           </Text>
                         </TouchableOpacity>
@@ -1455,7 +1460,7 @@ export default function ExploreScreen() {
                   style={[styles.footerButton, { backgroundColor: colors.tint }]}
                   onPress={applyFilters}
                 >
-                  <Text style={styles.footerApplyButtonText}>Apply Filters</Text>
+                  <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
                 </TouchableOpacity>
               </View>
             </Pressable>
@@ -1623,7 +1628,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   shopAllButtonText: {
-    color: '#0D0D0D',
     fontSize: 15,
     fontWeight: '700',
   },
@@ -1704,7 +1708,6 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#0D0D0D',
   },
   activeFiltersWrapper: {
     paddingBottom: 10,
@@ -1944,7 +1947,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerApplyButtonText: {
-    color: '#0D0D0D',
     fontSize: 15,
     fontWeight: '800',
     letterSpacing: 0.5,
