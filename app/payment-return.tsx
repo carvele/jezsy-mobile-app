@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   getLatestPayment,
@@ -120,7 +120,7 @@ export default function PaymentReturnScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  title: { fontSize: 16, fontWeight: '700', marginTop: 16 },
-  hint: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xxl },
+  title: { ...Type.bodyLargeStrong, marginTop: Spacing.lg },
+  hint: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: Spacing.sm },
 });

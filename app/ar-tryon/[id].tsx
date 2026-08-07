@@ -8,7 +8,7 @@ import { Image } from 'expo-image';
 import * as Speech from 'expo-speech';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
@@ -344,17 +344,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(13,13,13,0.92)',
     borderRadius: 14,
     borderWidth: 1,
-    padding: 12,
+    padding: Spacing.md,
     width: 190,
   },
   fitHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   fitTitle: { color: '#FFF', fontSize: 13, fontWeight: '800' },
-  fitRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  fitRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.xs },
   fitZone: { color: 'rgba(255,255,255,0.8)', fontSize: 12 },
   fitVerdict: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
   fitNote: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 6 },
@@ -367,18 +367,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
     zIndex: 10,
   },
   backButton: {
-    padding: 4,
+    padding: Spacing.xs,
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 20,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   webviewContainer: {
     flex: 1,
@@ -393,8 +392,8 @@ const styles = StyleSheet.create({
     top: 20,
     alignSelf: 'center',
     backgroundColor: 'rgba(239, 71, 111, 0.8)', // red warning
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     borderRadius: 20,
   },
   demoWarningText: {
@@ -403,10 +402,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   modeToggle: {
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     backgroundColor: '#C9A96E',
-    borderRadius: 12,
+    borderRadius: Radius.md,
   },
   modeToggleText: {
     fontWeight: '700',
@@ -432,8 +431,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     borderRadius: 20,
   },
   overlayGuideText: {
