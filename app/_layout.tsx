@@ -1,10 +1,10 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { View } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
@@ -33,6 +33,7 @@ function InitialLayout() {
   const { session, isLoading, isProfileLoading, profile, isPasswordRecovery, beginPasswordRecovery } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
   const themeLoaded = useThemeContext()?.loaded ?? false;
@@ -83,6 +84,12 @@ function InitialLayout() {
   // Committing the redirect before paint eliminates that frame.
   useLayoutEffect(() => {
     if (!flagsReady) return;
+    // useLayoutEffect fires before the root navigator has mounted on the very
+    // first render, and redirecting then throws "Attempted to navigate before
+    // mounting the Root Layout component" -- a hard render error on boot.
+    // Waiting for a navigation key keeps the pre-paint timing above for every
+    // later run without navigating into a navigator that does not exist yet.
+    if (!rootNavigationState?.key) return;
 
     const pathSegments = segments as string[];
     const inAuthGroup = pathSegments[0] === '(auth)';
@@ -115,19 +122,13 @@ function InitialLayout() {
         }
       }
     }
-  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery]);
+  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, rootNavigationState?.key]);
 
   useEffect(() => {
     if (hasBootstrapped) {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [hasBootstrapped]);
-
-  if (!hasBootstrapped) {
-    // Bare, theme-matched placeholder -- shown for at most a frame or two
-    // beneath the still-visible native splash, never the tabs/Home screen.
-    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
-  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -136,6 +137,14 @@ function InitialLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
       </Stack>
+      {/* Covers the Stack rather than replacing it. Returning a bare View here
+          meant the root layout rendered no navigator on its first pass, so the
+          redirect below threw "Attempted to navigate before mounting the Root
+          Layout component". Overlaying keeps the same guarantee -- the tabs are
+          never visible for a frame -- while the navigator still mounts. */}
+      {!hasBootstrapped && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
+      )}
       <StatusBar style="auto" />
     </ThemeProvider>
   );
