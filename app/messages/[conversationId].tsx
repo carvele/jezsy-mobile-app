@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal
@@ -10,7 +10,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useMessages, MessageContext } from '@/src/context/MessagesContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
@@ -278,6 +278,7 @@ export default function ChatScreen() {
       sender_id: session?.user.id,
       created_at: new Date().toISOString(),
       read_at: null,
+      _status: 'sending' as const,
       image_url: null,
       context_label: contextToSend?.label ?? null,
       // Carried on the optimistic row too, so a product question renders as a
@@ -289,9 +290,10 @@ export default function ChatScreen() {
 
     const result = await sendMessage(conversationId, textToSend, undefined, contextToSend ?? undefined);
     if (!result) {
-      // Revert if failed
-      setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-      setInputText(textToSend);
+      // Keep the failed message on screen rather than deleting it and pushing
+      // the text back into the input: silently vanishing reads as "the app ate
+      // my message", and there is nothing left to retry from.
+      setMessages(prev => prev.map(m => (m.id === tempMsg.id ? { ...m, _status: 'failed' } : m)));
     } else {
       // Replace temp message with real one; context has now been attached.
       setMessages(prev => prev.map(m => m.id === tempMsg.id ? result : m));
@@ -342,17 +344,42 @@ export default function ChatScreen() {
            setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
         } else {
            setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-           showToast("Failed to send image message.", 'error');
+           showToast('Could not send that photo. Please try again.', 'error');
         }
       } else {
         setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-        showToast("Could not upload the image to storage.", 'error');
+        showToast('Could not upload that photo. Please try again.', 'error');
       }
     } catch (e) {
       console.error('Error picking/uploading image:', e);
-      showToast("An unexpected error occurred while picking the image.", 'error');
+      showToast('Could not open your photos. Please try again.', 'error');
     }
   };
+
+  const handleRetrySend = async (msg: any) => {
+    if (!conversationId) return;
+    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, _status: 'sending' } : m)));
+
+    const context = msg.context_label
+      ? { label: msg.context_label, type: msg.context_type, ref: msg.context_ref }
+      : undefined;
+    const result = await sendMessage(conversationId, msg.text, undefined, context);
+
+    setMessages(prev =>
+      prev.map(m => (m.id === msg.id ? (result ?? { ...m, _status: 'failed' }) : m)),
+    );
+  };
+
+  // Only the newest of your own messages carries a status, as in most chat
+  // apps: repeating "Sent" down the whole thread is noise. A failed message is
+  // the exception -- it stays marked wherever it sits, because it is the one
+  // state the sender has to act on.
+  const lastOwnIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender_id === session?.user.id) return i;
+    }
+    return -1;
+  }, [messages, session?.user.id]);
 
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
     const isMe = item.sender_id === session?.user.id;
@@ -488,8 +515,34 @@ export default function ChatScreen() {
             );
           })()}
           <View style={styles.metaContainer}>
-            {isMe && item.read_at && (
-               <Text style={[styles.readReceiptText, { color: colors.tint }]}>Read • </Text>
+            {isMe && (item._status || index === lastOwnIndex) && (
+              item._status === 'failed' ? (
+                <TouchableOpacity
+                  onPress={() => handleRetrySend(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message not sent. Tap to try again."
+                >
+                  <Text style={[styles.readReceiptText, { color: colors.error }]}>
+                    Not sent. Tap to retry •{' '}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <Text
+                  style={[
+                    styles.readReceiptText,
+                    { color: item.read_at ? colors.tint : colors.secondaryText },
+                  ]}
+                  accessibilityLabel={
+                    item._status === 'sending'
+                      ? 'Sending'
+                      : item.read_at
+                        ? 'Read by the shop'
+                        : 'Sent'
+                  }
+                >
+                  {item._status === 'sending' ? 'Sending' : item.read_at ? 'Read' : 'Sent'} •{' '}
+                </Text>
+              )
             )}
             <Text style={[styles.timestampText, { color: colors.secondaryText }]}>{timeString}</Text>
             {item.edited_at ? (
@@ -680,28 +733,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    padding: 4,
+    padding: Spacing.xs,
     width: 32,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   container: {
     flex: 1,
   },
   listContent: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xxl,
   },
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   messageRowMe: {
     justifyContent: 'flex-end',
@@ -718,7 +770,7 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
   },
   messageBubble: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 10,
     borderRadius: 20,
     overflow: 'hidden',
@@ -732,29 +784,28 @@ const styles = StyleSheet.create({
   messageImage: {
     width: 200,
     height: 200,
-    borderRadius: 12,
-    marginBottom: 8,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.sm,
     marginTop: -4,
     marginHorizontal: -8,
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 22,
+    ...Type.bodyLarge,
   },
   metaContainer: {
     flexDirection: 'row',
-    marginTop: 4,
+    marginTop: Spacing.xs,
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: Spacing.xs,
   },
   timestampText: {
-    fontSize: 12,
+    ...Type.caption,
   },
   readReceiptText: {
     fontSize: 12,
     fontWeight: '600',
   },
-  reactionRow: { flexDirection: 'row', gap: 4, marginTop: 4 },
+  reactionRow: { flexDirection: 'row', gap: Spacing.xs, marginTop: Spacing.xs },
   reactionRowMe: { justifyContent: 'flex-end' },
   reactionRowThem: { justifyContent: 'flex-start' },
   reactionPill: {
@@ -763,7 +814,7 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
   },
   reactionEmoji: { fontSize: 13 },
@@ -776,14 +827,14 @@ const styles = StyleSheet.create({
   actionSheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingTop: 16,
+    paddingTop: Spacing.lg,
     paddingBottom: Platform.OS === 'ios' ? 36 : 16,
   },
   emojiRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 12,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.lg,
   },
   emojiButton: {
     width: 46,
@@ -798,16 +849,16 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  actionRowText: { fontSize: 15, fontWeight: '600' },
+  actionRowText: { ...Type.bodyStrong },
   dateSeparator: {
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 16,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.lg,
   },
   dateSeparatorText: {
     fontSize: 12,
@@ -819,10 +870,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     width: 220,
-    padding: 8,
-    borderRadius: 12,
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
     // Cancels the bubble's own horizontal padding so the card reads as a
     // distinct panel inset in the bubble rather than a floating box.
     marginHorizontal: -8,
@@ -831,7 +882,7 @@ const styles = StyleSheet.create({
   productCardImage: {
     width: 44,
     height: 56,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     backgroundColor: 'rgba(127,127,127,0.15)',
   },
   productCardBody: {
@@ -854,9 +905,9 @@ const styles = StyleSheet.create({
   },
   contextChip: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 6,
     maxWidth: 220,
@@ -868,9 +919,9 @@ const styles = StyleSheet.create({
   contextBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   contextBannerText: {
@@ -880,7 +931,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 12,
+    padding: Spacing.md,
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     alignItems: 'flex-end',
@@ -890,18 +941,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 40,
     width: 40,
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   input: {
     flex: 1,
     borderRadius: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingTop: 10,
     paddingBottom: 10,
     minHeight: 40,
     maxHeight: 120,
+    // Size only, not Type.bodyLarge: a lineHeight on an Android TextInput
+    // shifts the baseline, and this one grows as you type.
     fontSize: 16,
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   sendButton: {
     justifyContent: 'center',

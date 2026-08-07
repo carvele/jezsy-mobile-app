@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMessages } from '@/src/context/MessagesContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -135,8 +135,8 @@ export default function InboxScreen() {
               {item.last_message || 'Start a conversation...'}
             </Text>
             {item.unread_count > 0 && !isStaff && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.unread_count}</Text>
+              <View style={[styles.badge, { backgroundColor: colors.notification }]}>
+                <Text style={[styles.badgeText, { color: colors.onNotification }]}>{item.unread_count}</Text>
               </View>
             )}
           </View>
@@ -162,7 +162,7 @@ export default function InboxScreen() {
         <View style={styles.notificationContent}>
           <View style={styles.notificationHeader}>
             <Text style={[styles.notificationTitle, { color: colors.text }]}>{item.title}</Text>
-            {!item.is_read && <View style={styles.unreadDot} />}
+            {!item.is_read && <View style={[styles.unreadDot, { backgroundColor: colors.notification }]} />}
           </View>
           <Text style={[styles.notificationBody, { color: colors.secondaryText }]}>{item.body}</Text>
           <Text style={[styles.notificationDate, { color: colors.secondaryText }]}>
@@ -210,7 +210,7 @@ export default function InboxScreen() {
       {/* Messages Tab */}
       {activeTab === 'messages' && (
         messagesLoading ? (
-          <View style={{ paddingHorizontal: 16 }}>
+          <View style={{ paddingHorizontal: Spacing.lg }}>
             <SkeletonList count={5}><ListRowSkeleton /></SkeletonList>
           </View>
         ) : conversations.length === 0 ? (
@@ -234,7 +234,7 @@ export default function InboxScreen() {
       {/* Notifications Tab */}
       {activeTab === 'notifications' && (
         notificationsLoading ? (
-          <View style={{ paddingHorizontal: 16 }}>
+          <View style={{ paddingHorizontal: Spacing.lg }}>
             <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
           </View>
         ) : notifications.length === 0 ? (
@@ -268,23 +268,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 16,
-    letterSpacing: 0.5,
+    // 28 was the odd one out: wardrobe and profile both set their page title
+    // from Type.display, so this aligns the three rather than keeping a
+    // fourth size for one screen.
+    ...Type.display,
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
   segmentedControl: {
     flexDirection: 'row',
-    marginHorizontal: 16,
+    marginHorizontal: Spacing.lg,
     padding: 2,
-    borderRadius: 8,
-    marginBottom: 16,
+    borderRadius: Radius.sm,
+    marginBottom: Spacing.lg,
   },
   segment: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
     alignItems: 'center',
     borderRadius: 6,
   },
@@ -300,7 +301,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   list: {
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: 120, // clears the floating tab bar at its largest bottom inset
   },
   conversationItem: {
@@ -318,8 +319,7 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   avatarText: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...Type.title,
   },
   itemContent: {
     flex: 1,
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
     alignItems: 'center',
   },
   name: {
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   time: {
-    fontSize: 12,
+    ...Type.caption,
   },
   footer: {
     flexDirection: 'row',
@@ -344,21 +344,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lastMessage: {
-    fontSize: 14,
+    ...Type.body,
     flex: 1,
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   badge: {
-    backgroundColor: '#ff3b30',
     borderRadius: 10,
     minWidth: 20,
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: Spacing.xs,
   },
   badgeText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -367,12 +365,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    gap: 12,
+    gap: Spacing.md,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 8,
+    ...Type.title,
+    marginTop: Spacing.sm,
   },
   emptyText: {
     fontSize: 15,
@@ -382,11 +379,11 @@ const styles = StyleSheet.create({
   // Notifications styles
   notificationCard: {
     flexDirection: 'row',
-    padding: 16,
+    padding: Spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 16,
-    borderRadius: 12,
-    marginBottom: 8,
+    gap: Spacing.lg,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.sm,
   },
   iconContainer: {
     width: 48,
@@ -402,7 +399,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   notificationTitle: {
     fontSize: 16,
@@ -413,20 +410,18 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF3B30',
     marginTop: 6,
-    marginLeft: 8,
+    marginLeft: Spacing.sm,
   },
   notificationBody: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 8,
+    ...Type.body,
+    marginBottom: Spacing.sm,
   },
   notificationDate: {
-    fontSize: 12,
+    ...Type.caption,
   },
   dismissButton: {
-    padding: 4,
+    padding: Spacing.xs,
     alignSelf: 'flex-start',
   },
 });

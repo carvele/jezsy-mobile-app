@@ -48,7 +48,10 @@ export default function ProfileScreen() {
     try {
       await signOut();
     } catch (error: any) {
-      showToast(error.message, 'error');
+      // Raw Supabase errors ("AuthApiError: ...") are not customer copy, and
+      // sign-out has no failure the customer can act on differently.
+      console.error('Error signing out:', error);
+      showToast('Could not sign you out. Please try again.', 'error');
     }
   };
 

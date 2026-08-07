@@ -438,7 +438,7 @@ export default function MeasurementsScreen() {
                 style={[styles.scanBtn, { backgroundColor: colors.tint }]}
                 onPress={() => {
                   if (!height || !weight) {
-                    showToast('Please enter your height and weight above before scanning.', 'info');
+                    showToast('Please enter your height and weight before scanning.', 'info');
                     return;
                   }
                   // body-scan's measurement math assumes cm regardless of
