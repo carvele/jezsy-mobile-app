@@ -20,7 +20,15 @@ interface ToastContextData {
 
 const ToastContext = createContext<ToastContextData>({ showToast: () => {} });
 
-const VISIBLE_MS = 2600;
+const MIN_VISIBLE_MS = 2600;
+const MAX_VISIBLE_MS = 6000;
+// A flat 2.6s was tuned for a short confirmation ("Item added to bag"), and
+// cut off longer validation copy before it could be read. Roughly 200wpm
+// reading speed, with the floor and ceiling from the copy the app actually
+// sends -- shortest is well under the floor, longest (password policy hints)
+// lands under the ceiling.
+const msForMessage = (message: string) =>
+  Math.min(MAX_VISIBLE_MS, Math.max(MIN_VISIBLE_MS, message.length * 60));
 
 const ICON: Record<ToastKind, Parameters<typeof IconSymbol>[0]['name']> = {
   success: 'checkmark.circle.fill',
@@ -58,7 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToast({ message, kind });
     opacity.value = withTiming(1, { duration: 180 });
     translateY.value = withTiming(0, { duration: 180 });
-    timer.current = setTimeout(hide, VISIBLE_MS);
+    timer.current = setTimeout(hide, msForMessage(message));
   }, [opacity, translateY, hide]);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -91,7 +99,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           accessibilityRole="alert"
         >
           <IconSymbol name={ICON[toast.kind]} size={20} color={accent} />
-          <Text style={[styles.message, { color: colors.text }]} numberOfLines={3}>
+          <Text style={[styles.message, { color: colors.text }]} numberOfLines={4}>
             {toast.message}
           </Text>
           <TouchableOpacity onPress={hide} accessibilityRole="button" accessibilityLabel="Dismiss notification">
