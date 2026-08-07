@@ -292,6 +292,7 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexGrow: 0,
+    flexShrink: 0,
     marginBottom: 4,
   },
   filterRowContent: {
