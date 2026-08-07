@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -187,7 +187,7 @@ export default function CapsuleDetailScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>Capsule not found.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: Spacing.xl }}>
           <Text style={{ color: colors.tint }}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -346,43 +346,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    gap: Spacing.md,
   },
-  iconBtn: { padding: 4 },
+  iconBtn: { padding: Spacing.xs },
   headerTitle: { fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' },
-  content: { padding: 20, paddingBottom: 60 },
-  description: { fontSize: 14, marginBottom: 16, lineHeight: 20 },
-  progressLabel: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
-  progressTrack: { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 20 },
+  content: { padding: Spacing.xl, paddingBottom: 60 },
+  description: { fontSize: 14, marginBottom: Spacing.lg, lineHeight: 20 },
+  progressLabel: { fontSize: 15, fontWeight: '700', marginBottom: Spacing.sm },
+  progressTrack: { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: Spacing.xl },
   progressFill: { height: '100%', borderRadius: 4 },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     height: 48,
-    borderRadius: 24,
+    borderRadius: Radius.xl,
     borderWidth: 1,
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   addButtonText: { fontSize: 15, fontWeight: '700' },
-  emptyState: { alignItems: 'center', paddingVertical: 40, gap: 12 },
-  combinationsBlock: { marginTop: 8 },
-  dividerWrap: { alignItems: 'center', marginBottom: 16 },
-  combinationsTitle: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
-  combinationsSub: { fontSize: 14, lineHeight: 21, marginBottom: 16 },
+  emptyState: { alignItems: 'center', paddingVertical: 40, gap: Spacing.md },
+  combinationsBlock: { marginTop: Spacing.sm },
+  dividerWrap: { alignItems: 'center', marginBottom: Spacing.lg },
+  combinationsTitle: { fontSize: 18, fontWeight: '700', marginBottom: Spacing.xs },
+  combinationsSub: { fontSize: 14, lineHeight: 21, marginBottom: Spacing.lg },
   emptyText: { fontSize: 15, textAlign: 'center' },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 16,
+    rowGap: Spacing.lg,
   },
   itemCard: {
     width: '48%',
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
   },
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     top: 8,
     right: 8,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 12,
+    borderRadius: Radius.md,
   },
   checkOverlay: {
     position: 'absolute',
@@ -402,16 +402,16 @@ const styles = StyleSheet.create({
     right: 8,
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  pickerContent: { padding: 20, paddingBottom: 60 },
+  pickerContent: { padding: Spacing.xl, paddingBottom: 60 },
   pickerCard: {
     width: '48%',
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 2,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
 });

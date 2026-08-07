@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Link } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -99,7 +99,7 @@ export default function OutfitDetailScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>Outfit not found.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: Spacing.xl }}>
           <Text style={{ color: colors.tint }}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -166,23 +166,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    gap: Spacing.md,
   },
-  iconBtn: { padding: 4 },
+  iconBtn: { padding: Spacing.xs },
   headerTitle: { fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' },
-  content: { padding: 20, paddingBottom: 60 },
-  itemCount: { fontSize: 14, marginBottom: 16 },
+  content: { padding: Spacing.xl, paddingBottom: 60 },
+  itemCount: { fontSize: 14, marginBottom: Spacing.lg },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 16,
+    rowGap: Spacing.lg,
   },
   itemCard: {
     width: '48%',
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
   },
@@ -191,13 +191,13 @@ const styles = StyleSheet.create({
     height: 180,
   },
   itemInfo: {
-    padding: 12,
+    padding: Spacing.md,
   },
   slotLabel: {
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   itemName: {
     fontSize: 14,
@@ -206,6 +206,6 @@ const styles = StyleSheet.create({
   notOwned: {
     fontSize: 11,
     fontWeight: '700',
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
 });

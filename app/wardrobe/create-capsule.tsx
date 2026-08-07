@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -122,28 +122,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
   },
-  backButton: { padding: 4 },
+  backButton: { padding: Spacing.xs },
   headerTitle: { fontSize: 18, fontWeight: '700' },
-  form: { padding: 20, gap: 20 },
-  formRow: { gap: 8 },
+  form: { padding: Spacing.xl, gap: Spacing.xl },
+  formRow: { gap: Spacing.sm },
   label: { fontSize: 16, fontWeight: '700' },
   input: {
     minHeight: 52,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 14,
     fontSize: 15,
   },
   saveButton: {
     height: 56,
-    borderRadius: 28,
+    borderRadius: Radius.pill,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: Spacing.md,
   },
   saveButtonText: {
     fontSize: 16,
