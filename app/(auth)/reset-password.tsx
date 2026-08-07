@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   SafeAreaView,
 } from 'react-native';
@@ -17,6 +16,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
+import { PrimaryButton } from '@/src/components/PrimaryButton';
 
 export default function ResetPasswordScreen() {
   const { showToast } = useToast();
@@ -126,19 +126,11 @@ export default function ResetPasswordScreen() {
             />
           </View>
 
-          <TouchableOpacity
-            style={[styles.submitButton, { backgroundColor: colors.tint, opacity: submitting ? 0.6 : 1 }]}
+          <PrimaryButton
+            label="Update Password"
             onPress={handleSubmit}
-            disabled={submitting}
-            accessibilityRole="button"
-            accessibilityLabel="Update password"
-          >
-            {submitting ? (
-              <ActivityIndicator color={colors.onTint} />
-            ) : (
-              <Text style={[styles.submitButtonText, { color: colors.onTint }]}>Update Password</Text>
-            )}
-          </TouchableOpacity>
+            loading={submitting}
+          />
 
           <TouchableOpacity
             style={styles.cancelButton}
@@ -189,17 +181,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     height: '100%',
-  },
-  submitButton: {
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
   },
   cancelButton: {
     height: 44,

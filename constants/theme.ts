@@ -41,6 +41,11 @@ export const Colors = {
     blush: blushTextLight,
     blushFill,
     surface: '#F9FAFB',
+    // Translucent surfaces and separators. The onboarding screens hand-rolled
+    // these as white-with-alpha, which has no light-mode counterpart -- the
+    // tint has to invert, not just change opacity.
+    glass: 'rgba(0,0,0,0.04)',
+    hairline: 'rgba(0,0,0,0.12)',
     // Semantic status colors (AA-compliant as text on light backgrounds)
     success: '#0F8A5F',
     warning: '#B45309',
@@ -66,6 +71,8 @@ export const Colors = {
     blush: blushFill,
     blushFill,
     surface: '#16213E', // Elevated surfaces
+    glass: 'rgba(255,255,255,0.06)',
+    hairline: 'rgba(255,255,255,0.12)',
     // Semantic status colors (tuned for contrast on dark backgrounds)
     success: '#06D6A0',
     warning: '#FFB703',

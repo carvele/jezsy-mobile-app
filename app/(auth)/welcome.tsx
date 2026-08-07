@@ -17,6 +17,7 @@ import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
+import { PrimaryButton } from '@/src/components/PrimaryButton';
 
 // Required to dismiss the auth session on iOS
 WebBrowser.maybeCompleteAuthSession();
@@ -130,7 +131,7 @@ export default function WelcomeScreen() {
 
       {/* Multi-stop gradient overlay */}
       <LinearGradient
-        colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)', 'rgba(10,10,10,0.97)']}
+        colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)', 'rgba(13,13,13,0.97)']}
         locations={[0, 0.55, 1]}
         style={StyleSheet.absoluteFillObject}
       />
@@ -168,13 +169,11 @@ export default function WelcomeScreen() {
         </View>
 
         {/* Email Sign In */}
-        <TouchableOpacity
-          style={styles.emailButton}
-          activeOpacity={0.85}
+        <PrimaryButton
+          label="Continue with Email"
           onPress={() => router.push('/(auth)/auth')}
-        >
-          <Text style={styles.emailButtonText}>Continue with Email</Text>
-        </TouchableOpacity>
+          dark
+        />
 
         <Text style={styles.termsText}>
           By continuing, you agree to our{' '}
@@ -186,10 +185,16 @@ export default function WelcomeScreen() {
   );
 }
 
+// Deliberately not theme-aware. The background is a full-bleed photograph
+// under a dark gradient scrim, so white text on it is correct whatever the
+// system theme is -- lightening the scrim would make that text unreadable.
+// The dark palette is read directly rather than via useColorScheme.
+const c = Colors.dark;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: c.background,
   },
   brandingContainer: {
     position: 'absolute',
@@ -202,7 +207,7 @@ const styles = StyleSheet.create({
   brandLogo: {
     fontSize: 52,
     fontWeight: '800',
-    color: Colors.dark.tint,
+    color: c.tint,
     letterSpacing: 4,
     marginBottom: 6,
   },
@@ -261,12 +266,12 @@ const styles = StyleSheet.create({
   emailButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.dark.tint,
+    backgroundColor: c.tint,
     borderRadius: 14,
     height: 56,
   },
   emailButtonText: {
-    color: '#0D0D0D',
+    color: c.onTint,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -278,7 +283,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   termsLink: {
-    color: Colors.dark.tint,
+    color: c.tint,
     fontWeight: '600',
   },
 });

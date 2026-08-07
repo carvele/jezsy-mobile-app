@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Radius } from '@/constants/theme';
 import { ArrowRight } from 'lucide-react-native';
 import { markOnboardingSeen } from '@/src/utils/onboarding';
 
@@ -99,7 +99,7 @@ export default function Onboarding() {
           </TouchableOpacity>
           <TouchableOpacity onPress={nextSlide} style={styles.nextButton}>
             <Text style={styles.nextText}>{currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}</Text>
-            <ArrowRight size={20} color={Colors.dark.background} />
+            <ArrowRight size={20} color={c.onTint} />
           </TouchableOpacity>
         </View>
       </View>
@@ -107,10 +107,15 @@ export default function Onboarding() {
   );
 }
 
+// Deliberately not theme-aware. The background is a full-bleed image carousel under a dark overlay,
+// so white text on it is correct whatever the system theme is -- lightening
+// it would make that text unreadable.
+const c = Colors.dark;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: c.background,
   },
   slide: {
     width,
@@ -161,7 +166,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   activeDot: {
-    backgroundColor: Colors.dark.tint,
+    backgroundColor: c.tint,
     width: 24,
   },
   actions: {
@@ -177,17 +182,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  // Not PrimaryButton: this is a compact inline pill sitting beside Skip, not
+  // the full-width 56pt CTA the other onboarding screens use.
   nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.tint,
-    paddingHorizontal: 24,
+    backgroundColor: c.tint,
+    paddingHorizontal: Spacing.xxl,
     paddingVertical: 14,
-    borderRadius: 30,
-    gap: 8,
+    borderRadius: Radius.pill,
+    gap: Spacing.sm,
   },
   nextText: {
-    color: Colors.dark.background,
+    color: c.onTint,
     fontSize: 16,
     fontWeight: '700',
   },

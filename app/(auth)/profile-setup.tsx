@@ -7,7 +7,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Animated,
   StatusBar,
   ScrollView,
@@ -19,6 +18,8 @@ import { ArrowLeft, ArrowRight, Check, User, Phone, MapPin, Calendar, ChevronDow
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { useToast } from '@/src/context/ToastContext';
 import { CountryPickerModal } from '@/src/components/CountryPickerModal';
 import { DobPickerModal } from '@/src/components/DobPickerModal';
@@ -43,6 +44,8 @@ const STEP_META = [
 ];
 
 export default function ProfileSetupScreen() {
+  const theme = useColorScheme();
+  const colors = Colors[theme];
   const { showToast } = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -318,7 +321,7 @@ export default function ProfileSetupScreen() {
                 onPress={() => setShowDatePickerModal(true)}
                 activeOpacity={0.7}
               >
-                <Calendar size={20} color={Colors.dark.tint} />
+                <Calendar size={20} color={colors.tint} />
               </TouchableOpacity>
             </View>
           </View>
@@ -420,9 +423,9 @@ export default function ProfileSetupScreen() {
   const Icon = meta.icon;
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient colors={['#0A0A0A', '#0f0f0f']} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient colors={[colors.background, colors.surface]} style={StyleSheet.absoluteFillObject} />
 
       {/* Top step indicator */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
@@ -455,7 +458,7 @@ export default function ProfileSetupScreen() {
           {/* Icon + Heading */}
           <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
             <View style={styles.iconBadge}>
-              <Icon size={20} color={Colors.dark.tint} />
+              <Icon size={20} color={colors.tint} />
             </View>
             <Text style={styles.title}>{meta.title}</Text>
             <Text style={styles.subtitle}>{meta.subtitle}</Text>
@@ -468,26 +471,15 @@ export default function ProfileSetupScreen() {
 
           {/* CTA */}
           <View style={styles.footer}>
-            <TouchableOpacity
-              style={[styles.nextBtn, loading && { opacity: 0.7 }]}
+            <PrimaryButton
+              label={step < TOTAL_STEPS - 1 ? 'Continue' : 'Finish Setup'}
               onPress={next}
-              activeOpacity={0.85}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#0D0D0D" />
-              ) : step < TOTAL_STEPS - 1 ? (
-                <>
-                  <Text style={styles.nextBtnText}>Continue</Text>
-                  <ArrowRight size={18} color="#0D0D0D" />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.nextBtnText}>Finish Setup</Text>
-                  <Check size={18} color="#0D0D0D" />
-                </>
-              )}
-            </TouchableOpacity>
+              loading={loading}
+              icon={step < TOTAL_STEPS - 1
+                ? <ArrowRight size={18} color={colors.onTint} />
+                : <Check size={18} color={colors.onTint} />}
+              style={styles.nextBtnGlow}
+            />
 
             {/* Address slide can be skipped */}
             {step === TOTAL_STEPS - 1 && (
@@ -526,7 +518,7 @@ export default function ProfileSetupScreen() {
 const GLASS = 'rgba(255,255,255,0.06)';
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0A' },
+  root: { flex: 1 },
   flex: { flex: 1 },
 
   topBar: {
@@ -669,25 +661,14 @@ const styles = StyleSheet.create({
   },
 
   footer: { gap: 10, paddingTop: 16 },
-  nextBtn: {
-    height: 56,
-    backgroundColor: Colors.dark.tint,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+  // Geometry and colour now live in PrimaryButton; only the gold glow is
+  // specific to this screen. Not an Elevation token -- those cast black.
+  nextBtnGlow: {
     shadowColor: Colors.dark.tint,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 6,
-  },
-  nextBtnText: {
-    color: '#0D0D0D',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.3,
   },
   skipBtn: { alignSelf: 'center', paddingVertical: 6 },
   skipText: { color: 'rgba(255,255,255,0.3)', fontSize: 13 },
