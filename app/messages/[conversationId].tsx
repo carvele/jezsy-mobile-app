@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal
@@ -278,6 +278,7 @@ export default function ChatScreen() {
       sender_id: session?.user.id,
       created_at: new Date().toISOString(),
       read_at: null,
+      _status: 'sending' as const,
       image_url: null,
       context_label: contextToSend?.label ?? null,
       // Carried on the optimistic row too, so a product question renders as a
@@ -289,9 +290,10 @@ export default function ChatScreen() {
 
     const result = await sendMessage(conversationId, textToSend, undefined, contextToSend ?? undefined);
     if (!result) {
-      // Revert if failed
-      setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-      setInputText(textToSend);
+      // Keep the failed message on screen rather than deleting it and pushing
+      // the text back into the input: silently vanishing reads as "the app ate
+      // my message", and there is nothing left to retry from.
+      setMessages(prev => prev.map(m => (m.id === tempMsg.id ? { ...m, _status: 'failed' } : m)));
     } else {
       // Replace temp message with real one; context has now been attached.
       setMessages(prev => prev.map(m => m.id === tempMsg.id ? result : m));
@@ -353,6 +355,31 @@ export default function ChatScreen() {
       showToast("An unexpected error occurred while picking the image.", 'error');
     }
   };
+
+  const handleRetrySend = async (msg: any) => {
+    if (!conversationId) return;
+    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, _status: 'sending' } : m)));
+
+    const context = msg.context_label
+      ? { label: msg.context_label, type: msg.context_type, ref: msg.context_ref }
+      : undefined;
+    const result = await sendMessage(conversationId, msg.text, undefined, context);
+
+    setMessages(prev =>
+      prev.map(m => (m.id === msg.id ? (result ?? { ...m, _status: 'failed' }) : m)),
+    );
+  };
+
+  // Only the newest of your own messages carries a status, as in most chat
+  // apps: repeating "Sent" down the whole thread is noise. A failed message is
+  // the exception -- it stays marked wherever it sits, because it is the one
+  // state the sender has to act on.
+  const lastOwnIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender_id === session?.user.id) return i;
+    }
+    return -1;
+  }, [messages, session?.user.id]);
 
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
     const isMe = item.sender_id === session?.user.id;
@@ -488,8 +515,34 @@ export default function ChatScreen() {
             );
           })()}
           <View style={styles.metaContainer}>
-            {isMe && item.read_at && (
-               <Text style={[styles.readReceiptText, { color: colors.tint }]}>Read • </Text>
+            {isMe && (item._status || index === lastOwnIndex) && (
+              item._status === 'failed' ? (
+                <TouchableOpacity
+                  onPress={() => handleRetrySend(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message not sent. Tap to try again."
+                >
+                  <Text style={[styles.readReceiptText, { color: colors.error }]}>
+                    Not sent. Tap to retry •{' '}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <Text
+                  style={[
+                    styles.readReceiptText,
+                    { color: item.read_at ? colors.tint : colors.secondaryText },
+                  ]}
+                  accessibilityLabel={
+                    item._status === 'sending'
+                      ? 'Sending'
+                      : item.read_at
+                        ? 'Read by the shop'
+                        : 'Sent'
+                  }
+                >
+                  {item._status === 'sending' ? 'Sending' : item.read_at ? 'Read' : 'Sent'} •{' '}
+                </Text>
+              )
             )}
             <Text style={[styles.timestampText, { color: colors.secondaryText }]}>{timeString}</Text>
             {item.edited_at ? (

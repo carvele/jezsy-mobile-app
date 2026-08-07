@@ -24,6 +24,7 @@ Value per unit of risk, as agreed:
 2. **Wardrobe sub-screens** — closes the seam inside the flow already redesigned
 3. **Profile cluster** — 6 screens, repetitive, low risk
 4. **Reservations + payment** — the money screens, extra care
+5. **Inbox, notifications, messages** — added later; missing from the original list
 
 Each area is one branch off `main`, merged before the next starts, so a regression is bisectable
 to one area rather than one enormous commit.
@@ -84,6 +85,23 @@ These take money and show legal/price copy, so treat them with more care than th
 - Do not touch the receipt image `contentFit` or the payment-deadline copy; both were deliberate
   fixes.
 
+## Stage 5 — Inbox, notifications and messages
+
+`app/(tabs)/messages.tsx` (the Inbox tab, carrying both the Messages and
+Notifications lists behind a segmented control) and `app/messages/[conversationId].tsx`
+(913 lines).
+
+This area was missing from the original four stages, which is why the cross-cutting
+contrast pass never reached it: that pass was scoped by grepping `#0D0D0D`, and the
+defect here was a hardcoded `#ff3b30` unread badge at 3.55:1. The lesson generalises —
+**scoping a sweep by one literal only finds screens that use that literal.** Any future
+audit should start from the route list, not from a grep.
+
+The chat screen carries more geometry that merely looks like spacing than anywhere else
+in the app: bubble tail notches, negative margins that cancel the bubble's own padding,
+and per-platform home-indicator insets. Convert colour and typography freely; leave
+anything whose value is derived from a neighbour.
+
 ---
 
 ## Cross-cutting: finish the contrast sweep properly
@@ -128,6 +146,8 @@ On device, per stage, in **both themes** — the contrast class of bug is invisi
 - Stage 3: every settings screen, plus the appearance toggle itself.
 - Stage 4: the reserve flow as far as the payment screen without submitting, checking the price
   breakdown reads correctly.
+- Stage 5: both Inbox tabs, then open a conversation — check the bubble tails, the reaction
+  pills and the growing input.
 
 Any row that reflows means a value came off the out-of-scope list.
 
