@@ -34,6 +34,7 @@ yarn-error.*
 .env
 .env*.local
 .mcp.json
+google-services.json
 
 # local tooling and editor state
 .agents/
