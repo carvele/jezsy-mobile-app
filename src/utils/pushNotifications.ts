@@ -32,8 +32,11 @@ export async function registerForPushNotificationsAsync(): Promise<PushRegistrat
   // an uncaught rejection there must never be able to block or degrade login.
   try {
     // Lazily import native modules so they never load in Expo Go.
-    const deviceModule = await import("expo-device");
-    Device = deviceModule.default;
+    // expo-device has no default export -- isDevice/deviceName/modelName are
+    // named exports on the module namespace itself. Reading `.default` here
+    // was always undefined, which silently misreported every physical
+    // device as "no-device" (undefined is falsy) instead of registering it.
+    Device = await import("expo-device");
     Notifications = await import("expo-notifications");
     const rnModule = await import("react-native");
     Platform = rnModule.Platform;
