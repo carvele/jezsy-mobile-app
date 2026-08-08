@@ -11,6 +11,7 @@ import {
   TextInput,
   Dimensions,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -250,6 +251,7 @@ export default function AddWardrobeItemScreen() {
         <View style={{ width: 40 }} />
       </View>
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Image Picker Area */}
         <View style={[styles.imageContainer, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -420,6 +422,7 @@ export default function AddWardrobeItemScreen() {
         
         <View style={{ height: 60 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
