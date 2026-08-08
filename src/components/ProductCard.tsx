@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { Colors } from '@/constants/theme';
@@ -135,7 +136,7 @@ export function ProductCard({
             accessibilityLabel={saved ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
             accessibilityState={{ selected: saved }}
           >
-            <View style={styles.heartBg}>
+            <BlurView intensity={40} tint="light" style={styles.heartBg}>
               <IconSymbol
                 name={saved ? 'heart.fill' : 'heart'}
                 size={16}
@@ -143,7 +144,7 @@ export function ProductCard({
                 // pink is the right variant regardless of app theme.
                 color={saved ? Colors.dark.blushFill : '#FFF'}
               />
-            </View>
+            </BlurView>
           </Pressable>
 
           {outOfStock && (
@@ -209,11 +210,20 @@ const styles = StyleSheet.create({
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   badgeText: { fontSize: 12, fontWeight: '800' },
   heart: { position: 'absolute', top: 6, right: 6 },
+  // Real backdrop blur (expo-blur BlurView), not a flat rgba(0,0,0,0.45)
+  // fill: floats over a product photo in every card variant, the one case
+  // in this shared component where translucency reveals real content
+  // (Apple HIG Materials guidance). overflow hidden clips the blur to the
+  // circle rather than bleeding a square past the rounded corners. The
+  // NEW/SALE badges stay opaque on purpose -- they're status/urgency
+  // indicators, not chrome, and need maximum legibility, not softening.
   heartBg: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },

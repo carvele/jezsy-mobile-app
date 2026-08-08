@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { BlurView } from "expo-blur";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Camera,
@@ -424,17 +425,20 @@ export default function BodyScanScreen() {
       <PoseLandmarkOverlay landmarks={overlayLandmarks} />
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => { Speech.stop(); router.back(); }} style={styles.iconBtn}>
-            <IconSymbol name="chevron.left" size={24} color="#fff" />
+          <TouchableOpacity onPress={() => { Speech.stop(); router.back(); }}>
+            <BlurView intensity={40} tint="dark" style={styles.iconBtn}>
+              <IconSymbol name="chevron.left" size={24} color="#fff" />
+            </BlurView>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
             {phase === "front" ? "Face the camera" : phase === "turn" ? "Turn to your side" : "Hold your side pose"}
           </Text>
           <TouchableOpacity
             onPress={() => { Speech.stop(); router.replace({ pathname: "/profile/measurements", params: { height, weight, gender } }); }}
-            style={styles.iconBtnText}
           >
-            <Text style={styles.skipText}>Skip</Text>
+            <BlurView intensity={40} tint="dark" style={styles.iconBtnText}>
+              <Text style={styles.skipText}>Skip</Text>
+            </BlurView>
           </TouchableOpacity>
         </View>
 
@@ -458,11 +462,17 @@ export default function BodyScanScreen() {
               </Text>
             </View>
           ) : phase === "turn" ? (
-            <Text style={styles.warningText}>Turn a quarter circle so your side faces the camera</Text>
+            <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
+              <Text style={styles.warningText}>Turn a quarter circle so your side faces the camera</Text>
+            </BlurView>
           ) : !isTiltValid ? (
-            <Text style={styles.warningText}>Please follow voice instructions</Text>
+            <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
+              <Text style={styles.warningText}>Please follow voice instructions</Text>
+            </BlurView>
           ) : (
-            <Text style={styles.warningText}>Stand back so your whole body is visible</Text>
+            <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
+              <Text style={styles.warningText}>Stand back so your whole body is visible</Text>
+            </BlurView>
           )}
         </View>
       </SafeAreaView>
@@ -481,14 +491,34 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     zIndex: 20,
   },
+  // Real backdrop blur (expo-blur BlurView), not a flat rgba(13,13,13,0.5)
+  // fill: this is nav chrome floating over the live camera feed, the same
+  // case as the AR Try-On overlay panels -- translucency over genuinely
+  // varying content, not flat app chrome (Apple HIG Materials guidance).
+  // overflow hidden clips the blur to the rounded shape. countdownBadge/
+  // processingBadge below are left opaque on purpose -- those are semantic
+  // status signals during a timed pose-hold, where ambiguous legibility is
+  // a real usability risk, not just decoration.
   iconBtn: {
     width: 40, height: 40,
     alignItems: "center", justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: 20,
   },
   iconBtnText: {
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-    backgroundColor: "rgba(0,0,0,0.5)", borderRadius: Radius.lg,
+    overflow: "hidden",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: Radius.lg,
+  },
+  // Wraps each warningText Text node (BlurView can't blur text directly --
+  // it needs its own container to blur behind).
+  warningWrap: {
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: Radius.lg,
   },
   headerTitle: { ...Type.subtitle, color: "#fff" },
   skipText: { color: "#fff", fontWeight: "600" },
@@ -508,9 +538,7 @@ const styles = StyleSheet.create({
   warningText: {
     color: "#FFCC00",
     fontWeight: "600",
-    backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
-    borderRadius: Radius.lg,
     fontSize: 16,
     textAlign: "center",
   },
