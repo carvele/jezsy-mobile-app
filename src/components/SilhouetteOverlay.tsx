@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Ellipse, Path } from 'react-native-svg';
 
 interface Props {
   // Caller owns the color/state mapping (e.g. red = tilt invalid, yellow =
@@ -15,7 +15,7 @@ export function SilhouetteOverlay({ color }: Props) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <View style={styles.container}>
-        <Svg width="100%" height="80%" viewBox="0 0 100 250">
+        <Svg width="100%" height="80%" viewBox="0 0 100 260">
           <Path
             d="M 50 10 C 58 10, 62 18, 62 26 C 62 34, 58 42, 50 42 C 42 42, 38 34, 38 26 C 38 18, 42 10, 50 10 Z
                M 35 48 C 25 50, 15 65, 15 80 L 15 130 C 15 135, 20 140, 25 140 C 30 140, 35 135, 35 130 L 35 100
@@ -27,6 +27,11 @@ export function SilhouetteOverlay({ color }: Props) {
             strokeWidth="2"
             strokeDasharray="5, 5"
           />
+          {/* Stance zone: where the feet land once the customer has stepped
+              back far enough for the whole outline above to fit on screen. */}
+          <Ellipse cx="50" cy="248" rx="26" ry="9" fill="none" stroke={color} strokeWidth="2" />
+          <Ellipse cx="42" cy="246" rx="6" ry="10" fill={color} opacity="0.5" />
+          <Ellipse cx="58" cy="246" rx="6" ry="10" fill={color} opacity="0.5" />
         </Svg>
       </View>
     </View>
