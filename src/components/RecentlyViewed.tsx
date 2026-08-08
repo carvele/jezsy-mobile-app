@@ -7,17 +7,19 @@ import { supabase } from '@/src/lib/supabase';
 import { getRecentlyViewed } from '@/src/utils/recentlyViewed';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CATEGORY_SELECT } from '@/src/utils/categoryDisplay';
+import { useAuth } from '@/src/context/AuthContext';
 
 export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string }) {
   const [products, setProducts] = useState<any[]>([]);
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const { user } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       const load = async () => {
-        const ids = (await getRecentlyViewed()).filter(id => id !== excludeProductId);
+        const ids = (await getRecentlyViewed(user?.id)).filter(id => id !== excludeProductId);
         if (ids.length === 0) {
           if (active) setProducts([]);
           return;
@@ -36,7 +38,7 @@ export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string
       };
       load();
       return () => { active = false; };
-    }, [excludeProductId])
+    }, [excludeProductId, user?.id])
   );
 
   if (products.length === 0) return null;
