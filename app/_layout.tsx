@@ -19,6 +19,8 @@ import { ToastProvider } from '@/src/context/ToastContext';
 import { AppThemeProvider, useThemeContext } from '@/src/context/ThemeContext';
 import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
+import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
+import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoticeModal';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -32,12 +34,30 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 function InitialLayout() {
   const { session, isLoading, isProfileLoading, profile, isPasswordRecovery, beginPasswordRecovery } = useAuth();
   const segments = useSegments();
-  const router = useRouter();
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
   const themeLoaded = useThemeContext()?.loaded ?? false;
 
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+
+  // Checked once per cold start, not gated on routing: a pending request
+  // shouldn't lock the user out of the app (see account-settings.tsx's own
+  // "does not sign you out" copy), just surface once so it isn't silently
+  // forgotten in the queue.
+  const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
+  const [deletionNoticeDismissed, setDeletionNoticeDismissed] = useState(false);
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setPendingDeletionId(null);
+      return;
+    }
+    let cancelled = false;
+    getPendingDeletionRequest(session.user.id).then((req) => {
+      if (!cancelled) setPendingDeletionId(req?.id ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
 
   // Handle password-recovery deep links (both a cold start from the link and
   // the app already running in the background when it's tapped).
@@ -147,6 +167,17 @@ function InitialLayout() {
           never visible for a frame -- while the navigator still mounts. */}
       {!routeSettled && (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
+      )}
+      {routeSettled && pendingDeletionId && !deletionNoticeDismissed && (
+        <PendingDeletionNoticeModal
+          visible
+          requestId={pendingDeletionId}
+          onResolved={() => {
+            setPendingDeletionId(null);
+            setDeletionNoticeDismissed(true);
+          }}
+          onDismiss={() => setDeletionNoticeDismissed(true)}
+        />
       )}
       <StatusBar style="auto" />
     </ThemeProvider>
