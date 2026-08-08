@@ -39,8 +39,13 @@ const TOTAL_STEPS = 3;
 
 const STEP_META = [
   { icon: User,    label: 'Name',    title: "What's your\nname?",    subtitle: 'Help us personalize your experience.' },
-  { icon: Phone,   label: 'Info',    title: 'Personal\ninformation.', subtitle: 'For order updates and account security.' },
-  { icon: MapPin,  label: 'Address', title: 'Your delivery\naddress.',  subtitle: 'Where should we send your orders?' },
+  { icon: Phone,   label: 'Info',    title: 'Personal\ninformation.', subtitle: 'For reservation updates and account security.' },
+  // JezSy is reserve-and-collect, not delivery: nothing here is ever shipped,
+  // and address_line/city/province/zip_code are read back only by this
+  // screen and profile/edit.tsx, never by anything shipping-related. The
+  // previous copy ("Your delivery address", "Where should we send your
+  // orders?") promised a service the app does not have.
+  { icon: MapPin,  label: 'Address', title: 'Your\naddress.', subtitle: 'Add your address to complete your profile.' },
 ];
 
 export default function ProfileSetupScreen() {
