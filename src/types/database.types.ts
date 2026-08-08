@@ -1772,6 +1772,7 @@ export type Database = {
         Args: { p_emoji: string; p_message_id: string; p_user_id: string }
         Returns: Json
       }
+      process_account_deletion: { Args: { _request_id: string }; Returns: Json }
       request_reschedule: {
         Args: {
           _appointment_time: string

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -20,6 +20,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
+import { getPendingDeletionRequest, submitDeletionRequest, withdrawDeletionRequest } from '@/src/utils/accountDeletion';
 
 export default function AccountSettingsScreen() {
   const { showToast } = useToast();
@@ -36,43 +37,25 @@ export default function AccountSettingsScreen() {
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
   const [deletionBusy, setDeletionBusy] = useState(false);
 
-  // Cast: account_deletion_requests is added by migration 20260729101500 and
-  // is not in the generated types until that is applied and they are
-  // regenerated.
-  const deletionTable = useCallback(
-    () => (supabase as any).from('account_deletion_requests'),
-    [],
-  );
-
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
 
-    (async () => {
-      const { data } = await deletionTable()
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('status', 'pending')
-        .maybeSingle();
-      if (!cancelled) setPendingDeletionId(data?.id ?? null);
-    })();
+    getPendingDeletionRequest(user.id).then((req) => {
+      if (!cancelled) setPendingDeletionId(req?.id ?? null);
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [user?.id, deletionTable]);
+  }, [user?.id]);
 
-  const submitDeletionRequest = async () => {
+  const handleSubmitDeletionRequest = async () => {
     if (!user?.id) return;
     setDeletionBusy(true);
     try {
-      const { data, error } = await deletionTable()
-        .insert({ user_id: user.id })
-        .select('id')
-        .single();
-      if (error) throw error;
-
-      setPendingDeletionId(data.id);
+      const id = await submitDeletionRequest(user.id);
+      setPendingDeletionId(id);
       showToast('Deletion request submitted. Our team will be in touch.', 'success');
     } catch (err: any) {
       showToast(err.message ?? 'Could not submit your request.', 'error');
@@ -89,7 +72,7 @@ export default function AccountSettingsScreen() {
       'Your account will not be deleted right away. We review each request by hand, and any active reservations must be settled first. You can withdraw the request at any time before it is processed.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Request deletion', style: 'destructive', onPress: submitDeletionRequest },
+        { text: 'Request deletion', style: 'destructive', onPress: handleSubmitDeletionRequest },
       ],
     );
   };
@@ -98,9 +81,7 @@ export default function AccountSettingsScreen() {
     if (!pendingDeletionId) return;
     setDeletionBusy(true);
     try {
-      const { error } = await deletionTable().delete().eq('id', pendingDeletionId);
-      if (error) throw error;
-
+      await withdrawDeletionRequest(pendingDeletionId);
       setPendingDeletionId(null);
       showToast('Deletion request withdrawn.', 'success');
     } catch (err: any) {
