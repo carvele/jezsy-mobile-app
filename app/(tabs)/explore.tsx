@@ -31,6 +31,7 @@ import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/uti
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { GRID_GUTTER, GRID_COLUMN_GAP } from '@/src/utils/layout';
 import { isInStock } from '@/src/utils/stock';
+import { isNewArrival } from '@/src/utils/newArrival';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
@@ -442,7 +443,7 @@ export default function ExploreScreen() {
       }
 
       // 4. New Arrivals Filter
-      if (selectedNewArrivalsOnly && !product.is_new_arrival) {
+      if (selectedNewArrivalsOnly && !isNewArrival(product)) {
         return false;
       }
 
