@@ -8,6 +8,8 @@ import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
 import { formatLocalDate } from "@/src/utils/dateTime";
 import { scheduleReservationReminder } from "@/src/utils/pushNotifications";
+import { needsStepUpReauth } from "@/src/utils/stepUpAuth";
+import { StepUpAuthModal } from "@/src/components/StepUpAuthModal";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -53,6 +55,7 @@ export default function ReservationScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [reauthVisible, setReauthVisible] = useState(false);
 
   // Date and Time selection
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -160,7 +163,11 @@ export default function ReservationScreen() {
     return dates;
   };
 
-  const handleReserve = async () => {
+  // Gate, not the submit itself: validates preconditions and steps up
+  // re-authentication for a stale session before anything actually books.
+  // Scoped to this one sensitive action (OWASP ASVS step-up guidance), not a
+  // blanket app-wide re-auth gate -- see src/utils/stepUpAuth.ts for why.
+  const handleReserve = () => {
     if (!session?.user || lines.length === 0) {
       showToast("You must be logged in to make a reservation.", 'error');
       return;
@@ -170,6 +177,20 @@ export default function ReservationScreen() {
       showToast("Please select a valid appointment time.", 'info');
       return;
     }
+
+    if (needsStepUpReauth(session.user)) {
+      setReauthVisible(true);
+      return;
+    }
+
+    submitReservation();
+  };
+
+  const submitReservation = async () => {
+    // Re-checked here, not just in the handleReserve gate: TS can't carry the
+    // narrowing across the async gap the step-up modal introduces, and it's
+    // a real guard against appointmentTime clearing while that modal is open.
+    if (!appointmentTime) return;
 
     setSubmitting(true);
     try {
@@ -551,6 +572,16 @@ export default function ReservationScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      <StepUpAuthModal
+        visible={reauthVisible}
+        email={session?.user?.email ?? ''}
+        onClose={() => setReauthVisible(false)}
+        onVerified={() => {
+          setReauthVisible(false);
+          submitReservation();
+        }}
+      />
     </SafeAreaView>
   );
 }
