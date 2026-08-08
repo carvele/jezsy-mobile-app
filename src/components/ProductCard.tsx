@@ -8,6 +8,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { gridCardWidth } from '@/src/utils/layout';
 import { getCategoryLabel } from '@/src/utils/categoryDisplay';
+import { isNewArrival } from '@/src/utils/newArrival';
 
 
 // 'grid' fills half the row in a two-column list; 'rail' is a fixed width for
@@ -47,6 +48,7 @@ export function ProductCard({
   const onSale = !!(product.on_sale && product.sale_price);
   const price = onSale ? product.sale_price : product.price || 0;
   const saved = isInWishlist(product.id);
+  const isNew = isNewArrival(product);
 
   // Null stock means the product predates stock tracking; treat it as unknown
   // rather than sold out.
@@ -69,7 +71,7 @@ export function ProductCard({
     product.name,
     `₱${Number(price).toLocaleString()}`,
     onSale ? 'on sale' : null,
-    product.is_new_arrival ? 'new arrival' : null,
+    isNew ? 'new arrival' : null,
     product.model_3d_url ? 'available in AR' : null,
     recommendedSize ? `your size ${recommendedSize}` : null,
     stockLabel,
@@ -102,7 +104,7 @@ export function ProductCard({
 
           {/* Left column of badges so they never collide with the heart. */}
           <View style={styles.badgeColumn}>
-            {product.is_new_arrival && (
+            {isNew && (
               <View style={[styles.badge, { backgroundColor: colors.tint }]}>
                 <Text style={[styles.badgeText, { color: colors.onTint }]}>NEW</Text>
               </View>
