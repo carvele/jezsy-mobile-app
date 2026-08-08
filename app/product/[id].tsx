@@ -1,4 +1,5 @@
 import { Image } from "expo-image";
+import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -39,7 +40,14 @@ import { useToast } from '@/src/context/ToastContext';
 type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
 type Inventory = Database["public"]["Tables"]["inventory"]["Row"];
 
-const { width } = Dimensions.get("window");
+const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
+// Same reasoning as the home hero carousel: the dominant region (the image
+// gallery) claims 1/phi of the screen rather than a hand-picked constant, so
+// it scales with the device instead of being tuned to one screen size and
+// looking arbitrary on every other. The old hardcoded 500 happened to land
+// close to this on a mid-size phone and drifted on anything smaller/larger.
+const GOLDEN_RATIO = 1.618;
+const IMAGE_GALLERY_HEIGHT = SCREEN_HEIGHT / GOLDEN_RATIO;
 
 export default function ProductDetailScreen() {
   const { showToast } = useToast();
@@ -278,7 +286,7 @@ export default function ProductDetailScreen() {
                 accessibilityLabel="View image full screen"
                 accessibilityHint="Opens a zoomable full-screen view of this product image"
               >
-                <Image source={{ uri: item }} style={{ width, height: 500 }} contentFit="cover" />
+                <Image source={{ uri: item }} style={{ width, height: IMAGE_GALLERY_HEIGHT }} contentFit="cover" />
               </TouchableOpacity>
             )}
             keyExtractor={(item, index) => index.toString()}
@@ -294,31 +302,37 @@ export default function ProductDetailScreen() {
           )}
 
           {/* Top Floating Buttons */}
-          <TouchableOpacity 
-            style={[styles.backButton, { top: insets.top + 12, backgroundColor: "rgba(0,0,0,0.5)" }]} 
+          <TouchableOpacity
+            style={[styles.backButton, { top: insets.top + 12 }]}
             onPress={handleBack}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             accessibilityHint="Returns to the previous screen"
           >
-            <IconSymbol name="chevron.left" size={24} color="#FFF" />
+            <BlurView intensity={40} tint="light" style={[styles.glassFill, styles.glassChrome]}>
+              <IconSymbol name="chevron.left" size={24} color="#FFF" />
+            </BlurView>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.favoriteButton, { top: insets.top + 12, backgroundColor: "rgba(0,0,0,0.5)" }]}
+            style={[styles.favoriteButton, { top: insets.top + 12 }]}
             onPress={() => toggleWishlist(product.id)}
             accessibilityRole="button"
             accessibilityLabel={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
             accessibilityHint={isInWishlist(product.id) ? "Removes this item from your favorites list" : "Saves this item to your favorites list"}
           >
-            <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? Colors.dark.blushFill : "#FFF"} />
+            <BlurView intensity={40} tint="light" style={[styles.glassFill, styles.glassChrome]}>
+              <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? Colors.dark.blushFill : "#FFF"} />
+            </BlurView>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.shareButton, { top: insets.top + 12, backgroundColor: "rgba(0,0,0,0.5)" }]}
+            style={[styles.shareButton, { top: insets.top + 12 }]}
             onPress={handleShare}
             accessibilityRole="button"
             accessibilityLabel="Share this item"
           >
-            <IconSymbol name="paperplane.fill" size={22} color="#FFF" />
+            <BlurView intensity={40} tint="light" style={[styles.glassFill, styles.glassChrome]}>
+              <IconSymbol name="paperplane.fill" size={22} color="#FFF" />
+            </BlurView>
           </TouchableOpacity>
           {product.model_3d_url && (
             <TouchableOpacity
@@ -673,7 +687,7 @@ export default function ProductDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  imageContainer: { width: "100%", height: 500, position: "relative" },
+  imageContainer: { width: "100%", height: IMAGE_GALLERY_HEIGHT, position: "relative" },
   pagination: {
     position: 'absolute',
     bottom: 30,
@@ -696,17 +710,35 @@ const styles = StyleSheet.create({
   // `top` is supplied inline from useSafeAreaInsets: these float over the image
   // with edge-to-edge enabled, so a hardcoded guess put them under the status
   // bar on any device with a taller one.
+  //
+  // Real backdrop blur (expo-blur BlurView), not a simulated translucent
+  // fill: these sit over a real photo -- the one place in this app glass
+  // earns its keep per Apple HIG's Materials guidance, translucency over
+  // genuinely varying content, not flat app chrome. glassFill is the
+  // BlurView's own sizing/clipping (overflow hidden so the blur is cropped
+  // to the circle, not a square bleeding past the rounded corners);
+  // glassChrome is just the edge highlight, since the blur itself now
+  // supplies the translucent fill.
+  glassFill: {
+    width: "100%", height: "100%", borderRadius: 22,
+    justifyContent: "center", alignItems: "center",
+    overflow: "hidden",
+  },
+  glassChrome: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
   backButton: {
     position: "absolute", left: 20,
-    width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
+    width: 44, height: 44,
   },
   favoriteButton: {
     position: "absolute", right: 20,
-    width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
+    width: 44, height: 44,
   },
   shareButton: {
     position: "absolute", right: 76,
-    width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center",
+    width: 44, height: 44,
   },
   arButton: {
     position: "absolute", bottom: 60, right: 20, flexDirection: "row", alignItems: "center",
