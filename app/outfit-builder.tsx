@@ -270,12 +270,12 @@ export default function OutfitBuilderScreen() {
       if (error) throw error;
       setSaveVisible(false);
       setOutfitName('');
-      Alert.alert('Outfit Saved!', `"${name}" has been added to your wardrobe.`, [
+      Alert.alert('Outfit Saved', `"${name}" added to your wardrobe.`, [
         { text: 'Done', onPress: () => router.back() },
       ]);
     } catch (err) {
       console.error('Error saving outfit:', err);
-      showToast('Could not save that outfit. Please try again.', 'error');
+      showToast('Failed to save outfit. Try again.', 'error');
     } finally {
       setSaving(false);
     }
@@ -477,7 +477,7 @@ export default function OutfitBuilderScreen() {
               <View style={styles.center}>
                 <IconSymbol name="tshirt.fill" size={48} color={colors.icon} />
                 <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                  No wardrobe items yet. Try the Catalog tab.
+                  No wardrobe items available. Select pieces from Catalog or add items.
                 </Text>
               </View>
             ) : (
@@ -509,7 +509,7 @@ export default function OutfitBuilderScreen() {
             <View style={styles.center}>
               <IconSymbol name="heart" size={48} color={colors.icon} />
               <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                Your wishlist is empty. Save pieces you are considering and try them against your wardrobe here.
+                Wishlist empty. Save items from the catalog to style them here.
               </Text>
             </View>
           ) : (

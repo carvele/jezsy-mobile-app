@@ -97,21 +97,21 @@ export default function EditProfileScreen() {
 
   const validate = (): boolean => {
     if (!data.firstName.trim() || !data.lastName.trim()) {
-      showToast('Please enter your first and last name.', 'info');
+      showToast('Enter your first and last name.', 'info');
       return false;
     }
     const cleanedPhone = data.phone.replace(/\D/g, '');
     if (cleanedPhone && !selectedCountry.regex.test(cleanedPhone)) {
-      showToast(`Please enter a valid ${selectedCountry.name} phone number (${selectedCountry.format}).`, 'error');
+      showToast(`Enter a valid ${selectedCountry.name} phone number (${selectedCountry.format}).`, 'error');
       return false;
     }
     if (data.dateOfBirth.trim()) {
       if (!DOB_PATTERN.test(data.dateOfBirth.trim())) {
-        showToast('Please enter a valid date in MM/DD/YYYY format.', 'error');
+        showToast('Use MM/DD/YYYY format for date of birth.', 'error');
         return false;
       }
       if (!parseDateOfBirth(data.dateOfBirth)) {
-        showToast('Please enter a real calendar date.', 'error');
+        showToast('Enter a valid calendar date.', 'error');
         return false;
       }
     }

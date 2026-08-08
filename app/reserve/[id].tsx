@@ -169,12 +169,12 @@ export default function ReservationScreen() {
   // blanket app-wide re-auth gate -- see src/utils/stepUpAuth.ts for why.
   const handleReserve = () => {
     if (!session?.user || lines.length === 0) {
-      showToast("You must be logged in to make a reservation.", 'error');
+      showToast("Log in to make a reservation.", 'error');
       return;
     }
 
     if (!appointmentTime) {
-      showToast("Please select a valid appointment time.", 'info');
+      showToast("Select a valid appointment time.", 'info');
       return;
     }
 
@@ -267,7 +267,7 @@ export default function ReservationScreen() {
       );
     } catch (error: any) {
       console.error("Reservation error:", error);
-      showToast(error.message || "Failed to submit reservation. Please try again.", 'error');
+      showToast(error.message || "Unable to submit reservation. Try again.", 'error');
     } finally {
       setSubmitting(false);
     }
@@ -549,6 +549,11 @@ export default function ReservationScreen() {
           { backgroundColor: colors.background, borderTopColor: colors.border },
         ]}
       >
+        {!canSubmit && (
+          <Text style={[styles.ctaHelperText, { color: colors.secondaryText }]}>
+            Select a pickup time above to continue
+          </Text>
+        )}
         <TouchableOpacity
           style={[
             styles.primaryAction,
@@ -672,6 +677,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bottomBar: { padding: Spacing.xxl, borderTopWidth: 1 },
+  ctaHelperText: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: Spacing.sm,
+  },
   primaryAction: {
     height: 56,
     borderRadius: 28,

@@ -104,7 +104,7 @@ export default function AuthScreen() {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !validateEmail(trimmedEmail)) {
-      showToast('Please enter a valid email address.', 'error');
+      showToast('Enter a valid email address.', 'error');
       return;
     }
     const policyError = passwordPolicyError(password);

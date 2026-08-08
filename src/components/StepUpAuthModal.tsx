@@ -102,7 +102,7 @@ export function StepUpAuthModal({ visible, email, onClose, onVerified }: StepUpA
       <View style={styles.overlay}>
         <View style={[styles.content, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Confirm It's You</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Confirm It&apos;s You</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Cancel">
               <IconSymbol name="xmark" size={24} color={colors.text} />
             </TouchableOpacity>
@@ -110,7 +110,7 @@ export function StepUpAuthModal({ visible, email, onClose, onVerified }: StepUpA
 
           <View style={styles.body}>
             <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-              It's been a while since you last signed in. For your security, enter the 6-digit
+              It&apos;s been a while since you last signed in. For your security, enter the 6-digit
               code we sent to {email} to complete this reservation.
             </Text>
 

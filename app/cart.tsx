@@ -98,18 +98,32 @@ export default function CartScreen() {
           color={isSelected ? colors.tint : colors.secondaryText}
         />
       </TouchableOpacity>
-      <Image
-        source={{ uri: item.product.image_url }}
-        style={styles.itemImage}
-        contentFit="cover"
-      />
+      <TouchableOpacity
+        onPress={() => router.push(`/product/${item.product.id}`)}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`View product details for ${item.product.name}`}
+      >
+        <Image
+          source={{ uri: item.product.image_url }}
+          style={styles.itemImage}
+          contentFit="cover"
+        />
+      </TouchableOpacity>
       <View style={styles.itemInfo}>
-        <Text
-          style={[styles.itemName, { color: colors.text }]}
-          numberOfLines={2}
+        <TouchableOpacity
+          onPress={() => router.push(`/product/${item.product.id}`)}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`View product details for ${item.product.name}`}
         >
-          {item.product.name}
-        </Text>
+          <Text
+            style={[styles.itemName, { color: colors.text }]}
+            numberOfLines={2}
+          >
+            {item.product.name}
+          </Text>
+        </TouchableOpacity>
         <Text style={[styles.itemPrice, { color: colors.text }]}>
           ₱
           {(
@@ -253,7 +267,7 @@ export default function CartScreen() {
             Your bag is empty
           </Text>
           <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-            Looks like you haven&apos;t added anything to your bag yet.
+            Browse the catalog to add items to your bag.
           </Text>
           <TouchableOpacity
             style={[styles.shopBtn, { backgroundColor: colors.tint }]}
@@ -323,10 +337,9 @@ export default function CartScreen() {
             </TouchableOpacity>
 
             <Text style={[styles.footerNote, { color: colors.secondaryText }]}>
-              Selected items are collected in one visit, under a single
-              pickup date and time. You pay a 50% deposit and settle the
-              balance when you collect. Use an item&apos;s own Reserve button
-              to book just that piece instead.
+              Collect all selected items in a single visit. Pay a 50%
+              deposit now and settle the remaining balance at pickup.
+              Reserve items individually to schedule separate visits.
             </Text>
           </View>
         </>

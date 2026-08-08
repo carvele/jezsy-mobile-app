@@ -59,7 +59,7 @@ export default function WishlistScreen() {
       // Rendered as an empty wishlist indistinguishable from actually
       // having nothing saved.
       console.error('Error fetching wishlist products:', err);
-      showToast('Could not load your wishlist. Please try again.', 'error');
+      showToast('Unable to load wishlist. Try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -135,7 +135,7 @@ export default function WishlistScreen() {
           <IconSymbol name="heart" size={56} color={colors.icon} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>Your wishlist is empty</Text>
           <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-            Save items you love while browsing the catalog.
+            Browse the catalog and save items you love.
           </Text>
           <TouchableOpacity
             style={[styles.browseBtn, { backgroundColor: colors.tint }]}
