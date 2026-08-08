@@ -602,7 +602,15 @@ export default function ProductDetailScreen() {
             style={[styles.iconAction, { borderColor: colors.border, opacity: canPurchase ? 1 : 0.4 }]}
             onPress={() => {
               if (product && canPurchase) {
-                addToCart(product, effectiveQuantity, selectedSize || undefined, selectedColor || undefined);
+                // selectedStock is inventory.available for this exact size --
+                // the figure the server-side hold trigger enforces against.
+                addToCart(
+                  product,
+                  effectiveQuantity,
+                  selectedSize || undefined,
+                  selectedColor || undefined,
+                  selectedStock ?? undefined,
+                );
                 setAddedToBag(true);
                 setTimeout(() => setAddedToBag(false), 2000);
               }

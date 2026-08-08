@@ -1789,6 +1789,10 @@ export type Database = {
         }
         Returns: Json
       }
+      reservation_holds_stock: {
+        Args: { _deleted: boolean; _status: string }
+        Returns: boolean
+      }
       resolve_reschedule: {
         Args: { _approve: boolean; _reservation_id: string }
         Returns: Json
