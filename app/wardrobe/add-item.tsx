@@ -122,7 +122,7 @@ export default function AddWardrobeItemScreen() {
       if (useCamera) {
         const cameraPerm = await ImagePicker.requestCameraPermissionsAsync();
         if (!cameraPerm.granted) {
-          showToast('Camera permission is required to snap photos.', 'error');
+          showToast('Camera access required to snap photos.', 'error');
           return;
         }
         result = await ImagePicker.launchCameraAsync({
@@ -134,7 +134,7 @@ export default function AddWardrobeItemScreen() {
       } else {
         const libraryPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!libraryPerm.granted) {
-          showToast('Gallery permission is required to choose photos.', 'error');
+          showToast('Photo library access required to select photos.', 'error');
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({
@@ -150,7 +150,7 @@ export default function AddWardrobeItemScreen() {
       }
     } catch (e) {
       console.error('Error picking image:', e);
-      showToast('Could not open your photos. Please try again.', 'error');
+      showToast('Unable to open photos. Try again.', 'error');
     }
   };
 
@@ -164,15 +164,15 @@ export default function AddWardrobeItemScreen() {
 
   const handleSave = async () => {
     if (!session?.user?.id) {
-      showToast('You must be logged in to add items.', 'error');
+      showToast('Sign in required to add items.', 'error');
       return;
     }
     if (!imageUri) {
-      showToast('Please select or capture a photo first.', 'info');
+      showToast('Select or capture a photo first.', 'info');
       return;
     }
     if (!garmentType) {
-      showToast('Please choose a garment type (Top, Bottom, etc.) so it can be included in wardrobe insights.', 'info');
+      showToast('Select a garment type (Top, Bottom, etc.) for wardrobe insights.', 'info');
       return;
     }
 
@@ -197,11 +197,11 @@ export default function AddWardrobeItemScreen() {
       // uri may come from removeBackground(), which returns only a path.
       const response = await fetch(finalUri);
       if (!response.ok && response.status !== 0) {
-        throw new Error('Could not read the selected image.');
+        throw new Error('Unable to read selected image.');
       }
       const bytes = await response.arrayBuffer();
       if (!bytes || bytes.byteLength === 0) {
-        throw new Error('The selected image appears to be empty.');
+        throw new Error('Selected image file is empty.');
       }
 
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -228,12 +228,12 @@ export default function AddWardrobeItemScreen() {
 
       if (dbError) throw dbError;
 
-      Alert.alert('Success', 'Item added to your wardrobe.', [
-        { text: 'Awesome', onPress: () => router.back() }
+      Alert.alert('Item Added', 'Item added to your wardrobe.', [
+        { text: 'Done', onPress: () => router.back() }
       ]);
     } catch (err: any) {
       console.error('Error saving wardrobe item:', err);
-      showToast(err.message || 'Could not save item. Please try again.', 'error');
+      showToast(err.message || 'Failed to save item. Try again.', 'error');
     } finally {
       setSaving(false);
       setStatusMessage('');
@@ -293,7 +293,7 @@ export default function AddWardrobeItemScreen() {
             <View style={{ flex: 1, paddingRight: Spacing.lg }}>
               <Text style={[styles.label, { color: colors.text }]}>Remove Background</Text>
               <Text style={[styles.subLabel, { color: colors.secondaryText }]}>
-                Cut out the clothing item automatically using on-device ML
+                Automatically isolate clothing item using on-device ML
               </Text>
             </View>
             <Switch
@@ -351,7 +351,32 @@ export default function AddWardrobeItemScreen() {
                   </TouchableOpacity>
                 );
               })}
+              <TouchableOpacity
+                style={[
+                  styles.chip,
+                  { borderColor: colors.border, backgroundColor: !CATEGORIES.includes(category) ? colors.tint : colors.card }
+                ]}
+                onPress={() => {
+                  if (CATEGORIES.includes(category)) {
+                    setCategory('');
+                  }
+                }}
+              >
+                <Text style={[styles.chipText, { color: !CATEGORIES.includes(category) ? colors.onTint : colors.text }]}>
+                  Custom...
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
+            {!CATEGORIES.includes(category) && (
+              <TextInput
+                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginTop: Spacing.sm }]}
+                placeholder="Custom category name..."
+                placeholderTextColor={colors.secondaryText}
+                value={category}
+                onChangeText={setCategory}
+                autoFocus
+              />
+            )}
           </View>
 
           {/* Subcategory description */}

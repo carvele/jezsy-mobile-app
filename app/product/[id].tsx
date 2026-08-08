@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors, Radius, Spacing, Type } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useSafeBack } from "@/src/hooks/useSafeBack";
 import { ReviewsList } from "@/src/components/ReviewsList";
 import { RelatedProducts } from "@/src/components/RelatedProducts";
 import { RecentlyViewed } from "@/src/components/RecentlyViewed";
@@ -76,13 +77,8 @@ export default function ProductDetailScreen() {
   const { addToCart } = useCart();
   const { getOrCreateConversation } = useMessages();
 
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/');
-    }
-  };
+  const goBack = useSafeBack('/');
+  const handleBack = goBack;
 
   useEffect(() => {
     const fetchProductAndInventory = async () => {

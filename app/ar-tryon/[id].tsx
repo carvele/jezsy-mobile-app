@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -12,6 +12,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
+import { useSafeBack } from '@/src/hooks/useSafeBack';
 import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
 import { useToast } from '@/src/context/ToastContext';
 
@@ -46,17 +47,11 @@ export default function ARTryOnScreen() {
     [recommendedSize, sizingMeasurements, product?.measurements]
   );
 
-  const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
 
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/');
-    }
-  };
+  const goBack = useSafeBack('/');
+  const handleBack = goBack;
 
   useEffect(() => {
     const fetchProduct = async () => {

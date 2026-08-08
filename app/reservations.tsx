@@ -71,7 +71,7 @@ export default function ReservationsScreen() {
         // having none -- including the confirm-then-pay ones now waiting on
         // a payment deadline, which is the worst screen for this to go quiet on.
         console.error('Error fetching reservations:', err);
-        showToast('Could not load your reservations. Please try again.', 'error');
+        showToast('Unable to load reservations. Try again.', 'error');
       } finally {
         setLoading(false);
       }

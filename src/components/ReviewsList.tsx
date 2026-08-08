@@ -46,10 +46,11 @@ export function ReviewsList({ productId }: ReviewsListProps) {
       }
       const { data } = await supabase
         .from('reservation_items')
-        .select('id, reservations!inner(deleted)')
-        .eq('product_id', productId);
+        .select('id, reservations!inner(customer_id, deleted, status)')
+        .eq('product_id', productId)
+        .eq('reservations.customer_id', user.id);
       if (!active) return;
-      setEligible(!!data?.some((row: any) => !row.reservations?.deleted));
+      setEligible(!!data?.some((row: any) => !row.reservations?.deleted && ['Completed', 'Active'].includes(row.reservations?.status)));
     };
     checkEligibility();
     return () => { active = false; };
@@ -202,7 +203,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
       {loading ? (
         <ActivityIndicator color={colors.tint} style={{ marginVertical: 32 }} />
       ) : reviews.length === 0 ? (
-        <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No reviews yet. Be the first to share your thoughts!</Text>
+        <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No reviews yet. Write the first review.</Text>
       ) : visibleReviews.length === 0 ? (
         <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No reviews match this filter.</Text>
       ) : (

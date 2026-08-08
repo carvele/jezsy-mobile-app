@@ -141,59 +141,59 @@ export default function ProfileSetupScreen() {
   const validate = (): boolean => {
     if (step === 0) {
       if (!data.firstName.trim() || !data.lastName.trim()) {
-        showToast('Please enter your first and last name.', 'info');
+        showToast('Enter your first and last name to continue.', 'info');
         return false;
       }
     }
     if (step === 1) {
       const cleanedPhone = data.phone.replace(/\D/g, '');
       if (!cleanedPhone) {
-        showToast('Please enter your phone number.', 'info');
+        showToast('Enter your phone number.', 'info');
         return false;
       }
       if (!selectedCountry.regex.test(cleanedPhone)) {
-        showToast(`Please enter a valid ${selectedCountry.name} phone number (${selectedCountry.format}).`, 'error');
+        showToast(`Enter a valid ${selectedCountry.name} phone number (${selectedCountry.format}).`, 'error');
         return false;
       }
       if (!data.gender) {
-        showToast('Please select your gender.', 'info');
+        showToast('Select your gender preference.', 'info');
         return false;
       }
       if (!data.dateOfBirth.trim()) {
-        showToast('Please enter your date of birth.', 'info');
+        showToast('Enter your date of birth.', 'info');
         return false;
       }
 
       // Check standard DOB format MM/DD/YYYY
       if (!DOB_PATTERN.test(data.dateOfBirth.trim())) {
-        showToast('Please enter a valid date in MM/DD/YYYY format.', 'error');
+        showToast('Use MM/DD/YYYY format for date of birth.', 'error');
         return false;
       }
 
       if (!parseDateOfBirth(data.dateOfBirth)) {
-        showToast('Please enter a real calendar date.', 'error');
+        showToast('Enter a valid calendar date.', 'error');
         return false;
       }
     }
     if (step === 2) {
       if (!data.addressLine.trim()) {
-        showToast('Please enter your street address.', 'info');
+        showToast('Enter your street address.', 'info');
         return false;
       }
       if (!data.barangay.trim()) {
-        showToast('Please enter your barangay.', 'info');
+        showToast('Enter your barangay.', 'info');
         return false;
       }
       if (!data.city.trim()) {
-        showToast('Please enter your city/municipality.', 'info');
+        showToast('Enter your city or municipality.', 'info');
         return false;
       }
       if (!data.province.trim()) {
-        showToast('Please enter your province.', 'info');
+        showToast('Enter your province.', 'info');
         return false;
       }
       if (!data.zipCode.trim()) {
-        showToast('Please enter your zip code.', 'info');
+        showToast('Enter your ZIP code.', 'info');
         return false;
       }
     }

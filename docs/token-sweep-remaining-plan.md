@@ -36,9 +36,10 @@ to one area rather than one enormous commit.
 Two blind spots, both found only when someone asked a direct question rather than read the plan.
 
 **The list was not exhaustive.** It was written by walking the areas that felt like areas, not by
-walking the route table. Stages 5, 6 and 7 below are the screens that fell through -- **6,771
-lines**, including `product/[id]`, which is among the highest-traffic screens in the app. Any
-future audit should start from the file listing and subtract, never from memory and add.
+walking the route table. Stages 5, 6 and 7 (strays) below are the screens that fell through -- **6,771
+lines**, including `product/[id]` (808 lines), `cart.tsx` (394 lines), `wishlist.tsx` (224 lines),
+`outfit-builder.tsx` (791 lines), `profile/body-scan.tsx` (530 lines), and `ar-tryon/[id].tsx` (447 lines).
+Any future audit should start from the file listing and subtract, never from memory and add.
 
 **"Largely done" was not done.** Stage 1 was described as mostly finished because its enablers
 (`PrimaryButton`, `onTint`, grid constants) had landed. The mechanical sweep never ran: as of this
