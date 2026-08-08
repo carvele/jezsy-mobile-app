@@ -18,6 +18,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
+import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
 
 export default function AccountSettingsScreen() {
   const { showToast } = useToast();
@@ -109,8 +110,9 @@ export default function AccountSettingsScreen() {
   };
 
   const handleChangePassword = async () => {
-    if (password.length < 8) {
-      showToast('Please use at least 8 characters.', 'error');
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      showToast(policyError, 'error');
       return;
     }
     if (password !== confirmPassword) {
@@ -127,7 +129,7 @@ export default function AccountSettingsScreen() {
       setConfirmPassword('');
       showToast('Your password has been changed.', 'success');
     } catch (err: any) {
-      showToast(err.message ?? 'Could not update your password.', 'error');
+      showToast(translatePasswordServerError(err.message ?? 'Could not update your password.'), 'error');
     } finally {
       setSubmitting(false);
     }

@@ -24,6 +24,7 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
+import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -106,8 +107,9 @@ export default function AuthScreen() {
       showToast('Please enter a valid email address.', 'error');
       return;
     }
-    if (password.length < 8) {
-      showToast('Please use at least 8 characters.', 'error');
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      showToast(policyError, 'error');
       return;
     }
     if (password !== confirmPassword) {
@@ -145,7 +147,7 @@ export default function AuthScreen() {
       transitionMode('otp_verify');
     } catch (err: any) {
       console.error('Sign Up error:', err);
-      let msg = err.message ?? 'Could not create your account.';
+      let msg = translatePasswordServerError(err.message ?? 'Could not create your account.');
       // Never confirm that an address is already registered. Supabase
       // obfuscates this case when email confirmations are on, so this branch
       // only fires with confirmations off -- where its raw message would

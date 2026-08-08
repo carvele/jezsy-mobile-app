@@ -17,6 +17,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
+import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
 
 export default function ResetPasswordScreen() {
   const { showToast } = useToast();
@@ -31,8 +32,9 @@ export default function ResetPasswordScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (password.length < 8) {
-      showToast('Please use at least 8 characters.', 'error');
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      showToast(policyError, 'error');
       return;
     }
     if (password !== confirmPassword) {
@@ -57,7 +59,7 @@ export default function ResetPasswordScreen() {
         { text: 'OK', onPress: () => router.replace('/(tabs)') },
       ]);
     } catch (err: any) {
-      showToast(err.message ?? 'Could not update your password.', 'error');
+      showToast(translatePasswordServerError(err.message ?? 'Could not update your password.'), 'error');
     } finally {
       setSubmitting(false);
     }
