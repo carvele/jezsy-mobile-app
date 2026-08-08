@@ -4,6 +4,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/lib/supabase';
 import { useWishlist } from '@/src/context/WishlistContext';
+import { useAuth } from '@/src/context/AuthContext';
 import { getRecentlyViewed } from '@/src/utils/recentlyViewed';
 import { rankCandidates } from '@/src/utils/recommendations';
 import { ProductCard } from '@/src/components/ProductCard';
@@ -28,6 +29,7 @@ export function RelatedProducts({
 }) {
   const [products, setProducts] = useState<any[]>([]);
   const { wishlistIds } = useWishlist();
+  const { user } = useAuth();
   const theme = useColorScheme();
   const colors = Colors[theme];
 
@@ -35,7 +37,7 @@ export function RelatedProducts({
     let cancelled = false;
 
     const fetchRecommendations = async () => {
-      const recentIds = await getRecentlyViewed();
+      const recentIds = await getRecentlyViewed(user?.id);
       const signalIds = [...new Set([...wishlistIds, ...recentIds])].filter(
         (id) => id !== currentProductId,
       );
@@ -96,7 +98,7 @@ export function RelatedProducts({
     return () => {
       cancelled = true;
     };
-  }, [mainCategoryId, currentProductId, currentSubCategoryId, wishlistIds]);
+  }, [mainCategoryId, currentProductId, currentSubCategoryId, wishlistIds, user?.id]);
 
   if (products.length === 0) return null;
 

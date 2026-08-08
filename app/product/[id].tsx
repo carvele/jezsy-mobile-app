@@ -139,8 +139,8 @@ export default function ProductDetailScreen() {
   }, [id, user?.id]);
 
   useEffect(() => {
-    if (id) addRecentlyViewed(id);
-  }, [id]);
+    if (id) addRecentlyViewed(id, user?.id);
+  }, [id, user?.id]);
 
   useEffect(() => {
     const checkNotifyRequest = async () => {
