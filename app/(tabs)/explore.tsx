@@ -284,7 +284,13 @@ export default function ExploreScreen() {
         .select(PRODUCT_SELECT)
         .eq('deleted', false)
         .eq('visibility', 'public')
-        .order('created_at', { ascending: false });
+        // id as a tiebreak. This query pages by range(), and without a
+        // unique secondary key Postgres does not promise the same order
+        // for rows tied on created_at across separate calls -- a tied row
+        // could land on two pages (duplicate card) or neither (a product
+        // silently missing from infinite scroll).
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true });
     }
     if (!selectedCategory || !selectedSubCategory) return null;
 
@@ -305,7 +311,9 @@ export default function ExploreScreen() {
       query = query.eq('category_id', subId);
     }
 
-    return query.order('created_at', { ascending: false });
+    // Same tiebreak reasoning as the "Shop All" branch above -- this query
+    // pages too.
+    return query.order('created_at', { ascending: false }).order('id', { ascending: true });
   }, [showAllProducts, selectedCategory, selectedSubCategory, subCategoriesByParent, subCategoryIdByName]);
 
   // Fetch page 0 whenever the active category/subcategory/"Shop All" mode

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,9 +7,14 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Animated,
+  Easing,
+  Dimensions,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Link, useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
@@ -28,6 +33,17 @@ import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// The card occupies 1/phi of the screen (~61.8%) rather than a hand-picked
+// fraction -- golden-ratio framing that also reads noticeably less dominant
+// than the original 78%, with a bigger neighbor peek as the direct result.
+const GOLDEN_RATIO = 1.618;
+const HERO_CARD_WIDTH = SCREEN_WIDTH / GOLDEN_RATIO;
+const HERO_CARD_GAP = Spacing.md;
+// Safety cap, not a real limit: nothing stops a merchant flagging thirty
+// products is_featured, and a thirty-dot carousel is not a hero section.
+const HERO_MAX_CARDS = 8;
+
 export default function HomeScreen() {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
@@ -35,6 +51,21 @@ export default function HomeScreen() {
   const [topCategories, setTopCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // heroIndex is the dot/real-product index (0..featuredProducts.length-1).
+  // heroExtendedIndex tracks position within the looped array, which has a
+  // clone of the last card prepended and a clone of the first appended --
+  // the standard trick for a ScrollView that swipes past either end into
+  // more content instead of bouncing off a hard stop.
+  const [heroIndex, setHeroIndex] = useState(0);
+  const heroScrollX = useRef(new Animated.Value(0)).current;
+  // Separate from heroScrollX, which is native-driven off real onScroll
+  // events and can't also be JS-driven without React Native's "already
+  // using native driver" conflict -- this one exists purely to hand
+  // auto-advance its own frame-by-frame values.
+  const heroAutoScrollDriver = useRef(new Animated.Value(0)).current;
+  const heroScrollRef = useRef<ScrollView>(null);
+  const heroExtendedIndexRef = useRef(1);
+  const heroInteractingRef = useRef(false);
 
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -49,7 +80,14 @@ export default function HomeScreen() {
           .select(`*, ${CATEGORY_SELECT}`)
           .eq('visibility', 'public')
           .eq('deleted', false)
-          .order('created_at', { ascending: false }),
+          // id as a tiebreak: rows seeded in the same batch share one
+          // created_at, and Postgres does not promise a stable order for
+          // ties on that alone -- the hero section could silently swap
+          // which of two featured products got the large slot between
+          // loads. id is unique per row, so this makes every consumer of
+          // `data` (hero pool, trending sort, search) deterministic.
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true }),
         supabase
           .from('categories')
           .select('*')
@@ -75,7 +113,7 @@ export default function HomeScreen() {
           featuredInStock.length >= 2 ? featuredInStock
           : sellable.length >= 2 ? sellable
           : data;
-        setFeaturedProducts(heroPool.slice(0, 2));
+        setFeaturedProducts(heroPool.slice(0, HERO_MAX_CARDS));
 
         // Real popularity signal (same one Explore's "Most Popular" sort
         // trusts), not just "newest" mislabeled as trending. Sold-out items
@@ -108,9 +146,65 @@ export default function HomeScreen() {
     }
   };
 
+  // Focus, not mount-only: Shop by Category's order depends on affinity
+  // counts that recordCategoryVisit writes when the user taps into a
+  // category, so coming back from Explore needs a re-sort, not just the
+  // Home tab's very first load.
+  useFocusEffect(
+    useCallback(() => {
+      fetchProducts();
+    }, [])
+  );
+
+  // Lands on a clone (extended index 0 or featuredProducts.length + 1) and
+  // instantly, unanimatedly repositions onto the identical real card at the
+  // opposite end -- since the clone and its real counterpart render
+  // pixel-identical, the jump is imperceptible and the loop reads seamless.
+  const settleHeroLoop = useCallback((extendedIdx: number) => {
+    if (featuredProducts.length <= 1) return;
+    const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+    const lastExtendedIdx = featuredProducts.length + 1;
+    if (extendedIdx === 0) {
+      heroScrollRef.current?.scrollTo({ x: featuredProducts.length * step, animated: false });
+      heroExtendedIndexRef.current = featuredProducts.length;
+    } else if (extendedIdx === lastExtendedIdx) {
+      heroScrollRef.current?.scrollTo({ x: step, animated: false });
+      heroExtendedIndexRef.current = 1;
+    } else {
+      heroExtendedIndexRef.current = extendedIdx;
+    }
+  }, [featuredProducts.length]);
+
+  // Auto-advances the hero every 4s, pausing while a finger is on it so it
+  // never fights a manual swipe or moves content out from under a mid-read
+  // tap. Drives the scroll itself via a JS-side Animated.timing rather than
+  // ScrollView's own scrollTo(animated: true) -- Android's native smooth-
+  // scroll easing under the New Architecture reads as visibly jittery for
+  // this kind of short, frequent, programmatic scroll, and a hand-driven
+  // timing loop sidesteps it entirely by calling scrollTo(..., false) once
+  // per animation frame instead.
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    if (featuredProducts.length <= 1) return;
+    const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+    const timer = setInterval(() => {
+      if (heroInteractingRef.current) return;
+      const nextExtended = heroExtendedIndexRef.current + 1;
+      heroAutoScrollDriver.setValue(heroExtendedIndexRef.current * step);
+      const listenerId = heroAutoScrollDriver.addListener(({ value }) => {
+        heroScrollRef.current?.scrollTo({ x: value, animated: false });
+      });
+      Animated.timing(heroAutoScrollDriver, {
+        toValue: nextExtended * step,
+        duration: 450,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start(() => {
+        heroAutoScrollDriver.removeListener(listenerId);
+        settleHeroLoop(nextExtended);
+      });
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [featuredProducts.length, settleHeroLoop, heroAutoScrollDriver]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -125,8 +219,14 @@ export default function HomeScreen() {
     );
   }
 
-  const mainFeature = featuredProducts[0];
-  const secondaryFeature = featuredProducts[1];
+  // Clone of the last card in front and the first card behind so a swipe
+  // past either edge lands on real-looking content instead of a hard stop;
+  // the boundary-snap on the ScrollView then silently re-centers onto the
+  // matching real card once the clone settles into view.
+  const heroLoops = featuredProducts.length > 1;
+  const loopedHeroProducts = heroLoops
+    ? [featuredProducts[featuredProducts.length - 1], ...featuredProducts, featuredProducts[0]]
+    : featuredProducts;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -136,63 +236,112 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
         }
         contentContainerStyle={styles.scrollContent}
+        nestedScrollEnabled
       >
         {/* Top Header */}
         <View style={styles.header}>
           <Text style={[styles.brandLogo, { color: colors.text }]}>JezSy</Text>
         </View>
 
-        {/* 1. Editorial Featured Section (Asymmetric / Magazine style) */}
-        {mainFeature && (
+        {/* 1. Featured Carousel. Auto-advances (see the effect above) but
+            pauses the instant a finger touches it, so it never fights a
+            manual swipe or shifts content out from under a mid-read tap.
+            Scales the same way from 1 card (no dots, nothing to advance to)
+            up to HERO_MAX_CARDS. */}
+        {featuredProducts.length > 0 && (
           <View style={styles.editorialSection}>
-            <Link href={`/product/${mainFeature.id}`} asChild>
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={styles.mainFeature}
-                accessibilityRole="button"
-                accessibilityLabel={`Featured: ${mainFeature.name}`}
-                accessibilityHint="Opens product details"
-              >
-                <Image
-                  source={mainFeature.image_url ? { uri: mainFeature.image_url } : require('@/assets/images/partial-react-logo.png')}
-                  style={[styles.mainFeatureImage, { backgroundColor: colors.imagePlaceholder }]}
-                  contentFit="cover"
-                />
-                <View style={styles.mainFeatureTextContainer}>
-                  <Text style={[styles.featureBrand, { color: colors.text }]}>
-                    {(getMainCategoryName(mainFeature) ?? 'EDITORIAL').toUpperCase()}
-                  </Text>
-                  <Text style={[styles.featureName, { color: colors.text }]} numberOfLines={2}>
-                    {mainFeature.name}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </Link>
+            <Animated.ScrollView
+              ref={heroScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={HERO_CARD_WIDTH + HERO_CARD_GAP}
+              decelerationRate="fast"
+              contentContainerStyle={styles.heroCarouselContent}
+              contentOffset={heroLoops ? { x: HERO_CARD_WIDTH + HERO_CARD_GAP, y: 0 } : undefined}
+              onScrollBeginDrag={() => { heroInteractingRef.current = true; }}
+              onMomentumScrollEnd={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                heroInteractingRef.current = false;
+                const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+                settleHeroLoop(Math.round(e.nativeEvent.contentOffset.x / step));
+              }}
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { x: heroScrollX } } }],
+                {
+                  useNativeDriver: true,
+                  listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                    const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+                    const idx = Math.round(e.nativeEvent.contentOffset.x / step);
+                    const real = heroLoops
+                      ? (idx - 1 + featuredProducts.length) % featuredProducts.length
+                      : idx;
+                    setHeroIndex(Math.max(0, Math.min(real, featuredProducts.length - 1)));
+                  },
+                }
+              )}
+              scrollEventThrottle={16}
+            >
+              {loopedHeroProducts.map((item, index) => {
+                // Neighbors sit at 92% scale and dim to 1/phi opacity -- the
+                // same "focus" language a physical gallery rail uses, so the
+                // card under a finger always reads as the one being looked
+                // at.
+                const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+                const inputRange = [(index - 1) * step, index * step, (index + 1) * step];
+                const scale = heroScrollX.interpolate({
+                  inputRange,
+                  outputRange: [0.92, 1, 0.92],
+                  extrapolate: 'clamp',
+                });
+                const opacity = heroScrollX.interpolate({
+                  inputRange,
+                  outputRange: [1 / GOLDEN_RATIO, 1, 1 / GOLDEN_RATIO],
+                  extrapolate: 'clamp',
+                });
+                return (
+                  <TouchableOpacity
+                    key={`${item.id}-${index}`}
+                    activeOpacity={0.9}
+                    style={[styles.heroCard, index === loopedHeroProducts.length - 1 && styles.heroCardLast]}
+                    onPress={() => router.push(`/product/${item.id}`)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Featured: ${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}`}
+                    accessibilityHint="Opens product details"
+                  >
+                    <Animated.View style={{ transform: [{ scale }], opacity }}>
+                      <Image
+                        source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
+                        style={[styles.heroCardImage, { backgroundColor: colors.imagePlaceholder }]}
+                        contentFit="cover"
+                      />
+                      <View style={styles.heroCardTextContainer}>
+                        <Text style={[styles.featureBrand, { color: colors.text }]}>
+                          {(getMainCategoryName(item) ?? 'EDITORIAL').toUpperCase()}
+                        </Text>
+                        <Text style={[styles.featureName, { color: colors.text }]} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <Text style={[styles.featurePrice, { color: colors.secondaryText }]}>
+                          ₱{(item.sale_price || item.price || 0).toLocaleString()}
+                        </Text>
+                      </View>
+                    </Animated.View>
+                  </TouchableOpacity>
+                );
+              })}
+            </Animated.ScrollView>
 
-            {secondaryFeature && (
-              <Link href={`/product/${secondaryFeature.id}`} asChild>
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  style={styles.secondaryFeature}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${secondaryFeature.name}, ₱${(secondaryFeature.sale_price || secondaryFeature.price || 0).toLocaleString()}`}
-                  accessibilityHint="Opens product details"
-                >
-                  <Image
-                    source={secondaryFeature.image_url ? { uri: secondaryFeature.image_url } : require('@/assets/images/partial-react-logo.png')}
-                    style={[styles.secondaryFeatureImage, { backgroundColor: colors.imagePlaceholder }]}
-                    contentFit="cover"
+            {featuredProducts.length > 1 && (
+              <View style={styles.heroDots} accessibilityElementsHidden importantForAccessibility="no">
+                {featuredProducts.map((item, i) => (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.heroDot,
+                      { backgroundColor: i === heroIndex ? colors.tint : colors.hairline },
+                    ]}
                   />
-                  <View style={styles.secondaryFeatureTextContainer}>
-                    <Text style={[styles.featureNameSmall, { color: colors.text }]} numberOfLines={1}>
-                      {secondaryFeature.name}
-                    </Text>
-                    <Text style={[styles.featurePrice, { color: colors.secondaryText }]}>
-                      ₱{(secondaryFeature.sale_price || secondaryFeature.price || 0).toLocaleString()}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </Link>
+                ))}
+              </View>
             )}
           </View>
         )}
@@ -285,22 +434,32 @@ const styles = StyleSheet.create({
   
   // Editorial Section
   editorialSection: {
-    paddingHorizontal: Spacing.xl,
     marginTop: 10,
     marginBottom: 40,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
   },
-  mainFeature: {
-    width: '60%',
+  // The peek past the screen edge is the swipe affordance, so the row
+  // itself carries no horizontal padding -- each card supplies its own via
+  // marginRight, and the leading card starts flush with the header above.
+  heroCarouselContent: {
+    paddingLeft: Spacing.xl,
   },
-  mainFeatureImage: {
+  heroCard: {
+    width: HERO_CARD_WIDTH,
+    marginRight: HERO_CARD_GAP,
+  },
+  // The trailing edge needs its own visible margin too, since
+  // contentContainerStyle's paddingLeft has no paddingRight counterpart to
+  // balance it -- without this the last card's peek runs off-screen instead
+  // of resting against it like every other gap in the row.
+  heroCardLast: {
+    marginRight: Spacing.xl,
+  },
+  heroCardImage: {
     width: '100%',
     aspectRatio: 3 / 4,
     borderRadius: Radius.sm,
   },
-  mainFeatureTextContainer: {
+  heroCardTextContainer: {
     marginTop: Spacing.md,
   },
   featureBrand: {
@@ -313,27 +472,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     lineHeight: 24,
-  },
-  secondaryFeature: {
-    width: '35%',
-    marginTop: 80, // Staggered effect
-  },
-  secondaryFeatureImage: {
-    width: '100%',
-    aspectRatio: 3 / 4,
-    borderRadius: Radius.sm,
-  },
-  secondaryFeatureTextContainer: {
-    marginTop: Spacing.md,
-  },
-  featureNameSmall: {
-    fontSize: 13,
-    fontWeight: '600',
     marginBottom: Spacing.xs,
   },
   featurePrice: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  heroDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.lg,
+  },
+  heroDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
 
   // Edits Section
