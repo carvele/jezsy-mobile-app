@@ -249,11 +249,11 @@ export default function ProfileSetupScreen() {
     (
       <View key="name" style={styles.fields}>
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>First name</Text>
+          <Text style={[styles.label, { color: colors.secondaryText }]}>First name</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
             placeholder="e.g. Maria"
-            placeholderTextColor="rgba(255,255,255,0.3)"
+            placeholderTextColor={colors.secondaryText}
             value={data.firstName}
             onChangeText={v => set('firstName', v)}
             autoFocus
@@ -261,18 +261,18 @@ export default function ProfileSetupScreen() {
           />
         </View>
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Last name</Text>
+          <Text style={[styles.label, { color: colors.secondaryText }]}>Last name</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
             placeholder="e.g. Santos"
-            placeholderTextColor="rgba(255,255,255,0.3)"
+            placeholderTextColor={colors.secondaryText}
             value={data.lastName}
             onChangeText={v => set('lastName', v)}
             returnKeyType="done"
             onSubmitEditing={next}
           />
         </View>
-        <Text style={styles.helperText}>
+        <Text style={[styles.helperText, { color: colors.secondaryText }]}>
           Make sure it matches your valid ID — this is used for reservations.
         </Text>
       </View>
@@ -283,21 +283,21 @@ export default function ProfileSetupScreen() {
       <ScrollView key="personal_info" showsVerticalScrollIndicator={false}>
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Mobile number</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Mobile number</Text>
             <View style={styles.phoneInputRow}>
               <TouchableOpacity
-                style={styles.countrySelectorBtn}
+                style={[styles.countrySelectorBtn, { backgroundColor: colors.glass, borderColor: colors.hairline }]}
                 onPress={() => setShowCountryModal(true)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
-                <Text style={styles.countryDialCode}>{selectedCountry.dialCode}</Text>
-                <ChevronDown size={14} color="rgba(255,255,255,0.4)" />
+                <Text style={[styles.countryDialCode, { color: colors.text }]}>{selectedCountry.dialCode}</Text>
+                <ChevronDown size={14} color={colors.secondaryText} />
               </TouchableOpacity>
               <TextInput
-                style={[styles.input, styles.phoneInput]}
+                style={[styles.input, styles.phoneInput, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder={selectedCountry.placeholder}
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={colors.secondaryText}
                 value={data.phone}
                 onChangeText={handlePhoneChange}
                 keyboardType="phone-pad"
@@ -306,12 +306,12 @@ export default function ProfileSetupScreen() {
             </View>
           </View>
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { marginTop: 8 }]}>Date of birth</Text>
+            <Text style={[styles.label, { color: colors.secondaryText, marginTop: 8 }]}>Date of birth</Text>
             <View style={styles.dobInputRow}>
               <TextInput
-                style={[styles.input, styles.dobInput]}
+                style={[styles.input, styles.dobInput, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder="MM/DD/YYYY"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={colors.secondaryText}
                 value={data.dateOfBirth}
                 onChangeText={handleDOBChange}
                 keyboardType="numbers-and-punctuation"
@@ -326,16 +326,28 @@ export default function ProfileSetupScreen() {
             </View>
           </View>
           <View style={{ marginTop: 8 }}>
-            <Text style={styles.label}>Gender</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Gender</Text>
             <View style={styles.chipGrid}>
               {GENDER_OPTIONS.map(g => (
                 <TouchableOpacity
                   key={g}
-                  style={[styles.chip, data.gender === g && styles.chipActive]}
+                  style={[
+                    styles.chip,
+                    { borderColor: colors.hairline, backgroundColor: colors.glass },
+                    data.gender === g && { backgroundColor: colors.tint, borderColor: colors.tint },
+                  ]}
                   onPress={() => set('gender', g)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.chipText, data.gender === g && styles.chipTextActive, { color: colors.onTint }]}>{g}</Text>
+                  <Text
+                    style={[
+                      styles.chipText,
+                      { color: data.gender === g ? colors.onTint : colors.secondaryText },
+                      data.gender === g && styles.chipTextActive,
+                    ]}
+                  >
+                    {g}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -349,11 +361,11 @@ export default function ProfileSetupScreen() {
       <ScrollView key="address" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Street address</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Street address</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
               placeholder="House/unit no., building, street name"
-              placeholderTextColor="rgba(255,255,255,0.3)"
+              placeholderTextColor={colors.secondaryText}
               value={data.addressLine}
               onChangeText={v => set('addressLine', v)}
               autoFocus
@@ -361,11 +373,11 @@ export default function ProfileSetupScreen() {
             />
           </View>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Barangay</Text>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Barangay</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
               placeholder="e.g. Brgy. San Jose"
-              placeholderTextColor="rgba(255,255,255,0.3)"
+              placeholderTextColor={colors.secondaryText}
               value={data.barangay}
               onChangeText={v => set('barangay', v)}
               returnKeyType="next"
@@ -373,11 +385,11 @@ export default function ProfileSetupScreen() {
           </View>
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.label}>CITY / MUNICIPALITY</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>City / Municipality</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder="e.g. Cebu City"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={colors.secondaryText}
                 value={data.city}
                 onChangeText={v => set('city', v)}
                 returnKeyType="next"
@@ -386,11 +398,11 @@ export default function ProfileSetupScreen() {
           </View>
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Province</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Province</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder="e.g. Cebu"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={colors.secondaryText}
                 value={data.province}
                 onChangeText={v => set('province', v)}
                 returnKeyType="next"
@@ -398,11 +410,11 @@ export default function ProfileSetupScreen() {
             </View>
             <View style={{ width: 16 }} />
             <View style={[styles.fieldGroup, { width: 110 }]}>
-              <Text style={styles.label}>Zip code</Text>
+              <Text style={[styles.label, { color: colors.secondaryText }]}>Zip code</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder="0000"
-                placeholderTextColor="rgba(255,255,255,0.3)"
+                placeholderTextColor={colors.secondaryText}
                 value={data.zipCode}
                 onChangeText={v => set('zipCode', v)}
                 keyboardType="numeric"
@@ -411,7 +423,7 @@ export default function ProfileSetupScreen() {
               />
             </View>
           </View>
-          <Text style={styles.helperText}>
+          <Text style={[styles.helperText, { color: colors.secondaryText }]}>
             You can add more addresses later in your profile settings.
           </Text>
         </View>
@@ -424,13 +436,13 @@ export default function ProfileSetupScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
       <LinearGradient colors={[colors.background, colors.surface]} style={StyleSheet.absoluteFillObject} />
 
       {/* Top step indicator */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={back} activeOpacity={0.7}>
-          <ArrowLeft size={22} color="rgba(255,255,255,0.7)" />
+          <ArrowLeft size={22} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.progressPills}>
           {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
@@ -439,15 +451,15 @@ export default function ProfileSetupScreen() {
               style={[
                 styles.pill,
                 i === step
-                  ? styles.pillActive
+                  ? { backgroundColor: colors.tint }
                   : i < step
-                  ? styles.pillDone
-                  : styles.pillInactive,
+                  ? { backgroundColor: `${colors.tint}66` }
+                  : { backgroundColor: colors.hairline },
               ]}
             />
           ))}
         </View>
-        <Text style={styles.stepCount}>{step + 1}/{TOTAL_STEPS}</Text>
+        <Text style={[styles.stepCount, { color: colors.secondaryText }]}>{step + 1}/{TOTAL_STEPS}</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -457,11 +469,11 @@ export default function ProfileSetupScreen() {
         <View style={styles.content}>
           {/* Icon + Heading */}
           <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-            <View style={styles.iconBadge}>
+            <View style={[styles.iconBadge, { backgroundColor: `${colors.tint}18`, borderColor: `${colors.tint}33` }]}>
               <Icon size={20} color={colors.tint} />
             </View>
-            <Text style={styles.title}>{meta.title}</Text>
-            <Text style={styles.subtitle}>{meta.subtitle}</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{meta.title}</Text>
+            <Text style={[styles.subtitle, { color: colors.secondaryText }]}>{meta.subtitle}</Text>
           </Animated.View>
 
           {/* Slide content */}
@@ -478,13 +490,13 @@ export default function ProfileSetupScreen() {
               icon={step < TOTAL_STEPS - 1
                 ? <ArrowRight size={18} color={colors.onTint} />
                 : <Check size={18} color={colors.onTint} />}
-              style={styles.nextBtnGlow}
+              style={[styles.nextBtnGlow, { shadowColor: colors.tint }]}
             />
 
             {/* Address slide can be skipped */}
             {step === TOTAL_STEPS - 1 && (
               <TouchableOpacity style={styles.skipBtn} onPress={() => handleSubmit()}>
-                <Text style={styles.skipText}>Skip, I&apos;ll add address later</Text>
+                <Text style={[styles.skipText, { color: colors.secondaryText }]}>Skip, I&apos;ll add address later</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -515,8 +527,6 @@ export default function ProfileSetupScreen() {
   );
 }
 
-const GLASS = 'rgba(255,255,255,0.06)';
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
@@ -531,13 +541,9 @@ const styles = StyleSheet.create({
   backBtn: { padding: 6 },
   progressPills: { flex: 1, flexDirection: 'row', gap: 6 },
   pill: { flex: 1, height: 3, borderRadius: 2 },
-  pillActive:   { backgroundColor: Colors.dark.tint },
-  pillDone:     { backgroundColor: `${Colors.dark.tint}66` },
-  pillInactive: { backgroundColor: 'rgba(255,255,255,0.12)' },
   stepCount: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.4)',
     letterSpacing: 0.5,
   },
 
@@ -551,9 +557,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: Radius.md,
-    backgroundColor: `${Colors.dark.tint}18`,
     borderWidth: 1,
-    borderColor: `${Colors.dark.tint}33`,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 18,
@@ -561,14 +565,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: '800',
-    color: '#fff',
     lineHeight: 42,
     letterSpacing: -0.5,
     marginBottom: Spacing.sm,
   },
   subtitle: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
     lineHeight: 20,
   },
 
@@ -580,7 +582,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.38)',
     letterSpacing: 1.6,
     // Caps live here, not in the string: a screen reader spells out literal
     // all-caps text letter by letter.
@@ -588,10 +589,8 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 16,
-    color: '#fff',
     paddingVertical: 11,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.14)',
   },
   // Mobile Input Dial Code styles
   phoneInputRow: {
@@ -604,10 +603,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 44,
     paddingHorizontal: Spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
     marginRight: Spacing.md,
     gap: 6,
   },
@@ -615,7 +612,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   countryDialCode: {
-    color: '#fff',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -647,19 +643,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 100,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    backgroundColor: GLASS,
   },
-  chipActive: {
-    backgroundColor: Colors.dark.tint,
-    borderColor: Colors.dark.tint,
-  },
-  chipText: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '500' },
+  chipText: { fontSize: 14, fontWeight: '500' },
   chipTextActive: { fontWeight: '700' },
 
   helperText: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.3)',
     lineHeight: 18,
   },
 
@@ -667,12 +656,11 @@ const styles = StyleSheet.create({
   // Geometry and colour now live in PrimaryButton; only the gold glow is
   // specific to this screen. Not an Elevation token -- those cast black.
   nextBtnGlow: {
-    shadowColor: Colors.dark.tint,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 6,
   },
   skipBtn: { alignSelf: 'center', paddingVertical: 6 },
-  skipText: { color: 'rgba(255,255,255,0.3)', fontSize: 13 },
+  skipText: { fontSize: 13 },
 });
