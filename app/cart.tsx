@@ -1,10 +1,11 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors, Radius, Spacing, Type } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useCart } from "@/src/context/CartContext";
+import { useCart, CartItem } from "@/src/context/CartContext";
+import { EditVariantModal } from "@/src/components/EditVariantModal";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
     FlatList,
     StyleSheet,
@@ -18,16 +19,85 @@ export default function CartScreen() {
   const theme = useColorScheme() ?? "dark";
   const colors = Colors[theme];
   const router = useRouter();
-  const { items, updateQuantity, removeFromCart, totalAmount, itemCount } =
-    useCart();
+  const { items, updateQuantity, removeFromCart, updateVariant } = useCart();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [editingItem, setEditingItem] = useState<CartItem | null>(null);
 
-  const renderCartItem = ({ item }: { item: any }) => (
+  // New items default to selected (keeps "reserve everything" the default
+  // experience); items removed from the bag drop out of the selection too.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      items.forEach((i) => {
+        if (!next.has(i.id)) {
+          next.add(i.id);
+          changed = true;
+        }
+      });
+      next.forEach((id) => {
+        if (!items.some((i) => i.id === id)) {
+          next.delete(id);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [items]);
+
+  const toggleSelected = (itemId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const allSelected = items.length > 0 && selectedIds.size === items.length;
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? new Set() : new Set(items.map((i) => i.id)));
+  };
+
+  const selectedItems = items.filter((i) => selectedIds.has(i.id));
+  const selectedCount = selectedItems.reduce((sum, i) => sum + i.quantity, 0);
+  const selectedTotal = selectedItems.reduce((sum, i) => {
+    const unitPrice =
+      i.product.on_sale && i.product.sale_price
+        ? i.product.sale_price
+        : i.product.price || 0;
+    return sum + unitPrice * i.quantity;
+  }, 0);
+
+  const renderCartItem = ({ item }: { item: any }) => {
+    // Per-size availability captured at add time, not product.stock (which
+    // sums every size). Undefined = untracked variant, so uncapped here and
+    // left to the server-side hold trigger.
+    const maxQty = item.maxQuantity ?? Infinity;
+    const atMaxQty = item.quantity >= maxQty;
+    const isSelected = selectedIds.has(item.id);
+
+    return (
     <View
       style={[
         styles.cartItem,
         { backgroundColor: colors.card, borderColor: colors.border },
       ]}
     >
+      <TouchableOpacity
+        onPress={() => toggleSelected(item.id)}
+        style={styles.checkbox}
+        hitSlop={8}
+        accessibilityRole="checkbox"
+        accessibilityLabel={`Select ${item.product.name}`}
+        accessibilityState={{ checked: isSelected }}
+      >
+        <IconSymbol
+          name={isSelected ? "checkmark.circle.fill" : "checkmark.circle"}
+          size={22}
+          color={isSelected ? colors.tint : colors.secondaryText}
+        />
+      </TouchableOpacity>
       <Image
         source={{ uri: item.product.image_url }}
         style={styles.itemImage}
@@ -60,6 +130,15 @@ export default function CartScreen() {
               Color: {item.selectedColor}
             </Text>
           )}
+          {((item.product.sizes && item.product.sizes.length > 0) || item.product.color) && (
+            <TouchableOpacity
+              onPress={() => setEditingItem(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Change size or color for ${item.product.name}`}
+            >
+              <Text style={[styles.variantEdit, { color: colors.tint }]}>Change</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.itemActions}>
@@ -79,11 +158,13 @@ export default function CartScreen() {
               {item.quantity}
             </Text>
             <TouchableOpacity
-              style={styles.qtyBtn}
-              onPress={() => updateQuantity(item.id, item.quantity + 1)}
+              style={[styles.qtyBtn, atMaxQty && styles.qtyBtnDisabled]}
+              onPress={() => !atMaxQty && updateQuantity(item.id, item.quantity + 1)}
+              disabled={atMaxQty}
               accessibilityRole="button"
               accessibilityLabel={`Increase quantity of ${item.product.name}`}
-              accessibilityHint="Increases item quantity by one"
+              accessibilityHint={atMaxQty ? `Only ${maxQty} in stock` : "Increases item quantity by one"}
+              accessibilityState={{ disabled: atMaxQty }}
             >
               <IconSymbol name="plus" size={16} color={colors.text} />
             </TouchableOpacity>
@@ -119,7 +200,8 @@ export default function CartScreen() {
         </TouchableOpacity>
       </View>
     </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView
@@ -142,6 +224,25 @@ export default function CartScreen() {
         </Text>
         <View style={{ width: 38 }} />
       </View>
+
+      {items.length > 0 && (
+        <TouchableOpacity
+          onPress={toggleSelectAll}
+          style={styles.selectAllRow}
+          accessibilityRole="checkbox"
+          accessibilityLabel="Select all items"
+          accessibilityState={{ checked: allSelected }}
+        >
+          <IconSymbol
+            name={allSelected ? "checkmark.circle.fill" : "checkmark.circle"}
+            size={20}
+            color={allSelected ? colors.tint : colors.secondaryText}
+          />
+          <Text style={[styles.selectAllText, { color: colors.text }]}>
+            {allSelected ? "Deselect all" : "Select all"}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {items.length === 0 ? (
         <View style={styles.emptyState}>
@@ -184,41 +285,62 @@ export default function CartScreen() {
               <Text
                 style={[styles.summaryLabel, { color: colors.secondaryText }]}
               >
-                Subtotal ({itemCount} items)
+                Subtotal ({selectedCount} selected)
               </Text>
               <Text style={[styles.summaryValue, { color: colors.text }]}>
-                ₱{totalAmount.toLocaleString()}
+                ₱{selectedTotal.toLocaleString()}
               </Text>
             </View>
             <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
               <Text style={[styles.totalLabel, { color: colors.text }]}>
-                Deposit if you reserve all
+                Deposit if you reserve selected
               </Text>
               <Text style={[styles.totalValue, { color: colors.tint }]}>
-                ₱{(totalAmount * 0.5).toLocaleString()}
+                ₱{(selectedTotal * 0.5).toLocaleString()}
               </Text>
             </View>
 
             <TouchableOpacity
-              style={[styles.reserveAllBtn, { backgroundColor: colors.tint }]}
-              onPress={() => router.push({ pathname: '/reserve/[id]', params: { id: 'cart' } })}
+              style={[
+                styles.reserveAllBtn,
+                { backgroundColor: colors.tint, opacity: selectedItems.length === 0 ? 0.5 : 1 },
+              ]}
+              onPress={() =>
+                router.push({
+                  pathname: '/reserve/[id]',
+                  params: { id: 'cart', itemIds: selectedItems.map((i) => i.id).join(',') },
+                })
+              }
+              disabled={selectedItems.length === 0}
               accessibilityRole="button"
-              accessibilityLabel={`Reserve all ${itemCount} items`}
-              accessibilityHint="Books one pickup slot for everything in your bag"
+              accessibilityLabel={`Reserve selected ${selectedCount} items`}
+              accessibilityHint="Books one pickup slot for the selected items in your bag"
+              accessibilityState={{ disabled: selectedItems.length === 0 }}
             >
               <Text style={styles.reserveAllBtnText}>
-                Reserve all ({itemCount})
+                Reserve selected ({selectedCount})
               </Text>
             </TouchableOpacity>
 
             <Text style={[styles.footerNote, { color: colors.secondaryText }]}>
-              Everything in your bag is collected in one visit, under a single
+              Selected items are collected in one visit, under a single
               pickup date and time. You pay a 50% deposit and settle the
               balance when you collect. Use an item&apos;s own Reserve button
               to book just that piece instead.
             </Text>
           </View>
         </>
+      )}
+
+      {editingItem && (
+        <EditVariantModal
+          visible={!!editingItem}
+          product={editingItem.product}
+          currentSize={editingItem.selectedSize}
+          currentColor={editingItem.selectedColor}
+          onClose={() => setEditingItem(null)}
+          onSave={(size, color, maxQuantity) => updateVariant(editingItem.id, size, color, maxQuantity)}
+        />
       )}
     </SafeAreaView>
   );
@@ -274,6 +396,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 16,
   },
+  selectAllRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.sm,
+  },
+  selectAllText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
   listContent: {
     padding: Spacing.lg,
     paddingBottom: Spacing.xxl,
@@ -286,6 +419,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     padding: Spacing.md,
     gap: Spacing.lg,
+  },
+  checkbox: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   itemImage: {
     width: 80,
@@ -314,6 +451,11 @@ const styles = StyleSheet.create({
   variantText: {
     fontSize: 12,
   },
+  variantEdit: {
+    fontSize: 12,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
   itemActions: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -330,6 +472,9 @@ const styles = StyleSheet.create({
   qtyBtn: {
     padding: Spacing.sm,
     paddingHorizontal: Spacing.md,
+  },
+  qtyBtnDisabled: {
+    opacity: 0.4,
   },
   qtyText: {
     fontSize: 14,

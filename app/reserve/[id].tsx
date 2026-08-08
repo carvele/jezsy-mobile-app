@@ -42,10 +42,11 @@ const CART_ROUTE_ID = "cart";
 
 export default function ReservationScreen() {
   const { showToast } = useToast();
-  const { id, size, color } = useLocalSearchParams<{
+  const { id, size, color, itemIds } = useLocalSearchParams<{
     id: string;
     size: string;
     color: string;
+    itemIds: string;
   }>();
   const isCartMode = id === CART_ROUTE_ID;
   const { items: cartItems, clearCart } = useCart();
@@ -123,7 +124,14 @@ export default function ReservationScreen() {
 
   const lines: ReservationLine[] = useMemo(() => {
     if (isCartMode) {
-      return cartItems.map((item) => ({
+      // itemIds scopes this reservation to what the customer checked in the
+      // bag; absent (or empty), fall back to the whole bag for compatibility
+      // with any other caller of /reserve/cart.
+      const selectedIds = itemIds ? new Set(itemIds.split(",")) : null;
+      const scopedItems = selectedIds
+        ? cartItems.filter((item) => selectedIds.has(item.id))
+        : cartItems;
+      return scopedItems.map((item) => ({
         key: item.id,
         product: item.product,
         size: item.selectedSize || undefined,
@@ -139,7 +147,7 @@ export default function ReservationScreen() {
       color: color || undefined,
       quantity: 1,
     }];
-  }, [isCartMode, cartItems, product, size, color]);
+  }, [isCartMode, cartItems, product, size, color, itemIds]);
 
   const generateDates = () => {
     const dates = [];
