@@ -23,6 +23,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useWishlist } from '@/src/context/WishlistContext';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { Database } from '@/src/types/database.types';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { evaluateColors } from '@/src/utils/colorMatcher';
@@ -81,6 +83,9 @@ export default function OutfitBuilderScreen() {
   const [saveVisible, setSaveVisible]     = useState(false);
   const [outfitName, setOutfitName]       = useState('');
   const [saving, setSaving]               = useState(false);
+
+  const [viewMode, setViewMode]           = useState<'slots' | 'canvas'>('slots');
+  const viewShotRef                       = React.useRef<ViewShot>(null);
 
   // Picker state
   const [pickerTab, setPickerTab]         = useState<ItemSource>('wardrobe');
@@ -284,6 +289,50 @@ export default function OutfitBuilderScreen() {
     }
   };
 
+  const handleShare = async () => {
+    if (filledCount === 0) {
+      showToast('Add at least one item before sharing.', 'error');
+      return;
+    }
+    if (viewMode !== 'canvas') {
+      setViewMode('canvas');
+      // Wait for the render to switch to canvas mode
+      setTimeout(async () => {
+        if (viewShotRef.current?.capture) {
+          try {
+            const uri = await viewShotRef.current.capture();
+            await Sharing.shareAsync(uri, { dialogTitle: 'Share my outfit' });
+          } catch (err) {
+            console.error(err);
+            showToast('Failed to capture outfit image', 'error');
+          }
+        }
+      }, 500);
+      return;
+    }
+
+    if (viewShotRef.current?.capture) {
+      try {
+        const uri = await viewShotRef.current.capture();
+        await Sharing.shareAsync(uri, { dialogTitle: 'Share my outfit' });
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to capture outfit image', 'error');
+      }
+    }
+  };
+
+  const handleDiscard = () => {
+    Alert.alert(
+      'Discard Outfit?',
+      'This will clear all currently selected items.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => setSlots(EMPTY_SLOTS) },
+      ]
+    );
+  };
+
   // ── Render slot card ──────────────────────────────────────────────────────
   const renderSlot = (slotKey: SlotKey) => {
     const item = slots[slotKey];
@@ -366,17 +415,37 @@ export default function OutfitBuilderScreen() {
           <IconSymbol name="chevron.left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Outfit Builder</Text>
-        <TouchableOpacity
-          style={[styles.saveHeaderBtn, { backgroundColor: colors.tint, opacity: filledCount === 0 ? 0.4 : 1 }]}
-          onPress={() => filledCount > 0 && setSaveVisible(true)}
-          disabled={filledCount === 0}
-          accessibilityRole="button"
-          accessibilityLabel="Save outfit"
-          accessibilityHint={filledCount === 0 ? "Add at least one item to save" : "Opens the save dialog to name and store this outfit"}
-          accessibilityState={{ disabled: filledCount === 0 }}
-        >
-          <Text style={[styles.saveHeaderBtnText, { color: colors.onTint }]}>Save</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={handleShare}
+            disabled={filledCount === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Share outfit"
+          >
+            <IconSymbol name="square.and.arrow.up" size={20} color={filledCount === 0 ? colors.secondaryText : colors.tint} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={handleDiscard}
+            disabled={filledCount === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Discard outfit"
+          >
+            <IconSymbol name="trash" size={20} color={filledCount === 0 ? colors.secondaryText : colors.error} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.saveHeaderBtn, { backgroundColor: colors.tint, opacity: filledCount === 0 ? 0.4 : 1 }]}
+            onPress={() => filledCount > 0 && setSaveVisible(true)}
+            disabled={filledCount === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Save outfit"
+            accessibilityHint={filledCount === 0 ? "Add at least one item to save" : "Opens the save dialog to name and store this outfit"}
+            accessibilityState={{ disabled: filledCount === 0 }}
+          >
+            <Text style={[styles.saveHeaderBtnText, { color: colors.onTint }]}>Save</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Outfit preview strip */}
@@ -425,11 +494,40 @@ export default function OutfitBuilderScreen() {
         );
       })()}
 
-      {/* Slots list */}
-      <ScrollView contentContainerStyle={styles.slotsList} showsVerticalScrollIndicator={false}>
-        {SLOT_KEYS.map(renderSlot)}
-        <View style={{ height: 100 }} />
-      </ScrollView>
+      {/* View Mode Toggle */}
+      <View style={styles.viewToggleContainer}>
+        <TouchableOpacity
+          style={[styles.viewToggleBtn, viewMode === 'slots' && { backgroundColor: colors.tint }]}
+          onPress={() => setViewMode('slots')}
+        >
+          <Text style={[styles.viewToggleText, { color: viewMode === 'slots' ? colors.onTint : colors.text }]}>List</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.viewToggleBtn, viewMode === 'canvas' && { backgroundColor: colors.tint }]}
+          onPress={() => setViewMode('canvas')}
+        >
+          <Text style={[styles.viewToggleText, { color: viewMode === 'canvas' ? colors.onTint : colors.text }]}>Canvas</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Main Content Area */}
+      {viewMode === 'slots' ? (
+        <ScrollView contentContainerStyle={styles.slotsList} showsVerticalScrollIndicator={false}>
+          {SLOT_KEYS.map(renderSlot)}
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.canvasContainer} showsVerticalScrollIndicator={false}>
+          <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={[styles.canvasStage, { backgroundColor: colors.background }]}>
+            {slots.shoes && <Image source={{ uri: slots.shoes.image_url }} style={styles.canvasShoes} contentFit="contain" />}
+            {slots.bottom && <Image source={{ uri: slots.bottom.image_url }} style={styles.canvasBottom} contentFit="contain" />}
+            {slots.top && <Image source={{ uri: slots.top.image_url }} style={styles.canvasTop} contentFit="contain" />}
+            {slots.outerwear && <Image source={{ uri: slots.outerwear.image_url }} style={styles.canvasOuterwear} contentFit="contain" />}
+            {slots.accessory && <Image source={{ uri: slots.accessory.image_url }} style={styles.canvasAccessory} contentFit="contain" />}
+          </ViewShot>
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      )}
 
       {/* Processing overlay: background removal runs after the picker closes,
           which otherwise looks frozen for a few seconds with no feedback. */}
@@ -791,4 +889,86 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   processingText: { fontSize: 14, fontWeight: '600' },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  headerActionBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewToggleContainer: {
+    flexDirection: 'row',
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+    borderRadius: Radius.pill,
+    backgroundColor: '#1E1E1E',
+    overflow: 'hidden',
+    padding: 4,
+  },
+  viewToggleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: Radius.pill,
+  },
+  viewToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  canvasContainer: {
+    padding: Spacing.xl,
+    alignItems: 'center',
+  },
+  canvasStage: {
+    width: width - Spacing.xl * 2,
+    aspectRatio: 3 / 4,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  canvasShoes: {
+    position: 'absolute',
+    bottom: '5%',
+    left: '20%',
+    right: '20%',
+    height: '25%',
+    zIndex: 5,
+  },
+  canvasBottom: {
+    position: 'absolute',
+    bottom: '25%',
+    left: '15%',
+    right: '15%',
+    height: '45%',
+    zIndex: 10,
+  },
+  canvasTop: {
+    position: 'absolute',
+    top: '15%',
+    left: '15%',
+    right: '15%',
+    height: '45%',
+    zIndex: 20,
+  },
+  canvasAccessory: {
+    position: 'absolute',
+    top: '5%',
+    right: '5%',
+    width: '30%',
+    height: '20%',
+    zIndex: 30,
+  },
+  canvasOuterwear: {
+    position: 'absolute',
+    top: '10%',
+    bottom: '20%',
+    left: '5%',
+    right: '5%',
+    zIndex: 40,
+  },
 });
