@@ -2,11 +2,17 @@
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
 
+-- Create partial index for fast periodic cron queries on pending reservations
+CREATE INDEX IF NOT EXISTS reservations_pending_unattended_idx
+  ON public.reservations (created_at)
+  WHERE status = 'pending';
+
 -- Create an RPC to find unattended reservations and trigger a webhook
 CREATE OR REPLACE FUNCTION public.check_unattended_reservations()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = ''
 AS $$
 DECLARE
   unattended_count int;
@@ -19,10 +25,6 @@ BEGIN
     AND created_at < now() - interval '15 minutes';
 
   IF unattended_count > 0 THEN
-    -- Get project reference URL or use environment variables, here we assume it hits our edge function
-    -- Ideally, webhook_url would be loaded from a vault or secrets table, 
-    -- but for this migration we'll trigger a standard Supabase edge function path.
-    -- (In production, replace 'https://wufcmtndotfvxvvxkamv.supabase.co' with your project URL)
     webhook_url := 'https://wufcmtndotfvxvvxkamv.supabase.co/functions/v1/send-unattended-alert';
     
     PERFORM net.http_post(
@@ -33,6 +35,14 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- Restrict execution permissions on SECURITY DEFINER function
+REVOKE EXECUTE ON FUNCTION public.check_unattended_reservations() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_unattended_reservations() TO service_role;
+
+-- Unschedule existing job if present to maintain idempotency
+SELECT cron.unschedule('check-unattended-reservations-cron')
+WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-unattended-reservations-cron');
 
 -- Schedule the cron job to run every 5 minutes
 SELECT cron.schedule(
