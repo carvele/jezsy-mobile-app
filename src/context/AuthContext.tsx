@@ -154,6 +154,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [user, fetchProfile]);
 
   const signOut = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem('jezsy_cart');
+    } catch (e) {}
     await supabase.auth.signOut();
   }, []);
 

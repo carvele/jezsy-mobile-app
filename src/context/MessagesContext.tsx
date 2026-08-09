@@ -53,9 +53,13 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   }, [session?.user.id]);
 
   useEffect(() => {
-    refreshConversations();
+    if (!session?.user.id) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
 
-    if (!session?.user.id) return;
+    refreshConversations();
 
     // Realtime subscription for conversation updates
     const subscription = supabase

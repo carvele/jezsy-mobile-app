@@ -33,6 +33,7 @@ interface CartContextData {
   removeFromCart: (itemId: string) => Promise<void>;
   updateQuantity: (itemId: string, quantity: number) => Promise<void>;
   updateVariant: (itemId: string, size?: string, color?: string, maxQuantity?: number) => Promise<void>;
+  removeItems: (itemIds: string[]) => Promise<void>;
   clearCart: () => Promise<void>;
   totalAmount: number;
   itemCount: number;
@@ -44,6 +45,7 @@ const CartContext = createContext<CartContextData>({
   removeFromCart: async () => {},
   updateQuantity: async () => {},
   updateVariant: async () => {},
+  removeItems: async () => {},
   clearCart: async () => {},
   totalAmount: 0,
   itemCount: 0,
@@ -157,6 +159,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems)).catch((e: any) => console.error(e));
       return newItems;
+  const removeItems = useCallback(async (itemIds: string[]) => {
+    setItems((prev) => {
+      const remaining = prev.filter((i) => !itemIds.includes(i.id));
+      AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(remaining)).catch((e: any) => console.error(e));
+      return remaining;
     });
   }, []);
 
@@ -173,7 +180,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, updateVariant, clearCart, totalAmount, itemCount }}>
+    <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, updateVariant, removeItems, clearCart, totalAmount, itemCount }}>
       {children}
     </CartContext.Provider>
   );
