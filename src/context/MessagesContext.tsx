@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useAuth } from './AuthContext';
@@ -57,34 +57,43 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
     if (!session?.user.id) return;
 
-    // Subscribe to realtime updates on conversations
-    const conversationSubscription = supabase
-      .channel('public:conversations')
+    // Realtime subscription for conversation updates
+    const subscription = supabase
+      .channel(`user-conversations:${session.user.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'conversations' },
-        (payload: any) => {
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+        },
+        () => {
           refreshConversations();
         }
       )
       .subscribe();
 
     return () => {
-      conversationSubscription.unsubscribe();
+      supabase.removeChannel(subscription);
     };
-  }, [session, refreshConversations]);
+  }, [session?.user.id, refreshConversations]);
 
-  const sendMessage = async (conversationId: string, text: string, imageUrl?: string, context?: MessageContext) => {
+  const sendMessage = useCallback(async (
+    conversationId: string,
+    text: string,
+    imageUrl?: string,
+    context?: MessageContext
+  ) => {
     if (!session?.user.id) return null;
 
     try {
-      // 1. Insert message. Cast to any: context_* columns are added by
-      // migration 20260724091000 and are not yet in the generated types.
+      const isStaff = profile?.role === 'staff' || profile?.role === 'admin' || profile?.role === 'owner';
       const payload: any = {
         conversation_id: conversationId,
         sender_id: session.user.id,
-        sender_name: profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : 'Customer',
-        text,
+        sender_role: isStaff ? 'staff' : 'customer',
+        sender_name: profile?.full_name || (isStaff ? 'Boutique Support' : 'Customer'),
+        text: text.trim(),
         image_url: imageUrl || null,
       };
       if (context) {
@@ -109,12 +118,12 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       console.error('Error sending message:', error);
       return null;
     }
-  };
+  }, [session?.user.id, profile?.role, profile?.full_name]);
 
   // Only the sender may change `text` -- enforce_message_edit_scope
   // (20260722172749) raises for anyone else, so the sender_id filter below is
   // defence in depth rather than the only guard.
-  const editMessage = async (messageId: string, text: string) => {
+  const editMessage = useCallback(async (messageId: string, text: string) => {
     if (!session?.user.id) return null;
 
     const trimmed = text.trim();
@@ -137,14 +146,14 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       console.error('Error editing message:', error);
       return null;
     }
-  };
+  }, [session?.user.id]);
 
   // merge_message_reaction (20260720191000) already toggles: sending the emoji a
   // user has already set removes it. The reactions map is { userId: emoji }, so
   // one reaction per person per message. Permission rides on the messages UPDATE
   // policy, which is scoped to conversation participants -- so reacting to the
   // other party's message is allowed, unlike editing it.
-  const toggleReaction = async (messageId: string, emoji: string) => {
+  const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     if (!session?.user.id) return null;
 
     try {
@@ -160,9 +169,9 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       console.error('Error toggling reaction:', error);
       return null;
     }
-  };
+  }, [session?.user.id]);
 
-  const markAsRead = async (conversationId: string) => {
+  const markAsRead = useCallback(async (conversationId: string) => {
     try {
       await supabase
         .from('conversations')
@@ -180,9 +189,9 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('Error marking as read:', error);
     }
-  };
+  }, [session?.user.id]);
 
-  const getOrCreateConversation = async () => {
+  const getOrCreateConversation = useCallback(async () => {
     if (!session?.user.id) return null;
 
     try {
@@ -232,22 +241,32 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       console.error('Error getting/creating conversation:', error);
       return null;
     }
-  };
+  }, [session?.user.id]);
+
+  const value = useMemo(() => ({
+    conversations,
+    unreadCount,
+    loading,
+    sendMessage,
+    editMessage,
+    toggleReaction,
+    markAsRead,
+    getOrCreateConversation,
+    refreshConversations,
+  }), [
+    conversations,
+    unreadCount,
+    loading,
+    sendMessage,
+    editMessage,
+    toggleReaction,
+    markAsRead,
+    getOrCreateConversation,
+    refreshConversations,
+  ]);
 
   return (
-    <MessagesContext.Provider
-      value={{
-        conversations,
-        unreadCount,
-        loading,
-        sendMessage,
-        editMessage,
-        toggleReaction,
-        markAsRead,
-        getOrCreateConversation,
-        refreshConversations
-      }}
-    >
+    <MessagesContext.Provider value={value}>
       {children}
     </MessagesContext.Provider>
   );
@@ -255,7 +274,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
 export const useMessages = () => {
   const context = useContext(MessagesContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useMessages must be used within a MessagesProvider');
   }
   return context;
