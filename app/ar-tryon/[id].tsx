@@ -167,48 +167,105 @@ export default function ARTryOnScreen() {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <style>
-          body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #0D0D0D; overflow: hidden; }
-          model-viewer {
-            width: 100%;
-            height: 100%;
-            --poster-color: transparent;
-            background-color: #0D0D0D;
+          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          body, html {
+            width: 100%; height: 100%;
+            background: radial-gradient(ellipse at 50% 30%, #1a1a2e 0%, #0D0D0D 100%);
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           }
+          model-viewer {
+            width: 100%; height: 100%;
+            --poster-color: transparent;
+            background-color: transparent;
+          }
+          /* Elegant gold AR button */
           #ar-button {
             position: absolute;
-            bottom: 30px;
+            bottom: 32px;
             left: 50%;
             transform: translateX(-50%);
-            background-color: #C9A96E;
+            background: linear-gradient(135deg, #C9A96E 0%, #8A6D3B 100%);
             color: #0D0D0D;
-            padding: 16px 32px;
-            border-radius: 28px;
-            font-size: 16px;
-            font-weight: 700;
+            padding: 14px 36px;
+            border-radius: 100px;
+            font-size: 15px;
+            font-weight: 800;
             border: none;
-            box-shadow: 0 4px 8px rgba(201, 169, 110, 0.3);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 24px rgba(201,169,110,0.45), 0 1px 4px rgba(0,0,0,0.4);
+            cursor: pointer;
+            transition: opacity 0.15s;
           }
+          #ar-button:active { opacity: 0.8; }
+          /* Contextual controls hint */
+          #hint {
+            position: absolute;
+            bottom: 92px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.45);
+            font-size: 12px;
+            white-space: nowrap;
+            pointer-events: none;
+          }
+          /* Offline / error state */
+          #error-state {
+            display: none;
+            position: absolute;
+            inset: 0;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+            gap: 12px;
+          }
+          #error-state.visible { display: flex; }
+          #error-state span { font-size: 36px; }
         </style>
-        <!-- Import the component -->
         <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
       </head>
       <body>
         <model-viewer
+          id="mv"
           src="${modelUrl}"
           ios-src="${iosModelUrl}"
           ar
           ar-modes="webxr scene-viewer quick-look"
           camera-controls
           auto-rotate
-          rotation-per-second="30deg"
-          shadow-intensity="1"
-          environment-image="neutral"
+          rotation-per-second="18deg"
+          shadow-intensity="1.4"
+          shadow-softness="0.9"
+          exposure="1.1"
+          tone-mapping="commerce"
+          environment-image="legacy"
+          min-camera-orbit="auto auto 5%"
+          max-camera-orbit="auto auto 200%"
+          interpolation-decay="200"
           alt="A 3D model of ${product.name.replace(/"/g, '&quot;')}">
           <button slot="ar-button" id="ar-button">
             View in your space (AR)
           </button>
         </model-viewer>
+        <div id="hint">Drag to rotate &nbsp;·&nbsp; Pinch to zoom</div>
+        <div id="error-state">
+          <span>📦</span>
+          3D model unavailable offline.<br/>Switch to 2D overlay to preview the item.
+        </div>
+        <script>
+          const mv = document.getElementById('mv');
+          mv.addEventListener('error', () => {
+            mv.style.display = 'none';
+            document.getElementById('error-state').classList.add('visible');
+          });
+          // Hide controls hint after first interaction
+          mv.addEventListener('camera-change', () => {
+            const hint = document.getElementById('hint');
+            if (hint) hint.style.display = 'none';
+          });
+        </script>
       </body>
     </html>
   `;

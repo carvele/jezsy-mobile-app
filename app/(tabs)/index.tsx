@@ -23,6 +23,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
 import { useToast } from '@/src/context/ToastContext';
+import { cacheProductCatalog, getCachedCatalog, OfflineProduct } from '@/src/services/offlineSync';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
 import { GRID_GUTTER } from '@/src/utils/layout';
@@ -72,7 +73,31 @@ export default function HomeScreen() {
   const { showToast } = useToast();
   const router = useRouter();
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (fromCache = false) => {
+    // Immediately seed UI from cache so there's something to look at before the
+    // network responds. fromCache=true is used by the mount-time call to avoid
+    // showing a loading spinner when stale data is already available.
+    if (fromCache) {
+      const cached = await getCachedCatalog();
+      if (cached) {
+        const data = cached as any[];
+        const sellable = data.filter(isInStock);
+        const featuredInStock = sellable.filter((p) => p.is_featured);
+        const heroPool = featuredInStock.length >= 2 ? featuredInStock : sellable.length >= 2 ? sellable : data;
+        setFeaturedProducts(heroPool.slice(0, HERO_MAX_CARDS));
+        const byPopularity = [...data].sort((a, b) => {
+          const stockDiff = Number(isInStock(b)) - Number(isInStock(a));
+          if (stockDiff !== 0) return stockDiff;
+          const reviewDiff = (b.review_count || 0) - (a.review_count || 0);
+          if (reviewDiff !== 0) return reviewDiff;
+          return (b.rating || 0) - (a.rating || 0);
+        });
+        setTrendingProducts(byPopularity.slice(0, 6));
+        setAllProducts(data);
+        setLoading(false);
+        return; // Don't hit network if we seeded from a valid cache
+      }
+    }
     try {
       const [productsRes, categoriesRes] = await Promise.all([
         supabase
@@ -100,6 +125,9 @@ export default function HomeScreen() {
 
       const data = productsRes.data;
       if (data) {
+        // Write a fresh catalog snapshot to AsyncStorage for offline use.
+        cacheProductCatalog(data as unknown as OfflineProduct[]).catch(() => {});
+
         setAllProducts(data);
 
         const sellable = data.filter(isInStock);
@@ -155,6 +183,13 @@ export default function HomeScreen() {
       fetchProducts();
     }, [])
   );
+
+  // Seed UI from cached data immediately on cold start, then let the network
+  // call (above) overwrite with fresher data when it resolves.
+  useEffect(() => {
+    fetchProducts(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Lands on a clone (extended index 0 or featuredProducts.length + 1) and
   // instantly, unanimatedly repositions onto the identical real card at the

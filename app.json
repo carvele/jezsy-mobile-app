@@ -10,7 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jezsy.mobileapp"
+      "bundleIdentifier": "com.jezsy.mobileapp",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "JezSy uses your camera for the virtual try-on and AR experience.",
+        "NSPhotoLibraryUsageDescription": "JezSy reads photos to let you upload wardrobe items.",
+        "NSPhotoLibraryAddUsageDescription": "JezSy saves outfit captures to your photo library.",
+        "NSMicrophoneUsageDescription": "JezSy uses the microphone during video-based try-on sessions.",
+        "NSFaceIDUsageDescription": "JezSy uses Face ID for fast, secure sign-in."
+      }
     },
     "android": {
       "package": "com.jezsy.mobileapp",

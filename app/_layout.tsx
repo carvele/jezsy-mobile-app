@@ -3,8 +3,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
-import { useEffect, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
@@ -21,6 +21,8 @@ import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
 import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
 import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoticeModal';
+import { registerOfflineSyncListener } from '@/src/services/offlineSync';
+import NetInfo from '@react-native-community/netinfo';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -30,6 +32,37 @@ export const unstable_settings = {
 // check both resolve, so the tabs-anchor screen is never mounted before we
 // know the correct first screen to land on.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// ── Offline Banner ────────────────────────────────────────────────────────────
+function OfflineBanner() {
+  const [isOffline, setIsOffline] = useState(false);
+  const slideAnim = useRef(new Animated.Value(-44)).current;
+
+  useEffect(() => {
+    const unsub = NetInfo.addEventListener((state) => {
+      const offline = !state.isConnected || state.isInternetReachable === false;
+      setIsOffline(offline);
+      Animated.timing(slideAnim, {
+        toValue: offline ? 0 : -44,
+        duration: 280,
+        useNativeDriver: true,
+      }).start();
+    });
+    return unsub;
+  }, [slideAnim]);
+
+  if (!isOffline) return null;
+  return (
+    <Animated.View
+      style={[
+        styles.offlineBanner,
+        { transform: [{ translateY: slideAnim }] },
+      ]}
+    >
+      <Text style={styles.offlineBannerText}>⚡ No internet — browsing cached content</Text>
+    </Animated.View>
+  );
+}
 
 function InitialLayout() {
   const { session, isLoading, isProfileLoading, profile, isPasswordRecovery, beginPasswordRecovery } = useAuth();
@@ -153,6 +186,13 @@ function InitialLayout() {
     }
   }, [hasBootstrapped]);
 
+  // Register global offline-sync listener. Flushes the local order queue as
+  // soon as connectivity is restored. Cleaned up on unmount (hot reload etc.).
+  useEffect(() => {
+    const unsubscribe = registerOfflineSyncListener();
+    return unsubscribe;
+  }, []);
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
@@ -179,6 +219,7 @@ function InitialLayout() {
           onDismiss={() => setDeletionNoticeDismissed(true)}
         />
       )}
+      <OfflineBanner />
       <StatusBar style="auto" />
     </ThemeProvider>
   );
@@ -213,3 +254,23 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  offlineBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 44,
+    backgroundColor: '#B45309',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  offlineBannerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+});
