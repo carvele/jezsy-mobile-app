@@ -88,11 +88,12 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const isStaff = profile?.role === 'staff' || profile?.role === 'admin' || profile?.role === 'owner';
+      const senderName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : (isStaff ? 'Boutique Support' : 'Customer');
       const payload: any = {
         conversation_id: conversationId,
         sender_id: session.user.id,
         sender_role: isStaff ? 'staff' : 'customer',
-        sender_name: profile?.full_name || (isStaff ? 'Boutique Support' : 'Customer'),
+        sender_name: senderName,
         text: text.trim(),
         image_url: imageUrl || null,
       };
@@ -109,20 +110,13 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
       if (messageError) throw messageError;
 
-      // The parent conversation's last_message / last_message_time are updated
-      // atomically by the sync_conversation_on_message DB trigger (see
-      // supabase/migrations/20260720100000_conversation_last_message_trigger.sql),
-      // so no separate client-side conversation update is needed here.
       return message;
     } catch (error) {
       console.error('Error sending message:', error);
       return null;
     }
-  }, [session?.user.id, profile?.role, profile?.full_name]);
+  }, [session?.user.id, profile?.role, profile?.first_name, profile?.last_name]);
 
-  // Only the sender may change `text` -- enforce_message_edit_scope
-  // (20260722172749) raises for anyone else, so the sender_id filter below is
-  // defence in depth rather than the only guard.
   const editMessage = useCallback(async (messageId: string, text: string) => {
     if (!session?.user.id) return null;
 
@@ -130,8 +124,6 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     if (!trimmed) return null;
 
     try {
-      // Cast: edited_at is added by 20260730150000 and is not in the generated
-      // types until they are regenerated.
       const { data, error } = await supabase
         .from('messages')
         .update({ text: trimmed, edited_at: new Date().toISOString() } as any)
@@ -148,11 +140,6 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [session?.user.id]);
 
-  // merge_message_reaction (20260720191000) already toggles: sending the emoji a
-  // user has already set removes it. The reactions map is { userId: emoji }, so
-  // one reaction per person per message. Permission rides on the messages UPDATE
-  // policy, which is scoped to conversation participants -- so reacting to the
-  // other party's message is allowed, unlike editing it.
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     if (!session?.user.id) return null;
 
@@ -195,7 +182,6 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     if (!session?.user.id) return null;
 
     try {
-      // Check if conversation already exists for this customer
       const { data: existing } = await supabase
         .from('conversations')
         .select('*')
@@ -204,7 +190,6 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
       if (existing) return existing;
 
-      // Create new conversation
       const { data: newConv, error: createError } = await supabase
         .from('conversations')
         .insert({
@@ -219,9 +204,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       setConversations(prev => [newConv, ...prev]);
       return newConv;
     } catch (error) {
-      // If single() fails because no row, it throws error. Let's handle it properly:
       if ((error as any).code === 'PGRST116') {
-        // Create new conversation
         const { data: newConv, error: createError } = await supabase
           .from('conversations')
           .insert({
