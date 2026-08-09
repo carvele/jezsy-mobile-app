@@ -174,12 +174,15 @@ export default function ARTryOnScreen() {
     );
   }
 
-  if (!hasPermission) {
+  if (mode === '2d' && !hasPermission) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>We need your permission to show the camera</Text>
         <TouchableOpacity onPress={requestPermission} style={{ marginTop: 20 }}>
           <Text style={{ color: colors.tint }}>Grant Permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setMode('3d')} style={{ marginTop: 20 }}>
+          <Text style={{ color: colors.tint }}>Switch to 3D View</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={handleBack} style={{ marginTop: 20 }}>
           <Text style={{ color: colors.text }}>Go Back</Text>
