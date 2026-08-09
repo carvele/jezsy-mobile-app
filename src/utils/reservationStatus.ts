@@ -102,4 +102,4 @@ export const isAwaitingPayment = (status: string | null): boolean =>
  * then rejects, so the gap is recorded here rather than papered over.
  */
 export const canReschedule = (status: string | null): boolean =>
-  ['pending', 'toPay'].includes(statusBucket(status));
+  ['pending', 'toPay', 'ready'].includes(statusBucket(status));

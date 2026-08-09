@@ -51,7 +51,7 @@ export default function ReservationScreen() {
     itemIds: string;
   }>();
   const isCartMode = id === CART_ROUTE_ID;
-  const { items: cartItems, clearCart } = useCart();
+  const { items: cartItems, removeItems, clearCart } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -242,10 +242,10 @@ export default function ReservationScreen() {
       const priceChanged =
         Number.isFinite(serverTotal) && Math.abs(serverTotal - clientTotal) >= 0.01;
 
-      // Only clear the bag once the reservation is actually on the server,
-      // so a failed submit does not silently empty it.
+      // Only remove the reserved items from the bag once the reservation is
+      // actually on the server, leaving unreserved items intact.
       if (isCartMode) {
-        await clearCart();
+        await removeItems(lines.map((line) => line.id));
       }
 
       await scheduleReservationReminder(

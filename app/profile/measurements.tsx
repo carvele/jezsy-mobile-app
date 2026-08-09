@@ -102,15 +102,19 @@ export default function MeasurementsScreen() {
     AsyncStorage.setItem(UNIT_STORAGE_KEY, nextUnit).catch(() => {});
   };
 
+  const scanDataProcessedRef = React.useRef<string | null>(null);
+
   // `unit` is read once this fires (gated by unitReady); it must NOT re-run
   // when the user later toggles units, or it would re-derive from the
   // original scan data and fight the plain field-by-field conversion
   // toggleUnit already does.
   useEffect(() => {
     if (!unitReady) return;
-    if (params.scanned === 'true' && params.scanData) {
+    const rawScanData = params.scanData as string | undefined;
+    if (params.scanned === 'true' && rawScanData && scanDataProcessedRef.current !== rawScanData) {
       try {
-        const scanData = JSON.parse(params.scanData as string);
+        scanDataProcessedRef.current = rawScanData;
+        const scanData = JSON.parse(rawScanData);
 
         if (scanData.bust) setBust(cmToUnit(scanData.bust.toString(), unit));
         if (scanData.waist) setWaist(cmToUnit(scanData.waist.toString(), unit));
@@ -125,12 +129,6 @@ export default function MeasurementsScreen() {
         if (scanData.overallConfidence) setScanConfidence(scanData.overallConfidence);
         if (scanData.confidence) setFieldConfidence(scanData.confidence);
 
-        // Restore the height/weight entered before scanning (passed back as
-        // params); the saved-measurements load is skipped on scan return, so
-        // these fields would otherwise be blank on the remounted screen.
-        // Both travel as cm/kg regardless of display unit -- the Auto-Scan
-        // handoff below converts height to cm before navigating, since
-        // body-scan's measurement math assumes cm.
         if (params.height) setHeight(cmToUnit(String(params.height), unit));
         if (params.weight) setWeight(String(params.weight));
 
@@ -140,8 +138,7 @@ export default function MeasurementsScreen() {
         console.error("Failed to parse scan data", e);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, unitReady]);
+  }, [params.scanned, params.scanData, params.height, params.weight, unitReady, unit]);
 
   // Same reasoning as the scan-results effect above: `unit` must be read once
   // at load, not re-applied every time the user toggles it afterward.
