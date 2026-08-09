@@ -408,6 +408,14 @@ export default function ChatScreen() {
         ) : null}
         <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
         <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
+          {!isMe && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, marginLeft: 4 }}>
+              <IconSymbol name="checkmark.seal.fill" size={12} color={colors.tint} />
+              <Text style={{ fontSize: 11, fontWeight: '600', color: colors.secondaryText, marginLeft: 3 }}>
+                {item.sender_name || 'Boutique Specialist'}
+              </Text>
+            </View>
+          )}
           <TouchableOpacity
             activeOpacity={canAct(item) ? 0.7 : 1}
             onLongPress={() => canAct(item) && setActionTarget(item)}
@@ -570,7 +578,13 @@ export default function ChatScreen() {
         >
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Shop Owner</Text>
+        <View style={{ alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Boutique Support</Text>
+            <IconSymbol name="checkmark.seal.fill" size={16} color={colors.tint} style={{ marginLeft: 4 }} />
+          </View>
+          <Text style={{ fontSize: 11, color: colors.secondaryText }}>Verified Staff Team</Text>
+        </View>
         <View style={{ width: 32 }} />
       </View>
 

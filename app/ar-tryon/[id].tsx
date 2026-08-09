@@ -3,7 +3,8 @@ import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Lin
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { usePoseDetection, RunningMode, Delegate } from 'react-native-mediapipe-posedetection';
 import { Image } from 'expo-image';
 import * as Speech from 'expo-speech';
 import { supabase } from '@/src/lib/supabase';
@@ -17,7 +18,7 @@ import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { useToast } from '@/src/context/ToastContext';
-
+import { evaluatePoseMatch } from '@/src/utils/poseMatcher';
 type Product = Database['public']['Tables']['products']['Row'];
 type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category'>;
 
@@ -27,10 +28,44 @@ export default function ARTryOnScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
-  const [permission, requestPermission] = useCameraPermissions();
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('front');
   const [poseGuides, setPoseGuides] = useState<PoseGuide[]>([]);
   const [poseIndex, setPoseIndex] = useState(0);
   const currentPose = poseGuides.length > 0 ? poseGuides[poseIndex % poseGuides.length] : null;
+
+  const [matchScore, setMatchScore] = useState(0);
+  const [isMatched, setIsMatched] = useState(false);
+  const [matchFeedback, setMatchFeedback] = useState('Align with outline');
+  const [garmentTransform, setGarmentTransform] = useState({ scale: 1, translateX: 0, translateY: 0 });
+  
+  // Pose Detection Hook
+  const poseDetection = usePoseDetection({
+    onResults: (result) => {
+      const landmarks = result.results?.[0]?.landmarks?.[0];
+      if (!landmarks || landmarks.length === 0) return;
+      if (!currentPose) return;
+      
+      // Evaluate pose
+      const normalizedLandmarks = landmarks.map(p => ({
+        x: p.x,
+        y: p.y,
+        z: p.z || 0,
+        visibility: p.visibility ?? p.presence ?? 0,
+      }));
+      const match = evaluatePoseMatch(normalizedLandmarks as any, currentPose.name);
+      setMatchScore(match.score);
+      setIsMatched(match.isMatched);
+      setMatchFeedback(match.feedback);
+      if (match.transform) {
+        setGarmentTransform(match.transform);
+      }
+    },
+    onError: (e) => console.error(e)
+  }, RunningMode.LIVE_STREAM, 'pose_landmarker_lite.task', {
+    numPoses: 1,
+    delegate: Delegate.CPU
+  });
 
   const [showHintModal, setShowHintModal] = useState(false);
 
@@ -114,6 +149,18 @@ export default function ARTryOnScreen() {
     };
   }, [mode, currentPose?.id]);
 
+  // Hands-free auto capture
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (isMatched && mode === '2d') {
+      timer = setTimeout(() => {
+        // In a full implementation, we would call cameraRef.current.takePhoto() here
+        showToast('📸 Pose captured successfully!', 'success');
+      }, 2000);
+    }
+    return () => clearTimeout(timer);
+  }, [isMatched, mode]);
+
   const handleShufflePose = () => {
     setPoseIndex((i) => (i + 1) % poseGuides.length);
   };
@@ -123,6 +170,20 @@ export default function ARTryOnScreen() {
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.tint} />
         <Text style={{ color: colors.text, marginTop: 16 }}>Loading 3D Model...</Text>
+      </View>
+    );
+  }
+
+  if (!hasPermission) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <Text style={{ color: colors.text }}>We need your permission to show the camera</Text>
+        <TouchableOpacity onPress={requestPermission} style={{ marginTop: 20 }}>
+          <Text style={{ color: colors.tint }}>Grant Permission</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleBack} style={{ marginTop: 20 }}>
+          <Text style={{ color: colors.text }}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -140,8 +201,8 @@ export default function ARTryOnScreen() {
 
   const toggleMode = async () => {
     if (mode === '3d') {
-      if (!permission?.granted) {
-        const { granted } = await requestPermission();
+      if (!hasPermission) {
+        const granted = await requestPermission();
         if (!granted) {
           showToast("Camera access is needed for the 2D overlay.", 'info');
           return;
@@ -341,14 +402,39 @@ export default function ARTryOnScreen() {
         </View>
       ) : (
         <View style={styles.webviewContainer}>
-          <CameraView style={styles.camera} facing="front" />
+          {device ? (
+            <Camera
+              style={styles.camera}
+              device={device}
+              isActive={mode === '2d'}
+              pixelFormat="rgb"
+              frameProcessor={poseDetection.frameProcessor}
+              onLayout={poseDetection.cameraViewLayoutChangeHandler}
+            />
+          ) : (
+            <View style={[styles.camera, { backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
+              <Text style={{ color: '#fff' }}>Camera not available</Text>
+            </View>
+          )}
           <View style={styles.overlayContainer} pointerEvents="box-none">
             <View pointerEvents="none">
               <Image
                 source={{ uri: product.image_url || '' }}
-                style={styles.overlayImage}
+                style={[
+                  styles.overlayImage,
+                  {
+                    transform: [
+                      { scale: garmentTransform.scale },
+                      { translateX: garmentTransform.translateX },
+                      { translateY: garmentTransform.translateY },
+                    ]
+                  }
+                ]}
                 contentFit="contain"
               />
+            </View>
+            <View style={[styles.matchBadge, { backgroundColor: isMatched ? 'rgba(52, 199, 89, 0.9)' : 'rgba(0, 0, 0, 0.7)' }]}>
+              <Text style={styles.matchBadgeText}>{matchFeedback}</Text>
             </View>
             <View style={styles.overlayGuide} pointerEvents="box-none">
               <Text style={styles.overlayGuideText}>
@@ -518,6 +604,19 @@ const styles = StyleSheet.create({
   },
   shuffleButton: {
     marginLeft: 10,
-    padding: 2,
+    padding: 4,
+  },
+  matchBadge: {
+    position: 'absolute',
+    top: 40,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 20,
+  },
+  matchBadgeText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

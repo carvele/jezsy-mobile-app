@@ -314,6 +314,16 @@ export default function ReservationDetailScreen() {
           </View>
         </View>
 
+        {Boolean((reservation as any).confirmed_by_name) && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, marginBottom: 12 }}>
+            <IconSymbol name="checkmark.seal.fill" size={14} color={colors.tint} />
+            <Text style={{ fontSize: 12, color: colors.secondaryText, marginLeft: 4 }}>
+              Confirmed by {(reservation as any).confirmed_by_name}
+              {(reservation as any).confirmed_at ? ` on ${new Date((reservation as any).confirmed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
+            </Text>
+          </View>
+        )}
+
         {/* Gated on 'ready', not 'confirmed'. Stored 'Confirmed' means approved
             and still unpaid, so this was showing a pickup pass to customers who
             owed money and hiding it from the ones who had paid. */}
