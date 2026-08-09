@@ -62,14 +62,36 @@ export default function WardrobeItemDetailScreen() {
     if (!item) return;
     setLogging(true);
     try {
+      const now = new Date();
+      const lastWorn = item.last_worn_at ? new Date(item.last_worn_at) : null;
+      let newStreak = (item as any).current_streak || 1;
+
+      if (lastWorn) {
+        const diffMs = now.getTime() - lastWorn.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          newStreak += 1;
+        } else if (diffDays > 1) {
+          newStreak = 1;
+        }
+      } else {
+        newStreak = 1;
+      }
+
       const { data, error } = await supabase
         .from('wardrobe_items')
-        .update({ wear_count: item.wear_count + 1, last_worn_at: new Date().toISOString() })
+        .update({
+          wear_count: item.wear_count + 1,
+          last_worn_at: now.toISOString(),
+          current_streak: newStreak,
+          longest_streak: Math.max(newStreak, (item as any).longest_streak || 0),
+        } as any)
         .eq('id', item.id)
         .select('*')
         .single();
       if (error) throw error;
       setItem(data);
+      showToast(`Logged! 🔥 ${newStreak}-day wear streak`, 'success');
     } catch (err) {
       console.error('Error logging wear:', err);
       showToast('Could not log this wear. Please try again.', 'error');
@@ -131,18 +153,23 @@ export default function WardrobeItemDetailScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Go back">
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Item Details</Text>
         <TouchableOpacity
           onPress={handleDelete}
-          disabled={deleting}
           style={styles.deleteButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          disabled={deleting}
           accessibilityRole="button"
-          accessibilityLabel="Remove item from wardrobe"
+          accessibilityLabel="Delete this item"
         >
-          <IconSymbol name="trash.fill" size={20} color="#FF453A" />
+          {deleting ? (
+            <ActivityIndicator size="small" color={colors.notification} />
+          ) : (
+            <IconSymbol name="trash.fill" size={20} color={colors.notification} />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -180,9 +207,17 @@ export default function WardrobeItemDetailScreen() {
           </View>
         )}
 
-        <View style={[styles.wearCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <IconSymbol name="chart.bar.fill" size={20} color={colors.tint} />
-          <Text style={[styles.wearLabel, { color: colors.text }]}>{wearLabel}</Text>
+        <View style={styles.wearRow}>
+          <View style={[styles.wearCard, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
+            <IconSymbol name="chart.bar.fill" size={20} color={colors.tint} />
+            <Text style={[styles.wearLabel, { color: colors.text }]}>{wearLabel}</Text>
+          </View>
+          <View style={[styles.wearCard, { backgroundColor: colors.card, borderColor: colors.border, marginLeft: Spacing.sm }]}>
+            <Text style={{ fontSize: 18 }}>🔥</Text>
+            <Text style={[styles.wearLabel, { color: colors.text }]}>
+              {(item as any).current_streak || 0}d streak
+            </Text>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -261,6 +296,11 @@ const styles = StyleSheet.create({
     ...Type.caption,
     fontWeight: '600',
   },
+  wearRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
   wearCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -268,12 +308,11 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    marginBottom: Spacing.xl,
   },
   wearLabel: {
     ...Type.bodyStrong,
     fontWeight: '600',
-    flex: 1,
+    flexShrink: 1,
   },
   logButton: {
     flexDirection: 'row',

@@ -32,8 +32,8 @@ export default function InboxScreen() {
     try {
       const nowIso = new Date().toISOString();
       const [personalRes, announcementsRes, dismissalsRes] = await Promise.all([
-        supabase.from('notifications').select('*').eq('user_id', user.id),
-        supabase.from('announcements').select('*').or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+        supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
+        supabase.from('announcements').select('*').or(`expires_at.is.null,expires_at.gt.${nowIso}`).order('created_at', { ascending: false }).limit(10),
         supabase.from('announcement_dismissals').select('announcement_id').eq('user_id', user.id),
       ]);
 
@@ -150,11 +150,22 @@ export default function InboxScreen() {
     return (
       <TouchableOpacity
         style={[styles.notificationCard, { backgroundColor: item.is_read ? colors.background : colors.card, borderBottomColor: colors.border }]}
-        onPress={() => !isAnnouncement && markAsRead(item.id)}
+        onPress={() => {
+          if (!isAnnouncement) {
+            markAsRead(item.id);
+            if (item.reservation_id) {
+              router.push(`/reservations/${item.reservation_id}`);
+            } else if (item.product_id) {
+              router.push(`/product/${item.product_id}`);
+            } else if (item.conversation_id) {
+              router.push(`/messages/${item.conversation_id}`);
+            }
+          }
+        }}
         disabled={isAnnouncement}
         accessibilityRole="button"
         accessibilityLabel={`${item.title}, ${item.is_read ? 'read' : 'unread'}`}
-        accessibilityHint={isAnnouncement ? undefined : (item.is_read ? 'This notification has been read' : 'Tap to mark this notification as read')}
+        accessibilityHint={isAnnouncement ? undefined : (item.is_read ? 'This notification has been read' : 'Tap to open details')}
       >
         <View style={[styles.iconContainer, { backgroundColor: colors.tint + '20' }]}>
           <IconSymbol name={getIconForType(item.type)} size={24} color={colors.tint} />
@@ -172,6 +183,7 @@ export default function InboxScreen() {
         {isAnnouncement && (
           <TouchableOpacity
             style={styles.dismissButton}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             onPress={() => dismissAnnouncement(item.id)}
             accessibilityRole="button"
             accessibilityLabel="Dismiss this announcement"

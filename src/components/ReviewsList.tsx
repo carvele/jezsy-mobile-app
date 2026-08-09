@@ -59,11 +59,12 @@ export function ReviewsList({ productId }: ReviewsListProps) {
   const fetchReviews = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('reviews')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('product_id', productId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(10);
         
       if (error) throw error;
       

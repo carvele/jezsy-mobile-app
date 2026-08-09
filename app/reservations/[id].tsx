@@ -25,10 +25,12 @@ import { useAuth } from '@/src/context/AuthContext';
 function formatRemaining(dueAt: string): string | null {
   const ms = new Date(dueAt).getTime() - Date.now();
   if (!Number.isFinite(ms) || ms <= 0) return null;
-  const mins = Math.ceil(ms / 60000);
-  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} left to pay`;
-  const hours = Math.ceil(mins / 60);
-  return `${hours} hour${hours === 1 ? '' : 's'} left to pay`;
+  const totalMins = Math.floor(ms / 60000);
+  if (totalMins < 60) return `${totalMins} minute${totalMins === 1 ? '' : 's'} left to pay`;
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (mins === 0) return `${hours} hour${hours === 1 ? '' : 's'} left to pay`;
+  return `${hours}h ${mins}m left to pay`;
 }
 
 type Reservation = Database['public']['Tables']['reservations']['Row'];

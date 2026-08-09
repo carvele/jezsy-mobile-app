@@ -140,10 +140,12 @@ export default function ChatScreen() {
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(30);
 
       if (!error && data) {
-        setMessages(data);
+        // Reverse array so messages render chronologically ascending
+        setMessages([...data].reverse());
       }
       markAsRead(conversationId);
     };

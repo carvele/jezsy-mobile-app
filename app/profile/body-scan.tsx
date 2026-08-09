@@ -23,6 +23,8 @@ import { ConsentModal } from "@/src/components/ConsentModal";
 import { TiltGuide } from "@/src/components/TiltGuide";
 import { PoseLandmarkOverlay } from "@/src/components/PoseLandmarkOverlay";
 import { SilhouetteOverlay } from "@/src/components/SilhouetteOverlay";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { FirstUseHintModal } from "@/src/components/FirstUseHintModal";
 import { ScanPrep } from "@/src/components/ScanPrep";
 import {
   isPoseValid,
@@ -72,6 +74,18 @@ export default function BodyScanScreen() {
   const [overlayLandmarks, setOverlayLandmarks] = useState<Landmark[]>([]);
   const [progress, setProgress] = useState(0);
   const [modelError, setModelError] = useState(false);
+  const [showScanHint, setShowScanHint] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem("body_scan_hint_seen").then((seen) => {
+      if (!seen) setShowScanHint(true);
+    });
+  }, []);
+
+  const handleAcknowledgeScanHint = () => {
+    setShowScanHint(false);
+    AsyncStorage.setItem("body_scan_hint_seen", "true");
+  };
 
   const lastSpokenRef = useRef<string>("");
   // Mirrors isTiltValid/isCapturing into refs so the onResults callback
@@ -194,6 +208,8 @@ export default function BodyScanScreen() {
     speakIfNew("Now turn to your side, keeping your arms relaxed.");
   }, [setPhaseBoth, speakIfNew]);
 
+  const lastOverlayUpdateRef = useRef(0);
+
   const handleResults = useCallback(
     (result: PoseDetectionResultBundle) => {
       const pose = result.results[0]?.landmarks?.[0];
@@ -211,7 +227,12 @@ export default function BodyScanScreen() {
         visibility: p.visibility ?? p.presence ?? 0,
       }));
 
-      setOverlayLandmarks(landmarks.slice(0, 33));
+      // Throttle overlay state updates to ~12 FPS (~80ms) to prevent React JS thread lockup
+      const now = Date.now();
+      if (now - lastOverlayUpdateRef.current > 80) {
+        lastOverlayUpdateRef.current = now;
+        setOverlayLandmarks(landmarks.slice(0, 33));
+      }
 
       if (!isTiltValidRef.current) {
         // Keep the tilt guidance loop in charge until the phone is upright.
@@ -476,6 +497,13 @@ export default function BodyScanScreen() {
           )}
         </View>
       </SafeAreaView>
+      <FirstUseHintModal
+        visible={showScanHint}
+        icon="figure.stand"
+        title="Body Scan Guidance"
+        message="Stand about 2 meters from your camera in form-fitting clothing. Keep your phone upright and follow the audio instructions."
+        onAcknowledge={handleAcknowledgeScanHint}
+      />
     </View>
   );
 }

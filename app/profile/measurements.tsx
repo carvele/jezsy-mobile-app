@@ -564,8 +564,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   unitToggleOption: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   unitToggleText: {
     fontSize: 13,

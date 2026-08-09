@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -80,67 +80,68 @@ export default function ProductDetailScreen() {
   const goBack = useSafeBack('/');
   const handleBack = goBack;
 
-  useEffect(() => {
-    const fetchProductAndInventory = async () => {
-      try {
-        const [productRes, invRes] = await Promise.all([
-          supabase.from("products").select(`*, ${CATEGORY_SELECT}`).eq("id", id).single(),
-          supabase.from("inventory").select("*").eq("product_doc_id", id)
-        ]);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchProductAndInventory = async () => {
+        try {
+          const [productRes, invRes] = await Promise.all([
+            supabase.from("products").select(`*, ${CATEGORY_SELECT}`).eq("id", id).single(),
+            supabase.from("inventory").select("*").eq("product_doc_id", id)
+          ]);
 
-        if (productRes.error) {
-          console.error("Error fetching product:", productRes.error);
-        } else if (productRes.data) {
-          const data = productRes.data;
-          setProduct(data);
-          
-          if (invRes.data) {
-            setInventory(invRes.data);
-          }
+          if (productRes.error) {
+            console.error("Error fetching product:", productRes.error);
+          } else if (productRes.data) {
+            const data = productRes.data;
+            setProduct(data);
+            
+            if (invRes.data) {
+              setInventory(invRes.data);
+            }
 
-          // Default selections
-          if (data.sizes && data.sizes.length > 0) {
-            // Find first available size or just default to first
-            const availableSize = data.sizes.find(s => {
-              const inv = invRes.data?.find(i => i.size === s);
-              return !inv || (inv.available || 0) > 0;
-            });
-            setSelectedSize(availableSize || data.sizes[0]);
-          }
-          if (data.color) setSelectedColor(data.color.split(",")[0].trim());
+            // Default selections
+            if (data.sizes && data.sizes.length > 0) {
+              const availableSize = data.sizes.find(s => {
+                const inv = invRes.data?.find(i => i.size === s);
+                return !inv || (inv.available || 0) > 0;
+              });
+              setSelectedSize((prev) => prev || availableSize || data.sizes?.[0] || "");
+            }
+            if (data.color) setSelectedColor((prev) => prev || (data.color ? data.color.split(",")[0].trim() : ""));
 
-          // Compute size recommendation if user is logged in
-          if (user?.id && data.measurements) {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("fit_preference")
-              .eq("id", user.id)
-              .single();
-            const { data: metrics } = await supabase
-              .from("user_measurements")
-              .select("measurements")
-              .eq("user_id", user.id)
-              .maybeSingle();
+            // Compute size recommendation if user is logged in
+            if (user?.id && data.measurements) {
+              const { data: profile } = await supabase
+                .from("profiles")
+                .select("fit_preference")
+                .eq("id", user.id)
+                .single();
+              const { data: metrics } = await supabase
+                .from("user_measurements")
+                .select("measurements")
+                .eq("user_id", user.id)
+                .maybeSingle();
 
-            if (metrics && metrics.measurements) {
-              const rec = recommendSize(
-                metrics.measurements as any,
-                data.measurements as any,
-                profile?.fit_preference || "regular",
-              );
-              setRecommendedSize(rec);
+              if (metrics && metrics.measurements) {
+                const rec = recommendSize(
+                  metrics.measurements as any,
+                  data.measurements as any,
+                  profile?.fit_preference || "regular",
+                );
+                setRecommendedSize(rec);
+              }
             }
           }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoading(false);
         }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+      };
 
-    fetchProductAndInventory();
-  }, [id, user?.id]);
+      fetchProductAndInventory();
+    }, [id, user?.id])
+  );
 
   useEffect(() => {
     if (id) addRecentlyViewed(id, user?.id);

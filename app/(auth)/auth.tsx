@@ -142,8 +142,14 @@ export default function AuthScreen() {
       // stays indistinguishable from a real signup.
       const isDuplicate = !!data?.user && (data.user.identities?.length ?? 0) === 0;
 
+      if (isDuplicate) {
+        showToast('An account with this email may already exist. Please sign in instead.', 'info');
+        transitionMode('login');
+        return;
+      }
+
       setVerificationType('signup');
-      if (!isDuplicate) setTimer(60);
+      setTimer(60);
       transitionMode('otp_verify');
     } catch (err: any) {
       console.error('Sign Up error:', err);
@@ -569,6 +575,8 @@ export default function AuthScreen() {
                   value={otpCode}
                   onChangeText={handleOtpTextChange}
                   keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  autoComplete="one-time-code"
                   maxLength={6}
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}

@@ -14,6 +14,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useSafeBack } from '@/src/hooks/useSafeBack';
 import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { useToast } from '@/src/context/ToastContext';
 
 type Product = Database['public']['Tables']['products']['Row'];
@@ -29,6 +31,19 @@ export default function ARTryOnScreen() {
   const [poseGuides, setPoseGuides] = useState<PoseGuide[]>([]);
   const [poseIndex, setPoseIndex] = useState(0);
   const currentPose = poseGuides.length > 0 ? poseGuides[poseIndex % poseGuides.length] : null;
+
+  const [showHintModal, setShowHintModal] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('ar_hint_seen').then((seen) => {
+      if (!seen) setShowHintModal(true);
+    });
+  }, []);
+
+  const handleAcknowledgeHint = () => {
+    setShowHintModal(false);
+    AsyncStorage.setItem('ar_hint_seen', 'true');
+  };
 
   // Fit guidance: overlay how this garment's recommended size sits against the
   // user's own measurements. Guidance only, not a physical simulation.
@@ -94,6 +109,9 @@ export default function ARTryOnScreen() {
     if (mode === '2d' && currentPose) {
       Speech.speak(`Try this pose: ${currentPose.name}`);
     }
+    return () => {
+      Speech.stop();
+    };
   }, [mode, currentPose?.id]);
 
   const handleShufflePose = () => {
@@ -321,6 +339,13 @@ export default function ARTryOnScreen() {
           </View>
         </View>
       )}
+      <FirstUseHintModal
+        visible={showHintModal}
+        icon="camera"
+        title="Virtual Try-On"
+        message="Align your body with the camera frame in a well-lit area. You can switch between 3D model view and 2D pose guidance overlay."
+        onAcknowledge={handleAcknowledgeHint}
+      />
     </SafeAreaView>
   );
 }

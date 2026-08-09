@@ -183,28 +183,24 @@ export default function HomeScreen() {
   // this kind of short, frequent, programmatic scroll, and a hand-driven
   // timing loop sidesteps it entirely by calling scrollTo(..., false) once
   // per animation frame instead.
+  // Smooth auto-advance carousel every 4s, pausing while user interacts.
   useEffect(() => {
     if (featuredProducts.length <= 1) return;
     const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
     const timer = setInterval(() => {
       if (heroInteractingRef.current) return;
       const nextExtended = heroExtendedIndexRef.current + 1;
-      heroAutoScrollDriver.setValue(heroExtendedIndexRef.current * step);
-      const listenerId = heroAutoScrollDriver.addListener(({ value }) => {
-        heroScrollRef.current?.scrollTo({ x: value, animated: false });
-      });
-      Animated.timing(heroAutoScrollDriver, {
-        toValue: nextExtended * step,
-        duration: 450,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start(() => {
-        heroAutoScrollDriver.removeListener(listenerId);
-        settleHeroLoop(nextExtended);
-      });
+      heroExtendedIndexRef.current = nextExtended;
+      heroScrollRef.current?.scrollTo({ x: nextExtended * step, animated: true });
+      // Settle loop seamlessly after native animation completes
+      setTimeout(() => {
+        if (!heroInteractingRef.current) {
+          settleHeroLoop(nextExtended);
+        }
+      }, 350);
     }, 4000);
     return () => clearInterval(timer);
-  }, [featuredProducts.length, settleHeroLoop, heroAutoScrollDriver]);
+  }, [featuredProducts.length, settleHeroLoop]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -337,6 +333,7 @@ export default function HomeScreen() {
                     key={item.id}
                     style={[
                       styles.heroDot,
+                      i === heroIndex && styles.heroDotActive,
                       { backgroundColor: i === heroIndex ? colors.tint : colors.hairline },
                     ]}
                   />
@@ -488,6 +485,10 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  heroDotActive: {
+    width: 20,
+    borderRadius: 4,
   },
 
   // Edits Section

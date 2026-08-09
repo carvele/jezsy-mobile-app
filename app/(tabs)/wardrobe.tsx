@@ -64,18 +64,21 @@ export default function WardrobeScreen() {
           .select('*')
           .eq('user_id', session.user.id)
           .eq('deleted', false)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(50),
         supabase
           .from('saved_outfits')
           .select('*')
           .eq('user_id', session.user.id)
           .eq('deleted', false)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(50),
         supabase
           .from('capsules')
           .select('*, capsule_items(count)')
           .eq('user_id', session.user.id)
           .order('created_at', { ascending: false })
+          .limit(50)
       ]);
 
       if (itemsRes.error) throw itemsRes.error;

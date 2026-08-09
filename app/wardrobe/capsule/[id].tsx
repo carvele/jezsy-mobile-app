@@ -106,7 +106,8 @@ export default function CapsuleDetailScreen() {
         .select('*')
         .eq('user_id', session.user.id)
         .eq('deleted', false)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
       if (error) throw error;
       setAllItems(data || []);
     } catch (err) {

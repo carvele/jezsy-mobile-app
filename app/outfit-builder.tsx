@@ -143,31 +143,34 @@ export default function OutfitBuilderScreen() {
   const sortedWardrobeItems = useMemo(() => {
     if (filledCount === 0) return wardrobeItems;
     const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
-    return [...wardrobeItems].sort((a, b) => {
-      const scoreA = evaluateColors([...currentColors, ...(a.color_tags || [])]).score;
-      const scoreB = evaluateColors([...currentColors, ...(b.color_tags || [])]).score;
-      return scoreB - scoreA;
-    });
+    const scored = wardrobeItems.map(item => ({
+      item,
+      score: evaluateColors([...currentColors, ...(item.color_tags || [])]).score,
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map(s => s.item);
   }, [wardrobeItems, slots, filledCount]);
 
   const sortedCatalogItems = useMemo(() => {
     if (filledCount === 0) return catalogItems;
     const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
-    return [...catalogItems].sort((a, b) => {
-      const scoreA = evaluateColors([...currentColors, ...(a.color ? [a.color] : [])]).score;
-      const scoreB = evaluateColors([...currentColors, ...(b.color ? [b.color] : [])]).score;
-      return scoreB - scoreA;
-    });
+    const scored = catalogItems.map(item => ({
+      item,
+      score: evaluateColors([...currentColors, ...(item.color ? [item.color] : [])]).score,
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map(s => s.item);
   }, [catalogItems, slots, filledCount]);
 
   const sortedWishlistItems = useMemo(() => {
     if (filledCount === 0) return wishlistItems;
     const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
-    return [...wishlistItems].sort((a, b) => {
-      const scoreA = evaluateColors([...currentColors, ...(a.color ? [a.color] : [])]).score;
-      const scoreB = evaluateColors([...currentColors, ...(b.color ? [b.color] : [])]).score;
-      return scoreB - scoreA;
-    });
+    const scored = wishlistItems.map(item => ({
+      item,
+      score: evaluateColors([...currentColors, ...(item.color ? [item.color] : [])]).score,
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map(s => s.item);
   }, [wishlistItems, slots, filledCount]);
 
   const openPicker = useCallback((slot: SlotKey) => {

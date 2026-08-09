@@ -4,8 +4,9 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCart, CartItem } from "@/src/context/CartContext";
 import { EditVariantModal } from "@/src/components/EditVariantModal";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import { supabase } from "@/src/lib/supabase";
 import {
     FlatList,
     StyleSheet,
@@ -22,6 +23,42 @@ export default function CartScreen() {
   const { items, updateQuantity, removeFromCart, updateVariant } = useCart();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingItem, setEditingItem] = useState<CartItem | null>(null);
+  const [priceWarnings, setPriceWarnings] = useState<Set<string>>(new Set());
+
+  // H-1: Re-validate prices against live DB on every screen focus
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      const refreshPrices = async () => {
+        if (items.length === 0) return;
+        const productIds = [...new Set(items.map((i) => i.product.id))];
+        const { data } = await supabase
+          .from("products")
+          .select("id, price, sale_price, on_sale")
+          .in("id", productIds);
+        if (!data || !active) return;
+
+        const warnings = new Set<string>();
+        const priceMap = new Map(data.map((p) => [p.id, p]));
+        items.forEach((item) => {
+          const live = priceMap.get(item.product.id);
+          if (!live) return;
+          const cachedPrice =
+            item.product.on_sale && item.product.sale_price
+              ? item.product.sale_price
+              : item.product.price;
+          const livePrice =
+            live.on_sale && live.sale_price ? live.sale_price : live.price;
+          if (cachedPrice !== livePrice) warnings.add(item.id);
+        });
+        setPriceWarnings(warnings);
+      };
+      refreshPrices();
+      return () => {
+        active = false;
+      };
+    }, [items])
+  );
 
   // New items default to selected (keeps "reserve everything" the default
   // experience); items removed from the bag drop out of the selection too.
