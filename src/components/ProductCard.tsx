@@ -117,10 +117,10 @@ export function ProductCard({
                 </Text>
               </View>
             )}
-            {product.model_3d_url && (
-              <View style={[styles.badge, styles.badgeRow, { backgroundColor: 'rgba(201,169,110,0.92)' }]}>
-                <IconSymbol name="cube.transparent" size={10} color={Colors.dark.onTint} />
-                <Text style={[styles.badgeText, { color: Colors.dark.onTint }]}>AR</Text>
+            {(product.model_3d_url || (product.tags && product.tags.includes('AR Try-On'))) && (
+              <View style={[styles.badge, styles.badgeRow, { backgroundColor: '#6366f1' }]}>
+                <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
+                <Text style={[styles.badgeText, { color: '#ffffff' }]}>AR</Text>
               </View>
             )}
           </View>

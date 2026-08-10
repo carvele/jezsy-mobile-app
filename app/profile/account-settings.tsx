@@ -50,13 +50,15 @@ export default function AccountSettingsScreen() {
     };
   }, [user?.id]);
 
-  const handleSubmitDeletionRequest = async () => {
+  const [deletionReason, setDeletionReason] = useState('');
+
+  const handleSubmitDeletionRequest = async (reason?: string) => {
     if (!user?.id) return;
     setDeletionBusy(true);
     try {
-      const id = await submitDeletionRequest(user.id);
+      const id = await submitDeletionRequest(user.id, reason || deletionReason);
       setPendingDeletionId(id);
-      showToast('Deletion request submitted. Our team will be in touch.', 'success');
+      showToast('Deletion request submitted with 7-day grace period.', 'success');
     } catch (err: any) {
       showToast(err.message ?? 'Could not submit your request.', 'error');
     } finally {
@@ -64,15 +66,13 @@ export default function AccountSettingsScreen() {
     }
   };
 
-  // Kept as an Alert rather than a toast: this needs a confirm/cancel choice,
-  // matching the other destructive confirmations in the app.
   const handleRequestDeletion = () => {
     Alert.alert(
       'Request account deletion',
-      'Your account will not be deleted right away. We review each request by hand, and any active reservations must be settled first. You can withdraw the request at any time before it is processed.',
+      'Your account will enter a 7-day grace period before permanent deletion. You can withdraw the request anytime before it is processed.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Request deletion', style: 'destructive', onPress: handleSubmitDeletionRequest },
+        { text: 'Confirm Deletion', style: 'destructive', onPress: () => handleSubmitDeletionRequest() },
       ],
     );
   };
@@ -213,8 +213,7 @@ export default function AccountSettingsScreen() {
                 <View style={[styles.noticeBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
                   <IconSymbol name="clock.arrow.circlepath" size={18} color={colors.tint} />
                   <Text style={[styles.noticeText, { color: colors.secondaryText }]}>
-                    Your deletion request is with our team. We will email you once it has
-                    been processed.
+                    Your account is scheduled for deletion after a 7-day grace period. You can withdraw this request anytime before then.
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -229,20 +228,39 @@ export default function AccountSettingsScreen() {
                     <ActivityIndicator color={colors.text} />
                   ) : (
                     <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-                      Withdraw Request
+                      Withdraw Deletion Request
                     </Text>
                   )}
                 </TouchableOpacity>
               </>
             ) : (
               <>
-                <Text style={[styles.noticeText, { color: colors.secondaryText, marginBottom: Spacing.lg }]}>
-                  Deletion is handled by hand so we can settle any active reservations
-                  first. Requesting it does not sign you out or remove anything straight
-                  away.
+                <Text style={[styles.noticeText, { color: colors.secondaryText, marginBottom: Spacing.sm }]}>
+                  Please select a reason for requesting account deletion:
                 </Text>
+                
+                {['No longer using the app', 'Privacy concerns', 'Found an alternative', 'Other'].map((r) => (
+                  <TouchableOpacity
+                    key={r}
+                    style={{
+                      paddingVertical: 10,
+                      paddingHorizontal: 14,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: deletionReason === r ? colors.tint : colors.border,
+                      backgroundColor: deletionReason === r ? colors.card : 'transparent',
+                      marginBottom: 8,
+                    }}
+                    onPress={() => setDeletionReason(r)}
+                  >
+                    <Text style={{ fontSize: 13, color: deletionReason === r ? colors.tint : colors.text, fontWeight: deletionReason === r ? '600' : '400' }}>
+                      {deletionReason === r ? '✓ ' : ''}{r}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+
                 <TouchableOpacity
-                  style={[styles.dangerButton, { borderColor: colors.error, opacity: deletionBusy ? 0.6 : 1 }]}
+                  style={[styles.dangerButton, { borderColor: colors.error, opacity: deletionBusy ? 0.6 : 1, marginTop: Spacing.sm }]}
                   onPress={handleRequestDeletion}
                   disabled={deletionBusy}
                   accessibilityRole="button"
@@ -253,7 +271,7 @@ export default function AccountSettingsScreen() {
                     <ActivityIndicator color={colors.error} />
                   ) : (
                     <Text style={[styles.dangerButtonText, { color: colors.error }]}>
-                      Request Account Deletion
+                      Request Account Deletion (7-Day Grace Period)
                     </Text>
                   )}
                 </TouchableOpacity>

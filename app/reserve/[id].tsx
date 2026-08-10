@@ -31,6 +31,7 @@ type Product = Database["public"]["Tables"]["products"]["Row"];
 // now" on a product, and "Reserve all" from the bag -- normalise into this
 // shape so the screen has a single rendering and submission path.
 type ReservationLine = {
+  id?: string;
   key: string;
   product: Product;
   size?: string;
@@ -245,7 +246,7 @@ export default function ReservationScreen() {
       // Only remove the reserved items from the bag once the reservation is
       // actually on the server, leaving unreserved items intact.
       if (isCartMode) {
-        await removeItems(lines.map((line) => line.id));
+        await removeItems(lines.map((line) => line.id).filter((itemId): itemId is string => Boolean(itemId)));
       }
 
       await scheduleReservationReminder(

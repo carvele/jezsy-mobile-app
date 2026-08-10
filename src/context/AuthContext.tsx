@@ -10,6 +10,7 @@ import { supabase } from "../lib/supabase";
 import { Database } from "../types/database.types";
 import { savePushTokenToProfile } from "../utils/pushNotifications";
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 

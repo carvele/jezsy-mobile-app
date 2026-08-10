@@ -339,11 +339,33 @@ export default function HomeScreen() {
                     accessibilityHint="Opens product details"
                   >
                     <Animated.View style={{ transform: [{ scale }], opacity }}>
-                      <Image
-                        source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-                        style={[styles.heroCardImage, { backgroundColor: colors.imagePlaceholder }]}
-                        contentFit="cover"
-                      />
+                      <View style={{ position: 'relative' }}>
+                        <Image
+                          source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
+                          style={[styles.heroCardImage, { backgroundColor: colors.imagePlaceholder }]}
+                          contentFit="cover"
+                        />
+                        {/* Overlaid Tag Badges */}
+                        <View style={{ position: 'absolute', top: 12, left: 12, flexDirection: 'row', gap: 6, zIndex: 10 }}>
+                          {(item.on_sale || item.sale_price) && (
+                            <View style={{ backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
+                              <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>
+                                {item.discount_percentage ? `-${item.discount_percentage}% SALE` : 'SALE'}
+                              </Text>
+                            </View>
+                          )}
+                          {(item.is_new_arrival || (item.tags && item.tags.includes('New Arrival'))) && (
+                            <View style={{ backgroundColor: '#10b981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
+                              <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>NEW</Text>
+                            </View>
+                          )}
+                          {item.tags && item.tags.includes('AR Try-On') && (
+                            <View style={{ backgroundColor: '#6366f1', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
+                              <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>AR</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
                       <View style={styles.heroCardTextContainer}>
                         <Text style={[styles.featureBrand, { color: colors.text }]}>
                           {(getMainCategoryName(item) ?? 'EDITORIAL').toUpperCase()}
@@ -351,9 +373,22 @@ export default function HomeScreen() {
                         <Text style={[styles.featureName, { color: colors.text }]} numberOfLines={2}>
                           {item.name}
                         </Text>
-                        <Text style={[styles.featurePrice, { color: colors.secondaryText }]}>
-                          ₱{(item.sale_price || item.price || 0).toLocaleString()}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                          {item.on_sale && item.sale_price ? (
+                            <>
+                              <Text style={[styles.featurePrice, { color: '#ef4444', fontWeight: '700' }]}>
+                                ₱{item.sale_price.toLocaleString()}
+                              </Text>
+                              <Text style={[styles.featurePrice, { color: colors.secondaryText, textDecorationLine: 'line-through', fontSize: 11 }]}>
+                                ₱{item.price?.toLocaleString()}
+                              </Text>
+                            </>
+                          ) : (
+                            <Text style={[styles.featurePrice, { color: colors.secondaryText }]}>
+                              ₱{(item.price || 0).toLocaleString()}
+                            </Text>
+                          )}
+                        </View>
                       </View>
                     </Animated.View>
                   </TouchableOpacity>

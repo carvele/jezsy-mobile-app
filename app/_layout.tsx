@@ -17,6 +17,7 @@ import { CartProvider } from '@/src/context/CartContext';
 import { MessagesProvider } from '@/src/context/MessagesContext';
 import { ToastProvider } from '@/src/context/ToastContext';
 import { AppThemeProvider, useThemeContext } from '@/src/context/ThemeContext';
+import { supabase } from '@/src/lib/supabase';
 import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
 import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
@@ -90,6 +91,23 @@ function InitialLayout() {
       if (!cancelled) setPendingDeletionId(req?.id ?? null);
     });
     return () => { cancelled = true; };
+  }, [session?.user?.id]);
+
+  // Activity Heartbeat — keeps admin dashboard "Last active" & green dot accurately synced
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const updateActivityPing = async () => {
+      const nowIso = new Date().toISOString();
+      await (supabase
+        .from('profiles')
+        .update({ updated_at: nowIso, last_online: nowIso, last_activity: nowIso } as any)
+        .eq('id', session.user.id));
+    };
+
+    updateActivityPing();
+    const interval = setInterval(updateActivityPing, 2 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [session?.user?.id]);
 
   // Handle password-recovery deep links (both a cold start from the link and

@@ -159,6 +159,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems)).catch((e: any) => console.error(e));
       return newItems;
+    });
+  }, []);
+
   const removeItems = useCallback(async (itemIds: string[]) => {
     setItems((prev) => {
       const remaining = prev.filter((i) => !itemIds.includes(i.id));
@@ -187,3 +190,4 @@ export function CartProvider({ children }: { children: ReactNode }) {
 }
 
 export const useCart = () => useContext(CartContext);
+
