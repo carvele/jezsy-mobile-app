@@ -193,9 +193,12 @@ export default function ProfileScreen() {
               'Push notification preferences',
               () => router.push('/profile/notifications-settings' as any),
             )}
-            {/* Help Center removed: it was a row that only called
-                router.push('/(tabs)/messages'), duplicating the Messages tab
-                already in the bottom nav, with no help content behind it. */}
+            {renderSettingItem(
+              'questionmark.circle',
+              'Help & FAQ',
+              'Rentals, fittings, payments, & returns',
+              () => router.push('/profile/faq' as any),
+            )}
           </View>
         </View>
 

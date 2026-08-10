@@ -412,7 +412,7 @@ export default function ChatScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, marginLeft: 4 }}>
               <IconSymbol name="checkmark.seal.fill" size={12} color={colors.tint} />
               <Text style={{ fontSize: 11, fontWeight: '600', color: colors.secondaryText, marginLeft: 3 }}>
-                {item.sender_name || 'Boutique Specialist'}
+                {item.sender_name && item.sender_name !== 'Staff' ? item.sender_name : 'JezSy Owner'}
               </Text>
             </View>
           )}
