@@ -46,6 +46,8 @@ const AuthContext = createContext<AuthContextType>({
   endPasswordRecovery: () => {},
 });
 
+const PROFILE_CACHE_KEY = 'jezsy_profile_cache';
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -65,12 +67,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .select("*")
         .eq("id", userId)
         .maybeSingle();
-      const nextProfile = error ? null : (data ?? null);
+      if (error) {
+        // Network/server error — fall back to cached profile
+        const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+        const nextProfile = cached ? JSON.parse(cached) : null;
+        setProfile(nextProfile);
+        return nextProfile;
+      }
+      const nextProfile = data ?? null;
+      // Cache successful fetches for offline resilience
+      if (nextProfile) {
+        await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(nextProfile));
+      }
       setProfile(nextProfile);
       return nextProfile;
     } catch {
-      setProfile(null);
-      return null;
+      // Total failure — try cache before giving up
+      try {
+        const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+        const nextProfile = cached ? JSON.parse(cached) : null;
+        setProfile(nextProfile);
+        return nextProfile;
+      } catch {
+        setProfile(null);
+        return null;
+      }
     } finally {
       setIsProfileLoading(false);
     }
@@ -134,12 +155,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (error) {
         console.error("Failed to sync profile", error);
-        // Fall back to whatever row already existed rather than nulling it out.
-        setProfile(existing ?? null);
-        return existing ?? null;
+        // Fall back to existing row or cached profile for offline resilience
+        let fallback = existing ?? null;
+        if (!fallback) {
+          try {
+            const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+            fallback = cached ? JSON.parse(cached) : null;
+          } catch { /* ignore */ }
+        }
+        setProfile(fallback);
+        return fallback;
       }
 
       const nextProfile = data ?? existing ?? null;
+      // Cache successful profiles for offline resilience
+      if (nextProfile) {
+        await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(nextProfile)).catch(() => {});
+      }
       setProfile(nextProfile);
       savePushTokenToProfile(authUser.id);
       return nextProfile;
@@ -156,7 +188,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = useCallback(async () => {
     try {
-      await AsyncStorage.removeItem('jezsy_cart');
+      await AsyncStorage.multiRemove(['jezsy_cart', PROFILE_CACHE_KEY]);
     } catch (e) {}
     await supabase.auth.signOut();
   }, []);

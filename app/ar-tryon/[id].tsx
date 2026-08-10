@@ -229,9 +229,16 @@ export default function ARTryOnScreen() {
   // Fallback 3D model if product doesn't have one
   const rawModelUrl = product.model_3d_url || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
   // Sanitize URL for safe HTML injection — only allow http/https URLs
-  const modelUrl = /^https?:\/\//.test(rawModelUrl) ? rawModelUrl : 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
+  const validatedUrl = /^https?:\/\//.test(rawModelUrl) ? rawModelUrl : 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
   // Attempt to map to USDZ for iOS QuickLook — only if not the fallback
-  const iosModelUrl = product.model_3d_url ? modelUrl.replace(/\.glb$/i, '.usdz') : '';
+  const rawIosModelUrl = product.model_3d_url ? validatedUrl.replace(/\.glb$/i, '.usdz') : '';
+
+  // Escape for safe HTML attribute interpolation — prevents XSS via crafted URLs
+  const escapeAttr = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const modelUrl = escapeAttr(validatedUrl);
+  const iosModelUrl = escapeAttr(rawIosModelUrl);
+  const safeName = escapeAttr(product.name ?? '');
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -340,7 +347,7 @@ export default function ARTryOnScreen() {
           min-camera-orbit="auto auto 5%"
           max-camera-orbit="auto auto 200%"
           interpolation-decay="200"
-          alt="A 3D model of ${product.name.replace(/"/g, '&quot;')}">
+          alt="A 3D model of ${safeName}">
           <button slot="ar-button" id="ar-button">
             View in your space (AR)
           </button>
