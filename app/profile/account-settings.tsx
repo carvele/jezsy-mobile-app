@@ -20,7 +20,13 @@ import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
-import { getPendingDeletionRequest, submitDeletionRequest, withdrawDeletionRequest } from '@/src/utils/accountDeletion';
+import {
+  getPendingDeletionRequest,
+  getUserUnsettledBalance,
+  submitDeletionRequest,
+  withdrawDeletionRequest,
+  UnsettledBalanceResult,
+} from '@/src/utils/accountDeletion';
 
 export default function AccountSettingsScreen() {
   const { showToast } = useToast();
@@ -35,6 +41,7 @@ export default function AccountSettingsScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
+  const [unsettledInfo, setUnsettledInfo] = useState<UnsettledBalanceResult | null>(null);
   const [deletionBusy, setDeletionBusy] = useState(false);
 
   useEffect(() => {
@@ -43,6 +50,12 @@ export default function AccountSettingsScreen() {
 
     getPendingDeletionRequest(user.id).then((req) => {
       if (!cancelled) setPendingDeletionId(req?.id ?? null);
+    });
+
+    getUserUnsettledBalance(user.id).then((info) => {
+      if (!cancelled) setUnsettledInfo(info);
+    }).catch((err) => {
+      console.error('Failed checking unsettled balance:', err);
     });
 
     return () => {
@@ -67,6 +80,20 @@ export default function AccountSettingsScreen() {
   };
 
   const handleRequestDeletion = () => {
+    if (unsettledInfo?.hasUnsettledBalance) {
+      Alert.alert(
+        'Unsettled Balance Owed',
+        `You have an unsettled balance of ₱${unsettledInfo.totalBalance.toFixed(
+          2
+        )} across ${unsettledInfo.unsettledCount} reservation(s). You must settle all remaining balances at the boutique before requesting account deletion.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'View Reservations', onPress: () => router.push('/reservations') },
+        ]
+      );
+      return;
+    }
+
     Alert.alert(
       'Request account deletion',
       'Your account will enter a 7-day grace period before permanent deletion. You can withdraw the request anytime before it is processed.',
@@ -231,6 +258,25 @@ export default function AccountSettingsScreen() {
                       Withdraw Deletion Request
                     </Text>
                   )}
+                </TouchableOpacity>
+              </>
+            ) : unsettledInfo?.hasUnsettledBalance ? (
+              <>
+                <View style={[styles.noticeBox, { borderColor: '#EAB308', backgroundColor: 'rgba(234,179,8,0.08)' }]}>
+                  <IconSymbol name="exclamationmark.triangle.fill" size={18} color="#EAB308" />
+                  <Text style={[styles.noticeText, { color: colors.text, fontWeight: '500' }]}>
+                    You have an outstanding balance of ₱{unsettledInfo.totalBalance.toFixed(2)} across {unsettledInfo.unsettledCount} reservation(s). You must settle all remaining balances before requesting account deletion.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { borderColor: colors.tint, marginTop: Spacing.sm }]}
+                  onPress={() => router.push('/reservations')}
+                  accessibilityRole="button"
+                  accessibilityLabel="View reservations to settle balance"
+                >
+                  <Text style={[styles.secondaryButtonText, { color: colors.tint, fontWeight: '600' }]}>
+                    View My Reservations
+                  </Text>
                 </TouchableOpacity>
               </>
             ) : (
