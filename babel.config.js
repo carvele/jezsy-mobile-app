@@ -11,6 +11,9 @@ module.exports = function (api) {
     // With react-native-worklets absent, babel-preset-expo auto-injects
     // react-native-reanimated/plugin (the 3.x plugin) on its own.
     // react-native-worklets-core still needs its plugin listed explicitly.
-    plugins: ['react-native-worklets-core/plugin'],
+    plugins: [
+      'react-native-worklets-core/plugin',
+      'react-native-reanimated/plugin',
+    ],
   };
 };

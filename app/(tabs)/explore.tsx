@@ -416,8 +416,13 @@ export default function ExploreScreen() {
 
       // 2. Color filter
       if (selectedColors.length > 0) {
-        const productColor = (product.color || '').trim().toLowerCase();
-        const hasColor = selectedColors.some((color) => color.toLowerCase() === productColor);
+        const productColors = (product.color || '')
+          .split(',')
+          .map((c) => c.trim().toLowerCase())
+          .filter(Boolean);
+        const hasColor = selectedColors.some((color) =>
+          productColors.includes(color.toLowerCase())
+        );
         if (!hasColor) return false;
       }
 
@@ -453,7 +458,7 @@ export default function ExploreScreen() {
       }
 
       // 5.5 AR Filter
-      if (selectedArOnly && !product.model_3d_url) {
+      if (selectedArOnly && !product.model_3d_url && !(product.tags && product.tags.includes('AR Try-On'))) {
         return false;
       }
 

@@ -16,10 +16,10 @@ export async function getPendingDeletionRequest(userId: string): Promise<{ id: s
   return data ?? null;
 }
 
-export async function submitDeletionRequest(userId: string): Promise<string> {
+export async function submitDeletionRequest(userId: string, reason?: string): Promise<string> {
   const { data, error } = await supabase
     .from('account_deletion_requests')
-    .insert({ user_id: userId })
+    .insert({ user_id: userId, reason: reason || 'Requested by customer' })
     .select('id')
     .single();
   if (error) throw error;

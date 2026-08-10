@@ -165,20 +165,35 @@ export default function ProductDetailScreen() {
     checkNotifyRequest();
   }, [id, user?.id, selectedSize]);
 
-  const handleNotifyMe = async () => {
+  const handleToggleNotifyMe = async () => {
     if (!user?.id || !id || !selectedSize) {
       showToast("Log in to get notified when this size is back in stock.", 'info');
       return;
     }
     setNotifySubmitting(true);
     try {
-      const { error } = await supabase
-        .from("stock_notify_requests")
-        .insert({ user_id: user.id, product_id: id, size: selectedSize });
-      if (error && error.code !== "23505") throw error; // 23505 = already requested
-      setNotifyRequested(true);
+      if (notifyRequested) {
+        // Cancel notification request
+        const { error } = await supabase
+          .from("stock_notify_requests")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("product_id", id)
+          .eq("size", selectedSize);
+        if (error) throw error;
+        setNotifyRequested(false);
+        showToast("Stock notification cancelled.", 'info');
+      } else {
+        // Create notification request
+        const { error } = await supabase
+          .from("stock_notify_requests")
+          .insert({ user_id: user.id, product_id: id, size: selectedSize });
+        if (error && error.code !== "23505") throw error; // 23505 = already requested
+        setNotifyRequested(true);
+        showToast("We'll notify you when this size is back in stock!", 'success');
+      }
     } catch (err) {
-      console.error("Error requesting stock notification:", err);
+      console.error("Error toggling stock notification:", err);
     } finally {
       setNotifySubmitting(false);
     }
@@ -381,32 +396,17 @@ export default function ProductDetailScreen() {
             )}
           </View>
 
-          {/* Color Selection */}
-          {colorsList.length > 0 && (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Color</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
-                {colorsList.map((c, index) => {
-                  const isSelected = selectedColor === c;
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.optionButton,
-                        { borderColor: isSelected ? colors.tint : colors.border },
-                        isSelected && { backgroundColor: colors.card },
-                      ]}
-                      onPress={() => setSelectedColor(c)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Select color ${c}`}
-                      accessibilityHint={`Selects ${c} as the color option`}
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{c}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+          {/* Color Display */}
+          {(colorsList.length > 0 || product.color) && (
+            <View style={[styles.section, { marginBottom: 12 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                  {colorsList.length > 1 ? 'Colors:' : 'Color:'}
+                </Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.tint }}>
+                  {colorsList.length > 0 ? colorsList.join(' · ') : product.color}
+                </Text>
+              </View>
             </View>
           )}
 
@@ -504,15 +504,15 @@ export default function ProductDetailScreen() {
           {/* Notify Me when the selected size is out of stock */}
           {selectedSizeOutOfStock && (
             <TouchableOpacity
-              style={[styles.notifyBtn, { borderColor: colors.tint, opacity: notifySubmitting ? 0.6 : 1 }]}
-              onPress={handleNotifyMe}
-              disabled={notifySubmitting || notifyRequested}
+              style={[styles.notifyBtn, { borderColor: notifyRequested ? colors.secondaryText : colors.tint, opacity: notifySubmitting ? 0.6 : 1 }]}
+              onPress={handleToggleNotifyMe}
+              disabled={notifySubmitting}
               accessibilityRole="button"
-              accessibilityLabel={notifyRequested ? "You will be notified when this size is back in stock" : "Notify me when this size is back in stock"}
+              accessibilityLabel={notifyRequested ? "Cancel stock notification" : "Notify me when this size is back in stock"}
             >
-              <IconSymbol name={notifyRequested ? "checkmark.circle.fill" : "bell.fill"} size={18} color={colors.tint} />
-              <Text style={[styles.notifyBtnText, { color: colors.tint }]}>
-                {notifyRequested ? "We'll notify you when it's back" : "Notify Me When Available"}
+              <IconSymbol name={notifyRequested ? "checkmark.circle.fill" : "bell.fill"} size={18} color={notifyRequested ? colors.secondaryText : colors.tint} />
+              <Text style={[styles.notifyBtnText, { color: notifyRequested ? colors.secondaryText : colors.tint }]}>
+                {notifyRequested ? "Notification Set ✓ (Tap to cancel)" : "Notify Me When Available"}
               </Text>
             </TouchableOpacity>
           )}
