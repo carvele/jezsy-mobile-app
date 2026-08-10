@@ -85,8 +85,10 @@ export function evaluatePoseMatch(
   let score = 0;
   let feedback = 'Align with outline';
 
-  // Evaluate specific poses
-  if (targetPoseName === 'Front T-Pose') {
+  const poseKey = (targetPoseName || '').toLowerCase();
+
+  // Evaluate specific poses or base pose types
+  if (poseKey === 'front t-pose') {
     // Check if arms are extended horizontally
     const leftArmHorizontal = Math.abs(leftWrist.y - leftShoulder.y) < 0.15;
     const rightArmHorizontal = Math.abs(rightWrist.y - rightShoulder.y) < 0.15;
@@ -99,23 +101,23 @@ export function evaluatePoseMatch(
       score = 40;
       feedback = 'Extend arms straight out';
     }
-  } else if (targetPoseName === 'Side Profile') {
+  } else if (poseKey === 'side profile' || poseKey.includes('side')) {
     // Shoulders should be close together horizontally
-    if (shoulderWidth < 0.15) {
+    if (shoulderWidth < 0.18) {
       score = 85;
       feedback = 'Hold still...';
     } else {
       score = 30;
       feedback = 'Turn to the side';
     }
-  } else if (targetPoseName === 'Walking Stride') {
+  } else if (poseKey === 'walking stride' || poseKey.includes('walking') || poseKey.includes('stride')) {
     // Legs split
     const leftAnkle = landmarks[L.leftAnkle];
     const rightAnkle = landmarks[L.rightAnkle];
     
     if (leftAnkle.visibility > 0.6 && rightAnkle.visibility > 0.6) {
       const ankleDistX = Math.abs(leftAnkle.x - rightAnkle.x);
-      if (ankleDistX > 0.15) {
+      if (ankleDistX > 0.12) {
          score = 85;
          feedback = 'Hold still...';
       } else {
@@ -126,8 +128,18 @@ export function evaluatePoseMatch(
       score = 20;
       feedback = 'Step back to show legs';
     }
+  } else if (poseKey.includes('front') || poseKey.includes('standing') || poseKey.includes('gala')) {
+    // Generic front standing pose
+    const shoulderTilt = Math.abs(leftShoulder.y - rightShoulder.y);
+    if (shoulderTilt < 0.12) {
+      score = 85;
+      feedback = 'Hold still...';
+    } else {
+      score = 45;
+      feedback = 'Stand up straight';
+    }
   } else {
-    // Default fallback - just need to be visible
+    // Default fallback - just need key joints visible
     score = 80;
     feedback = 'Hold still...';
   }

@@ -20,11 +20,11 @@ import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { useToast } from '@/src/context/ToastContext';
 import { evaluatePoseMatch } from '@/src/utils/poseMatcher';
 type Product = Database['public']['Tables']['products']['Row'];
-type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category'>;
+type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category' | 'image_url' | 'occasion' | 'base_pose_type'>;
 
 export default function ARTryOnScreen() {
   const { showToast } = useToast();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, stylePoseId } = useLocalSearchParams<{ id: string; stylePoseId?: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
@@ -128,17 +128,26 @@ export default function ARTryOnScreen() {
     const fetchPoseGuides = async () => {
       const { data, error } = await supabase
         .from('pose_guides')
-        .select('id,name,category')
+        .select('id,name,category,image_url,occasion,base_pose_type')
         .eq('deleted', false)
         .order('created_at');
 
       if (!error && data) {
-        setPoseGuides(data);
+        let sorted = data as PoseGuide[];
+        if (stylePoseId) {
+          const matchIdx = sorted.findIndex((p) => p.id === stylePoseId);
+          if (matchIdx > -1) {
+            const [target] = sorted.splice(matchIdx, 1);
+            sorted = [target, ...sorted];
+          }
+          setMode('2d'); // Automatically switch to 2D camera mode when recreating a style pose
+        }
+        setPoseGuides(sorted);
       }
     };
 
     fetchPoseGuides();
-  }, []);
+  }, [stylePoseId]);
 
   useEffect(() => {
     if (mode === '2d' && currentPose) {
@@ -287,6 +296,29 @@ export default function ARTryOnScreen() {
           }
           #error-state.visible { display: flex; }
           #error-state span { font-size: 36px; }
+          #controls-bar {
+            position: absolute;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 6px 12px;
+            border-radius: 20px;
+            backdrop-filter: blur(8px);
+            z-index: 10;
+          }
+          #controls-bar button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+          }
         </style>
         <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
       </head>
@@ -313,6 +345,11 @@ export default function ARTryOnScreen() {
             View in your space (AR)
           </button>
         </model-viewer>
+        <div id="controls-bar">
+          <button onclick="adjustExposure(0.2)">☀️ Light +</button>
+          <button onclick="adjustExposure(-0.2)">🌙 Light -</button>
+          <button onclick="resetCamera()">🔄 Reset View</button>
+        </div>
         <div id="hint">Drag to rotate &nbsp;·&nbsp; Pinch to zoom</div>
         <div id="error-state">
           <span>📦</span>
@@ -324,11 +361,20 @@ export default function ARTryOnScreen() {
             mv.style.display = 'none';
             document.getElementById('error-state').classList.add('visible');
           });
-          // Hide controls hint after first interaction
           mv.addEventListener('camera-change', () => {
             const hint = document.getElementById('hint');
             if (hint) hint.style.display = 'none';
           });
+          function adjustExposure(delta) {
+            const current = parseFloat(mv.getAttribute('exposure') || '1.1');
+            const next = Math.min(Math.max(current + delta, 0.4), 2.5);
+            mv.setAttribute('exposure', next.toFixed(2));
+          }
+          function resetCamera() {
+            mv.cameraOrbit = 'auto auto auto';
+            mv.fieldOfView = 'auto';
+            mv.setAttribute('exposure', '1.1');
+          }
         </script>
       </body>
     </html>
@@ -420,6 +466,16 @@ export default function ARTryOnScreen() {
             </View>
           )}
           <View style={styles.overlayContainer} pointerEvents="box-none">
+            {/* Reference Pose Picture-in-Picture Box */}
+            {currentPose?.image_url && (
+              <View style={styles.pipContainer}>
+                <Image source={{ uri: currentPose.image_url }} style={styles.pipImage} contentFit="cover" />
+                <View style={styles.pipLabelContainer}>
+                  <Text style={styles.pipLabelText}>Target Look</Text>
+                </View>
+              </View>
+            )}
+
             <View pointerEvents="none">
               <Image
                 source={{ uri: product.image_url || '' }}
@@ -441,7 +497,7 @@ export default function ARTryOnScreen() {
             </View>
             <View style={styles.overlayGuide} pointerEvents="box-none">
               <Text style={styles.overlayGuideText}>
-                {currentPose ? `Try this pose: ${currentPose.name}` : 'Align your body with the item'}
+                {currentPose ? `Recreating: ${currentPose.name}` : 'Align your body with the item'}
               </Text>
               {currentPose && (
                 <TouchableOpacity
@@ -621,5 +677,36 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
     fontSize: 14,
+  },
+  pipContainer: {
+    position: 'absolute',
+    top: 50,
+    left: 16,
+    width: 80,
+    height: 110,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: '#0F172A',
+    zIndex: 25,
+  },
+  pipImage: {
+    width: '100%',
+    height: '100%',
+  },
+  pipLabelContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  pipLabelText: {
+    color: '#FDE68A',
+    fontSize: 9,
+    fontWeight: '800',
   },
 });

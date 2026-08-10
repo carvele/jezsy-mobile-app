@@ -25,6 +25,7 @@ import { useSafeBack } from "@/src/hooks/useSafeBack";
 import { ReviewsList } from "@/src/components/ReviewsList";
 import { RelatedProducts } from "@/src/components/RelatedProducts";
 import { RecentlyViewed } from "@/src/components/RecentlyViewed";
+import CompleteTheLookSection from "@/components/CompleteTheLookSection";
 import { addRecentlyViewed } from "@/src/utils/recentlyViewed";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
@@ -573,6 +574,9 @@ export default function ProductDetailScreen() {
 
           {/* Customer Reviews & Ratings */}
           <ReviewsList productId={product.id} />
+
+          {/* Complete The Look - AI Stylist */}
+          <CompleteTheLookSection currentProduct={product as any} />
 
           {/* Related Products */}
           {getMainCategoryId(product) && (
