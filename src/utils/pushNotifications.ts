@@ -187,3 +187,31 @@ export async function scheduleReservationReminder(
     console.error("Error scheduling reservation reminder:", e);
   }
 }
+
+export async function scheduleReturnReminder(
+  displayId: string,
+  returnDateStr: string,
+): Promise<void> {
+  if (IS_EXPO_GO) return;
+
+  try {
+    const Notifications = await import("expo-notifications");
+
+    const returnDate = new Date(returnDateStr);
+    // 24 hours before return due date
+    const reminderTime = new Date(returnDate.getTime() - 24 * 60 * 60 * 1000);
+    if (reminderTime <= new Date()) return;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Rental Return Reminder 📦",
+        body: `Your rental #${displayId} is due for return tomorrow. Please make sure to return it on time!`,
+        sound: true,
+        data: { displayId, returnDateStr, type: "return_reminder" },
+      },
+      trigger: { type: "date", date: reminderTime } as any,
+    });
+  } catch (e) {
+    console.error("Error scheduling return reminder:", e);
+  }
+}

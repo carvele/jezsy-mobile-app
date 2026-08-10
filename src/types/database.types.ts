@@ -781,6 +781,14 @@ export type Database = {
           id: string
           name: string
           updated_at: string | null
+          image_url: string | null
+          description: string | null
+          occasion: string | null
+          style_tags: string[] | null
+          difficulty: string | null
+          is_featured: boolean | null
+          base_pose_type: string | null
+          sort_order: number | null
         }
         Insert: {
           category: string
@@ -789,6 +797,14 @@ export type Database = {
           id: string
           name: string
           updated_at?: string | null
+          image_url?: string | null
+          description?: string | null
+          occasion?: string | null
+          style_tags?: string[] | null
+          difficulty?: string | null
+          is_featured?: boolean | null
+          base_pose_type?: string | null
+          sort_order?: number | null
         }
         Update: {
           category?: string
@@ -797,8 +813,55 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string | null
+          image_url?: string | null
+          description?: string | null
+          occasion?: string | null
+          style_tags?: string[] | null
+          difficulty?: string | null
+          is_featured?: boolean | null
+          base_pose_type?: string | null
+          sort_order?: number | null
         }
         Relationships: []
+      }
+      pose_guide_products: {
+        Row: {
+          id: string
+          pose_guide_id: string
+          product_id: string
+          sort_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          pose_guide_id: string
+          product_id: string
+          sort_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          pose_guide_id?: string
+          product_id?: string
+          sort_order?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pose_guide_products_pose_guide_id_fkey"
+            columns: ["pose_guide_id"]
+            isOneToOne: false
+            referencedRelation: "pose_guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pose_guide_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       products: {
         Row: {

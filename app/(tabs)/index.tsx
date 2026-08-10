@@ -30,6 +30,7 @@ import { GRID_GUTTER } from '@/src/utils/layout';
 import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
+import { StyleGallery } from '@/components/StyleGallery';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -412,6 +413,9 @@ export default function HomeScreen() {
             )}
           </View>
         )}
+
+        {/* Style Inspiration Feed (StyleHint-inspired Pose Discovery) */}
+        <StyleGallery />
 
         {/* 2. Shop by Category (real categories, deep-links into Explore) */}
         {topCategories.length > 0 && (
