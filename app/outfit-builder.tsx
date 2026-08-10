@@ -84,6 +84,8 @@ export default function OutfitBuilderScreen() {
   const [outfitName, setOutfitName]       = useState('');
   const [saving, setSaving]               = useState(false);
 
+  const [pendingShare, setPendingShare]   = useState(false);
+
   const [viewMode, setViewMode]           = useState<'slots' | 'canvas'>('slots');
   const viewShotRef                       = React.useRef<ViewShot>(null);
 
@@ -95,6 +97,28 @@ export default function OutfitBuilderScreen() {
   const [pickerLoading, setPickerLoading] = useState(false);
 
   const filledCount = SLOT_KEYS.filter((k) => slots[k] !== null).length;
+
+  const captureAndShare = useCallback(async () => {
+    if (viewShotRef.current?.capture) {
+      try {
+        const uri = await viewShotRef.current.capture();
+        await Sharing.shareAsync(uri, { dialogTitle: 'Share my outfit' });
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to capture outfit image', 'error');
+      }
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (pendingShare && viewMode === 'canvas') {
+      setPendingShare(false);
+      // Give canvas one layout frame to finalize rendering
+      requestAnimationFrame(() => {
+        captureAndShare();
+      });
+    }
+  }, [pendingShare, viewMode, captureAndShare]);
 
   const fetchWardrobeItems = useCallback(async () => {
     if (!session?.user?.id) return;
@@ -296,30 +320,11 @@ export default function OutfitBuilderScreen() {
     }
     if (viewMode !== 'canvas') {
       setViewMode('canvas');
-      // Wait for the render to switch to canvas mode
-      setTimeout(async () => {
-        if (viewShotRef.current?.capture) {
-          try {
-            const uri = await viewShotRef.current.capture();
-            await Sharing.shareAsync(uri, { dialogTitle: 'Share my outfit' });
-          } catch (err) {
-            console.error(err);
-            showToast('Failed to capture outfit image', 'error');
-          }
-        }
-      }, 500);
+      setPendingShare(true);
       return;
     }
 
-    if (viewShotRef.current?.capture) {
-      try {
-        const uri = await viewShotRef.current.capture();
-        await Sharing.shareAsync(uri, { dialogTitle: 'Share my outfit' });
-      } catch (err) {
-        console.error(err);
-        showToast('Failed to capture outfit image', 'error');
-      }
-    }
+    await captureAndShare();
   };
 
   const handleDiscard = () => {

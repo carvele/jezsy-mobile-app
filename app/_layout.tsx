@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
@@ -94,8 +94,10 @@ function InitialLayout() {
   }, [session?.user?.id]);
 
   // Activity Heartbeat — keeps admin dashboard "Last active" & green dot accurately synced
+  // Only pings when the app is in the foreground to avoid battery drain.
   useEffect(() => {
     if (!session?.user?.id) return;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     const updateActivityPing = async () => {
       const nowIso = new Date().toISOString();
@@ -105,9 +107,24 @@ function InitialLayout() {
         .eq('id', session.user.id));
     };
 
-    updateActivityPing();
-    const interval = setInterval(updateActivityPing, 2 * 60 * 1000);
-    return () => clearInterval(interval);
+    const startPinging = () => {
+      updateActivityPing();
+      interval = setInterval(updateActivityPing, 2 * 60 * 1000);
+    };
+
+    const stopPinging = () => {
+      if (interval) { clearInterval(interval); interval = null; }
+    };
+
+    // Only ping when app is in foreground
+    if (AppState.currentState === 'active') startPinging();
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') startPinging();
+      else stopPinging();
+    });
+
+    return () => { stopPinging(); sub.remove(); };
   }, [session?.user?.id]);
 
   // Handle password-recovery deep links (both a cold start from the link and

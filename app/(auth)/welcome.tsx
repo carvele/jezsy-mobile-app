@@ -57,7 +57,7 @@ export default function WelcomeScreen() {
       //   Dev build → jezsymobileapp://auth/callback
       const redirectTo = Linking.createURL('auth/callback');
 
-      console.log('[OAuth] redirectTo:', redirectTo);
+      if (__DEV__) console.log('[OAuth] redirectTo:', redirectTo);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
