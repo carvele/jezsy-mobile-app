@@ -2,9 +2,10 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { supabase } from "@/src/lib/supabase";
 import {
-    formatLocalDate,
+    formatManilaDate,
     formatTimeLabel,
     formatTimeValue,
+    manilaDayOfWeek,
     toStoreTimeValue,
 } from "@/src/utils/dateTime";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -52,8 +53,12 @@ export function TimeSlotPicker({
   const fetchSlots = useCallback(async () => {
     setLoading(true);
     try {
-      const dateStr = formatLocalDate(selectedDate);
-      const dayOfWeek = selectedDate.getDay();
+      // Anchored to Asia/Manila, not the device's own calendar day/weekday --
+      // store_hours.day_of_week and assert_bookable_slot on the server both
+      // mean Manila's day. A device set to a different timezone previously
+      // could disagree with the server about which weekday "today" even is.
+      const dateStr = formatManilaDate(selectedDate);
+      const dayOfWeek = manilaDayOfWeek(selectedDate);
 
       // Fetch standard hours
       const { data: hoursData, error: hoursError } = await supabase
