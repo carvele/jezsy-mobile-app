@@ -44,12 +44,22 @@ export function StyleGallery() {
   const fetchStylePoses = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('pose_guides')
         .select('*')
         .eq('deleted', false)
         .order('is_featured', { ascending: false })
         .order('created_at', { ascending: false });
+
+      if (error && (error as any).code === '42703') {
+        const fallback = await supabase
+          .from('pose_guides')
+          .select('*')
+          .eq('deleted', false)
+          .order('created_at', { ascending: false });
+        data = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) throw error;
       setPoses((data as StylePose[]) || []);
