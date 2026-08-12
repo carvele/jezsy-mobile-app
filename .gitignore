@@ -49,6 +49,7 @@ com.facebook.react.devsupport.BundleDownloader
 # scratch docs and on-device verification screenshots -- kept locally,
 # never committed (see CLAUDE.md: "Don't auto-commit activity logs and docs")
 docs/activity-log.md
+docs/security-audit-*.md
 .verify_shots/
 
 # typescript
