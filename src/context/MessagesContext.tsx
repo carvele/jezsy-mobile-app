@@ -96,7 +96,6 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       const payload: any = {
         conversation_id: conversationId,
         sender_id: session.user.id,
-        sender_role: isStaff ? 'staff' : 'customer',
         sender_name: senderName,
         text: text.trim(),
         image_url: imageUrl || null,
