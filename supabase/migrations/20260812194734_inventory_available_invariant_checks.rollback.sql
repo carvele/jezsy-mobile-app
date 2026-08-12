@@ -1,0 +1,2 @@
+ALTER TABLE public.inventory DROP CONSTRAINT IF EXISTS inventory_available_matches_total_reserved_check;
+ALTER TABLE public.inventory DROP CONSTRAINT IF EXISTS inventory_available_nonnegative_check;

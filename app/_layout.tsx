@@ -66,7 +66,7 @@ function OfflineBanner() {
 }
 
 function InitialLayout() {
-  const { session, isLoading, isProfileLoading, profile, isPasswordRecovery, beginPasswordRecovery } = useAuth();
+  const { session, isLoading, isProfileLoading, profile, isPasswordRecovery, beginPasswordRecovery, signOut } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -198,6 +198,15 @@ function InitialLayout() {
         // marketing carousel to the login/welcome screen.
         router.replace(onboardingSeen ? '/(auth)/welcome' : '/(auth)');
       }
+    } else if (profile?.deleted) {
+      // Staff already erased this account server-side (process_account_deletion
+      // scrubs profiles and sets deleted=true, but does not itself end the
+      // session -- that happens on a best-effort second step that can fail).
+      // A lingering session on a scrubbed, nameless profile would otherwise
+      // fall into the !profile.first_name branch below and route to
+      // profile-setup, letting the customer "revive" a profile staff just
+      // deleted. Sign out instead of routing anywhere in the app.
+      signOut();
     } else {
       // User is logged in
       if (!profile || !profile.first_name) {
@@ -213,7 +222,7 @@ function InitialLayout() {
     // Whichever branch ran, the correct route is now committed, so the cover
     // can come down without exposing the default route for a frame.
     setRouteSettled(true);
-  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery]);
+  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut]);
 
   useEffect(() => {
     if (hasBootstrapped) {
