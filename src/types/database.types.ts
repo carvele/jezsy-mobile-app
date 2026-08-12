@@ -773,78 +773,27 @@ export type Database = {
           },
         ]
       }
-      pose_guides: {
+      pose_guide_products: {
         Row: {
-          category: string
           created_at: string | null
-          deleted: boolean | null
           id: string
-          name: string
-          updated_at: string | null
-          image_url: string | null
-          description: string | null
-          occasion: string | null
-          style_tags: string[] | null
-          difficulty: string | null
-          is_featured: boolean | null
-          base_pose_type: string | null
+          pose_guide_id: string
+          product_id: string
           sort_order: number | null
         }
         Insert: {
-          category: string
           created_at?: string | null
-          deleted?: boolean | null
-          id: string
-          name: string
-          updated_at?: string | null
-          image_url?: string | null
-          description?: string | null
-          occasion?: string | null
-          style_tags?: string[] | null
-          difficulty?: string | null
-          is_featured?: boolean | null
-          base_pose_type?: string | null
-          sort_order?: number | null
-        }
-        Update: {
-          category?: string
-          created_at?: string | null
-          deleted?: boolean | null
-          id?: string
-          name?: string
-          updated_at?: string | null
-          image_url?: string | null
-          description?: string | null
-          occasion?: string | null
-          style_tags?: string[] | null
-          difficulty?: string | null
-          is_featured?: boolean | null
-          base_pose_type?: string | null
-          sort_order?: number | null
-        }
-        Relationships: []
-      }
-      pose_guide_products: {
-        Row: {
-          id: string
-          pose_guide_id: string
-          product_id: string
-          sort_order: number
-          created_at: string
-        }
-        Insert: {
           id?: string
           pose_guide_id: string
           product_id: string
-          sort_order?: number
-          created_at?: string
+          sort_order?: number | null
         }
         Update: {
+          created_at?: string | null
           id?: string
           pose_guide_id?: string
           product_id?: string
-          sort_order?: number
-          created_at?: string
+          sort_order?: number | null
         }
         Relationships: [
           {
@@ -860,8 +809,59 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
-          }
+          },
         ]
+      }
+      pose_guides: {
+        Row: {
+          base_pose_type: string | null
+          category: string
+          created_at: string | null
+          deleted: boolean | null
+          description: string | null
+          difficulty: string | null
+          id: string
+          image_url: string | null
+          is_featured: boolean | null
+          name: string
+          occasion: string | null
+          sort_order: number | null
+          style_tags: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          base_pose_type?: string | null
+          category: string
+          created_at?: string | null
+          deleted?: boolean | null
+          description?: string | null
+          difficulty?: string | null
+          id: string
+          image_url?: string | null
+          is_featured?: boolean | null
+          name: string
+          occasion?: string | null
+          sort_order?: number | null
+          style_tags?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          base_pose_type?: string | null
+          category?: string
+          created_at?: string | null
+          deleted?: boolean | null
+          description?: string | null
+          difficulty?: string | null
+          id?: string
+          image_url?: string | null
+          is_featured?: boolean | null
+          name?: string
+          occasion?: string | null
+          sort_order?: number | null
+          style_tags?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       products: {
         Row: {
@@ -1139,6 +1139,9 @@ export type Database = {
           balance_settled_by_name: string | null
           balance_settled_method: string | null
           color: string | null
+          confirmed_at: string | null
+          confirmed_by_id: string | null
+          confirmed_by_name: string | null
           countdown: boolean | null
           created_at: string
           customer_id: string | null
@@ -1178,6 +1181,9 @@ export type Database = {
           balance_settled_by_name?: string | null
           balance_settled_method?: string | null
           color?: string | null
+          confirmed_at?: string | null
+          confirmed_by_id?: string | null
+          confirmed_by_name?: string | null
           countdown?: boolean | null
           created_at?: string
           customer_id?: string | null
@@ -1217,6 +1223,9 @@ export type Database = {
           balance_settled_by_name?: string | null
           balance_settled_method?: string | null
           color?: string | null
+          confirmed_at?: string | null
+          confirmed_by_id?: string | null
+          confirmed_by_name?: string | null
           countdown?: boolean | null
           created_at?: string
           customer_id?: string | null
@@ -1251,6 +1260,13 @@ export type Database = {
           {
             foreignKeyName: "reservations_assigned_staff_id_fkey"
             columns: ["assigned_staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_confirmed_by_id_fkey"
+            columns: ["confirmed_by_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1790,19 +1806,34 @@ export type Database = {
         Returns: undefined
       }
       check_email_exists: { Args: { lookup_email: string }; Returns: boolean }
-      create_reservation: {
-        Args: {
-          _appointment_time: string
-          _color: string
-          _date: string
-          _payment_option?: string
-          _product_id: string
-          _quantity: number
-          _receipt_path: string
-          _size: string
-        }
-        Returns: Json
-      }
+      check_unattended_reservations: { Args: never; Returns: undefined }
+      create_reservation:
+        | {
+            Args: {
+              _appointment_time: string
+              _color: string
+              _date: string
+              _payment_option?: string
+              _product_id: string
+              _quantity?: number
+              _receipt_path?: string
+              _size: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _appointment_time: string
+              _color: string
+              _date: string
+              _payment_option?: string
+              _product_id: string
+              _quantity: number
+              _receipt_path: string
+              _size: string
+            }
+            Returns: Json
+          }
       create_reservation_multi: {
         Args: {
           _appointment_time: string
@@ -1875,6 +1906,10 @@ export type Database = {
         Returns: Json
       }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
+      update_staff_role: {
+        Args: { new_role: string; target_user_id: string }
+        Returns: undefined
+      }
       update_staff_status: {
         Args: {
           change_note: string
