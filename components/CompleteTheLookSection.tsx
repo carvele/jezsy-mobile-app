@@ -30,9 +30,18 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
     async function loadCatalogAndScore() {
       try {
         setLoading(true);
+        // RelatedProducts.tsx (the sibling recommendation component) filters
+        // deleted/visibility explicitly rather than relying on RLS alone --
+        // matching that here closes the one case RLS doesn't cover: a
+        // staff/owner account browsing the mobile app would otherwise get
+        // deleted or non-public products recommended, since
+        // is_staff_or_admin() bypasses the customer-facing RLS policy.
         const { data, error } = await supabase
           .from("products")
           .select("id, name, category, category_id, color, price, sale_price, on_sale, image_url")
+          .eq("deleted", false)
+          .eq("visibility", "public")
+          .order("created_at", { ascending: false })
           .limit(50);
 
         if (error) throw error;
