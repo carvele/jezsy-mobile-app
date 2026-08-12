@@ -91,6 +91,24 @@ export default function ReservationsScreen() {
     }
   };
 
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: reservations.length,
+      pending: 0,
+      toPay: 0,
+      ready: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+    reservations.forEach((r) => {
+      const bucket = statusBucket(r.status);
+      if (counts[bucket] !== undefined) {
+        counts[bucket] += 1;
+      }
+    });
+    return counts;
+  }, [reservations]);
+
   const filteredReservations = useMemo(() => {
     if (activeFilter === 'all') return reservations;
     return reservations.filter((r) => statusBucket(r.status) === activeFilter);
@@ -166,6 +184,7 @@ export default function ReservationsScreen() {
           renderItem={({ item: filter }) => {
             const isActive = activeFilter === filter;
             const label = filterLabel(filter);
+            const count = statusCounts[filter] ?? 0;
             return (
               <TouchableOpacity
                 onPress={() => setActiveFilter(filter)}
@@ -186,6 +205,25 @@ export default function ReservationsScreen() {
                 >
                   {label}
                 </Text>
+                {count > 0 && (
+                  <View
+                    style={[
+                      styles.countBadge,
+                      {
+                        backgroundColor: isActive ? colors.background : colors.tint,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.countBadgeText,
+                        { color: isActive ? colors.tint : colors.onTint },
+                      ]}
+                    >
+                      {count}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           }}
@@ -299,14 +337,29 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
     borderRadius: Radius.pill,
     borderWidth: 1,
+    gap: 6,
   },
   filterChipText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  countBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   listContent: {
     padding: Spacing.xl,
