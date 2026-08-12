@@ -1136,6 +1136,8 @@ export type Database = {
           balance_method: string | null
           balance_settled_at: string | null
           balance_settled_by: string | null
+          balance_settled_by_name: string | null
+          balance_settled_method: string | null
           color: string | null
           countdown: boolean | null
           created_at: string
@@ -1173,6 +1175,8 @@ export type Database = {
           balance_method?: string | null
           balance_settled_at?: string | null
           balance_settled_by?: string | null
+          balance_settled_by_name?: string | null
+          balance_settled_method?: string | null
           color?: string | null
           countdown?: boolean | null
           created_at?: string
@@ -1210,6 +1214,8 @@ export type Database = {
           balance_method?: string | null
           balance_settled_at?: string | null
           balance_settled_by?: string | null
+          balance_settled_by_name?: string | null
+          balance_settled_method?: string | null
           color?: string | null
           countdown?: boolean | null
           created_at?: string
