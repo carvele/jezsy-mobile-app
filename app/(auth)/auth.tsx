@@ -26,8 +26,8 @@ import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+// Enable LayoutAnimation on Android (Legacy Architecture only)
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(global as any).nativeFabricUIManager) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
