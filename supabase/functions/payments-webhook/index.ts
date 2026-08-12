@@ -119,10 +119,18 @@ serve(async (req) => {
     // Idempotency: PayMongo retries, and a repeat must not apply twice.
     if (payment.last_event_id === eventId) return json({ received: true, duplicate: true });
 
+    // checkout_session.expired deliberately does NOT map to "failed" here.
+    // Event delivery order across a session's lifecycle is not guaranteed, so
+    // treating expiry as instantly terminal risks a customer whose payment
+    // actually succeeded seeing a false "payment not completed" a few seconds
+    // before the correcting payment.paid event lands -- worse than the stuck
+    // row it would resolve. expire_stale_payments() (2-hour cron) already
+    // resolves genuinely abandoned sessions safely, with nothing watching it
+    // in real time to be misled by the race.
     let nextStatus: string | null = null;
     if (eventType === "checkout_session.payment.paid" || eventType === "payment.paid") {
       nextStatus = "paid";
-    } else if (eventType === "payment.failed" || eventType === "checkout_session.expired") {
+    } else if (eventType === "payment.failed") {
       nextStatus = "failed";
     }
 
