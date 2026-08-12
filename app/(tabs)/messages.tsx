@@ -104,7 +104,7 @@ export default function InboxScreen() {
     // conversation -- was shown "Shop Owner" instead of the customer's ref.
     const isStaff =
       profile?.role === 'staff' || profile?.role === 'admin' || profile?.role === 'owner';
-    const displayName = isStaff ? `Customer (${item.customer_id.substring(0, 6)})` : 'Shop Owner';
+    const displayName = isStaff ? `Customer (${item.customer_id.substring(0, 6)})` : 'Boutique Support';
 
     const dateStr = item.last_message_time
       ? new Date(item.last_message_time).toLocaleDateString([], {

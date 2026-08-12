@@ -106,11 +106,12 @@ export default function ARTryOnScreen() {
   useEffect(() => {
     const fetchProduct = async () => {
       try {
-        const { data, error } = await supabase
-          .from('products')
-          .select('*')
-          .eq('id', id)
-          .single();
+        const isUuid = Boolean(id) && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
+        const query = isUuid
+          ? supabase.from('products').select('*').eq('id', id).single()
+          : supabase.from('products').select('*').or(`sku.eq.${id},display_id.eq.${id}`).limit(1).maybeSingle();
+
+        const { data, error } = await query;
 
         if (error) throw error;
         setProduct(data);

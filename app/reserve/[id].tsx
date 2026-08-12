@@ -246,7 +246,12 @@ export default function ReservationScreen() {
       // Only remove the reserved items from the bag once the reservation is
       // actually on the server, leaving unreserved items intact.
       if (isCartMode) {
-        await removeItems(lines.map((line) => line.id).filter((itemId): itemId is string => Boolean(itemId)));
+        await removeItems(lines.map((line) => line.key).filter((itemId): itemId is string => Boolean(itemId)));
+      } else if (id) {
+        const matchingCartItems = cartItems.filter((ci) => ci.product.id === id);
+        if (matchingCartItems.length > 0) {
+          await removeItems(matchingCartItems.map((ci) => ci.id));
+        }
       }
 
       await scheduleReservationReminder(
