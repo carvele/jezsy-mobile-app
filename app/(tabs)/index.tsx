@@ -366,6 +366,14 @@ export default function HomeScreen() {
                             </View>
                           )}
                         </View>
+                        {/* Overlaid Total Stock Badge */}
+                        <View style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
+                          <View style={{ backgroundColor: (item.stock != null && item.stock <= 0) ? '#ef4444' : 'rgba(0,0,0,0.65)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
+                            <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>
+                              {item.stock != null ? (item.stock > 0 ? `📦 ${item.stock} IN STOCK` : 'OUT OF STOCK') : '📦 IN STOCK'}
+                            </Text>
+                          </View>
+                        </View>
                       </View>
                       <View style={styles.heroCardTextContainer}>
                         <Text style={[styles.featureBrand, { color: colors.text }]}>

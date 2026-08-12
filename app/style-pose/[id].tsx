@@ -74,7 +74,11 @@ export default function StylePoseDetailScreen() {
         .eq('pose_guide_id', poseId);
 
       if (linkError) {
-        console.error('Error fetching linked products:', linkError);
+        if ((linkError as any).code === 'PGRST205' || (linkError as any).code === '42P01') {
+          setProducts([]);
+        } else {
+          console.error('Error fetching linked products:', linkError);
+        }
       } else if (linkData) {
         const prods = linkData.map((item: any) => item.product).filter(Boolean);
         setProducts(prods);

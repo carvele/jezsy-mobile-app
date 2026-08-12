@@ -390,12 +390,34 @@ export default function ChatScreen() {
     const previous = index > 0 ? messages[index - 1] : null;
     const showDateSeparator = shouldStartMessageGroup(previous?.created_at, item.created_at);
 
+    // Safely parse raw JSON strings to prevent string leak crashes on Android
+    let displayText = item.text || '';
+    let jsonContext: any = null;
+    if (displayText && displayText.trim().startsWith('{') && displayText.trim().endsWith('}')) {
+      try {
+        const parsed = JSON.parse(displayText.trim());
+        if (parsed && typeof parsed === 'object') {
+          jsonContext = parsed;
+          displayText = parsed.text || parsed.message || parsed.label || parsed.title || '';
+        }
+      } catch {
+        // Safe string fallback
+      }
+    }
+
     // Falls back to the plain chip while the lookup is in flight, for a
     // deleted product, and for reservation/order contexts.
+    const productRef = item.context_ref || jsonContext?.ref || jsonContext?.product_id;
     const productPreview =
-      item.context_type === 'product' && item.context_ref
-        ? productPreviews[item.context_ref]
+      (item.context_type === 'product' || jsonContext?.type === 'product') && productRef
+        ? productPreviews[productRef]
         : null;
+
+    const reservationRef = item.context_ref || jsonContext?.ref || jsonContext?.reservation_id || jsonContext?.id;
+    const isReservationContext =
+      item.context_type === 'reservation' ||
+      jsonContext?.type === 'reservation' ||
+      (item.context_label && item.context_label.toLowerCase().includes('reservation'));
 
     return (
       <>
@@ -412,7 +434,7 @@ export default function ChatScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, marginLeft: 4 }}>
               <IconSymbol name="checkmark.seal.fill" size={12} color={colors.tint} />
               <Text style={{ fontSize: 11, fontWeight: '600', color: colors.secondaryText, marginLeft: 3 }}>
-                {item.sender_name && item.sender_name !== 'Staff' ? item.sender_name : 'JezSy Owner'}
+                {item.sender_name && item.sender_name !== 'Staff' ? item.sender_name : 'Boutique Support'}
               </Text>
             </View>
           )}
@@ -440,7 +462,7 @@ export default function ChatScreen() {
             {productPreview ? (
               <TouchableOpacity
                 style={[styles.productCard, { backgroundColor: isMe ? 'rgba(0,0,0,0.10)' : colors.background, borderColor: isMe ? 'rgba(0,0,0,0.12)' : colors.border }]}
-                onPress={() => router.push(`/product/${item.context_ref}`)}
+                onPress={() => router.push(`/product/${productRef}`)}
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel={`Question about ${productPreview.name}. Opens the product page.`}
@@ -463,6 +485,20 @@ export default function ChatScreen() {
                 </View>
                 <IconSymbol name="chevron.right" size={14} color={isMe ? 'rgba(0,0,0,0.4)' : colors.secondaryText} />
               </TouchableOpacity>
+            ) : isReservationContext ? (
+              <TouchableOpacity
+                style={[styles.contextChip, { backgroundColor: isMe ? 'rgba(0,0,0,0.12)' : colors.background, borderColor: isMe ? 'transparent' : colors.border, flexDirection: 'row', alignItems: 'center' }]}
+                onPress={() => {
+                  if (reservationRef) router.push(`/reservations/${reservationRef}`);
+                }}
+                activeOpacity={0.8}
+              >
+                <IconSymbol name="calendar" size={12} color={isMe ? colors.onTint : colors.tint} />
+                <Text style={[styles.contextChipText, { color: isMe ? colors.onTint : colors.text, fontWeight: '600', marginLeft: 4 }]} numberOfLines={1}>
+                  Reservation: {item.context_label || jsonContext?.label || reservationRef || 'Details'}
+                </Text>
+                <IconSymbol name="chevron.right" size={12} color={isMe ? 'rgba(0,0,0,0.4)' : colors.secondaryText} style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
             ) : item.context_label ? (
               <View style={[styles.contextChip, { backgroundColor: isMe ? 'rgba(0,0,0,0.12)' : colors.background, borderColor: isMe ? 'transparent' : colors.border }]}>
                 <Text style={[styles.contextChipText, { color: isMe ? colors.onTint : colors.secondaryText }]} numberOfLines={1}>
@@ -473,9 +509,9 @@ export default function ChatScreen() {
             {item.image_url && resolvedImageUrls[item.id] ? (
               <Image source={{ uri: resolvedImageUrls[item.id] }} style={styles.messageImage} resizeMode="cover" />
             ) : null}
-            {item.text ? (
+            {displayText ? (
               <Text style={[styles.messageText, { color: isMe ? colors.onTint : colors.text }]}>
-                {item.text}
+                {displayText}
               </Text>
             ) : null}
           </TouchableOpacity>
@@ -537,21 +573,23 @@ export default function ChatScreen() {
                   </Text>
                 </TouchableOpacity>
               ) : (
-                <Text
-                  style={[
-                    styles.readReceiptText,
-                    { color: item.read_at ? colors.tint : colors.secondaryText },
-                  ]}
-                  accessibilityLabel={
-                    item._status === 'sending'
-                      ? 'Sending'
-                      : item.read_at
-                        ? 'Read by the shop'
-                        : 'Sent'
-                  }
-                >
-                  {item._status === 'sending' ? 'Sending' : item.read_at ? 'Read' : 'Sent'} •{' '}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                  {item._status === 'sending' ? (
+                    <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sending • </Text>
+                  ) : item.read_at ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.readReceiptText, { color: colors.tint, fontWeight: '700' }]}>Seen </Text>
+                      <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
+                      <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
+                    </View>
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sent </Text>
+                      <IconSymbol name="checkmark" size={11} color={colors.secondaryText} />
+                      <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
+                    </View>
+                  )}
+                </View>
               )
             )}
             <Text style={[styles.timestampText, { color: colors.secondaryText }]}>{timeString}</Text>
