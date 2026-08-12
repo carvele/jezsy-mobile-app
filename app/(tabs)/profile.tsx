@@ -139,16 +139,7 @@ export default function ProfileScreen() {
 
         <View style={styles.section}>
           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg}}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>My Reservations</Text>
-              {counts.activeTotal > 0 && (
-                <View style={{ backgroundColor: colors.tint, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 }}>
-                  <Text style={{ color: colors.onTint, fontSize: 11, fontWeight: '700' }}>
-                    {counts.pending > 0 ? `${counts.pending} PENDING` : `${counts.activeTotal} ACTIVE`}
-                  </Text>
-                </View>
-              )}
-            </View>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>My Reservations</Text>
             <TouchableOpacity onPress={() => router.push('/reservations')}>
               <Text style={[Type.body, { color: colors.tint }]}>View All</Text>
             </TouchableOpacity>
