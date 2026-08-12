@@ -61,7 +61,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
     refreshConversations();
 
-    // Realtime subscription for conversation updates
+    // Realtime subscription for conversation and message updates
     const subscription = supabase
       .channel(`user-conversations:${session.user.id}`)
       .on(
@@ -70,6 +70,17 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
           event: '*',
           schema: 'public',
           table: 'conversations',
+        },
+        () => {
+          refreshConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
         },
         () => {
           refreshConversations();

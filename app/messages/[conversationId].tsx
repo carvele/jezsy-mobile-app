@@ -187,7 +187,7 @@ export default function ChatScreen() {
       .subscribe();
 
     return () => {
-      messageSubscription.unsubscribe();
+      supabase.removeChannel(messageSubscription);
     };
   }, [conversationId, markAsRead, session?.user.id]);
 
