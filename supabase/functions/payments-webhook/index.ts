@@ -122,7 +122,7 @@ serve(async (req) => {
     let nextStatus: string | null = null;
     if (eventType === "checkout_session.payment.paid" || eventType === "payment.paid") {
       nextStatus = "paid";
-    } else if (eventType === "payment.failed") {
+    } else if (eventType === "payment.failed" || eventType === "checkout_session.expired") {
       nextStatus = "failed";
     }
 
