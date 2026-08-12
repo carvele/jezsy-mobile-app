@@ -355,6 +355,14 @@ export default function WardrobeScreen() {
         </ScrollView>
       ) : activeTab === 'items' ? (
         <FlatList
+          // numColumns differs between this list and the outfits FlatList
+          // below, and both sit at the same position in this ternary --
+          // without distinct keys React updates the same FlatList instance
+          // in place when the tab switches instead of remounting, and
+          // FlatList's own invariant explicitly forbids changing numColumns
+          // that way ("Invariant Violation: Changing numColumns on the fly
+          // is not supported").
+          key="items-grid"
           data={visibleItems}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
@@ -383,6 +391,7 @@ export default function WardrobeScreen() {
       ) : activeTab === 'outfits' ? (
         outfits.length > 0 || suggestions.length > 0 ? (
           <FlatList
+            key="outfits-list"
             data={outfits}
             renderItem={renderOutfitItem}
             keyExtractor={(item) => item.id}
