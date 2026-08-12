@@ -91,11 +91,15 @@ export default function StylePoseDetailScreen() {
   };
 
   const handleTryInAR = () => {
-    if (!pose) return;
-    // Route to AR screen for the first linked product, or fallback product
-    const targetProductId = products.length > 0 ? products[0].id : 'P-001';
+    // No fallback product id: 'P-001' isn't a real row (products.id is a
+    // uuid), and ar-tryon's non-uuid lookup path queries sku/display_id --
+    // neither exists on products (sku is on inventory, display_id is on
+    // reservations) -- so a look with no linked products always dead-ended
+    // on "Product not found." The button below is hidden in that case
+    // instead of routing somewhere that can't resolve.
+    if (!pose || products.length === 0) return;
     router.push({
-      pathname: `/ar-tryon/${targetProductId}` as any,
+      pathname: `/ar-tryon/${products[0].id}` as any,
       params: { stylePoseId: pose.id },
     });
   };
@@ -228,12 +232,14 @@ export default function StylePoseDetailScreen() {
       </ScrollView>
 
       {/* Sticky Bottom CTA Bar */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.ctaButton} activeOpacity={0.88} onPress={handleTryInAR}>
-          <IconSymbol name="sparkles" size={20} color="#FFFFFF" />
-          <Text style={styles.ctaButtonText}>Try This Look in AR</Text>
-        </TouchableOpacity>
-      </View>
+      {products.length > 0 && (
+        <View style={styles.bottomBar}>
+          <TouchableOpacity style={styles.ctaButton} activeOpacity={0.88} onPress={handleTryInAR}>
+            <IconSymbol name="sparkles" size={20} color="#FFFFFF" />
+            <Text style={styles.ctaButtonText}>Try This Look in AR</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
