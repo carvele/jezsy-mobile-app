@@ -10,7 +10,15 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { statusBucket, statusLabel, isAwaitingPayment, canReschedule } from '@/src/utils/reservationStatus';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { formatTimeLabel, formatLocalDate } from '@/src/utils/dateTime';
+import {
+  formatTimeLabel,
+  formatManilaDate,
+  generateManilaDates,
+  isSameManilaDay,
+  manilaCalendarDay,
+  manilaDayNumber,
+  manilaWeekdayLabel,
+} from '@/src/utils/dateTime';
 import { resolveSignedStorageUrl } from '@/src/utils/signedStorageUrl';
 import { useMessages } from '@/src/context/MessagesContext';
 import { TimeSlotPicker } from '@/src/components/TimeSlotPicker';
@@ -48,7 +56,7 @@ export default function ReservationDetailScreen() {
   const [items, setItems] = useState<ReservationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showReschedule, setShowReschedule] = useState(false);
-  const [rescheduleDate, setRescheduleDate] = useState<Date>(new Date());
+  const [rescheduleDate, setRescheduleDate] = useState<Date>(() => manilaCalendarDay(new Date()));
   const [rescheduleSlot, setRescheduleSlot] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
@@ -130,17 +138,6 @@ export default function ReservationDetailScreen() {
     } as any);
   };
 
-  const generateDates = () => {
-    const dates: Date[] = [];
-    const today = new Date();
-    for (let i = 0; i < 14; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      dates.push(d);
-    }
-    return dates;
-  };
-
   const handleReschedule = async () => {
     if (!rescheduleSlot) {
       showToast('Please choose a new appointment time.', 'info');
@@ -154,7 +151,7 @@ export default function ReservationDetailScreen() {
       // closed day is refused immediately.
       const { error } = await supabase.rpc('request_reschedule', {
         _reservation_id: id,
-        _date: formatLocalDate(rescheduleDate),
+        _date: formatManilaDate(rescheduleDate),
         _appointment_time: rescheduleSlot,
       });
       if (error) throw error;
@@ -402,7 +399,7 @@ export default function ReservationDetailScreen() {
             {canRescheduleNow && !showReschedule && !reschedulePending && (
               <TouchableOpacity
                 onPress={() => {
-                  setRescheduleDate(reservation.date ? new Date(reservation.date) : new Date());
+                  setRescheduleDate(manilaCalendarDay(reservation.date ? new Date(reservation.date) : new Date()));
                   setRescheduleSlot(undefined);
                   setShowReschedule(true);
                 }}
@@ -427,7 +424,7 @@ export default function ReservationDetailScreen() {
               <Text style={[styles.pendingRequestText, { color: colors.secondaryText }]}>
                 You asked to move this to{' '}
                 <Text style={{ color: colors.text, fontWeight: '700' }}>
-                  {formatLocalDate(new Date(reservation.reschedule_requested_date as string))} at{' '}
+                  {formatManilaDate(new Date(reservation.reschedule_requested_date as string))} at{' '}
                   {formatTimeLabel(reservation.reschedule_requested_at_time)}
                 </Text>
                 . The time above still stands until the shop confirms.
@@ -439,21 +436,21 @@ export default function ReservationDetailScreen() {
             <View style={[styles.reschedulePanel, { borderTopColor: colors.border }]}>
               <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new date</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                {generateDates().map((d, index) => {
-                  const isSelected = d.toDateString() === rescheduleDate.toDateString();
+                {generateManilaDates(14).map((d, index) => {
+                  const isSelected = isSameManilaDay(d, rescheduleDate);
                   return (
                     <TouchableOpacity
                       key={index}
                       style={[styles.dateBox, { borderColor: isSelected ? colors.tint : colors.border }, isSelected && { backgroundColor: colors.background }]}
                       onPress={() => { setRescheduleDate(d); setRescheduleSlot(undefined); }}
                       accessibilityRole="button"
-                      accessibilityLabel={d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      accessibilityLabel={`${manilaWeekdayLabel(d)} ${manilaDayNumber(d)}`}
                       accessibilityState={{ selected: isSelected }}
                     >
                       <Text style={[styles.dayName, { color: isSelected ? colors.tint : colors.secondaryText }]}>
-                        {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                        {manilaWeekdayLabel(d)}
                       </Text>
-                      <Text style={[styles.dateNum, { color: isSelected ? colors.tint : colors.text }]}>{d.getDate()}</Text>
+                      <Text style={[styles.dateNum, { color: isSelected ? colors.tint : colors.text }]}>{manilaDayNumber(d)}</Text>
                     </TouchableOpacity>
                   );
                 })}

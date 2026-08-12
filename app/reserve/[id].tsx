@@ -6,7 +6,14 @@ import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
 import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
-import { formatLocalDate } from "@/src/utils/dateTime";
+import {
+    formatManilaDate,
+    generateManilaDates,
+    isSameManilaDay,
+    manilaCalendarDay,
+    manilaDayNumber,
+    manilaWeekdayLabel,
+} from "@/src/utils/dateTime";
 import { scheduleReservationReminder } from "@/src/utils/pushNotifications";
 import { needsStepUpReauth } from "@/src/utils/stepUpAuth";
 import { StepUpAuthModal } from "@/src/components/StepUpAuthModal";
@@ -58,8 +65,12 @@ export default function ReservationScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [reauthVisible, setReauthVisible] = useState(false);
 
-  // Date and Time selection
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  // Date and Time selection. Anchored to Asia/Manila (manilaCalendarDay), not
+  // the device's own calendar day -- a customer on a phone set to a
+  // non-Philippine timezone previously landed on the wrong "today" and could
+  // submit a reservation date the server's own Manila-anchored slot checks
+  // disagreed with.
+  const [selectedDate, setSelectedDate] = useState<Date>(() => manilaCalendarDay(new Date()));
   const [appointmentTime, setAppointmentTime] = useState<string | undefined>();
   // Opening on today is wrong whenever today is unbookable -- past closing, or
   // a day the boutique is shut. That left the picker disabled and Confirm dead
@@ -71,12 +82,15 @@ export default function ReservationScreen() {
     (hasAvailable: boolean) => {
       if (hasAvailable || !autoAdvanceDate) return;
       setSelectedDate((prev) => {
+        // prev is always a Manila-midnight-anchored Date (manilaCalendarDay),
+        // so advance it with the UTC setters -- the local setters would
+        // reapply the device's own offset on top and could skip or repeat a
+        // day depending on the device's timezone.
         const next = new Date(prev);
-        next.setDate(next.getDate() + 1);
+        next.setUTCDate(next.getUTCDate() + 1);
         // Stay inside the 14-day window the date strip offers.
-        const lastOffered = new Date();
-        lastOffered.setDate(lastOffered.getDate() + 13);
-        lastOffered.setHours(23, 59, 59, 999);
+        const lastOffered = manilaCalendarDay(new Date());
+        lastOffered.setUTCDate(lastOffered.getUTCDate() + 13);
         return next > lastOffered ? prev : next;
       });
     },
@@ -153,16 +167,6 @@ export default function ReservationScreen() {
     }];
   }, [isCartMode, cartItems, product, size, color, itemIds]);
 
-  const generateDates = () => {
-    const dates = [];
-    const today = new Date();
-    for (let i = 0; i < 14; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      dates.push(d);
-    }
-    return dates;
-  };
 
   // Gate, not the submit itself: validates preconditions and steps up
   // re-authentication for a stale session before anything actually books.
@@ -195,7 +199,7 @@ export default function ReservationScreen() {
 
     setSubmitting(true);
     try {
-      const reservationDate = formatLocalDate(selectedDate);
+      const reservationDate = formatManilaDate(selectedDate);
 
       // Every line's price and the resulting deposit are resolved
       // server-side from the products table; only the selection is sent.
@@ -315,7 +319,7 @@ export default function ReservationScreen() {
     );
   }
 
-  const days = generateDates();
+  const days = generateManilaDates(14);
   // Mirrors the server-side create_reservation_multi price resolution --
   // both must agree, or the deposit shown here would misrepresent what
   // actually gets charged. Per line: effective price x quantity.
@@ -410,12 +414,9 @@ export default function ReservationScreen() {
             style={styles.dateScroll}
           >
             {days.map((d, index) => {
-              const isSelected =
-                d.toDateString() === selectedDate.toDateString();
-              const dayName = d.toLocaleDateString("en-US", {
-                weekday: "short",
-              });
-              const dateNum = d.getDate();
+              const isSelected = isSameManilaDay(d, selectedDate);
+              const dayName = manilaWeekdayLabel(d);
+              const dateNum = manilaDayNumber(d);
               return (
                 <TouchableOpacity
                   key={index}
