@@ -22,25 +22,64 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { wishlistIds } = useWishlist();
   const { itemCount } = useCart();
-  
+  const [counts, setCounts] = useState({
+    pending: 0,
+    toPay: 0,
+    ready: 0,
+    completed: 0,
+    cancelled: 0,
+    activeTotal: 0,
+  });
+
   const theme = useColorScheme();
   const colors = Colors[theme];
 
   useEffect(() => {
     if (user) {
-      const fetchProfile = async () => {
+      const fetchProfileAndReservations = async () => {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', user.id)
           .single();
-          
+
         if (!error && data) {
           setProfile(data);
         }
+
+        const { data: resData } = await supabase
+          .from('reservations')
+          .select('status')
+          .eq('customer_id', user.id);
+
+        if (resData) {
+          let pending = 0;
+          let toPay = 0;
+          let ready = 0;
+          let completed = 0;
+          let cancelled = 0;
+
+          resData.forEach((r: any) => {
+            const s = (r.status || '').toLowerCase();
+            if (s === 'pending') pending++;
+            else if (s === 'confirmed' || s === 'accept_to_pay' || s === 'awaiting_payment' || s === 'topay') toPay++;
+            else if (s === 'ready' || s === 'fitting') ready++;
+            else if (s === 'completed') completed++;
+            else if (s === 'cancelled') cancelled++;
+          });
+
+          setCounts({
+            pending,
+            toPay,
+            ready,
+            completed,
+            cancelled,
+            activeTotal: pending + toPay + ready,
+          });
+        }
       };
-      
-      fetchProfile();
+
+      fetchProfileAndReservations();
     }
   }, [user]);
 
@@ -100,7 +139,16 @@ export default function ProfileScreen() {
 
         <View style={styles.section}>
           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg}}>
-            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>My Reservations</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>My Reservations</Text>
+              {counts.activeTotal > 0 && (
+                <View style={{ backgroundColor: colors.tint, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 }}>
+                  <Text style={{ color: colors.onTint, fontSize: 11, fontWeight: '700' }}>
+                    {counts.pending > 0 ? `${counts.pending} PENDING` : `${counts.activeTotal} ACTIVE`}
+                  </Text>
+                </View>
+              )}
+            </View>
             <TouchableOpacity onPress={() => router.push('/reservations')}>
               <Text style={[Type.body, { color: colors.tint }]}>View All</Text>
             </TouchableOpacity>
@@ -112,7 +160,14 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="View pending reservations"
             >
-              <IconSymbol name="clock.arrow.circlepath" size={24} color={colors.icon} />
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="clock.arrow.circlepath" size={24} color={colors.icon} />
+                {counts.pending > 0 && (
+                  <View style={styles.statusBadgeBubble}>
+                    <Text style={styles.statusBadgeText}>{counts.pending}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Pending</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -121,7 +176,14 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="View reservations awaiting payment"
             >
-              <IconSymbol name="creditcard" size={24} color={colors.icon} />
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="creditcard" size={24} color={colors.icon} />
+                {counts.toPay > 0 && (
+                  <View style={styles.statusBadgeBubble}>
+                    <Text style={styles.statusBadgeText}>{counts.toPay}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>To pay</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -130,7 +192,14 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="View reservations ready to collect"
             >
-              <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
+                {counts.ready > 0 && (
+                  <View style={styles.statusBadgeBubble}>
+                    <Text style={styles.statusBadgeText}>{counts.ready}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Ready</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -139,7 +208,14 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="View completed reservations"
             >
-              <IconSymbol name="star" size={24} color={colors.icon} />
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="star" size={24} color={colors.icon} />
+                {counts.completed > 0 && (
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.secondaryText }]}>
+                    <Text style={styles.statusBadgeText}>{counts.completed}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Completed</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -148,7 +224,14 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="View cancelled reservations"
             >
-              <IconSymbol name="xmark.circle" size={24} color={colors.icon} />
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="xmark.circle" size={24} color={colors.icon} />
+                {counts.cancelled > 0 && (
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.secondaryText }]}>
+                    <Text style={styles.statusBadgeText}>{counts.cancelled}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Cancelled</Text>
             </TouchableOpacity>
           </View>
@@ -289,6 +372,24 @@ const styles = StyleSheet.create({
   orderStatusText: {
     ...Type.caption,
     marginTop: Spacing.sm,
+  },
+  statusBadgeBubble: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    backgroundColor: '#ef4444',
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    zIndex: 10,
+  },
+  statusBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
   },
   settingsGroup: {
     borderRadius: Radius.lg,

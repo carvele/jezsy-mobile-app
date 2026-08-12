@@ -10,9 +10,11 @@ import {
   Animated,
   Easing,
   Dimensions,
+  Pressable,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +22,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { CATEGORY_SELECT, getMainCategoryName, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
 import { RecentlyViewed } from '@/src/components/RecentlyViewed';
 import { useToast } from '@/src/context/ToastContext';
@@ -31,6 +34,7 @@ import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 import { StyleGallery } from '@/components/StyleGallery';
+import { useWishlist } from '@/src/context/WishlistContext';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -72,6 +76,7 @@ export default function HomeScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
+  const { isInWishlist, toggleWishlist } = useWishlist();
   const router = useRouter();
 
   const fetchProducts = async (fromCache = false) => {
@@ -329,6 +334,20 @@ export default function HomeScreen() {
                   outputRange: [1 / GOLDEN_RATIO, 1, 1 / GOLDEN_RATIO],
                   extrapolate: 'clamp',
                 });
+                const saved = isInWishlist(item.id);
+                const stock: number | null | undefined = item.stock;
+                const hasStock = stock !== null && stock !== undefined;
+                const outOfStock = hasStock && stock <= 0;
+                const lowStock = hasStock && stock > 0 && stock <= 5;
+                const stockLabel = !hasStock
+                  ? null
+                  : outOfStock
+                    ? 'Out of stock'
+                    : lowStock
+                      ? `Only ${stock} left`
+                      : `${stock} in stock`;
+                const stockColor = outOfStock ? colors.error : lowStock ? colors.warning : colors.secondaryText;
+
                 return (
                   <TouchableOpacity
                     key={`${item.id}-${index}`}
@@ -346,58 +365,74 @@ export default function HomeScreen() {
                           style={[styles.heroCardImage, { backgroundColor: colors.imagePlaceholder }]}
                           contentFit="cover"
                         />
-                        {/* Overlaid Tag Badges */}
-                        <View style={{ position: 'absolute', top: 12, left: 12, flexDirection: 'row', gap: 6, zIndex: 10 }}>
+                        {/* Left Column Tag Badges */}
+                        <View style={{ position: 'absolute', top: 10, left: 10, flexDirection: 'row', gap: 6, zIndex: 10 }}>
+                          {(item.is_new_arrival || (item.tags && item.tags.includes('New Arrival'))) && (
+                            <View style={{ backgroundColor: colors.tint, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 }}>
+                              <Text style={{ color: colors.onTint, fontSize: 10, fontWeight: '800' }}>NEW</Text>
+                            </View>
+                          )}
                           {(item.on_sale || item.sale_price) && (
-                            <View style={{ backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
-                              <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>
-                                {item.discount_percentage ? `-${item.discount_percentage}% SALE` : 'SALE'}
+                            <View style={{ backgroundColor: colors.notification, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 }}>
+                              <Text style={{ color: colors.onNotification, fontSize: 10, fontWeight: '800' }}>
+                                {item.discount_percentage ? `-${item.discount_percentage}%` : 'SALE'}
                               </Text>
                             </View>
                           )}
-                          {(item.is_new_arrival || (item.tags && item.tags.includes('New Arrival'))) && (
-                            <View style={{ backgroundColor: '#10b981', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
-                              <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>NEW</Text>
-                            </View>
-                          )}
-                          {item.tags && item.tags.includes('AR Try-On') && (
-                            <View style={{ backgroundColor: '#6366f1', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
-                              <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>AR</Text>
+                          {(item.model_3d_url || (item.tags && item.tags.includes('AR Try-On'))) && (
+                            <View style={{ backgroundColor: '#6366f1', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                              <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
+                              <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '800' }}>AR</Text>
                             </View>
                           )}
                         </View>
-                        {/* Overlaid Total Stock Badge */}
-                        <View style={{ position: 'absolute', top: 12, right: 12, zIndex: 10 }}>
-                          <View style={{ backgroundColor: (item.stock != null && item.stock <= 0) ? '#ef4444' : 'rgba(0,0,0,0.65)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 }}>
-                            <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>
-                              {item.stock != null ? (item.stock > 0 ? `📦 ${item.stock} IN STOCK` : 'OUT OF STOCK') : '📦 IN STOCK'}
-                            </Text>
-                          </View>
-                        </View>
+
+                        {/* Top-Right Wishlist Heart Button */}
+                        <Pressable
+                          style={{ position: 'absolute', top: 8, right: 8, zIndex: 12 }}
+                          onPress={() => toggleWishlist(item.id)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel={saved ? `Remove ${item.name} from wishlist` : `Save ${item.name} to wishlist`}
+                        >
+                          <BlurView intensity={40} tint="light" style={styles.heroHeartBg}>
+                            <IconSymbol
+                              name={saved ? 'heart.fill' : 'heart'}
+                              size={16}
+                              color={saved ? Colors.dark.blushFill : '#FFF'}
+                            />
+                          </BlurView>
+                        </Pressable>
                       </View>
+
                       <View style={styles.heroCardTextContainer}>
-                        <Text style={[styles.featureBrand, { color: colors.text }]}>
-                          {(getMainCategoryName(item) ?? 'EDITORIAL').toUpperCase()}
+                        <Text style={[styles.featureBrand, { color: colors.secondaryText }]} numberOfLines={1}>
+                          {(getMainCategoryName(item) ?? 'COLLECTION').toUpperCase()}
                         </Text>
-                        <Text style={[styles.featureName, { color: colors.text }]} numberOfLines={2}>
+                        <Text style={[styles.featureName, { color: colors.text }]} numberOfLines={1}>
                           {item.name}
                         </Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                           {item.on_sale && item.sale_price ? (
                             <>
-                              <Text style={[styles.featurePrice, { color: '#ef4444', fontWeight: '700' }]}>
+                              <Text style={[styles.featurePrice, { color: colors.notification, fontWeight: '700' }]}>
                                 ₱{item.sale_price.toLocaleString()}
                               </Text>
-                              <Text style={[styles.featurePrice, { color: colors.secondaryText, textDecorationLine: 'line-through', fontSize: 11 }]}>
+                              <Text style={[styles.featurePrice, { color: colors.secondaryText, textDecorationLine: 'line-through', fontSize: 12 }]}>
                                 ₱{item.price?.toLocaleString()}
                               </Text>
                             </>
                           ) : (
-                            <Text style={[styles.featurePrice, { color: colors.secondaryText }]}>
+                            <Text style={[styles.featurePrice, { color: colors.text, fontWeight: '700' }]}>
                               ₱{(item.price || 0).toLocaleString()}
                             </Text>
                           )}
                         </View>
+                        {stockLabel && (
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: stockColor, marginTop: 2 }}>
+                            {stockLabel}
+                          </Text>
+                        )}
                       </View>
                     </Animated.View>
                   </TouchableOpacity>
@@ -571,6 +606,16 @@ const styles = StyleSheet.create({
   heroDotActive: {
     width: 20,
     borderRadius: 4,
+  },
+  heroHeartBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // Edits Section
