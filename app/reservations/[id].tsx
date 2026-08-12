@@ -258,7 +258,14 @@ export default function ReservationDetailScreen() {
     ? new Date(reservation.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : 'N/A';
   const statusColor = getStatusColor(reservation.status);
-  const balanceDue = (reservation.rental_price || 0) - (reservation.deposit || 0);
+  // Raw arithmetic, not "what's still owed" -- see isBalanceSettled below.
+  // Staff record collection via settle_reservation_balance at pickup, which
+  // this screen never checked: the row showed "Balance Due at Pickup: ₱X"
+  // forever, even for a Completed reservation staff had already been paid
+  // for in person.
+  const rawBalanceDue = (reservation.rental_price || 0) - (reservation.deposit || 0);
+  const isBalanceSettled = Boolean(reservation.balance_settled_at);
+  const balanceDue = isBalanceSettled ? 0 : rawBalanceDue;
   // Matches the dashboard's CAN_RESCHEDULE_STATUSES. The old list stopped at
   // 'confirmed', so a customer whose item was already waiting for collection
   // could not move the appointment even though staff could.
@@ -566,9 +573,20 @@ export default function ReservationDetailScreen() {
             <Text style={[styles.rowValue, { color: colors.success }]}>₱{(reservation.deposit || 0).toFixed(2)}</Text>
           </View>
           <View style={[styles.row, { marginBottom: 0 }]}>
-            <Text style={[styles.rowText, { color: colors.secondaryText }]}>Balance Due at Pickup</Text>
-            <Text style={[styles.rowValue, { color: colors.tint }]}>₱{balanceDue.toFixed(2)}</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
+              {isBalanceSettled ? 'Balance' : 'Balance Due at Pickup'}
+            </Text>
+            {isBalanceSettled ? (
+              <Text style={[styles.rowValue, { color: colors.success }]}>Collected ✓</Text>
+            ) : (
+              <Text style={[styles.rowValue, { color: colors.tint }]}>₱{balanceDue.toFixed(2)}</Text>
+            )}
           </View>
+          {isBalanceSettled && reservation.balance_settled_at && (
+            <Text style={[styles.rowText, { color: colors.secondaryText, fontSize: 12, marginTop: 2 }]}>
+              Collected {new Date(reservation.balance_settled_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          )}
           <View style={[styles.paymentStatusRow, { borderTopColor: colors.border }]}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>Payment Status</Text>
             <Text style={[styles.rowValue, { color: colors.text }]}>{reservation.payment_status || 'Pending'}</Text>
