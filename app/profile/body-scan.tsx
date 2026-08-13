@@ -7,13 +7,12 @@ import {
   Camera,
   useCameraDevice,
   useCameraPermission,
-} from "react-native-vision-camera";
-import {
   usePoseDetection,
   RunningMode,
   Delegate,
+  NATIVE_VISION_AVAILABLE,
   type PoseDetectionResultBundle,
-} from "react-native-mediapipe-posedetection";
+} from "@/src/utils/nativeVision";
 import * as Speech from "expo-speech";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -366,6 +365,28 @@ export default function BodyScanScreen() {
   }
 
   if (!hasPermission) {
+    // Without the native camera/pose modules, permission can never be
+    // granted -- requestPermission stub always resolves false -- so this
+    // must offer the same manual escape as the no-device/model-error cards
+    // below, or the flow is a dead end.
+    if (!NATIVE_VISION_AVAILABLE) {
+      return (
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
+          <View style={styles.centerCard}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Scan Unavailable</Text>
+            <Text style={[styles.cardBody, { color: colors.secondaryText }]}>
+              The body scan camera is unavailable on this device. You can enter your measurements manually instead.
+            </Text>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.tint }]}
+              onPress={() => router.replace({ pathname: "/profile/measurements", params: { height, weight, gender } })}
+            >
+              <Text style={styles.actionText}>Enter Manually</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
         <View style={styles.centerCard}>

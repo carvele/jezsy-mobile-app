@@ -3,8 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Lin
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
-import { usePoseDetection, RunningMode, Delegate } from 'react-native-mediapipe-posedetection';
+import { Camera, useCameraDevice, useCameraPermission, usePoseDetection, RunningMode, Delegate, NATIVE_VISION_AVAILABLE } from '@/src/utils/nativeVision';
 import { Image } from 'expo-image';
 import * as Speech from 'expo-speech';
 import { supabase } from '@/src/lib/supabase';
@@ -187,10 +186,16 @@ export default function ARTryOnScreen() {
   if (mode === '2d' && !hasPermission) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>We need your permission to show the camera</Text>
-        <TouchableOpacity onPress={requestPermission} style={{ marginTop: 20 }}>
-          <Text style={{ color: colors.tint }}>Grant Permission</Text>
-        </TouchableOpacity>
+        <Text style={{ color: colors.text }}>
+          {NATIVE_VISION_AVAILABLE
+            ? 'We need your permission to show the camera'
+            : 'The 2D camera overlay is unavailable on this device.'}
+        </Text>
+        {NATIVE_VISION_AVAILABLE && (
+          <TouchableOpacity onPress={requestPermission} style={{ marginTop: 20 }}>
+            <Text style={{ color: colors.tint }}>Grant Permission</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={() => setMode('3d')} style={{ marginTop: 20 }}>
           <Text style={{ color: colors.tint }}>Switch to 3D View</Text>
         </TouchableOpacity>
@@ -214,6 +219,10 @@ export default function ARTryOnScreen() {
 
   const toggleMode = async () => {
     if (mode === '3d') {
+      if (!NATIVE_VISION_AVAILABLE) {
+        setMode('2d'); // Falls through to the "unavailable" screen above with an explicit exit.
+        return;
+      }
       if (!hasPermission) {
         const granted = await requestPermission();
         if (!granted) {
