@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, withDelay } from 'react-native-reanimated';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useMessages, MessageContext } from '@/src/context/MessagesContext';
@@ -31,6 +32,30 @@ type ProductPreview = {
   image_url: string | null;
 };
 
+// Three dots bouncing in a staggered wave, matching the standard chat-app
+// "someone is typing" affordance. Each dot's animation starts on a fixed
+// delay from the others so they read as a wave rather than blinking in sync.
+function TypingDot({ delay, color }: { delay: number; color: string }) {
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    translateY.value = withDelay(
+      delay,
+      withRepeat(
+        withSequence(
+          withTiming(-4, { duration: 300 }),
+          withTiming(0, { duration: 300 }),
+        ),
+        -1,
+      ),
+    );
+  }, [delay, translateY]);
+
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
+
+  return <Animated.View style={[styles.typingDot, { backgroundColor: color }, style]} />;
+}
+
 export default function ChatScreen() {
   const { showToast } = useToast();
   const { conversationId, ctxType, ctxRef, ctxLabel } = useLocalSearchParams<{
@@ -40,7 +65,7 @@ export default function ChatScreen() {
     ctxLabel?: string;
   }>();
   const { session } = useAuth();
-  const { sendMessage, editMessage, toggleReaction, markAsRead } = useMessages();
+  const { sendMessage, editMessage, toggleReaction, markAsRead, isStaffOnline } = useMessages();
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -190,6 +215,52 @@ export default function ChatScreen() {
       supabase.removeChannel(messageSubscription);
     };
   }, [conversationId, markAsRead, session?.user.id]);
+
+  // Typing indicator: ephemeral broadcast on a per-conversation channel, not
+  // a DB write -- the admin dashboard joins the same channel name/shape when
+  // viewing this conversation, so typing is visible across both apps without
+  // a table or extra Realtime traffic on `messages`.
+  const [otherTyping, setOtherTyping] = useState(false);
+  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const otherTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef(0);
+
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const channel = supabase.channel(`typing:${conversationId}`);
+    channel
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload?.sender_id === session?.user.id) return;
+        setOtherTyping(true);
+        if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current);
+        otherTypingTimeoutRef.current = setTimeout(() => setOtherTyping(false), 4000);
+      })
+      .subscribe();
+    typingChannelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      typingChannelRef.current = null;
+      if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current);
+      setOtherTyping(false);
+    };
+  }, [conversationId, session?.user.id]);
+
+  // Throttled so every keystroke doesn't open a broadcast -- one every 2s is
+  // plenty to keep the other side's "typing..." indicator alive.
+  const handleInputChange = useCallback((text: string) => {
+    setInputText(text);
+    if (editingId) return;
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 2000) return;
+    lastTypingSentRef.current = now;
+    typingChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { sender_id: session?.user.id },
+    });
+  }, [editingId, session?.user.id]);
 
   // Prime the subject from the "Ask about this" entry point; it rides along on
   // the next message the user sends, then clears.
@@ -621,7 +692,16 @@ export default function ChatScreen() {
             <Text style={[styles.headerTitle, { color: colors.text }]}>Boutique Support</Text>
             <IconSymbol name="checkmark.seal.fill" size={16} color={colors.tint} style={{ marginLeft: 4 }} />
           </View>
-          <Text style={{ fontSize: 11, color: colors.secondaryText }}>Verified Staff Team</Text>
+          {otherTyping ? (
+            <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600' }}>typing...</Text>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              {isStaffOnline && <View style={[styles.presenceDot, { backgroundColor: colors.success }]} />}
+              <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                {isStaffOnline ? 'Active now' : 'Verified Staff Team'}
+              </Text>
+            </View>
+          )}
         </View>
         <View style={{ width: 32 }} />
       </View>
@@ -643,6 +723,24 @@ export default function ChatScreen() {
           contentContainerStyle={styles.listContent}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          ListFooterComponent={
+            otherTyping ? (
+              <View style={[styles.messageRow, styles.messageRowThem]}>
+                <View
+                  style={[
+                    styles.messageBubble,
+                    styles.messageBubbleThem,
+                    styles.typingBubble,
+                    { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 },
+                  ]}
+                >
+                  <TypingDot delay={0} color={colors.secondaryText} />
+                  <TypingDot delay={120} color={colors.secondaryText} />
+                  <TypingDot delay={240} color={colors.secondaryText} />
+                </View>
+              </View>
+            ) : null
+          }
         />
 
         <Modal
@@ -752,7 +850,7 @@ export default function ChatScreen() {
             placeholder={editingId ? 'Edit your message...' : 'Type a message...'}
             placeholderTextColor={colors.secondaryText}
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             multiline
             maxLength={500}
             returnKeyType={editingId ? 'done' : 'send'}
@@ -798,6 +896,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...Type.subtitle,
   },
+  presenceDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
   container: {
     flex: 1,
   },
@@ -834,6 +937,17 @@ const styles = StyleSheet.create({
   },
   messageBubbleThem: {
     borderBottomLeftRadius: 4,
+  },
+  typingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 12,
+  },
+  typingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   messageImage: {
     width: 200,

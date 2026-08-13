@@ -23,6 +23,10 @@ interface MessagesContextType {
   markAsRead: (conversationId: string) => Promise<void>;
   getOrCreateConversation: () => Promise<Conversation | null>;
   refreshConversations: () => Promise<void>;
+  /** user_id -> role, live across both this app and the admin dashboard (same presence channel). */
+  onlineUsers: Record<string, string>;
+  /** True if any staff/admin/owner is currently online -- conversations here are with the team, not one person. */
+  isStaffOnline: boolean;
 }
 
 const MessagesContext = createContext<MessagesContextType | undefined>(undefined);
@@ -31,8 +35,52 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const { session, profile } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, string>>({});
 
   const unreadCount = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
+
+  const isStaffOnline = Object.values(onlineUsers).some(
+    (role) => role === 'staff' || role === 'admin' || role === 'owner'
+  );
+
+  // Shared presence channel: 'presence:online' is the same channel name the
+  // admin dashboard tracks itself on, so a staff member's browser tab and a
+  // customer's phone see each other's live online state through Supabase
+  // Realtime -- no extra table or polling needed.
+  useEffect(() => {
+    if (!session?.user.id) {
+      setOnlineUsers({});
+      return;
+    }
+
+    const channel = supabase.channel('presence:online', {
+      config: { presence: { key: session.user.id } },
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState<{ user_id: string; role: string }>();
+        const next: Record<string, string> = {};
+        for (const presences of Object.values(state)) {
+          const p = presences[0];
+          if (p) next[p.user_id] = p.role;
+        }
+        setOnlineUsers(next);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            user_id: session.user.id,
+            role: profile?.role || 'customer',
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user.id, profile?.role]);
 
   const refreshConversations = useCallback(async () => {
     if (!session?.user.id) return;
@@ -250,6 +298,8 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     markAsRead,
     getOrCreateConversation,
     refreshConversations,
+    onlineUsers,
+    isStaffOnline,
   }), [
     conversations,
     unreadCount,
@@ -260,6 +310,8 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     markAsRead,
     getOrCreateConversation,
     refreshConversations,
+    onlineUsers,
+    isStaffOnline,
   ]);
 
   return (
