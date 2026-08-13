@@ -12,7 +12,7 @@ import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';
 
 export default function InboxScreen() {
-  const { conversations, loading: messagesLoading } = useMessages();
+  const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline } = useMessages();
   const { user, profile } = useAuth();
   const router = useRouter();
   const theme = useColorScheme();
@@ -105,6 +105,8 @@ export default function InboxScreen() {
     const isStaff =
       profile?.role === 'staff' || profile?.role === 'admin' || profile?.role === 'owner';
     const displayName = isStaff ? `Customer (${item.customer_id.substring(0, 6)})` : 'Boutique Support';
+    const isOnline = isStaff ? !!onlineUsers[item.customer_id] : isStaffOnline;
+    const isUnread = item.unread_count > 0 && !isStaff;
 
     const dateStr = item.last_message_time
       ? new Date(item.last_message_time).toLocaleDateString([], {
@@ -122,19 +124,31 @@ export default function InboxScreen() {
         accessibilityRole="button"
         accessibilityLabel={`Conversation with ${displayName}. ${item.last_message || 'No messages yet'}`}
       >
-        <View style={[styles.avatar, { backgroundColor: colors.tint }]}>
-          <Text style={[styles.avatarText, { color: colors.onTint }]}>{displayName.charAt(0).toUpperCase()}</Text>
+        <View style={styles.avatarContainer}>
+          <View style={[styles.avatar, { backgroundColor: colors.tint }]}>
+            <Text style={[styles.avatarText, { color: colors.onTint }]}>{displayName.charAt(0).toUpperCase()}</Text>
+          </View>
+          {isOnline && (
+            <View style={[styles.presenceDot, { backgroundColor: colors.success, borderColor: colors.background }]} />
+          )}
         </View>
         <View style={styles.itemContent}>
           <View style={styles.itemHeader}>
-            <Text style={[styles.name, { color: colors.text }]}>{displayName}</Text>
-            <Text style={[styles.time, { color: colors.secondaryText }]}>{dateStr}</Text>
+            <Text style={[styles.name, { color: colors.text }, isUnread && styles.nameUnread]}>{displayName}</Text>
+            <Text style={[styles.time, { color: colors.secondaryText }, isUnread && { color: colors.text }]}>{dateStr}</Text>
           </View>
           <View style={styles.footer}>
-            <Text style={[styles.lastMessage, { color: colors.secondaryText }]} numberOfLines={1}>
+            <Text
+              style={[
+                styles.lastMessage,
+                { color: isUnread ? colors.text : colors.secondaryText },
+                isUnread && styles.lastMessageUnread,
+              ]}
+              numberOfLines={1}
+            >
               {item.last_message || 'Start a conversation...'}
             </Text>
-            {item.unread_count > 0 && !isStaff && (
+            {isUnread && (
               <View style={[styles.badge, { backgroundColor: colors.notification }]}>
                 <Text style={[styles.badgeText, { color: colors.onNotification }]}>{item.unread_count}</Text>
               </View>
@@ -322,16 +336,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
   },
+  avatarContainer: {
+    marginRight: 14,
+  },
   avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
   },
   avatarText: {
     ...Type.title,
+  },
+  presenceDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    borderWidth: 2,
   },
   itemContent: {
     flex: 1,
@@ -347,6 +372,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  nameUnread: {
+    fontWeight: '800',
+  },
   time: {
     ...Type.caption,
   },
@@ -359,6 +387,9 @@ const styles = StyleSheet.create({
     ...Type.body,
     flex: 1,
     marginRight: Spacing.sm,
+  },
+  lastMessageUnread: {
+    fontWeight: '700',
   },
   badge: {
     borderRadius: 10,
