@@ -29,7 +29,7 @@ import { Database } from '@/src/types/database.types';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { evaluateColors } from '@/src/utils/colorMatcher';
 import { useToast } from '@/src/context/ToastContext';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
@@ -600,7 +600,7 @@ export default function OutfitBuilderScreen() {
           <View style={{ height: 100 }} />
         </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={styles.canvasContainer} showsVerticalScrollIndicator={false}>
+        <GestureScrollView contentContainerStyle={styles.canvasContainer} showsVerticalScrollIndicator={false}>
           <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={[styles.canvasStage, { backgroundColor: colors.background }]}>
             {slots.shoes && <DraggableCanvasItem uri={slots.shoes.image_url} baseStyle={styles.canvasShoes} resetKey={slots.shoes.image_url} />}
             {slots.bottom && <DraggableCanvasItem uri={slots.bottom.image_url} baseStyle={styles.canvasBottom} resetKey={slots.bottom.image_url} />}
@@ -612,7 +612,7 @@ export default function OutfitBuilderScreen() {
             <Text style={[styles.canvasHint, { color: colors.secondaryText }]}>Drag items to reposition</Text>
           )}
           <View style={{ height: 100 }} />
-        </ScrollView>
+        </GestureScrollView>
       )}
 
       {/* Processing overlay: background removal runs after the picker closes,
