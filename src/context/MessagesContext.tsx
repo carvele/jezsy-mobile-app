@@ -21,6 +21,7 @@ interface MessagesContextType {
   editMessage: (messageId: string, text: string) => Promise<Message | null>;
   toggleReaction: (messageId: string, emoji: string) => Promise<Record<string, string> | null>;
   markAsRead: (conversationId: string) => Promise<void>;
+  markDelivered: (conversationId: string) => Promise<void>;
   getOrCreateConversation: () => Promise<Conversation | null>;
   refreshConversations: () => Promise<void>;
   /** user_id -> role, live across both this app and the admin dashboard (same presence channel). */
@@ -134,6 +135,33 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
           refreshConversations();
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload: any) => {
+          // Marks a message Delivered the instant it lands while this app is
+          // running and subscribed, regardless of whether the recipient has
+          // that specific conversation open -- the same live signal the
+          // admin dashboard uses on its side. A message sent while this app
+          // is fully closed still gets caught by the conversation screen's
+          // catch-up call to markDelivered on open.
+          const msg = payload.new;
+          if (msg && msg.sender_id && msg.sender_id !== session.user.id && !msg.delivered_at) {
+            supabase
+              .from('messages')
+              .update({ delivered_at: new Date().toISOString() })
+              .eq('id', msg.id)
+              .is('delivered_at', null)
+              .then(({ error }: any) => {
+                if (error) console.error('Error marking message delivered:', error);
+              });
+          }
+        }
+      )
       .subscribe();
 
     return () => {
@@ -227,16 +255,45 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
         .update({ unread_count: 0 })
         .eq('id', conversationId);
 
-      // Also mark messages as read
+      const nowIso = new Date().toISOString();
+
+      // Reading implies delivery -- catches the case where read_at is being
+      // set without delivered_at ever having been stamped (e.g. the app was
+      // closed when the message arrived, so no realtime INSERT fired for
+      // it). is('delivered_at', null) means an earlier, real delivery time
+      // is never overwritten.
       await supabase
         .from('messages')
-        .update({ read_at: new Date().toISOString() })
+        .update({ delivered_at: nowIso })
+        .eq('conversation_id', conversationId)
+        .is('delivered_at', null)
+        .neq('sender_id', session?.user.id || '');
+
+      await supabase
+        .from('messages')
+        .update({ read_at: nowIso })
         .eq('conversation_id', conversationId)
         .is('read_at', null)
         .neq('sender_id', session?.user.id || '');
-        
+
     } catch (error) {
       console.error('Error marking as read:', error);
+    }
+  }, [session?.user.id]);
+
+  // Bulk catch-up for messages that arrived while this app was fully closed
+  // (so no realtime INSERT could have marked them) -- called when the chat
+  // screen fetches a conversation's history.
+  const markDelivered = useCallback(async (conversationId: string) => {
+    try {
+      await supabase
+        .from('messages')
+        .update({ delivered_at: new Date().toISOString() })
+        .eq('conversation_id', conversationId)
+        .is('delivered_at', null)
+        .neq('sender_id', session?.user.id || '');
+    } catch (error) {
+      console.error('Error marking delivered:', error);
     }
   }, [session?.user.id]);
 
@@ -296,6 +353,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     editMessage,
     toggleReaction,
     markAsRead,
+    markDelivered,
     getOrCreateConversation,
     refreshConversations,
     onlineUsers,
@@ -308,6 +366,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     editMessage,
     toggleReaction,
     markAsRead,
+    markDelivered,
     getOrCreateConversation,
     refreshConversations,
     onlineUsers,

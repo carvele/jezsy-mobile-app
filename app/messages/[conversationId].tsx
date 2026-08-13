@@ -16,7 +16,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
-import { formatDateSeparator, shouldStartMessageGroup } from '@/src/utils/dateTime';
+import { formatDateSeparator, formatReceiptTime, shouldStartMessageGroup } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
 
 // One reaction per person per message, so this is a shortlist rather than a
@@ -77,6 +77,10 @@ export default function ChatScreen() {
   // The long-press target. Reactions apply to anyone's message; Edit only shows
   // for your own, so one sheet serves both.
   const [actionTarget, setActionTarget] = useState<any | null>(null);
+  // Tapping a bubble reveals its exact Sent/Delivered/Seen time even when it
+  // isn't the last message of its group (where that row is hidden by
+  // default). Tapping the same bubble again, or any other bubble, closes it.
+  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
   const [pendingContext, setPendingContext] = useState<MessageContext | null>(null);
   const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string>>({});
   const resolvedImageUrlsRef = useRef(resolvedImageUrls);
@@ -469,7 +473,8 @@ export default function ChatScreen() {
     const next = index < messages.length - 1 ? messages[index + 1] : null;
     const isLastInGroup =
       !next || next.sender_id !== item.sender_id || shouldStartMessageGroup(item.created_at, next.created_at);
-    const showMeta = isLastInGroup || !!item.edited_at || (isMe && (item._status || index === lastOwnIndex));
+    const showMeta =
+      isLastInGroup || !!item.edited_at || (isMe && (item._status || index === lastOwnIndex)) || expandedMessageId === item.id;
 
     // Safely parse raw JSON strings to prevent string leak crashes on Android
     let displayText = item.text || '';
@@ -521,6 +526,10 @@ export default function ChatScreen() {
           )}
           <TouchableOpacity
             activeOpacity={canAct(item) ? 0.7 : 1}
+            onPress={() => {
+              if (!isMe || !canAct(item)) return;
+              setExpandedMessageId((prev) => (prev === item.id ? null : item.id));
+            }}
             onLongPress={() => canAct(item) && setActionTarget(item)}
             delayLongPress={300}
             disabled={!canAct(item)}
@@ -528,8 +537,8 @@ export default function ChatScreen() {
             accessibilityHint={
               canAct(item)
                 ? canEdit(item)
-                  ? 'Long press to react or edit this message'
-                  : 'Long press to react to this message'
+                  ? 'Tap for delivery status. Long press to react or edit this message'
+                  : 'Tap for delivery status. Long press to react to this message'
                 : undefined
             }
             style={[
@@ -660,8 +669,18 @@ export default function ChatScreen() {
                       <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sending • </Text>
                     ) : item.read_at ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={[styles.readReceiptText, { color: colors.tint, fontWeight: '700' }]}>Seen </Text>
+                        <Text style={[styles.readReceiptText, { color: colors.tint, fontWeight: '700' }]}>
+                          Seen{expandedMessageId === item.id ? ` ${formatReceiptTime(item.read_at)}` : ''}{' '}
+                        </Text>
                         <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
+                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
+                      </View>
+                    ) : item.delivered_at ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>
+                          Delivered{expandedMessageId === item.id ? ` ${formatReceiptTime(item.delivered_at)}` : ''}{' '}
+                        </Text>
+                        <IconSymbol name="checkmark.circle" size={11} color={colors.secondaryText} />
                         <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
                       </View>
                     ) : (

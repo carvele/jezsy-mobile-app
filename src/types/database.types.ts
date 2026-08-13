@@ -586,13 +586,17 @@ export type Database = {
           context_type: string | null
           conversation_id: string
           created_at: string | null
+          delivered_at: string | null
           edited_at: string | null
           id: string
           image_url: string | null
+          is_auto_response: boolean | null
           reactions: Json
           read_at: string | null
           sender_id: string | null
           sender_name: string | null
+          sender_role: string | null
+          sender_type: string | null
           text: string | null
         }
         Insert: {
@@ -601,13 +605,17 @@ export type Database = {
           context_type?: string | null
           conversation_id: string
           created_at?: string | null
+          delivered_at?: string | null
           edited_at?: string | null
           id?: string
           image_url?: string | null
+          is_auto_response?: boolean | null
           reactions?: Json
           read_at?: string | null
           sender_id?: string | null
           sender_name?: string | null
+          sender_role?: string | null
+          sender_type?: string | null
           text?: string | null
         }
         Update: {
@@ -616,13 +624,17 @@ export type Database = {
           context_type?: string | null
           conversation_id?: string
           created_at?: string | null
+          delivered_at?: string | null
           edited_at?: string | null
           id?: string
           image_url?: string | null
+          is_auto_response?: boolean | null
           reactions?: Json
           read_at?: string | null
           sender_id?: string | null
           sender_name?: string | null
+          sender_role?: string | null
+          sender_type?: string | null
           text?: string | null
         }
         Relationships: [
@@ -1807,33 +1819,19 @@ export type Database = {
       }
       check_email_exists: { Args: { lookup_email: string }; Returns: boolean }
       check_unattended_reservations: { Args: never; Returns: undefined }
-      create_reservation:
-        | {
-            Args: {
-              _appointment_time: string
-              _color: string
-              _date: string
-              _payment_option?: string
-              _product_id: string
-              _quantity?: number
-              _receipt_path?: string
-              _size: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              _appointment_time: string
-              _color: string
-              _date: string
-              _payment_option?: string
-              _product_id: string
-              _quantity: number
-              _receipt_path: string
-              _size: string
-            }
-            Returns: Json
-          }
+      create_reservation: {
+        Args: {
+          _appointment_time: string
+          _color: string
+          _date: string
+          _payment_option?: string
+          _product_id: string
+          _quantity: number
+          _receipt_path: string
+          _size: string
+        }
+        Returns: Json
+      }
       create_reservation_multi: {
         Args: {
           _appointment_time: string
@@ -1854,6 +1852,7 @@ export type Database = {
         Returns: undefined
       }
       dispatch_pending_push: { Args: never; Returns: number }
+      expire_stale_payments: { Args: never; Returns: number }
       expire_unpaid_reservations: { Args: never; Returns: number }
       get_slot_booked_counts: {
         Args: { _date: string }
@@ -1873,6 +1872,10 @@ export type Database = {
         Returns: Json
       }
       process_account_deletion: { Args: { _request_id: string }; Returns: Json }
+      reject_account_deletion_request: {
+        Args: { _request_id: string }
+        Returns: Json
+      }
       request_reschedule: {
         Args: {
           _appointment_time: string
@@ -1896,6 +1899,10 @@ export type Database = {
       resolve_reschedule: {
         Args: { _approve: boolean; _reservation_id: string }
         Returns: Json
+      }
+      send_customer_notification: {
+        Args: { _body: string; _title: string; _user_id: string }
+        Returns: string
       }
       settle_reservation_balance: {
         Args: { _method?: string; _reservation_id: string }
