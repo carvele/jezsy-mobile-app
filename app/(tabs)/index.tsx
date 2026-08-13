@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
-  Dimensions,
+  useWindowDimensions,
   Pressable,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
@@ -39,12 +39,14 @@ import { useWishlist } from '@/src/context/WishlistContext';
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // The card occupies 1/phi of the screen (~61.8%) rather than a hand-picked
 // fraction -- golden-ratio framing that also reads noticeably less dominant
 // than the original 78%, with a bigger neighbor peek as the direct result.
+// Derived from useWindowDimensions() inside the component (not a module-
+// level Dimensions.get() snapshot) so it stays correct across rotation and
+// foldable resize instead of freezing at whatever size the app happened to
+// cold-start at.
 const GOLDEN_RATIO = 1.618;
-const HERO_CARD_WIDTH = SCREEN_WIDTH / GOLDEN_RATIO;
 const HERO_CARD_GAP = Spacing.md;
 // Safety cap, not a real limit: nothing stops a merchant flagging thirty
 // products is_featured, and a thirty-dot carousel is not a hero section.
@@ -67,6 +69,8 @@ export default function HomeScreen() {
   const heroScrollRef = useRef<ScrollView>(null);
   const heroExtendedIndexRef = useRef(1);
   const heroInteractingRef = useRef(false);
+  const { width: screenWidth } = useWindowDimensions();
+  const heroCardWidth = screenWidth / GOLDEN_RATIO;
 
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -198,7 +202,7 @@ export default function HomeScreen() {
   // pixel-identical, the jump is imperceptible and the loop reads seamless.
   const settleHeroLoop = useCallback((extendedIdx: number) => {
     if (featuredProducts.length <= 1) return;
-    const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+    const step = heroCardWidth + HERO_CARD_GAP;
     const lastExtendedIdx = featuredProducts.length + 1;
     if (extendedIdx === 0) {
       heroScrollRef.current?.scrollTo({ x: featuredProducts.length * step, animated: false });
@@ -209,7 +213,7 @@ export default function HomeScreen() {
     } else {
       heroExtendedIndexRef.current = extendedIdx;
     }
-  }, [featuredProducts.length]);
+  }, [featuredProducts.length, heroCardWidth]);
 
   // Auto-advances the hero every 4s, pausing while a finger is on it so it
   // never fights a manual swipe or moves content out from under a mid-read
@@ -233,7 +237,7 @@ export default function HomeScreen() {
   // instant loop-snap landing mid-flight.
   useEffect(() => {
     if (featuredProducts.length <= 1) return;
-    const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+    const step = heroCardWidth + HERO_CARD_GAP;
     const timer = setInterval(() => {
       if (heroInteractingRef.current) return;
       const nextExtended = heroExtendedIndexRef.current + 1;
@@ -241,7 +245,7 @@ export default function HomeScreen() {
       heroScrollRef.current?.scrollTo({ x: nextExtended * step, animated: true });
     }, 4000);
     return () => clearInterval(timer);
-  }, [featuredProducts.length]);
+  }, [featuredProducts.length, heroCardWidth]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -291,14 +295,14 @@ export default function HomeScreen() {
               ref={heroScrollRef}
               horizontal
               showsHorizontalScrollIndicator={false}
-              snapToInterval={HERO_CARD_WIDTH + HERO_CARD_GAP}
+              snapToInterval={heroCardWidth + HERO_CARD_GAP}
               decelerationRate="fast"
               contentContainerStyle={styles.heroCarouselContent}
-              contentOffset={heroLoops ? { x: HERO_CARD_WIDTH + HERO_CARD_GAP, y: 0 } : undefined}
+              contentOffset={heroLoops ? { x: heroCardWidth + HERO_CARD_GAP, y: 0 } : undefined}
               onScrollBeginDrag={() => { heroInteractingRef.current = true; }}
               onMomentumScrollEnd={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
                 heroInteractingRef.current = false;
-                const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+                const step = heroCardWidth + HERO_CARD_GAP;
                 settleHeroLoop(Math.round(e.nativeEvent.contentOffset.x / step));
               }}
               onScroll={Animated.event(
@@ -306,7 +310,7 @@ export default function HomeScreen() {
                 {
                   useNativeDriver: true,
                   listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-                    const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+                    const step = heroCardWidth + HERO_CARD_GAP;
                     const idx = Math.round(e.nativeEvent.contentOffset.x / step);
                     const real = heroLoops
                       ? (idx - 1 + featuredProducts.length) % featuredProducts.length
@@ -322,7 +326,7 @@ export default function HomeScreen() {
                 // same "focus" language a physical gallery rail uses, so the
                 // card under a finger always reads as the one being looked
                 // at.
-                const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
+                const step = heroCardWidth + HERO_CARD_GAP;
                 const inputRange = [(index - 1) * step, index * step, (index + 1) * step];
                 const scale = heroScrollX.interpolate({
                   inputRange,
@@ -352,7 +356,7 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     key={`${item.id}-${index}`}
                     activeOpacity={0.9}
-                    style={[styles.heroCard, index === loopedHeroProducts.length - 1 && styles.heroCardLast]}
+                    style={[styles.heroCard, { width: heroCardWidth }, index === loopedHeroProducts.length - 1 && styles.heroCardLast]}
                     onPress={() => router.push(`/product/${item.id}`)}
                     accessibilityRole="button"
                     accessibilityLabel={`Featured: ${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}`}
@@ -547,9 +551,12 @@ const styles = StyleSheet.create({
   },
   
   // Editorial Section
+  // marginBottom trimmed from a hardcoded 40 to the xl token (20) -- the
+  // extra 20px was just dead vertical space between the dots and the next
+  // section, not doing anything for the carousel itself.
   editorialSection: {
     marginTop: 10,
-    marginBottom: 40,
+    marginBottom: Spacing.xl,
   },
   // The peek past the screen edge is the swipe affordance, so the row
   // itself carries no horizontal padding -- each card supplies its own via
@@ -557,8 +564,10 @@ const styles = StyleSheet.create({
   heroCarouselContent: {
     paddingLeft: Spacing.xl,
   },
+  // width is applied inline (heroCardWidth, from useWindowDimensions) since
+  // it now varies with the live window size rather than being fixed at
+  // whatever size the app cold-started at.
   heroCard: {
-    width: HERO_CARD_WIDTH,
     marginRight: HERO_CARD_GAP,
   },
   // The trailing edge needs its own visible margin too, since
@@ -576,6 +585,12 @@ const styles = StyleSheet.create({
   heroCardTextContainer: {
     marginTop: Spacing.md,
   },
+  // Hierarchy: category label is the smallest, mutedest text (secondaryText
+  // color, applied at the call site) -- purely context, never competes for
+  // attention. Product name is the heaviest weight of the three text rows so
+  // it reads as the primary element after the image itself. Price stays
+  // smaller than the name but bold (weight applied at the call site) so it's
+  // still a clear, scannable secondary signal, not buried.
   featureBrand: {
     fontSize: 12,
     fontWeight: '700',
@@ -584,7 +599,7 @@ const styles = StyleSheet.create({
   },
   featureName: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     lineHeight: 24,
     marginBottom: Spacing.xs,
   },
