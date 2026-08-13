@@ -877,6 +877,7 @@ export type Database = {
       }
       products: {
         Row: {
+          ar_data: Json
           base_color: string | null
           care_instructions: string | null
           category: string | null
@@ -921,6 +922,7 @@ export type Database = {
           visibility: string | null
         }
         Insert: {
+          ar_data?: Json
           base_color?: string | null
           care_instructions?: string | null
           category?: string | null
@@ -965,6 +967,7 @@ export type Database = {
           visibility?: string | null
         }
         Update: {
+          ar_data?: Json
           base_color?: string | null
           care_instructions?: string | null
           category?: string | null
@@ -1808,6 +1811,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adjust_inventory_stock: {
+        Args: {
+          p_available_delta?: number
+          p_inventory_id: string
+          p_reserved_delta?: number
+          p_total_delta?: number
+        }
+        Returns: {
+          new_available: number
+          new_reserved: number
+          new_total: number
+          out_product_doc_id: string
+          prev_available: number
+          prev_reserved: number
+          prev_total: number
+        }[]
+      }
       assert_bookable_slot: {
         Args: {
           _appointment: string
@@ -1841,15 +1861,6 @@ export type Database = {
           _receipt_path?: string
         }
         Returns: Json
-      }
-      create_reservations_from_cart: {
-        Args: {
-          _display_id: string
-          _items: Json
-          _pickup_date: string
-          _pickup_time: string
-        }
-        Returns: undefined
       }
       dispatch_pending_push: { Args: never; Returns: number }
       expire_stale_payments: { Args: never; Returns: number }
