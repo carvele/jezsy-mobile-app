@@ -1,0 +1,7 @@
+-- No prior migration in this repo ever defined handle_auto_acknowledgment()
+-- -- it existed live with no matching migration file (drift in the opposite
+-- direction from this session's usual pattern: something live that
+-- migrations never recorded). There is no known-good prior version to
+-- restore, and the pre-fix version was actively broken (rolled back every
+-- customer message insert it touched), so this rollback intentionally does
+-- not restore it.
