@@ -64,11 +64,6 @@ export default function HomeScreen() {
   // more content instead of bouncing off a hard stop.
   const [heroIndex, setHeroIndex] = useState(0);
   const heroScrollX = useRef(new Animated.Value(0)).current;
-  // Separate from heroScrollX, which is native-driven off real onScroll
-  // events and can't also be JS-driven without React Native's "already
-  // using native driver" conflict -- this one exists purely to hand
-  // auto-advance its own frame-by-frame values.
-  const heroAutoScrollDriver = useRef(new Animated.Value(0)).current;
   const heroScrollRef = useRef<ScrollView>(null);
   const heroExtendedIndexRef = useRef(1);
   const heroInteractingRef = useRef(false);
@@ -218,48 +213,35 @@ export default function HomeScreen() {
 
   // Auto-advances the hero every 4s, pausing while a finger is on it so it
   // never fights a manual swipe or moves content out from under a mid-read
-  // tap. Drives the scroll itself via a JS-side Animated.timing on
-  // heroAutoScrollDriver rather than ScrollView's own scrollTo(animated:
-  // true) -- Android's native smooth-scroll easing under the New
-  // Architecture reads as visibly jittery for this kind of short, frequent,
-  // programmatic scroll. A hand-driven timing loop sidesteps it by calling
-  // scrollTo(..., false) once per animation frame instead, and settling the
-  // loop in the animation's own completion callback rather than a fixed
-  // setTimeout guess -- the previous fixed-350ms guess could fire before or
-  // after the native scroll actually finished, so the instant loop-snap in
-  // settleHeroLoop landed mid-animation and visibly jittered specifically on
-  // the wrap back to the first card.
+  // tap.
+  //
+  // Previously hand-rolled a JS-thread Animated.timing loop that called
+  // scrollTo(..., false) once per animation frame, on the theory that
+  // native scrollTo(animated: true) was the jittery one. That was wrong,
+  // and made things worse: each of those ~60 per-second imperative scrollTo
+  // calls is a discrete native scroll command, not a continuous motion, so
+  // under any JS-thread contention it reads as the carousel jumping/
+  // re-rendering rather than sliding, and the pagination dots (driven off
+  // the same choppy onScroll events) drift out of sync with it too.
+  //
+  // The actual fix is smaller: trust the native animated scroll, and let
+  // the onMomentumScrollEnd handler below -- which already exists and
+  // already calls settleHeroLoop correctly -- be the ONLY place that
+  // decides when to settle the loop. It fires after any scroll completes,
+  // whether from this auto-advance or a manual swipe, so there's no
+  // guessed timing and no race between an unfinished animation and an
+  // instant loop-snap landing mid-flight.
   useEffect(() => {
     if (featuredProducts.length <= 1) return;
     const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
     const timer = setInterval(() => {
       if (heroInteractingRef.current) return;
       const nextExtended = heroExtendedIndexRef.current + 1;
-      const fromX = heroExtendedIndexRef.current * step;
-      const toX = nextExtended * step;
       heroExtendedIndexRef.current = nextExtended;
-
-      heroAutoScrollDriver.setValue(fromX);
-      const listenerId = heroAutoScrollDriver.addListener(({ value }) => {
-        heroScrollRef.current?.scrollTo({ x: value, animated: false });
-      });
-
-      Animated.timing(heroAutoScrollDriver, {
-        toValue: toX,
-        duration: 350,
-        easing: Easing.out(Easing.cubic),
-        // Must drive a numeric scrollTo argument on each frame, which the
-        // native driver cannot hand back to JS.
-        useNativeDriver: false,
-      }).start(() => {
-        heroAutoScrollDriver.removeListener(listenerId);
-        if (!heroInteractingRef.current) {
-          settleHeroLoop(nextExtended);
-        }
-      });
+      heroScrollRef.current?.scrollTo({ x: nextExtended * step, animated: true });
     }, 4000);
     return () => clearInterval(timer);
-  }, [featuredProducts.length, settleHeroLoop, heroAutoScrollDriver]);
+  }, [featuredProducts.length]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
