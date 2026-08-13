@@ -23,11 +23,15 @@ import { hasSeenOnboarding } from '@/src/utils/onboarding';
 import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
 import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoticeModal';
 import { registerOfflineSyncListener } from '@/src/services/offlineSync';
+import { initSentry, wrapRootComponent } from '@/src/utils/sentry';
 import NetInfo from '@react-native-community/netinfo';
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
+
+// As early as possible, before anything else in the app can throw.
+initSentry();
 
 // Held until the auth bootstrap (session + profile) and the onboarding-seen
 // check both resolve, so the tabs-anchor screen is never mounted before we
@@ -269,7 +273,7 @@ function InitialLayout() {
   );
 }
 
-export default function RootLayout() {
+function RootLayout() {
   // GestureHandlerRootView must wrap the whole tree for react-native-gesture-handler
   // to receive touches on Android; iOS auto-wraps but Android does not.
   return (
@@ -298,6 +302,8 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default wrapRootComponent(RootLayout);
 
 const styles = StyleSheet.create({
   offlineBanner: {
