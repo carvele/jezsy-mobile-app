@@ -1090,6 +1090,24 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limits: {
+        Row: {
+          key: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          key: string
+          request_count?: number
+          window_start: string
+        }
+        Update: {
+          key?: string
+          request_count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       reservation_items: {
         Row: {
           color: string | null
@@ -1838,6 +1856,14 @@ export type Database = {
         Returns: undefined
       }
       check_email_exists: { Args: { lookup_email: string }; Returns: boolean }
+      check_rate_limit: {
+        Args: {
+          p_key: string
+          p_max_requests: number
+          p_window_seconds: number
+        }
+        Returns: boolean
+      }
       check_unattended_reservations: { Args: never; Returns: undefined }
       create_reservation: {
         Args: {

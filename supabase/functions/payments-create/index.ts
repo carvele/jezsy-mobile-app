@@ -49,6 +49,22 @@ serve(async (req) => {
     const userId = userData?.user?.id;
     if (userError || !userId) return json({ error: "Authentication required." }, 401);
 
+    // Every call here opens (or reuses) a real PayMongo Checkout Session --
+    // the abuse surface is a scripted burst of session-creation calls, not
+    // legitimate retry behavior, which this limit comfortably allows for.
+    // Fails open on an unexpected RPC error (e.g. a transient DB hiccup):
+    // this is an abuse guard, not the payment's authorization check, so
+    // availability wins over strictness here.
+    const { data: withinLimit, error: rateLimitError } = await admin.rpc("check_rate_limit", {
+      p_key: `payments-create:${userId}`,
+      p_max_requests: 5,
+      p_window_seconds: 60,
+    });
+    if (rateLimitError) console.error("Rate limit check failed (failing open):", rateLimitError);
+    if (withinLimit === false) {
+      return json({ error: "Too many payment attempts. Please wait a moment and try again." }, 429);
+    }
+
     const body = await req.json().catch(() => null);
     const reservationId: string | undefined = body?.reservation_id;
     if (!reservationId) return json({ error: "reservation_id is required." }, 400);
