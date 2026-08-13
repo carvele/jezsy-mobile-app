@@ -55,21 +55,25 @@ $function$;
 -- had it, writes become admin-or-owner only.
 
 DROP POLICY IF EXISTS "Enable all access for admin/staff" ON public.devices;
+DROP POLICY IF EXISTS "Staff can view devices" ON public.devices;
 CREATE POLICY "Staff can view devices"
 ON public.devices FOR SELECT
 USING (public.is_staff_or_admin());
+DROP POLICY IF EXISTS "Admin or owner can manage devices" ON public.devices;
 CREATE POLICY "Admin or owner can manage devices"
 ON public.devices FOR ALL
 USING (public.is_admin_or_owner())
 WITH CHECK (public.is_admin_or_owner());
 
 DROP POLICY IF EXISTS "Staff manage store hours" ON public.store_hours;
+DROP POLICY IF EXISTS "Admin or owner can manage store hours" ON public.store_hours;
 CREATE POLICY "Admin or owner can manage store hours"
 ON public.store_hours FOR ALL
 USING (public.is_admin_or_owner())
 WITH CHECK (public.is_admin_or_owner());
 
 DROP POLICY IF EXISTS "Staff manage store closures" ON public.store_closures;
+DROP POLICY IF EXISTS "Admin or owner can manage store closures" ON public.store_closures;
 CREATE POLICY "Admin or owner can manage store closures"
 ON public.store_closures FOR ALL
 USING (public.is_admin_or_owner())

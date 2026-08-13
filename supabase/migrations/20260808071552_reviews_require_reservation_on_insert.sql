@@ -13,6 +13,7 @@
 -- ownership-based, same as before.
 
 DROP POLICY IF EXISTS "Enable all access for own reviews or admin" ON public.reviews;
+DROP POLICY IF EXISTS "Customers can insert reviews for reserved products" ON public.reviews;
 
 CREATE POLICY "Customers can insert reviews for reserved products"
   ON public.reviews FOR INSERT
@@ -31,11 +32,13 @@ CREATE POLICY "Customers can insert reviews for reserved products"
     )
   );
 
+DROP POLICY IF EXISTS "Customers can update own reviews" ON public.reviews;
 CREATE POLICY "Customers can update own reviews"
   ON public.reviews FOR UPDATE
   USING (user_id = auth.uid() OR is_staff_or_admin())
   WITH CHECK (user_id = auth.uid() OR is_staff_or_admin());
 
+DROP POLICY IF EXISTS "Customers can delete own reviews" ON public.reviews;
 CREATE POLICY "Customers can delete own reviews"
   ON public.reviews FOR DELETE
   USING (user_id = auth.uid() OR is_staff_or_admin());

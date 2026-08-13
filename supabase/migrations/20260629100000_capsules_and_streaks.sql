@@ -1,5 +1,5 @@
 -- Capsules Table
-CREATE TABLE capsules (
+CREATE TABLE IF NOT EXISTS capsules (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE capsules (
 );
 
 -- Capsule Items Link Table
-CREATE TABLE capsule_items (
+CREATE TABLE IF NOT EXISTS capsule_items (
     capsule_id UUID NOT NULL REFERENCES capsules(id) ON DELETE CASCADE,
     wardrobe_item_id UUID NOT NULL REFERENCES wardrobe_items(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -18,7 +18,7 @@ CREATE TABLE capsule_items (
 );
 
 -- Gamified Streaks Table
-CREATE TABLE user_streaks (
+CREATE TABLE IF NOT EXISTS user_streaks (
     user_id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
     current_streak INTEGER DEFAULT 0,
     longest_streak INTEGER DEFAULT 0,
@@ -32,23 +32,33 @@ ALTER TABLE capsules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE capsule_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_streaks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own capsules" ON capsules;
 CREATE POLICY "Users can view own capsules" ON capsules FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can insert own capsules" ON capsules;
 CREATE POLICY "Users can insert own capsules" ON capsules FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update own capsules" ON capsules;
 CREATE POLICY "Users can update own capsules" ON capsules FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can delete own capsules" ON capsules;
 CREATE POLICY "Users can delete own capsules" ON capsules FOR DELETE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view own capsule items" ON capsule_items;
 CREATE POLICY "Users can view own capsule items" ON capsule_items FOR SELECT USING (
     capsule_id IN (SELECT id FROM capsules WHERE user_id = auth.uid())
 );
+DROP POLICY IF EXISTS "Users can insert own capsule items" ON capsule_items;
 CREATE POLICY "Users can insert own capsule items" ON capsule_items FOR INSERT WITH CHECK (
     capsule_id IN (SELECT id FROM capsules WHERE user_id = auth.uid())
 );
+DROP POLICY IF EXISTS "Users can delete own capsule items" ON capsule_items;
 CREATE POLICY "Users can delete own capsule items" ON capsule_items FOR DELETE USING (
     capsule_id IN (SELECT id FROM capsules WHERE user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can view own streaks" ON user_streaks;
 CREATE POLICY "Users can view own streaks" ON user_streaks FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update own streaks" ON user_streaks;
 CREATE POLICY "Users can update own streaks" ON user_streaks FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can insert own streaks" ON user_streaks;
 CREATE POLICY "Users can insert own streaks" ON user_streaks FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- Function to handle streaks logic (to be called from frontend or trigger)

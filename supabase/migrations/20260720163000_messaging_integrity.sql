@@ -15,5 +15,12 @@ ALTER TABLE public.messages
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON public.messages (conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON public.messages (sender_id);
 
-ALTER TABLE public.conversations
-  ADD CONSTRAINT conversations_customer_id_key UNIQUE (customer_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'conversations_customer_id_key'
+  ) THEN
+    ALTER TABLE public.conversations
+      ADD CONSTRAINT conversations_customer_id_key UNIQUE (customer_id);
+  END IF;
+END $$;
