@@ -1,0 +1,33 @@
+name: EAS Build (preview)
+
+# Requires an EXPO_TOKEN secret in this repo's Settings > Secrets and
+# variables > Actions, generated from an Expo access token
+# (https://expo.dev/accounts/[account]/settings/access-tokens) with
+# permission to build this project. Until that secret is added, this
+# workflow will fail at the "eas build" step -- CI above (typecheck/lint)
+# is unaffected and still gates PRs on its own.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: EAS Build (Android, preview profile)
+        run: eas build --platform android --profile preview --non-interactive --no-wait

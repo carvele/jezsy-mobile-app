@@ -44,6 +44,12 @@ This project uses environment variables for Supabase configuration. Copy `.env.e
 
 Do not commit `.env`; it is ignored by `.gitignore`.
 
+## Database migrations
+
+Schema changes live in `supabase/migrations/`, applied against a live, shared
+Postgres project. See [supabase/migrations/README.md](supabase/migrations/README.md)
+for the idempotency conventions every migration in this repo must follow.
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:
