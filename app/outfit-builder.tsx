@@ -29,6 +29,8 @@ import { Database } from '@/src/types/database.types';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { evaluateColors } from '@/src/utils/colorMatcher';
 import { useToast } from '@/src/context/ToastContext';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 type Product     = Database['public']['Tables']['products']['Row'];
@@ -60,6 +62,14 @@ const SLOT_ICONS: Record<SlotKey, string> = {
   accessory: 'sparkles',
 };
 const SLOT_KEYS: SlotKey[] = ['top', 'bottom', 'outerwear', 'shoes', 'accessory'];
+// wardrobe_items.garment_type is capitalized (Top/Bottom/Outerwear/Shoes/
+// Accessory); products has no equivalent structured field -- catalog/
+// wishlist categories are boutique formal-wear categories (Ball Gowns,
+// Evening Wear, Cocktail & Party...), not garment slots, so there is
+// nothing reliable to filter those two tabs by.
+const SLOT_TO_GARMENT_TYPE: Record<SlotKey, string> = {
+  top: 'Top', bottom: 'Bottom', outerwear: 'Outerwear', shoes: 'Shoes', accessory: 'Accessory',
+};
 
 const { width } = Dimensions.get('window');
 const PICKER_CARD = (width - 48 - 12) / 2;
@@ -67,6 +77,52 @@ const PICKER_CARD = (width - 48 - 12) / 2;
 const EMPTY_SLOTS: Slots = {
   top: null, bottom: null, outerwear: null, shoes: null, accessory: null,
 };
+
+// Canvas items previously rendered at fixed percentage positions with no way
+// to move them, so a customer couldn't nudge an item into a more natural
+// spot to actually judge how the look reads together. baseStyle supplies the
+// starting position/size (unchanged); the pan gesture only adds a transform
+// on top, so layout math stays untouched and ViewShot still captures the
+// result correctly (transforms are part of the native render, not layout).
+function DraggableCanvasItem({ uri, baseStyle, resetKey }: { uri: string; baseStyle: any; resetKey: string }) {
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const startY = useSharedValue(0);
+
+  useEffect(() => {
+    translateX.value = 0;
+    translateY.value = 0;
+    startX.value = 0;
+    startY.value = 0;
+    // resetKey changing means the underlying item changed (new pick, or a
+    // cleared slot refilled) -- a repositioned top shouldn't hand its offset
+    // to an unrelated item that happens to land in the same slot next.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      translateX.value = startX.value + e.translationX;
+      translateY.value = startY.value + e.translationY;
+    })
+    .onEnd(() => {
+      startX.value = translateX.value;
+      startY.value = translateY.value;
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
+  }));
+
+  return (
+    <GestureDetector gesture={pan}>
+      <Animated.View style={[baseStyle, animatedStyle]}>
+        <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" />
+      </Animated.View>
+    </GestureDetector>
+  );
+}
 
 export default function OutfitBuilderScreen() {
   const { showToast } = useToast();
@@ -170,15 +226,18 @@ export default function OutfitBuilderScreen() {
 
   // Derive sorted items based on color harmony with already selected slots
   const sortedWardrobeItems = useMemo(() => {
-    if (filledCount === 0) return wardrobeItems;
+    const forSlot = activeSlot
+      ? wardrobeItems.filter((item) => item.garment_type === SLOT_TO_GARMENT_TYPE[activeSlot])
+      : wardrobeItems;
+    if (filledCount === 0) return forSlot;
     const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
-    const scored = wardrobeItems.map(item => ({
+    const scored = forSlot.map(item => ({
       item,
       score: evaluateColors([...currentColors, ...(item.color_tags || [])]).score,
     }));
     scored.sort((a, b) => b.score - a.score);
     return scored.map(s => s.item);
-  }, [wardrobeItems, slots, filledCount]);
+  }, [wardrobeItems, slots, filledCount, activeSlot]);
 
   const sortedCatalogItems = useMemo(() => {
     if (filledCount === 0) return catalogItems;
@@ -246,20 +305,39 @@ export default function OutfitBuilderScreen() {
     }
   }, [activeSlot]);
 
-  const selectProduct = useCallback((item: Product, source: Exclude<ItemSource, 'wardrobe'>) => {
+  const selectProduct = useCallback(async (item: Product, source: Exclude<ItemSource, 'wardrobe'>) => {
     if (!activeSlot) return;
-    setSlots((prev) => ({
-      ...prev,
-      [activeSlot]: {
-        product_id: item.id,
-        image_url:  item.image_url || '',
-        original_image_url: item.image_url || '',
-        name:       item.name,
-        color_tags: item.color ? [item.color] : [],
-        source,
-      },
-    }));
-    setPickerVisible(false);
+    setPickerVisible(false); // Close picker immediately for better UX
+    setSaving(true); // Re-use saving state to show a loader during BG removal
+
+    try {
+      // Same background-removal treatment as My Wardrobe items -- was
+      // previously skipped entirely for catalog/wishlist picks, so a
+      // product photo's studio background always showed up in the canvas
+      // preview while wardrobe items didn't.
+      let finalImageUrl = item.image_url || '';
+      if (item.image_url) {
+        try {
+          finalImageUrl = await removeBackground(item.image_url);
+        } catch (e) {
+          console.log('Background removal failed or fallback required, using original image', e);
+        }
+      }
+
+      setSlots((prev) => ({
+        ...prev,
+        [activeSlot]: {
+          product_id: item.id,
+          image_url:  finalImageUrl,
+          original_image_url: item.image_url || '',
+          name:       item.name,
+          color_tags: item.color ? [item.color] : [],
+          source,
+        },
+      }));
+    } finally {
+      setSaving(false);
+    }
   }, [activeSlot]);
 
   const removeSlot = useCallback((slot: SlotKey) => {
@@ -524,12 +602,15 @@ export default function OutfitBuilderScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.canvasContainer} showsVerticalScrollIndicator={false}>
           <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={[styles.canvasStage, { backgroundColor: colors.background }]}>
-            {slots.shoes && <Image source={{ uri: slots.shoes.image_url }} style={styles.canvasShoes} contentFit="contain" />}
-            {slots.bottom && <Image source={{ uri: slots.bottom.image_url }} style={styles.canvasBottom} contentFit="contain" />}
-            {slots.top && <Image source={{ uri: slots.top.image_url }} style={styles.canvasTop} contentFit="contain" />}
-            {slots.outerwear && <Image source={{ uri: slots.outerwear.image_url }} style={styles.canvasOuterwear} contentFit="contain" />}
-            {slots.accessory && <Image source={{ uri: slots.accessory.image_url }} style={styles.canvasAccessory} contentFit="contain" />}
+            {slots.shoes && <DraggableCanvasItem uri={slots.shoes.image_url} baseStyle={styles.canvasShoes} resetKey={slots.shoes.image_url} />}
+            {slots.bottom && <DraggableCanvasItem uri={slots.bottom.image_url} baseStyle={styles.canvasBottom} resetKey={slots.bottom.image_url} />}
+            {slots.top && <DraggableCanvasItem uri={slots.top.image_url} baseStyle={styles.canvasTop} resetKey={slots.top.image_url} />}
+            {slots.outerwear && <DraggableCanvasItem uri={slots.outerwear.image_url} baseStyle={styles.canvasOuterwear} resetKey={slots.outerwear.image_url} />}
+            {slots.accessory && <DraggableCanvasItem uri={slots.accessory.image_url} baseStyle={styles.canvasAccessory} resetKey={slots.accessory.image_url} />}
           </ViewShot>
+          {filledCount > 0 && (
+            <Text style={[styles.canvasHint, { color: colors.secondaryText }]}>Drag items to reposition</Text>
+          )}
           <View style={{ height: 100 }} />
         </ScrollView>
       )}
@@ -579,11 +660,13 @@ export default function OutfitBuilderScreen() {
               <ActivityIndicator size="large" color={colors.tint} />
             </View>
           ) : pickerTab === 'wardrobe' ? (
-            wardrobeItems.length === 0 ? (
+            sortedWardrobeItems.length === 0 ? (
               <View style={styles.center}>
                 <IconSymbol name="tshirt.fill" size={48} color={colors.icon} />
                 <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                  No wardrobe items available. Select pieces from Catalog or add items.
+                  {wardrobeItems.length === 0
+                    ? 'No wardrobe items available. Select pieces from Catalog or add items.'
+                    : `No ${activeSlot ? SLOT_LABELS[activeSlot].toLowerCase() : 'matching'} items in your wardrobe yet. Try Catalog, or add one tagged as ${activeSlot ? SLOT_LABELS[activeSlot] : 'this type'} in My Items.`}
                 </Text>
               </View>
             ) : (
@@ -935,6 +1018,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     overflow: 'hidden',
     position: 'relative',
+  },
+  canvasHint: {
+    fontSize: 12,
+    marginTop: Spacing.sm,
+    textAlign: 'center',
   },
   canvasShoes: {
     position: 'absolute',
