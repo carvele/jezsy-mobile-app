@@ -70,6 +70,30 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
+    const { data: callerData } = await callerClient.auth.getUser();
+    const callerId = callerData?.user?.id;
+    if (!callerId) return json(req, { error: 'Authentication required.' }, 401);
+
+    // Created once here and reused below for auth.admin.deleteUser -- both
+    // need the service-role key.
+    const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+    // This runs an irreversible data-erasure RPC -- the guard here is
+    // against a runaway retry loop or a scripted burst, not legitimate
+    // staff usage, which this limit comfortably allows for. Fails open on
+    // an unexpected RPC error: this is an abuse guard, not the RPC's own
+    // is_staff_or_admin() authorization check, so availability wins over
+    // strictness here.
+    const { data: withinLimit, error: rateLimitError } = await adminClient.rpc('check_rate_limit', {
+      p_key: `process-account-deletion:${callerId}`,
+      p_max_requests: 10,
+      p_window_seconds: 60,
+    });
+    if (rateLimitError) console.error('[process-account-deletion] Rate limit check failed (failing open):', rateLimitError);
+    if (withinLimit === false) {
+      return json(req, { error: 'Too many requests. Please wait a moment and try again.' }, 429);
+    }
+
     const { data: rpcData, error: rpcError } = await callerClient.rpc(
       'process_account_deletion',
       { _request_id: requestId },
@@ -98,7 +122,6 @@ Deno.serve(async (req) => {
     // credential itself. A failure here leaves the account data already
     // scrubbed but the login still live -- surfaced to staff rather than
     // silently swallowed, since it needs a manual follow-up either way.
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(targetUserId);
 
     if (authDeleteError) {
