@@ -25,6 +25,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { useToast } from '@/src/context/ToastContext';
+import { ImageCropModal } from '@/src/components/ImageCropModal';
 
 const { width } = Dimensions.get('window');
 
@@ -52,6 +53,8 @@ export default function AddWardrobeItemScreen() {
   const { session } = useAuth();
 
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [rawPickedUri, setRawPickedUri] = useState<string | null>(null);
+  const [cropModalVisible, setCropModalVisible] = useState(false);
   const [processedImageUri, setProcessedImageUri] = useState<string | null>(null);
   const [isProcessingBg, setIsProcessingBg] = useState<boolean>(false);
   
@@ -125,11 +128,14 @@ export default function AddWardrobeItemScreen() {
           showToast('Camera access required to snap photos.', 'error');
           return;
         }
+        // allowsEditing intentionally off: the native OS crop screen it
+        // triggers doesn't reliably render its confirm/cancel toolbar on
+        // some Android OEM skins when the crop box is this close to
+        // full-screen height, leaving users with no visible way to proceed.
+        // ImageCropModal below replaces it with our own View hierarchy.
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: [3, 4],
-          quality: 0.8,
+          quality: 0.9,
         });
       } else {
         const libraryPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -139,19 +145,29 @@ export default function AddWardrobeItemScreen() {
         }
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
-          allowsEditing: true,
-          aspect: [3, 4],
-          quality: 0.8,
+          quality: 0.9,
         });
       }
 
       if (!result.canceled && result.assets?.[0]) {
-        setImageUri(result.assets[0].uri);
+        setRawPickedUri(result.assets[0].uri);
+        setCropModalVisible(true);
       }
     } catch (e) {
       console.error('Error picking image:', e);
       showToast('Unable to open photos. Try again.', 'error');
     }
+  };
+
+  const handleCropCancel = () => {
+    setCropModalVisible(false);
+    setRawPickedUri(null);
+  };
+
+  const handleCropConfirm = (croppedUri: string) => {
+    setImageUri(croppedUri);
+    setCropModalVisible(false);
+    setRawPickedUri(null);
   };
 
   const toggleColor = (colorName: string) => {
@@ -448,6 +464,13 @@ export default function AddWardrobeItemScreen() {
         <View style={{ height: 60 }} />
       </ScrollView>
       </KeyboardAvoidingView>
+
+      <ImageCropModal
+        visible={cropModalVisible}
+        uri={rawPickedUri}
+        onCancel={handleCropCancel}
+        onConfirm={handleCropConfirm}
+      />
     </SafeAreaView>
   );
 }
