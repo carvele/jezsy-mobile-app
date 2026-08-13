@@ -10,19 +10,26 @@
 // Pass to .select() alongside '*' to embed both the subcategory and its
 // parent (main) category in one query.
 //
-// Hint syntax notes (this bit is fiddly):
+// Hint syntax notes (this bit is fiddly, and was wrong before -- verified
+// live against the PostgREST API, not just reasoned about):
 //   * Outer embed uses the CONSTRAINT name (products_category_id_fkey) because
 //     it's a FK between two different tables (products -> categories); exactly
 //     one relationship matches, so the constraint name resolves cleanly.
 //   * Inner "parent" embed is a SELF-reference (categories.parent_id ->
-//     categories.id). That one constraint defines TWO relationships (a row's
-//     parent AND its children), so hinting it by constraint name
-//     (categories_parent_id_fkey) does NOT resolve -- PostgREST returns
-//     PGRST200 "no relationship found". The correct disambiguator for a
-//     self-reference is the FK COLUMN name (parent_id), which unambiguously
-//     means "follow parent_id up to the parent row" (to-one).
+//     categories.id). The constraint name doesn't resolve at all here
+//     (PGRST200 "no relationship found", even after a schema cache reload --
+//     self-referencing constraints aren't indexed the same way). Hinting by
+//     TABLE!COLUMN ("categories!parent_id") does resolve without erroring,
+//     but silently picks the WRONG direction: it returns this row's
+//     CHILDREN (an array, empty for every leaf subcategory, since a
+//     subcategory never has children of its own) rather than its parent --
+//     which is exactly why every product's main-category label fell back to
+//     "COLLECTION" no matter what its actual category was. The direction
+//     that actually resolves correctly (a single object, the real parent)
+//     is the BARE column name as the embed spec: "parent:parent_id(...)",
+//     with no table prefix.
 export const CATEGORY_SELECT =
-  'categories!products_category_id_fkey(id, name, parent:categories!parent_id(id, name))';
+  'categories!products_category_id_fkey(id, name, parent:parent_id(id, name))';
 
 type ParentRef = { id: string; name: string };
 

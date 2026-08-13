@@ -218,30 +218,48 @@ export default function HomeScreen() {
 
   // Auto-advances the hero every 4s, pausing while a finger is on it so it
   // never fights a manual swipe or moves content out from under a mid-read
-  // tap. Drives the scroll itself via a JS-side Animated.timing rather than
-  // ScrollView's own scrollTo(animated: true) -- Android's native smooth-
-  // scroll easing under the New Architecture reads as visibly jittery for
-  // this kind of short, frequent, programmatic scroll, and a hand-driven
-  // timing loop sidesteps it entirely by calling scrollTo(..., false) once
-  // per animation frame instead.
-  // Smooth auto-advance carousel every 4s, pausing while user interacts.
+  // tap. Drives the scroll itself via a JS-side Animated.timing on
+  // heroAutoScrollDriver rather than ScrollView's own scrollTo(animated:
+  // true) -- Android's native smooth-scroll easing under the New
+  // Architecture reads as visibly jittery for this kind of short, frequent,
+  // programmatic scroll. A hand-driven timing loop sidesteps it by calling
+  // scrollTo(..., false) once per animation frame instead, and settling the
+  // loop in the animation's own completion callback rather than a fixed
+  // setTimeout guess -- the previous fixed-350ms guess could fire before or
+  // after the native scroll actually finished, so the instant loop-snap in
+  // settleHeroLoop landed mid-animation and visibly jittered specifically on
+  // the wrap back to the first card.
   useEffect(() => {
     if (featuredProducts.length <= 1) return;
     const step = HERO_CARD_WIDTH + HERO_CARD_GAP;
     const timer = setInterval(() => {
       if (heroInteractingRef.current) return;
       const nextExtended = heroExtendedIndexRef.current + 1;
+      const fromX = heroExtendedIndexRef.current * step;
+      const toX = nextExtended * step;
       heroExtendedIndexRef.current = nextExtended;
-      heroScrollRef.current?.scrollTo({ x: nextExtended * step, animated: true });
-      // Settle loop seamlessly after native animation completes
-      setTimeout(() => {
+
+      heroAutoScrollDriver.setValue(fromX);
+      const listenerId = heroAutoScrollDriver.addListener(({ value }) => {
+        heroScrollRef.current?.scrollTo({ x: value, animated: false });
+      });
+
+      Animated.timing(heroAutoScrollDriver, {
+        toValue: toX,
+        duration: 350,
+        easing: Easing.out(Easing.cubic),
+        // Must drive a numeric scrollTo argument on each frame, which the
+        // native driver cannot hand back to JS.
+        useNativeDriver: false,
+      }).start(() => {
+        heroAutoScrollDriver.removeListener(listenerId);
         if (!heroInteractingRef.current) {
           settleHeroLoop(nextExtended);
         }
-      }, 350);
+      });
     }, 4000);
     return () => clearInterval(timer);
-  }, [featuredProducts.length, settleHeroLoop]);
+  }, [featuredProducts.length, settleHeroLoop, heroAutoScrollDriver]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
