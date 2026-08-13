@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { Database } from '@/src/types/database.types';
@@ -48,43 +48,54 @@ export default function ReservationsScreen() {
   const colors = Colors[theme];
   const { showToast } = useToast();
 
-  useEffect(() => {
-    const fetchReservations = async () => {
-      if (!session?.user) return;
-      
-      try {
-        // The embedded count turns "Tailored Blazer" into "Tailored Blazer
-        // + 2 more": the parent's product columns only ever describe the
-        // first line, so on its own a multi-item reservation reads as if it
-        // held a single item.
-        const { data, error } = await supabase
-          .from('reservations')
-          .select('*, reservation_items(count)')
-          .eq('customer_id', session.user.id)
-          .eq('deleted', false)
-          .order('created_at', { ascending: false });
+  // useFocusEffect (not useEffect) so returning to this screen after an
+  // admin action elsewhere -- e.g. staff marking a reservation paid --
+  // refetches instead of leaving stale status badges from the last visit.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-        if (error) throw error;
-        setReservations(data || []);
-      } catch (err) {
-        // Rendered as "no reservations" indistinguishable from actually
-        // having none -- including the confirm-then-pay ones now waiting on
-        // a payment deadline, which is the worst screen for this to go quiet on.
-        console.error('Error fetching reservations:', err);
-        showToast('Unable to load reservations. Try again.', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
+      const fetchReservations = async () => {
+        if (!session?.user) return;
 
-    fetchReservations();
-  }, [session, showToast]);
+        try {
+          // The embedded count turns "Tailored Blazer" into "Tailored Blazer
+          // + 2 more": the parent's product columns only ever describe the
+          // first line, so on its own a multi-item reservation reads as if it
+          // held a single item.
+          const { data, error } = await supabase
+            .from('reservations')
+            .select('*, reservation_items(count)')
+            .eq('customer_id', session.user.id)
+            .eq('deleted', false)
+            .order('created_at', { ascending: false });
+
+          if (error) throw error;
+          if (!cancelled) setReservations(data || []);
+        } catch (err) {
+          // Rendered as "no reservations" indistinguishable from actually
+          // having none -- including the confirm-then-pay ones now waiting on
+          // a payment deadline, which is the worst screen for this to go quiet on.
+          console.error('Error fetching reservations:', err);
+          if (!cancelled) showToast('Unable to load reservations. Try again.', 'error');
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      };
+
+      fetchReservations();
+      return () => {
+        cancelled = true;
+      };
+    }, [session, showToast])
+  );
 
   const getStatusColor = (status: string | null) => {
     switch (statusBucket(status)) {
       case 'pending': return colors.warning;
       // Money is owed: the same attention colour the deadline copy uses.
       case 'toPay': return colors.notification;
+      case 'preparing': return colors.info;
       case 'ready': return colors.info;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
@@ -96,6 +107,7 @@ export default function ReservationsScreen() {
       all: reservations.length,
       pending: 0,
       toPay: 0,
+      preparing: 0,
       ready: 0,
       completed: 0,
       cancelled: 0,

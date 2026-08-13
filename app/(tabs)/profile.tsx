@@ -12,6 +12,7 @@ import { useWishlist } from '@/src/context/WishlistContext';
 import { useCart } from '@/src/context/CartContext';
 import { StreakBadge } from '@/src/components/StreakBadge';
 import { useToast } from '@/src/context/ToastContext';
+import { statusBucket } from '@/src/utils/reservationStatus';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
@@ -22,12 +23,14 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { wishlistIds } = useWishlist();
   const { itemCount } = useCart();
+  // Summarized to 4 tiles: Pending, To pay, Preparing, Ready. Completed and
+  // Cancelled reservations are done and stay reachable from "View All"
+  // rather than cluttering the at-a-glance summary.
   const [counts, setCounts] = useState({
     pending: 0,
     toPay: 0,
+    preparing: 0,
     ready: 0,
-    completed: 0,
-    cancelled: 0,
     activeTotal: 0,
   });
 
@@ -55,26 +58,25 @@ export default function ProfileScreen() {
         if (resData) {
           let pending = 0;
           let toPay = 0;
+          let preparing = 0;
           let ready = 0;
-          let completed = 0;
-          let cancelled = 0;
 
+          // Shared with reservations.tsx and the admin dashboard so a status
+          // only ever needs to be classified in one place.
           resData.forEach((r: any) => {
-            const s = (r.status || '').toLowerCase();
-            if (s === 'pending') pending++;
-            else if (s === 'confirmed' || s === 'accept_to_pay' || s === 'awaiting_payment' || s === 'topay') toPay++;
-            else if (s === 'ready' || s === 'fitting') ready++;
-            else if (s === 'completed') completed++;
-            else if (s === 'cancelled') cancelled++;
+            const bucket = statusBucket(r.status);
+            if (bucket === 'pending') pending++;
+            else if (bucket === 'toPay') toPay++;
+            else if (bucket === 'preparing') preparing++;
+            else if (bucket === 'ready') ready++;
           });
 
           setCounts({
             pending,
             toPay,
+            preparing,
             ready,
-            completed,
-            cancelled,
-            activeTotal: pending + toPay + ready,
+            activeTotal: pending + toPay + preparing + ready,
           });
         }
       };
@@ -179,6 +181,22 @@ export default function ProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=preparing')}
+              accessibilityRole="button"
+              accessibilityLabel="View reservations being prepared"
+            >
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="bag.fill" size={24} color={colors.icon} />
+                {counts.preparing > 0 && (
+                  <View style={styles.statusBadgeBubble}>
+                    <Text style={styles.statusBadgeText}>{counts.preparing}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Preparing</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.orderStatus}
               onPress={() => router.push('/reservations?status=ready')}
               accessibilityRole="button"
               accessibilityLabel="View reservations ready to collect"
@@ -192,38 +210,6 @@ export default function ProfileScreen() {
                 )}
               </View>
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Ready</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.orderStatus}
-              onPress={() => router.push('/reservations?status=completed')}
-              accessibilityRole="button"
-              accessibilityLabel="View completed reservations"
-            >
-              <View style={{ position: 'relative' }}>
-                <IconSymbol name="star" size={24} color={colors.icon} />
-                {counts.completed > 0 && (
-                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.secondaryText }]}>
-                    <Text style={styles.statusBadgeText}>{counts.completed}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Completed</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.orderStatus}
-              onPress={() => router.push('/reservations?status=cancelled')}
-              accessibilityRole="button"
-              accessibilityLabel="View cancelled reservations"
-            >
-              <View style={{ position: 'relative' }}>
-                <IconSymbol name="xmark.circle" size={24} color={colors.icon} />
-                {counts.cancelled > 0 && (
-                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.secondaryText }]}>
-                    <Text style={styles.statusBadgeText}>{counts.cancelled}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Cancelled</Text>
             </TouchableOpacity>
           </View>
         </View>
