@@ -461,6 +461,16 @@ export default function ChatScreen() {
     const previous = index > 0 ? messages[index - 1] : null;
     const showDateSeparator = shouldStartMessageGroup(previous?.created_at, item.created_at);
 
+    // A timestamp on every single bubble is noise once several land in a
+    // burst -- shown only on the last message of a consecutive run from the
+    // same sender, matching Messenger. "Last" means: the thread ends here,
+    // the next message is from someone else, or enough time passes before it
+    // that it would get its own date separator anyway.
+    const next = index < messages.length - 1 ? messages[index + 1] : null;
+    const isLastInGroup =
+      !next || next.sender_id !== item.sender_id || shouldStartMessageGroup(item.created_at, next.created_at);
+    const showMeta = isLastInGroup || !!item.edited_at || (isMe && (item._status || index === lastOwnIndex));
+
     // Safely parse raw JSON strings to prevent string leak crashes on Android
     let displayText = item.text || '';
     let jsonContext: any = null;
@@ -631,43 +641,45 @@ export default function ChatScreen() {
               </View>
             );
           })()}
-          <View style={styles.metaContainer}>
-            {isMe && (item._status || index === lastOwnIndex) && (
-              item._status === 'failed' ? (
-                <TouchableOpacity
-                  onPress={() => handleRetrySend(item)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Message not sent. Tap to try again."
-                >
-                  <Text style={[styles.readReceiptText, { color: colors.error }]}>
-                    Not sent. Tap to retry •{' '}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
-                  {item._status === 'sending' ? (
-                    <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sending • </Text>
-                  ) : item.read_at ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={[styles.readReceiptText, { color: colors.tint, fontWeight: '700' }]}>Seen </Text>
-                      <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
-                      <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
-                    </View>
-                  ) : (
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sent </Text>
-                      <IconSymbol name="checkmark" size={11} color={colors.secondaryText} />
-                      <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
-                    </View>
-                  )}
-                </View>
-              )
-            )}
-            <Text style={[styles.timestampText, { color: colors.secondaryText }]}>{timeString}</Text>
-            {item.edited_at ? (
-              <Text style={[styles.timestampText, { color: colors.secondaryText }]}> • edited</Text>
-            ) : null}
-          </View>
+          {showMeta && (
+            <View style={styles.metaContainer}>
+              {isMe && (item._status || index === lastOwnIndex) && (
+                item._status === 'failed' ? (
+                  <TouchableOpacity
+                    onPress={() => handleRetrySend(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Message not sent. Tap to try again."
+                  >
+                    <Text style={[styles.readReceiptText, { color: colors.error }]}>
+                      Not sent. Tap to retry •{' '}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                    {item._status === 'sending' ? (
+                      <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sending • </Text>
+                    ) : item.read_at ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={[styles.readReceiptText, { color: colors.tint, fontWeight: '700' }]}>Seen </Text>
+                        <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
+                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
+                      </View>
+                    ) : (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sent </Text>
+                        <IconSymbol name="checkmark" size={11} color={colors.secondaryText} />
+                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
+                      </View>
+                    )}
+                  </View>
+                )
+              )}
+              <Text style={[styles.timestampText, { color: colors.secondaryText }]}>{timeString}</Text>
+              {item.edited_at ? (
+                <Text style={[styles.timestampText, { color: colors.secondaryText }]}> • edited</Text>
+              ) : null}
+            </View>
+          )}
         </View>
         </View>
       </>

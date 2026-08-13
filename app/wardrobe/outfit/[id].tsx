@@ -135,7 +135,7 @@ export default function OutfitDetailScreen() {
               <View style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Image source={{ uri: slotItem.image_url }} style={styles.itemImage} contentFit="cover" />
                 <View style={styles.itemInfo}>
-                  <Text style={[styles.slotLabel, { color: colors.tint }]}>
+                  <Text style={[styles.slotLabel, { color: colors.tint }]} numberOfLines={1}>
                     {SLOT_LABELS[slotItem.slot] || slotItem.slot}
                   </Text>
                   <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>{slotItem.name}</Text>

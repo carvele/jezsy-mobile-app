@@ -255,7 +255,7 @@ export default function CapsuleDetailScreen() {
                   <IconSymbol name="xmark.circle" size={22} color="#fff" />
                 </TouchableOpacity>
                 <View style={styles.itemInfo}>
-                  <Text style={[styles.itemLabel, { color: colors.secondaryText }]}>{item.garment_type || item.category || 'Item'}</Text>
+                  <Text style={[styles.itemLabel, { color: colors.secondaryText }]} numberOfLines={1}>{item.garment_type || item.category || 'Item'}</Text>
                 </View>
               </View>
             ))}
@@ -322,7 +322,7 @@ export default function CapsuleDetailScreen() {
                       </View>
                     )}
                     <View style={styles.itemInfo}>
-                      <Text style={[styles.itemLabel, { color: colors.secondaryText }]}>{item.garment_type || item.category || 'Item'}</Text>
+                      <Text style={[styles.itemLabel, { color: colors.secondaryText }]} numberOfLines={1}>{item.garment_type || item.category || 'Item'}</Text>
                     </View>
                   </TouchableOpacity>
                 );
