@@ -29,20 +29,23 @@ export const RESERVATION_STATUSES = [
   'Confirmed',
   'Approved',
   'To Pay',
+  'Preparing',
   'To Pickup',
   'Fitting',
   'Active',
+  'Ready',
   'Completed',
   'Cancelled',
 ] as const;
 
 /** Filter buckets, in the order they appear in the tab row. */
-export const STATUS_FILTERS = ['all', 'pending', 'toPay', 'ready', 'completed', 'cancelled'] as const;
+export const STATUS_FILTERS = ['all', 'pending', 'toPay', 'preparing', 'ready', 'completed', 'cancelled'] as const;
 export type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 /**
- * Stored status to bucket. 'To Pay', 'Fitting' and 'Active' are legacy values
- * the dashboard still reconciles, so they are mapped rather than dropped.
+ * Stored status to bucket. 'To Pickup', 'Fitting' and 'Active' are legacy
+ * pre-rename values the dashboard still reconciles, so they are mapped to
+ * 'ready' rather than dropped.
  */
 const BUCKET: Record<string, Exclude<StatusFilter, 'all'>> = {
   pending: 'pending',
@@ -50,9 +53,11 @@ const BUCKET: Record<string, Exclude<StatusFilter, 'all'>> = {
   confirmed: 'toPay',
   approved: 'toPay',
   'to pay': 'toPay',
+  preparing: 'preparing',
   'to pickup': 'ready',
   fitting: 'ready',
   active: 'ready',
+  ready: 'ready',
   completed: 'completed',
   cancelled: 'cancelled',
 };
@@ -66,6 +71,7 @@ const FILTER_LABEL: Record<StatusFilter, string> = {
   all: 'All',
   pending: 'Pending',
   toPay: 'To pay',
+  preparing: 'Preparing',
   ready: 'Ready',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -76,6 +82,7 @@ export const filterLabel = (filter: StatusFilter): string => FILTER_LABEL[filter
 const BADGE_LABEL: Record<Exclude<StatusFilter, 'all'>, string> = {
   pending: 'Awaiting approval',
   toPay: 'To pay',
+  preparing: 'Preparing your item',
   ready: 'Ready to collect',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -93,13 +100,10 @@ export const isAwaitingPayment = (status: string | null): boolean =>
   statusBucket(status) === 'toPay';
 
 /**
- * Reschedulable states, deliberately matching what reschedule_reservation
- * actually accepts -- it raises on anything outside ('pending', 'confirmed').
- *
- * The dashboard's CAN_RESCHEDULE_STATUSES also includes 'To Pickup', so staff
- * can move an appointment in a state the customer cannot. Widening this to
- * 'ready' without also changing the RPC would just offer a button the server
- * then rejects, so the gap is recorded here rather than papered over.
+ * Reschedulable states, matching what request_reschedule actually accepts
+ * server-side (pending/request approval/confirmed/approved/to pay/preparing/
+ * to pickup/fitting/ready) -- kept in sync so this never offers a button the
+ * server then rejects.
  */
 export const canReschedule = (status: string | null): boolean =>
-  ['pending', 'toPay', 'ready'].includes(statusBucket(status));
+  ['pending', 'toPay', 'preparing', 'ready'].includes(statusBucket(status));

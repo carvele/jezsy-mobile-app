@@ -66,14 +66,14 @@ serve(async (req) => {
       return json({ error: "This reservation is already paid." }, 409);
     }
 
-    // Payment opens only AFTER staff accept, so Confirmed is the payable
-    // state. Pending means the request has not been reviewed yet -- charging
-    // there would mean refunding through PayMongo every time staff decline.
-    // 'To Pay' is what the admin dashboard writes for accepted-but-unpaid;
-    // accepted alongside 'Confirmed' so the flow works whichever label staff
-    // acceptance actually sets.
+    // Payment opens only after staff accept, matching
+    // is_awaiting_payment_status/isAwaitingPayment in the app. Pending means
+    // the request has not been reviewed yet -- charging there would mean
+    // refunding through PayMongo every time staff decline. 'confirmed' and
+    // 'approved' are pre-rename status values kept here during the
+    // reservation-status vocabulary transition; drop once no live row uses them.
     const status = String(reservation.status ?? "").toLowerCase();
-    if (status !== "confirmed" && status !== "to pay") {
+    if (status !== "confirmed" && status !== "approved" && status !== "to pay") {
       return json(
         {
           error:
