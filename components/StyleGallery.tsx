@@ -174,7 +174,7 @@ export function StyleGallery() {
 
         {filteredPoses.length === 0 && (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No style poses for "{selectedOccasion}"</Text>
+            <Text style={styles.emptyText}>No style poses for &quot;{selectedOccasion}&quot;</Text>
           </View>
         )}
       </ScrollView>
