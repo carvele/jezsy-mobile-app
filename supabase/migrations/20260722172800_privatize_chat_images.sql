@@ -10,6 +10,7 @@
 
 UPDATE storage.buckets SET public = false WHERE id = 'chat-images';
 
+DROP POLICY IF EXISTS "Participants can view chat images" ON storage.objects;
 CREATE POLICY "Participants can view chat images"
 ON storage.objects FOR SELECT TO authenticated
 USING (

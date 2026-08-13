@@ -29,7 +29,7 @@
 -- DB_IMPLEMENTATION_PLAN.md Batch 4 code change (in both apps); this
 -- migration only makes the value a valid one to log.
 
-ALTER TABLE public.stock_movements DROP CONSTRAINT stock_movements_change_type_check;
+ALTER TABLE public.stock_movements DROP CONSTRAINT IF EXISTS stock_movements_change_type_check;
 ALTER TABLE public.stock_movements ADD CONSTRAINT stock_movements_change_type_check
   CHECK (change_type = ANY (ARRAY['manual_adjustment', 'restock', 'correction', 'sale', 'reservation']));
 

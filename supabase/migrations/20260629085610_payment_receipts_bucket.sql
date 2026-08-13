@@ -6,6 +6,7 @@ ON CONFLICT (id) DO UPDATE SET public = false;
 
 DROP POLICY IF EXISTS "Public can view payment receipts" ON storage.objects;
 DROP POLICY IF EXISTS "Users can upload their own payment receipts" ON storage.objects;
+DROP POLICY IF EXISTS "Users can read their own payment receipts" ON storage.objects;
 
 CREATE POLICY "Users can upload their own payment receipts"
 ON storage.objects FOR INSERT

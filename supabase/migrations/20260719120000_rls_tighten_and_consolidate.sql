@@ -15,6 +15,7 @@
 
 -- 1. profiles: replace public read with owner-or-staff read
 DROP POLICY IF EXISTS "Enable read access for all users" ON public.profiles;
+DROP POLICY IF EXISTS "Enable read for own profile or admin" ON public.profiles;
 CREATE POLICY "Enable read for own profile or admin"
   ON public.profiles
   FOR SELECT

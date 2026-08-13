@@ -15,6 +15,13 @@ ALTER TABLE public.profiles
   ALTER COLUMN role SET DEFAULT 'customer',
   ALTER COLUMN role SET NOT NULL;
 
-ALTER TABLE public.profiles
-  ADD CONSTRAINT profiles_role_check
-  CHECK (role IN ('customer', 'staff', 'admin', 'owner'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'profiles_role_check'
+  ) THEN
+    ALTER TABLE public.profiles
+      ADD CONSTRAINT profiles_role_check
+      CHECK (role IN ('customer', 'staff', 'admin', 'owner'));
+  END IF;
+END $$;

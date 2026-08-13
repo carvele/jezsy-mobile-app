@@ -2,8 +2,8 @@
 
 -- Add columns for storing pose estimation confidence scores
 ALTER TABLE user_measurements
-ADD COLUMN scan_confidence real DEFAULT 0,
-ADD COLUMN per_field_confidence jsonb;
+ADD COLUMN IF NOT EXISTS scan_confidence real DEFAULT 0,
+ADD COLUMN IF NOT EXISTS per_field_confidence jsonb;
 
 -- Comment on columns for schema clarity
 COMMENT ON COLUMN user_measurements.scan_confidence IS 'Overall confidence score (0-1) of the AI body scan';
