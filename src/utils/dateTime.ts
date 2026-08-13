@@ -177,6 +177,36 @@ export function formatDateSeparator(iso: string): string {
   return `${datePart.toUpperCase()} AT ${time}`;
 }
 
+// Same day-bucket logic as formatDateSeparator, but sentence case for an
+// inline receipt caption ("Seen Sat, 3:41 PM") rather than a section divider
+// ("SAT AT 3:41 PM") -- the two read very differently at that scale.
+export function formatReceiptTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const daysAgo = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+  if (daysAgo === 0) return time;
+  if (daysAgo === 1) return `Yesterday, ${time}`;
+
+  if (daysAgo > 1 && daysAgo < 7) {
+    const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
+    return `${weekday}, ${time}`;
+  }
+
+  const datePart = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  });
+
+  return `${datePart}, ${time}`;
+}
+
 export function formatTimeLabel(time: string | null | undefined): string {
   if (!time) return 'N/A';
 
