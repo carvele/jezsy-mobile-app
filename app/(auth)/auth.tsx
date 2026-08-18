@@ -456,7 +456,7 @@ export default function AuthScreen() {
                 <Text style={styles.label}>Email</Text>
                 <View style={styles.inputRow}>
                   <Mail size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
-                  <TextInput
+                  <TextInput keyboardAppearance="dark"
                     style={styles.input}
                     placeholder="you@example.com"
                     placeholderTextColor="rgba(255,255,255,0.25)"
@@ -478,7 +478,7 @@ export default function AuthScreen() {
                 <Text style={styles.label}>Password</Text>
                 <View style={styles.inputRow}>
                   <Lock size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
-                  <TextInput
+                  <TextInput keyboardAppearance="dark"
                     style={styles.inputWithAction}
                     placeholder={mode === 'signup' ? 'Min. 6 characters' : 'Enter password'}
                     placeholderTextColor="rgba(255,255,255,0.25)"
@@ -511,7 +511,7 @@ export default function AuthScreen() {
                 <Text style={styles.label}>Confirm password</Text>
                 <View style={styles.inputRow}>
                   <Lock size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
-                  <TextInput
+                  <TextInput keyboardAppearance="dark"
                     style={styles.inputWithAction}
                     placeholder="Re-enter password"
                     placeholderTextColor="rgba(255,255,255,0.25)"
@@ -569,7 +569,7 @@ export default function AuthScreen() {
                 </TouchableOpacity>
 
                 {/* Hidden real input */}
-                <TextInput
+                <TextInput keyboardAppearance="dark"
                   ref={otpInputRef}
                   style={styles.hiddenInput}
                   value={otpCode}

@@ -177,7 +177,7 @@ export default function EditProfileScreen() {
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>First name</Text>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 value={data.firstName}
                 onChangeText={(v) => set('firstName', v)}
@@ -188,7 +188,7 @@ export default function EditProfileScreen() {
             <View style={{ width: 16 }} />
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>Last name</Text>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 value={data.lastName}
                 onChangeText={(v) => set('lastName', v)}
@@ -211,7 +211,7 @@ export default function EditProfileScreen() {
                 <Text style={[styles.countryDialCode, { color: colors.text }]}>{selectedCountry.dialCode}</Text>
                 <ChevronDown size={14} color={colors.secondaryText} />
               </TouchableOpacity>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, styles.phoneInput, { color: colors.text, borderBottomColor: colors.border }]}
                 value={data.phone}
                 onChangeText={handlePhoneChange}
@@ -225,7 +225,7 @@ export default function EditProfileScreen() {
           <View style={[styles.fieldGroup, { marginTop: Spacing.lg }]}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Date of birth</Text>
             <View style={styles.dobRow}>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, styles.dobInput, { color: colors.text, borderBottomColor: colors.border }]}
                 value={data.dateOfBirth}
                 onChangeText={handleDOBChange}
@@ -270,7 +270,7 @@ export default function EditProfileScreen() {
           <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>Address</Text>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Street address</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
               value={data.addressLine}
               onChangeText={(v) => set('addressLine', v)}
@@ -280,7 +280,7 @@ export default function EditProfileScreen() {
           </View>
           <View style={[styles.fieldGroup, { marginTop: Spacing.lg }]}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Barangay</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
               value={data.barangay}
               onChangeText={(v) => set('barangay', v)}
@@ -291,7 +291,7 @@ export default function EditProfileScreen() {
           <View style={[styles.row, { marginTop: Spacing.lg }]}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>City / Municipality</Text>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 value={data.city}
                 onChangeText={(v) => set('city', v)}
@@ -303,7 +303,7 @@ export default function EditProfileScreen() {
           <View style={[styles.row, { marginTop: Spacing.lg }]}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>Province</Text>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 value={data.province}
                 onChangeText={(v) => set('province', v)}
@@ -314,7 +314,7 @@ export default function EditProfileScreen() {
             <View style={{ width: 16 }} />
             <View style={[styles.fieldGroup, { width: 110 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>Zip code</Text>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 value={data.zipCode}
                 onChangeText={(v) => set('zipCode', v)}

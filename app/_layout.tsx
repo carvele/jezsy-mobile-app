@@ -40,6 +40,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // ── Offline Banner ────────────────────────────────────────────────────────────
 function OfflineBanner() {
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme];
   const [isOffline, setIsOffline] = useState(false);
   const slideAnim = useRef(new Animated.Value(-44)).current;
 
@@ -61,7 +63,7 @@ function OfflineBanner() {
     <Animated.View
       style={[
         styles.offlineBanner,
-        { transform: [{ translateY: slideAnim }] },
+        { backgroundColor: colors.warning, transform: [{ translateY: slideAnim }] },
       ]}
     >
       <Text style={styles.offlineBannerText}>⚡ No internet — browsing cached content</Text>
@@ -268,7 +270,7 @@ function InitialLayout() {
         />
       )}
       <OfflineBanner />
-      <StatusBar style="auto" />
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
     </ThemeProvider>
   );
 }
@@ -312,7 +314,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 44,
-    backgroundColor: '#B45309',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 9999,

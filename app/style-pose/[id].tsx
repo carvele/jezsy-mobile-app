@@ -13,6 +13,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Colors, Spacing, Type as Typography } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSafeBack } from '@/src/hooks/useSafeBack';
 
@@ -43,6 +44,8 @@ export default function StylePoseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const goBack = useSafeBack();
+  const theme = useColorScheme();
+  const colors = Colors[theme];
 
   const [pose, setPose] = useState<StylePoseDetail | null>(null);
   const [products, setProducts] = useState<LinkedProduct[]>([]);
@@ -106,31 +109,31 @@ export default function StylePoseDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.light.tint} />
+      <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.tint} />
       </SafeAreaView>
     );
   }
 
   if (!pose) {
     return (
-      <SafeAreaView style={styles.errorContainer}>
-        <Text style={styles.errorText}>Style pose not found</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={goBack}>
-          <Text style={styles.backBtnText}>Go Back</Text>
+      <SafeAreaView style={[styles.errorContainer, { backgroundColor: colors.background }]}>
+        <Text style={[styles.errorText, { color: colors.error }]}>Style pose not found</Text>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.tint }]} onPress={goBack}>
+          <Text style={[styles.backBtnText, { color: colors.onTint }]}>Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Navigation Bar */}
-      <View style={styles.navBar}>
+      <View style={[styles.navBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity style={styles.navBackBtn} onPress={goBack}>
-          <IconSymbol name="chevron.left" size={24} color={Colors.light.text} />
+          <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.navTitle} numberOfLines={1}>
+        <Text style={[styles.navTitle, { color: colors.text }]} numberOfLines={1}>
           {pose.name}
         </Text>
         <View style={{ width: 40 }} />
@@ -138,7 +141,7 @@ export default function StylePoseDetailScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Styled Reference Photo */}
-        <View style={styles.heroImageContainer}>
+        <View style={[styles.heroImageContainer, { backgroundColor: colors.imagePlaceholder }]}>
           {pose.image_url ? (
             <Image
               source={{ uri: pose.image_url }}
@@ -148,7 +151,7 @@ export default function StylePoseDetailScreen() {
             />
           ) : (
             <View style={styles.heroPlaceholder}>
-              <IconSymbol name="camera.fill" size={64} color="#94A3B8" />
+              <IconSymbol name="camera.fill" size={64} color={colors.tabIconDefault} />
             </View>
           )}
 
@@ -160,12 +163,12 @@ export default function StylePoseDetailScreen() {
         </View>
 
         {/* Pose Meta Card */}
-        <View style={styles.infoCard}>
+        <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
           <View style={styles.titleRow}>
-            <Text style={styles.poseTitle}>{pose.name}</Text>
+            <Text style={[styles.poseTitle, { color: colors.text }]}>{pose.name}</Text>
             {pose.difficulty && (
-              <View style={styles.difficultyBadge}>
-                <Text style={styles.difficultyBadgeText}>
+              <View style={[styles.difficultyBadge, { backgroundColor: colors.success + '22' }]}>
+                <Text style={[styles.difficultyBadgeText, { color: colors.success }]}>
                   {pose.difficulty.toUpperCase()}
                 </Text>
               </View>
@@ -173,9 +176,9 @@ export default function StylePoseDetailScreen() {
           </View>
 
           {pose.description ? (
-            <Text style={styles.descriptionText}>{pose.description}</Text>
+            <Text style={[styles.descriptionText, { color: colors.secondaryText }]}>{pose.description}</Text>
           ) : (
-            <Text style={styles.descriptionText}>
+            <Text style={[styles.descriptionText, { color: colors.secondaryText }]}>
               Recreate this signature look in AR Try-On mode to see how the garment fits your posture.
             </Text>
           )}
@@ -183,8 +186,8 @@ export default function StylePoseDetailScreen() {
 
         {/* Linked Products Section */}
         <View style={styles.productsSection}>
-          <Text style={styles.productsSectionTitle}>👗 Featured Garments in this Look</Text>
-          <Text style={styles.productsSectionSub}>
+          <Text style={[styles.productsSectionTitle, { color: colors.text }]}>👗 Featured Garments in this Look</Text>
+          <Text style={[styles.productsSectionSub, { color: colors.secondaryText }]}>
             Reserve any item from this styled look directly below
           </Text>
 
@@ -193,39 +196,39 @@ export default function StylePoseDetailScreen() {
               {products.map((prod) => (
                 <TouchableOpacity
                   key={prod.id}
-                  style={styles.productCard}
+                  style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}
                   onPress={() => router.push(`/product/${prod.id}` as any)}
                 >
                   {prod.image_url ? (
-                    <Image source={{ uri: prod.image_url }} style={styles.productImage} />
+                    <Image source={{ uri: prod.image_url }} style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]} />
                   ) : (
-                    <View style={styles.productImagePlaceholder}>
+                    <View style={[styles.productImagePlaceholder, { backgroundColor: colors.imagePlaceholder }]}>
                       <Text style={{ fontSize: 20 }}>👔</Text>
                     </View>
                   )}
 
                   <View style={styles.productInfo}>
-                    <Text style={styles.productName} numberOfLines={1}>
+                    <Text style={[styles.productName, { color: colors.text }]} numberOfLines={1}>
                       {prod.name}
                     </Text>
-                    <Text style={styles.productCategory}>{prod.category || 'Apparel'}</Text>
-                    <Text style={styles.productPrice}>
+                    <Text style={[styles.productCategory, { color: colors.secondaryText }]}>{prod.category || 'Apparel'}</Text>
+                    <Text style={[styles.productPrice, { color: colors.tint }]}>
                       ₱{(prod.rental_price || prod.price || 0).toLocaleString()} / day
                     </Text>
                   </View>
 
                   <TouchableOpacity
-                    style={styles.reserveBtn}
+                    style={[styles.reserveBtn, { backgroundColor: colors.tint }]}
                     onPress={() => router.push(`/reserve/${prod.id}` as any)}
                   >
-                    <Text style={styles.reserveBtnText}>Reserve</Text>
+                    <Text style={[styles.reserveBtnText, { color: colors.onTint }]}>Reserve</Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
               ))}
             </View>
           ) : (
-            <View style={styles.noProductsBox}>
-              <Text style={styles.noProductsText}>No specific products linked to this pose.</Text>
+            <View style={[styles.noProductsBox, { backgroundColor: colors.card }]}>
+              <Text style={[styles.noProductsText, { color: colors.secondaryText }]}>No specific products linked to this pose.</Text>
             </View>
           )}
         </View>
@@ -233,10 +236,10 @@ export default function StylePoseDetailScreen() {
 
       {/* Sticky Bottom CTA Bar */}
       {products.length > 0 && (
-        <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.ctaButton} activeOpacity={0.88} onPress={handleTryInAR}>
-            <IconSymbol name="sparkles" size={20} color="#FFFFFF" />
-            <Text style={styles.ctaButtonText}>Try This Look in AR</Text>
+        <View style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <TouchableOpacity style={[styles.ctaButton, { backgroundColor: colors.tint, shadowColor: colors.tint }]} activeOpacity={0.88} onPress={handleTryInAR}>
+            <IconSymbol name="sparkles" size={20} color={colors.onTint} />
+            <Text style={[styles.ctaButtonText, { color: colors.onTint }]}>Try This Look in AR</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -247,13 +250,11 @@ export default function StylePoseDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
   },
   errorContainer: {
     flex: 1,
@@ -263,17 +264,14 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...Typography.body,
-    color: '#EF4444',
     marginBottom: Spacing.md,
   },
   backBtn: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    backgroundColor: Colors.light.tint,
     borderRadius: 8,
   },
   backBtnText: {
-    color: '#FFFFFF',
     fontWeight: '700',
   },
   navBar: {
@@ -282,9 +280,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
   },
   navBackBtn: {
     padding: 8,
@@ -292,7 +288,6 @@ const styles = StyleSheet.create({
   navTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.light.text,
   },
   scrollContent: {
     paddingBottom: 100,
@@ -300,7 +295,6 @@ const styles = StyleSheet.create({
   heroImageContainer: {
     width: '100%',
     height: 380,
-    backgroundColor: '#0F172A',
     position: 'relative',
   },
   heroImage: {
@@ -316,18 +310,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     left: 16,
+    // Fixed dark scrim regardless of theme -- this sits directly on top of a
+    // photo, not a themed surface, so it needs to read against any image.
     backgroundColor: 'rgba(15, 23, 42, 0.8)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
   },
   heroOccasionText: {
+    // Fixed amber-on-dark-scrim, same reasoning as the badge background above.
     color: '#FDE68A',
     fontSize: 12,
     fontWeight: '700',
   },
   infoCard: {
-    backgroundColor: '#FFFFFF',
     marginHorizontal: Spacing.lg,
     marginTop: -24,
     borderRadius: 16,
@@ -347,23 +343,19 @@ const styles = StyleSheet.create({
   poseTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: Colors.light.text,
     flex: 1,
   },
   difficultyBadge: {
-    backgroundColor: '#ECFDF5',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
   },
   difficultyBadgeText: {
-    color: '#059669',
     fontSize: 10,
     fontWeight: '800',
   },
   descriptionText: {
     fontSize: 14,
-    color: '#475569',
     lineHeight: 20,
   },
   productsSection: {
@@ -373,11 +365,9 @@ const styles = StyleSheet.create({
   productsSectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.light.text,
   },
   productsSectionSub: {
     fontSize: 12,
-    color: '#64748B',
     marginTop: 2,
     marginBottom: Spacing.md,
   },
@@ -387,23 +377,19 @@ const styles = StyleSheet.create({
   productCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     padding: Spacing.md,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
   },
   productImage: {
     width: 60,
     height: 60,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
   },
   productImagePlaceholder: {
     width: 60,
     height: 60,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -414,67 +400,55 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.light.text,
   },
   productCategory: {
     fontSize: 11,
-    color: '#64748B',
     marginTop: 2,
   },
   productPrice: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.light.tint,
     marginTop: 4,
   },
   reserveBtn: {
-    backgroundColor: Colors.light.tint,
     paddingHorizontal: Spacing.md,
     paddingVertical: 8,
     borderRadius: 8,
   },
   reserveBtnText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
   },
   noProductsBox: {
     padding: Spacing.lg,
-    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     alignItems: 'center',
   },
   noProductsText: {
     fontSize: 13,
-    color: '#94A3B8',
   },
   bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
   },
   ctaButton: {
-    backgroundColor: Colors.light.tint,
     height: 52,
     borderRadius: 26,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: Colors.light.tint,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
   ctaButtonText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },

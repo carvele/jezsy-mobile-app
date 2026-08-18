@@ -876,7 +876,7 @@ export default function ChatScreen() {
               <IconSymbol name="camera.fill" size={24} color={colors.secondaryText} />
             </TouchableOpacity>
           )}
-          <TextInput
+          <TextInput keyboardAppearance={theme}
             style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
             placeholder={editingId ? 'Edit your message...' : 'Type a message...'}
             placeholderTextColor={colors.secondaryText}

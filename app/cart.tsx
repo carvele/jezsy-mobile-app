@@ -143,7 +143,7 @@ export default function CartScreen() {
       >
         <Image
           source={{ uri: item.product.image_url }}
-          style={styles.itemImage}
+          style={[styles.itemImage, { backgroundColor: colors.imagePlaceholder }]}
           contentFit="cover"
         />
       </TouchableOpacity>

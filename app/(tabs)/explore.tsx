@@ -804,7 +804,7 @@ export default function ExploreScreen() {
         <View style={styles.searchBarWrapper}>
           <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <IconSymbol name="magnifyingglass" size={20} color={colors.icon} style={styles.searchIcon} />
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.searchInput, { color: colors.text }]}
               placeholder="Search items, categories, or styles..."
               placeholderTextColor={colors.secondaryText}
@@ -1293,7 +1293,7 @@ export default function ExploreScreen() {
                 <View style={styles.filterSection}>
                   <Text style={[styles.filterSectionSubTitle, { color: colors.secondaryText }]}>Custom Price (₱)</Text>
                   <View style={styles.customPriceInputs}>
-                    <TextInput
+                    <TextInput keyboardAppearance={theme}
                       style={[styles.customPriceInput, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]}
                       placeholder="Min Price"
                       placeholderTextColor={colors.secondaryText}
@@ -1302,7 +1302,7 @@ export default function ExploreScreen() {
                       onChangeText={setTempMinPrice}
                     />
                     <Text style={{ color: colors.text, marginHorizontal: 12 }}>to</Text>
-                    <TextInput
+                    <TextInput keyboardAppearance={theme}
                       style={[styles.customPriceInput, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]}
                       placeholder="Max Price"
                       placeholderTextColor={colors.secondaryText}

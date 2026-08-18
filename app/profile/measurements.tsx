@@ -305,7 +305,7 @@ export default function MeasurementsScreen() {
             <View style={[styles.confDot, { backgroundColor: confColor }]} />
           )}
         </View>
-        <TextInput
+        <TextInput keyboardAppearance={theme}
           style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
           placeholder={placeholder}
           placeholderTextColor={colors.secondaryText}
@@ -404,7 +404,7 @@ export default function MeasurementsScreen() {
             <View style={styles.row}>
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: colors.secondaryText }]}>Height ({unit})</Text>
-                <TextInput
+                <TextInput keyboardAppearance={theme}
                   style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
                   placeholder={cmToUnit('165', unit)}
                   placeholderTextColor={colors.secondaryText}
@@ -415,7 +415,7 @@ export default function MeasurementsScreen() {
               </View>
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: colors.secondaryText }]}>Weight (kg)</Text>
-                <TextInput
+                <TextInput keyboardAppearance={theme}
                   style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
                   placeholder="55"
                   placeholderTextColor={colors.secondaryText}
