@@ -259,6 +259,12 @@ export default function ProfileScreen() {
               'Rentals, fittings, payments, & returns',
               () => router.push('/profile/faq' as any),
             )}
+            {renderSettingItem(
+              'cube.fill',
+              'Credits & Licenses',
+              '3D model attribution',
+              () => router.push('/profile/credits' as any),
+            )}
           </View>
         </View>
 
