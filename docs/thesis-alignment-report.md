@@ -26,8 +26,13 @@ Here is how the codebase maps to the **Specific Problems** (Page 4) and **Object
 *   **Implementation**: Done via the main shop/explore dashboard where products are fetched from the `products` table and filtered using standard database relations with the `categories` table.
 
 ### C. Digital Wardrobe & Outfit Customization
-*   **Specification (Page 68)**: *Allows customers to view available products on a digital wardrobe, match different outfits... randomize and customize.*
-*   **Implementation**: Implemented in `app/outfit-builder.tsx` where users can view top/bottom clothing item selections, save outfit configurations to `saved_outfits`, and shuffle a randomized outfit from the wardrobe via the header's shuffle action (`handleShuffle`).
+*   **Specification (Page 68)**: *Allows customers to view available products on a digital wardrobe, match different outfits... randomize and customize, with a digital mannequin and style guidance.*
+*   **Implementation**: Implemented in `app/outfit-builder.tsx` and `app/style-advisor.tsx`:
+    *   **Matching**: `src/utils/colorMatcher.ts` scores colour harmony via HSL hue geometry (monochromatic/analogous/complementary/triadic), live in the builder and driving `src/utils/outfitGenerator.ts` suggestions.
+    *   **Customization**: The 5-slot builder (top/bottom/outerwear/shoes/accessory) supports drag positioning, background removal, save-to-`saved_outfits`, and share-as-image.
+    *   **Randomize**: A Shuffle header action (`handleShuffle`) fills each slot with a random item from the user's own wardrobe, grouped by `garment_type`.
+    *   **Mannequin**: `src/components/MannequinSilhouette.tsx`, a stylised female dress-form SVG, renders behind the garment layers in the canvas view so outfits are styled onto a body shape.
+    *   **Interactive Style Advisor**: `app/style-advisor.tsx` lets the customer pick an occasion (Work/Casual/Date Night/Party/Formal) and returns a rule-based recommendation re-ranked from the same matching/generator logic, with styling tips and a "show me another" cycle.
 
 ### E. Voice-Guided Body Scan & Size Recommendations
 *   **Specification (Page 70)**: *Uploading body measurements to have a suggested size that will match...*
@@ -38,7 +43,7 @@ Here is how the codebase maps to the **Specific Problems** (Page 4) and **Object
 
 ### F. Augmented Reality (AR) Wear
 *   **Specification (Page 68)**: *Allows customers to view and wear clothes virtually...*
-*   **Implementation**: `app/ar-tryon/` integrates three-dimensional model rendering (3D `.glb` assets) to preview fits visually on mobile screens.
+*   **Implementation**: `app/ar-tryon/` integrates three-dimensional model rendering (3D `.glb` assets, WebXR via `<model-viewer>`) plus a live-camera 2D pose-overlay mode, to preview fits visually on mobile screens. 5 products (Cotton T-Shirt, Oversized Hoodie, Straight-Leg Jeans, Tailored Blazer, Navy Athletic Swimsuit) are wired to real sourced `.glb` models in Supabase Storage; the rest still fall back to a demo model. Two of those models are CC BY 4.0 licensed and credited via a new Credits & Licenses screen (`app/profile/credits.tsx`, Profile > Settings) as the license requires; the other three were sourced without a verified license.
 
 ### G. Reservation & Downpayment Processing
 *   **Specification (Page 68)**: *A reservation is also available for three (3) days with half-price downpayment...*
@@ -81,4 +86,6 @@ To align with the ISO 25010 "Usability" goals of your evaluation criteria, we au
 
 ### Verification Status
 *   **TypeScript check:** Passes compilation with no errors in the frontend app codebase.
-*   **GitHub Status:** All changes committed and pushed to `main` branch.
+*   **Lint:** `npm run lint` (CI-enforced on every PR via `.github/workflows/ci.yml`) passes with no errors.
+*   **GitHub Status:** All changes committed and pushed to `main` branch. Digital Wardrobe (matching, customization, randomize, mannequin, Style Advisor) and AR content-sourcing/attribution updates merged 2026-08-18 (PRs #153-#156).
+*   **Manual QA note:** The Digital Wardrobe and AR additions above were verified via `tsc`/`eslint` and code review; they have not yet had a manual click-through on a physical device or emulator (no test customer session was available during that work). Recommend a manual pass before treating them as demo-ready.
