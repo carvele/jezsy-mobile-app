@@ -66,7 +66,7 @@ export default function CreditsScreen() {
 
         {CREDITS.map((item) => (
           <View key={item.id} style={[styles.creditCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.creditTitle, { color: colors.text }]}>"{item.title}"</Text>
+            <Text style={[styles.creditTitle, { color: colors.text }]}>&quot;{item.title}&quot;</Text>
             <Text style={[styles.creditLine, { color: colors.secondaryText }]}>
               by{' '}
               <Text style={{ color: colors.tint }} onPress={() => Linking.openURL(item.authorUrl)}>
