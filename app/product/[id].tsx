@@ -237,7 +237,12 @@ export default function ProductDetailScreen() {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>Product not found.</Text>
-        <TouchableOpacity onPress={handleBack} style={{ marginTop: 20 }}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={{ marginTop: 20 }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Text style={{ color: colors.tint }}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -554,7 +559,12 @@ export default function ProductDetailScreen() {
               {product.description || "No description available for this premium piece."}
             </Text>
             {product.description && product.description.length > 100 && (
-              <TouchableOpacity onPress={() => setDescExpanded(!descExpanded)} style={{ marginTop: 8 }}>
+              <TouchableOpacity
+                onPress={() => setDescExpanded(!descExpanded)}
+                style={{ marginTop: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={descExpanded ? 'Read less' : 'Read more'}
+              >
                 <Text style={{ color: colors.tint, fontWeight: '600' }}>{descExpanded ? 'Read less' : 'Read more'}</Text>
               </TouchableOpacity>
             )}
