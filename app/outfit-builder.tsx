@@ -31,6 +31,7 @@ import { evaluateColors } from '@/src/utils/colorMatcher';
 import { useToast } from '@/src/context/ToastContext';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { MannequinSilhouette } from '@/src/components/MannequinSilhouette';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 type Product     = Database['public']['Tables']['products']['Row'];
@@ -602,6 +603,7 @@ export default function OutfitBuilderScreen() {
       ) : (
         <GestureScrollView contentContainerStyle={styles.canvasContainer} showsVerticalScrollIndicator={false}>
           <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={[styles.canvasStage, { backgroundColor: colors.background }]}>
+            <MannequinSilhouette color={colors.secondaryText} opacity={isDark ? 0.35 : 0.25} />
             {slots.shoes && <DraggableCanvasItem uri={slots.shoes.image_url} baseStyle={styles.canvasShoes} resetKey={slots.shoes.image_url} />}
             {slots.bottom && <DraggableCanvasItem uri={slots.bottom.image_url} baseStyle={styles.canvasBottom} resetKey={slots.bottom.image_url} />}
             {slots.top && <DraggableCanvasItem uri={slots.top.image_url} baseStyle={styles.canvasTop} resetKey={slots.top.image_url} />}
