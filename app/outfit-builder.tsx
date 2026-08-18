@@ -142,6 +142,7 @@ export default function OutfitBuilderScreen() {
   const [saving, setSaving]               = useState(false);
 
   const [pendingShare, setPendingShare]   = useState(false);
+  const [shuffling, setShuffling]         = useState(false);
 
   const [viewMode, setViewMode]           = useState<'slots' | 'canvas'>('slots');
   const viewShotRef                       = React.useRef<ViewShot>(null);
@@ -261,6 +262,60 @@ export default function OutfitBuilderScreen() {
     scored.sort((a, b) => b.score - a.score);
     return scored.map(s => s.item);
   }, [wishlistItems, slots, filledCount]);
+
+  // Loaded eagerly (not just when the picker opens) so Shuffle has a pool to
+  // draw from as soon as the screen mounts.
+  useEffect(() => {
+    fetchWardrobeItems();
+  }, [fetchWardrobeItems]);
+
+  const handleShuffle = useCallback(async () => {
+    if (wardrobeItems.length === 0) {
+      showToast('Add items to your wardrobe first to shuffle an outfit.', 'info');
+      return;
+    }
+
+    setShuffling(true);
+    try {
+      const picks = await Promise.all(
+        SLOT_KEYS.map(async (slotKey) => {
+          const pool = wardrobeItems.filter((item) => item.garment_type === SLOT_TO_GARMENT_TYPE[slotKey]);
+          if (pool.length === 0) return [slotKey, null] as const;
+          const item = pool[Math.floor(Math.random() * pool.length)];
+
+          let finalImageUrl = item.image_url || '';
+          if (item.image_url) {
+            try {
+              finalImageUrl = await removeBackground(item.image_url);
+            } catch (e) {
+              console.log('Background removal failed or fallback required, using original image', e);
+            }
+          }
+
+          const slotItem: SlotItem = {
+            product_id: item.product_id,
+            image_url: finalImageUrl,
+            original_image_url: item.image_url || '',
+            name: item.category || 'Item',
+            color_tags: item.color_tags,
+            source: 'wardrobe',
+          };
+          return [slotKey, slotItem] as const;
+        })
+      );
+
+      const filled = picks.filter(([, item]) => item !== null).length;
+      if (filled === 0) {
+        showToast('No wardrobe items are tagged with a garment type yet.', 'info');
+        return;
+      }
+
+      setSlots(Object.fromEntries(picks) as Slots);
+      showToast('Shuffled your outfit ✨', 'success');
+    } finally {
+      setShuffling(false);
+    }
+  }, [wardrobeItems, showToast]);
 
   const openPicker = useCallback((slot: SlotKey) => {
     setActiveSlot(slot);
@@ -502,6 +557,16 @@ export default function OutfitBuilderScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.headerActionBtn}
+            onPress={handleShuffle}
+            disabled={shuffling || wardrobeItems.length === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Shuffle outfit"
+            accessibilityHint="Fills each slot with a random item from your wardrobe"
+          >
+            <IconSymbol name="shuffle" size={20} color={shuffling || wardrobeItems.length === 0 ? colors.secondaryText : colors.tint} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerActionBtn}
             onPress={handleShare}
             disabled={filledCount === 0}
             accessibilityRole="button"
@@ -619,11 +684,13 @@ export default function OutfitBuilderScreen() {
 
       {/* Processing overlay: background removal runs after the picker closes,
           which otherwise looks frozen for a few seconds with no feedback. */}
-      {saving && !saveVisible && (
+      {(saving || shuffling) && !saveVisible && (
         <View style={styles.processingOverlay} pointerEvents="auto">
           <View style={[styles.processingCard, { backgroundColor: colors.card }]}>
             <ActivityIndicator size="large" color={colors.tint} />
-            <Text style={[styles.processingText, { color: colors.text }]}>Processing item…</Text>
+            <Text style={[styles.processingText, { color: colors.text }]}>
+              {shuffling ? 'Shuffling your outfit…' : 'Processing item…'}
+            </Text>
           </View>
         </View>
       )}

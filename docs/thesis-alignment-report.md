@@ -27,7 +27,7 @@ Here is how the codebase maps to the **Specific Problems** (Page 4) and **Object
 
 ### C. Digital Wardrobe & Outfit Customization
 *   **Specification (Page 68)**: *Allows customers to view available products on a digital wardrobe, match different outfits... randomize and customize.*
-*   **Implementation**: Implemented in `app/outfit-builder.tsx` where users can view top/bottom clothing item selections, save outfit configurations to `saved_outfits`, and randomized matches.
+*   **Implementation**: Implemented in `app/outfit-builder.tsx` where users can view top/bottom clothing item selections, save outfit configurations to `saved_outfits`, and shuffle a randomized outfit from the wardrobe via the header's shuffle action (`handleShuffle`).
 
 ### E. Voice-Guided Body Scan & Size Recommendations
 *   **Specification (Page 70)**: *Uploading body measurements to have a suggested size that will match...*
