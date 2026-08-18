@@ -80,6 +80,7 @@ const MAPPING = {
   'calendar.badge.exclamationmark': 'event-busy',
   'clock.arrow.circlepath': 'history',
   'arrow.clockwise': 'refresh',
+  'shuffle': 'shuffle',
 
   // Charts & Data
   'chart.bar.fill': 'bar-chart',
