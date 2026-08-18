@@ -384,7 +384,7 @@ export default function AddWardrobeItemScreen() {
               </TouchableOpacity>
             </ScrollView>
             {!CATEGORIES.includes(category) && (
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginTop: Spacing.sm }]}
                 placeholder="Custom category name..."
                 placeholderTextColor={colors.secondaryText}
@@ -398,7 +398,7 @@ export default function AddWardrobeItemScreen() {
           {/* Subcategory description */}
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Detail / Style Code (Optional)</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="e.g. Slim-fit, Double-breasted"
               placeholderTextColor={colors.secondaryText}

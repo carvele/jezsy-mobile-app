@@ -255,7 +255,7 @@ export default function ProfileSetupScreen() {
       <View key="name" style={styles.fields}>
         <View style={styles.fieldGroup}>
           <Text style={[styles.label, { color: colors.secondaryText }]}>First name</Text>
-          <TextInput
+          <TextInput keyboardAppearance={theme}
             style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
             placeholder="e.g. Maria"
             placeholderTextColor={colors.secondaryText}
@@ -267,7 +267,7 @@ export default function ProfileSetupScreen() {
         </View>
         <View style={styles.fieldGroup}>
           <Text style={[styles.label, { color: colors.secondaryText }]}>Last name</Text>
-          <TextInput
+          <TextInput keyboardAppearance={theme}
             style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
             placeholder="e.g. Santos"
             placeholderTextColor={colors.secondaryText}
@@ -299,7 +299,7 @@ export default function ProfileSetupScreen() {
                 <Text style={[styles.countryDialCode, { color: colors.text }]}>{selectedCountry.dialCode}</Text>
                 <ChevronDown size={14} color={colors.secondaryText} />
               </TouchableOpacity>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, styles.phoneInput, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder={selectedCountry.placeholder}
                 placeholderTextColor={colors.secondaryText}
@@ -313,7 +313,7 @@ export default function ProfileSetupScreen() {
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText, marginTop: 8 }]}>Date of birth</Text>
             <View style={styles.dobInputRow}>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, styles.dobInput, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder="MM/DD/YYYY"
                 placeholderTextColor={colors.secondaryText}
@@ -367,7 +367,7 @@ export default function ProfileSetupScreen() {
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Street address</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
               placeholder="House/unit no., building, street name"
               placeholderTextColor={colors.secondaryText}
@@ -379,7 +379,7 @@ export default function ProfileSetupScreen() {
           </View>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Barangay</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
               placeholder="e.g. Brgy. San Jose"
               placeholderTextColor={colors.secondaryText}
@@ -391,7 +391,7 @@ export default function ProfileSetupScreen() {
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>City / Municipality</Text>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder="e.g. Cebu City"
                 placeholderTextColor={colors.secondaryText}
@@ -404,7 +404,7 @@ export default function ProfileSetupScreen() {
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>Province</Text>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder="e.g. Cebu"
                 placeholderTextColor={colors.secondaryText}
@@ -416,7 +416,7 @@ export default function ProfileSetupScreen() {
             <View style={{ width: 16 }} />
             <View style={[styles.fieldGroup, { width: 110 }]}>
               <Text style={[styles.label, { color: colors.secondaryText }]}>Zip code</Text>
-              <TextInput
+              <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
                 placeholder="0000"
                 placeholderTextColor={colors.secondaryText}

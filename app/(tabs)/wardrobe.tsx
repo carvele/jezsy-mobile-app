@@ -247,7 +247,7 @@ export default function WardrobeScreen() {
 
       <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <IconSymbol name="magnifyingglass" size={18} color={colors.secondaryText} />
-        <TextInput
+        <TextInput keyboardAppearance={theme}
           style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search your wardrobe"
           placeholderTextColor={colors.secondaryText}

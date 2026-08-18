@@ -114,7 +114,7 @@ export function StepUpAuthModal({ visible, email, onClose, onVerified }: StepUpA
               code we sent to {email} to complete this reservation.
             </Text>
 
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               ref={inputRef}
               style={[styles.codeInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="000000"

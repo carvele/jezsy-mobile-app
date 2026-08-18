@@ -88,7 +88,7 @@ export default function ResetPasswordScreen() {
 
           <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
             <IconSymbol name="lock.fill" size={18} color={colors.secondaryText} />
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text }]}
               placeholder="New password"
               placeholderTextColor={colors.secondaryText}
@@ -115,7 +115,7 @@ export default function ResetPasswordScreen() {
 
           <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
             <IconSymbol name="lock.fill" size={18} color={colors.secondaryText} />
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text }]}
               placeholder="Confirm new password"
               placeholderTextColor={colors.secondaryText}

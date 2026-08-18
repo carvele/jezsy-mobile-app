@@ -137,7 +137,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
             </Text>
 
             <Text style={[styles.label, { color: colors.text }]}>Tell us more</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="What did you like or dislike?"
               placeholderTextColor={colors.secondaryText}

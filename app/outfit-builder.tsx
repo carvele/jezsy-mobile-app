@@ -644,7 +644,7 @@ export default function OutfitBuilderScreen() {
       })()}
 
       {/* View Mode Toggle */}
-      <View style={styles.viewToggleContainer}>
+      <View style={[styles.viewToggleContainer, { backgroundColor: colors.surface }]}>
         <TouchableOpacity
           style={[styles.viewToggleBtn, viewMode === 'slots' && { backgroundColor: colors.tint }]}
           onPress={() => setViewMode('slots')}
@@ -753,7 +753,7 @@ export default function OutfitBuilderScreen() {
                   >
                     <Image
                       source={{ uri: item.image_url || '' }}
-                      style={styles.pickerCardImage}
+                      style={[styles.pickerCardImage, { backgroundColor: colors.imagePlaceholder }]}
                       contentFit="cover"
                     />
                     <Text style={[styles.pickerCardName, { color: colors.text }]} numberOfLines={1}>
@@ -789,7 +789,7 @@ export default function OutfitBuilderScreen() {
                 >
                   <Image
                     source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-                    style={styles.pickerCardImage}
+                    style={[styles.pickerCardImage, { backgroundColor: colors.imagePlaceholder }]}
                     contentFit="cover"
                   />
                   <Text style={[styles.pickerCardName, { color: colors.text }]} numberOfLines={1}>
@@ -810,7 +810,7 @@ export default function OutfitBuilderScreen() {
         >
           <View style={[styles.saveSheet, { backgroundColor: colors.card }]}>
             <Text style={[styles.saveTitle, { color: colors.text }]}>Name Your Outfit</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.saveInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
               placeholder="e.g. Summer Date Night"
               placeholderTextColor={colors.secondaryText}
@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     overflow: 'hidden',
   },
-  pickerCardImage: { width: '100%', aspectRatio: 1, backgroundColor: '#2A2A2A' },
+  pickerCardImage: { width: '100%', aspectRatio: 1 },
   pickerCardName: { fontSize: 12, fontWeight: '600', padding: Spacing.sm },
   // Save modal
   saveOverlay: {
@@ -1063,7 +1063,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     marginBottom: Spacing.md,
     borderRadius: Radius.pill,
-    backgroundColor: '#1E1E1E',
     overflow: 'hidden',
     padding: 4,
   },

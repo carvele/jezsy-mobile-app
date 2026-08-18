@@ -12,6 +12,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Colors, Spacing, Type as Typography } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -33,6 +34,8 @@ const OCCASIONS = ['All', 'Party', 'Formal', 'Wedding', 'Date Night', 'Casual', 
 
 export function StyleGallery() {
   const router = useRouter();
+  const theme = useColorScheme();
+  const colors = Colors[theme];
   const [poses, setPoses] = useState<StylePose[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOccasion, setSelectedOccasion] = useState('All');
@@ -78,7 +81,7 @@ export function StyleGallery() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color={Colors.light.tint} />
+        <ActivityIndicator size="small" color={colors.tint} />
       </View>
     );
   }
@@ -92,8 +95,8 @@ export function StyleGallery() {
       {/* Header */}
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.sectionTitle}>✨ Style Inspiration</Text>
-          <Text style={styles.sectionSubtitle}>Recreate styled poses & try the look</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>✨ Style Inspiration</Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.tabIconDefault }]}>Recreate styled poses & try the look</Text>
         </View>
       </View>
 
@@ -108,10 +111,10 @@ export function StyleGallery() {
           return (
             <TouchableOpacity
               key={occ}
-              style={[styles.chip, isActive && styles.activeChip]}
+              style={[styles.chip, { backgroundColor: colors.surface }, isActive && { backgroundColor: colors.tint }]}
               onPress={() => setSelectedOccasion(occ)}
             >
-              <Text style={[styles.chipText, isActive && styles.activeChipText]}>
+              <Text style={[styles.chipText, { color: colors.secondaryText }, isActive && { color: colors.onTint }]}>
                 {occ}
               </Text>
             </TouchableOpacity>
@@ -128,11 +131,11 @@ export function StyleGallery() {
         {filteredPoses.map((pose) => (
           <TouchableOpacity
             key={pose.id}
-            style={styles.card}
+            style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
             activeOpacity={0.88}
             onPress={() => router.push(`/style-pose/${pose.id}` as any)}
           >
-            <View style={styles.imageContainer}>
+            <View style={[styles.imageContainer, { backgroundColor: colors.imagePlaceholder }]}>
               {pose.image_url ? (
                 <Image
                   source={{ uri: pose.image_url }}
@@ -142,7 +145,7 @@ export function StyleGallery() {
                 />
               ) : (
                 <View style={styles.placeholderImage}>
-                  <IconSymbol name="camera.fill" size={32} color={Colors.light.tabIconDefault} />
+                  <IconSymbol name="camera.fill" size={32} color={colors.tabIconDefault} />
                 </View>
               )}
               {pose.occasion && (
@@ -150,23 +153,23 @@ export function StyleGallery() {
                   <Text style={styles.occasionText}>{pose.occasion}</Text>
                 </View>
               )}
-              <View style={styles.tryBadge}>
-                <IconSymbol name="sparkles" size={12} color="#FFF" />
-                <Text style={styles.tryBadgeText}>Try Look</Text>
+              <View style={[styles.tryBadge, { backgroundColor: colors.tint }]}>
+                <IconSymbol name="sparkles" size={12} color={colors.onTint} />
+                <Text style={[styles.tryBadgeText, { color: colors.onTint }]}>Try Look</Text>
               </View>
             </View>
 
             <View style={styles.cardBody}>
-              <Text style={styles.poseName} numberOfLines={1}>
+              <Text style={[styles.poseName, { color: colors.text }]} numberOfLines={1}>
                 {pose.name}
               </Text>
               <View style={styles.metaRow}>
                 {pose.difficulty && (
-                  <Text style={styles.difficultyText}>
+                  <Text style={[styles.difficultyText, { color: colors.success }]}>
                     {pose.difficulty === 'easy' ? '● Easy' : pose.difficulty === 'intermediate' ? '●● Medium' : '●●● Pro'}
                   </Text>
                 )}
-                <Text style={styles.tagText}>{pose.category || 'Style Hint'}</Text>
+                <Text style={[styles.tagText, { color: colors.tabIconDefault }]}>{pose.category || 'Style Hint'}</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -174,7 +177,7 @@ export function StyleGallery() {
 
         {filteredPoses.length === 0 && (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No style poses for &quot;{selectedOccasion}&quot;</Text>
+            <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>No style poses for &quot;{selectedOccasion}&quot;</Text>
           </View>
         )}
       </ScrollView>

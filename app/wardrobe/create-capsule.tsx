@@ -70,7 +70,7 @@ export default function CreateCapsuleScreen() {
         <View style={styles.form}>
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Name</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="e.g. Work Capsule, Summer Trip"
               placeholderTextColor={colors.secondaryText}
@@ -81,7 +81,7 @@ export default function CreateCapsuleScreen() {
 
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Description (Optional)</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="What's this capsule for?"
               placeholderTextColor={colors.secondaryText}
@@ -93,7 +93,7 @@ export default function CreateCapsuleScreen() {
 
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Target Item Count</Text>
-            <TextInput
+            <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
               placeholder="30"
               placeholderTextColor={colors.secondaryText}
