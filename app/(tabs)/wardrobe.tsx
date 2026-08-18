@@ -281,6 +281,24 @@ export default function WardrobeScreen() {
       </ScrollView>
 
       <GapAnalysis items={items} />
+
+      <TouchableOpacity
+        style={[styles.advisorCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        onPress={() => router.push('/style-advisor' as any)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Open Style Advisor"
+        accessibilityHint="Get an outfit recommendation for a chosen occasion"
+      >
+        <View style={[styles.advisorIcon, { backgroundColor: colors.tint }]}>
+          <IconSymbol name="sparkles" size={20} color={colors.onTint} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.advisorTitle, { color: colors.text }]}>Ask the Style Advisor</Text>
+          <Text style={[styles.advisorSub, { color: colors.secondaryText }]}>Get a look styled for the occasion</Text>
+        </View>
+        <IconSymbol name="chevron.right" size={18} color={colors.secondaryText} />
+      </TouchableOpacity>
     </View>
   );
 
@@ -675,5 +693,29 @@ const styles = StyleSheet.create({
   createOutfitBtnText: {
     fontSize: 16,
     fontWeight: '700',
-  }
+  },
+  advisorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  advisorIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  advisorTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  advisorSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
 });
