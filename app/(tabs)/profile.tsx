@@ -97,7 +97,13 @@ export default function ProfileScreen() {
   };
 
   const renderSettingItem = (icon: any, title: string, subtitle?: string, onPress?: () => void) => (
-    <TouchableOpacity style={[styles.settingItem, { borderBottomColor: colors.border }]} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.settingItem, { borderBottomColor: colors.border }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityHint={subtitle ? `${subtitle}. Opens ${title}.` : `Opens ${title}.`}
+    >
       <View style={[styles.settingIconContainer, { backgroundColor: colors.card }]}>
         <IconSymbol name={icon} size={20} color={colors.tint} />
       </View>
@@ -134,7 +140,13 @@ export default function ProfileScreen() {
               {user?.email || ''}
             </Text>
           </View>
-          <TouchableOpacity style={[styles.editButton, { borderColor: colors.border }]} onPress={() => router.push('/profile/edit')}>
+          <TouchableOpacity
+            style={[styles.editButton, { borderColor: colors.border }]}
+            onPress={() => router.push('/profile/edit')}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile"
+            accessibilityHint="Opens your profile details."
+          >
             <Text style={[styles.editButtonText, { color: colors.text }]}>Edit</Text>
           </TouchableOpacity>
         </View>
@@ -142,7 +154,11 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg}}>
             <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>My Reservations</Text>
-            <TouchableOpacity onPress={() => router.push('/reservations')}>
+            <TouchableOpacity
+              onPress={() => router.push('/reservations')}
+              accessibilityRole="button"
+              accessibilityLabel="View all reservations"
+            >
               <Text style={[Type.body, { color: colors.tint }]}>View All</Text>
             </TouchableOpacity>
           </View>

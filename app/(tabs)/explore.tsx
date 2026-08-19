@@ -1066,14 +1066,22 @@ export default function ExploreScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.keyboardAvoidingView}
           >
-            <Pressable style={[styles.modalContent, { backgroundColor: colors.background }]} onPress={(e) => e.stopPropagation()}>
+            <Pressable
+              style={[styles.modalContent, { backgroundColor: colors.background }]}
+              onPress={(e) => e.stopPropagation()}
+              accessibilityViewIsModal
+            >
               {/* Drag Handle */}
               <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
 
               {/* Modal Header */}
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
-                <TouchableOpacity onPress={clearAllFilters}>
+                <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
+                <TouchableOpacity
+                  onPress={clearAllFilters}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear all filters"
+                >
                   <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
                 </TouchableOpacity>
               </View>
@@ -1092,6 +1100,9 @@ export default function ExploreScreen() {
                         },
                       ]}
                       onPress={() => setTempNewArrivalsOnly(!tempNewArrivalsOnly)}
+                      accessibilityRole="switch"
+                      accessibilityLabel="New arrivals only"
+                      accessibilityState={{ checked: tempNewArrivalsOnly }}
                     >
                       <IconSymbol name="flame.fill" size={14} color={tempNewArrivalsOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
                       <Text style={[styles.chipButtonText, { color: tempNewArrivalsOnly ? colors.onTint : colors.text }]}>New Arrivals</Text>
@@ -1106,6 +1117,9 @@ export default function ExploreScreen() {
                         },
                       ]}
                       onPress={() => setTempSaleOnly(!tempSaleOnly)}
+                      accessibilityRole="switch"
+                      accessibilityLabel="On sale only"
+                      accessibilityState={{ checked: tempSaleOnly }}
                     >
                       <IconSymbol name="tag.fill" size={14} color={tempSaleOnly ? colors.onTint : colors.notification} style={{ marginRight: 6 }} />
                       <Text style={[styles.chipButtonText, { color: tempSaleOnly ? colors.onTint : colors.text }]}>On Sale</Text>
@@ -1120,6 +1134,9 @@ export default function ExploreScreen() {
                         },
                       ]}
                       onPress={() => setTempArOnly(!tempArOnly)}
+                      accessibilityRole="switch"
+                      accessibilityLabel="Try in AR only"
+                      accessibilityState={{ checked: tempArOnly }}
                     >
                       <IconSymbol name="cube.transparent" size={14} color={tempArOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
                       <Text style={[styles.chipButtonText, { color: tempArOnly ? colors.onTint : colors.text }]}>Try in AR</Text>
@@ -1135,6 +1152,9 @@ export default function ExploreScreen() {
                           },
                         ]}
                         onPress={() => setTempMySizeOnly(!tempMySizeOnly)}
+                        accessibilityRole="switch"
+                        accessibilityLabel="My size only"
+                        accessibilityState={{ checked: tempMySizeOnly }}
                       >
                         <IconSymbol name="checkmark.circle.fill" size={14} color={tempMySizeOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
                         <Text style={[styles.chipButtonText, { color: tempMySizeOnly ? colors.onTint : colors.text }]}>My Size</Text>
@@ -1160,6 +1180,9 @@ export default function ExploreScreen() {
                             },
                           ]}
                           onPress={() => toggleTempSize(size)}
+                          accessibilityRole="checkbox"
+                          accessibilityLabel={`${size} size`}
+                          accessibilityState={{ checked: isSelected }}
                         >
                           <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
                             {size}
@@ -1187,6 +1210,9 @@ export default function ExploreScreen() {
                             },
                           ]}
                           onPress={() => toggleTempFit(fit)}
+                          accessibilityRole="checkbox"
+                          accessibilityLabel={`${fit} fit`}
+                          accessibilityState={{ checked: isSelected }}
                         >
                           <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
                             {fit}
@@ -1214,6 +1240,9 @@ export default function ExploreScreen() {
                             },
                           ]}
                           onPress={() => toggleTempMaterial(mat)}
+                          accessibilityRole="checkbox"
+                          accessibilityLabel={`${mat} material`}
+                          accessibilityState={{ checked: isSelected }}
                         >
                           <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
                             {mat}
@@ -1241,6 +1270,9 @@ export default function ExploreScreen() {
                             },
                           ]}
                           onPress={() => toggleTempColor(color.name)}
+                          accessibilityRole="checkbox"
+                          accessibilityLabel={`${color.name} color`}
+                          accessibilityState={{ checked: isSelected }}
                         >
                           <View
                             style={[
@@ -1279,6 +1311,9 @@ export default function ExploreScreen() {
                             },
                           ]}
                           onPress={() => setTempPriceRange(isSelected ? null : preset.id)}
+                          accessibilityRole="radio"
+                          accessibilityLabel={preset.label}
+                          accessibilityState={{ checked: isSelected }}
                         >
                           <Text style={[styles.pricePresetLabel, { color: isSelected ? colors.onTint : colors.text }]}>
                             {preset.label}
@@ -1297,6 +1332,7 @@ export default function ExploreScreen() {
                       style={[styles.customPriceInput, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]}
                       placeholder="Min Price"
                       placeholderTextColor={colors.secondaryText}
+                      accessibilityLabel="Minimum rental price in Philippine pesos"
                       keyboardType="numeric"
                       value={tempMinPrice}
                       onChangeText={setTempMinPrice}
@@ -1306,6 +1342,7 @@ export default function ExploreScreen() {
                       style={[styles.customPriceInput, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]}
                       placeholder="Max Price"
                       placeholderTextColor={colors.secondaryText}
+                      accessibilityLabel="Maximum rental price in Philippine pesos"
                       keyboardType="numeric"
                       value={tempMaxPrice}
                       onChangeText={setTempMaxPrice}
@@ -1321,6 +1358,8 @@ export default function ExploreScreen() {
                 <TouchableOpacity
                   style={[styles.footerButton, { backgroundColor: colors.tint }]}
                   onPress={applyFilters}
+                  accessibilityRole="button"
+                  accessibilityLabel="Apply filters"
                 >
                   <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
                 </TouchableOpacity>
@@ -1338,13 +1377,24 @@ export default function ExploreScreen() {
         onRequestClose={() => setIsSortModalOpen(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setIsSortModalOpen(false)}>
-          <View style={[styles.modalContent, { backgroundColor: colors.background, paddingBottom: Platform.OS === 'ios' ? 40 : 24 }]}>
+          <View
+            style={[styles.modalContent, { backgroundColor: colors.background, paddingBottom: Platform.OS === 'ios' ? 40 : 24 }]}
+            accessibilityViewIsModal
+          >
             {/* Drag Handle */}
             <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
 
             {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Sort Options</Text>
+              <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Sort Options</Text>
+              <TouchableOpacity
+                onPress={() => setIsSortModalOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close sort options"
+                hitSlop={12}
+              >
+                <IconSymbol name="xmark" size={20} color={colors.icon} />
+              </TouchableOpacity>
             </View>
 
             {/* Sort Options List */}
@@ -1359,6 +1409,9 @@ export default function ExploreScreen() {
                       setSelectedSort(option.id);
                       setIsSortModalOpen(false);
                     }}
+                    accessibilityRole="radio"
+                    accessibilityLabel={option.label}
+                    accessibilityState={{ checked: isSelected }}
                   >
                     <Text style={[styles.sortOptionLabel, { color: isSelected ? colors.tint : colors.text, fontWeight: isSelected ? '700' : '500' }]}>
                       {option.label}

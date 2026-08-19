@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Platform,
   ScrollView,
@@ -211,6 +212,12 @@ export default function ProductDetailScreen() {
     }
   };
 
+  const announceAddedToBag = () => {
+    setAddedToBag(true);
+    AccessibilityInfo.announceForAccessibility('Added to shopping bag');
+    setTimeout(() => setAddedToBag(false), 2000);
+  };
+
   const handleMessageSeller = async () => {
     const conv = await getOrCreateConversation();
     if (!conv) return;
@@ -296,12 +303,12 @@ export default function ProductDetailScreen() {
               const index = Math.round(e.nativeEvent.contentOffset.x / width);
               setActiveImageIndex(index);
             }}
-            renderItem={({ item }) => (
+            renderItem={({ item, index }) => (
               <TouchableOpacity
                 activeOpacity={1}
                 onPress={() => setViewerUri(item)}
                 accessibilityRole="button"
-                accessibilityLabel="View image full screen"
+                accessibilityLabel={`${product.name}, image ${index + 1} of ${imageGallery.length}`}
                 accessibilityHint="Opens a zoomable full-screen view of this product image"
               >
                 <Image source={{ uri: item }} style={{ width, height: IMAGE_GALLERY_HEIGHT }} contentFit="cover" />
@@ -374,7 +381,7 @@ export default function ProductDetailScreen() {
             {getMainCategoryName(product)?.toUpperCase()}
           </Text>
 
-          <Text style={[styles.title, { color: colors.text }]}>{product.name}</Text>
+          <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{product.name}</Text>
 
           {product.rating && product.review_count ? (
             <View style={styles.ratingRow}>
@@ -402,23 +409,37 @@ export default function ProductDetailScreen() {
             )}
           </View>
 
-          {/* Color Display */}
+          {/* Colour is a variant selection, not merely a product attribute. */}
           {(colorsList.length > 0 || product.color) && (
-            <View style={[styles.section, { marginBottom: 12 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
-                  {colorsList.length > 1 ? 'Colors:' : 'Color:'}
-                </Text>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.tint }}>
-                  {colorsList.length > 0 ? colorsList.join(' · ') : product.color}
-                </Text>
-              </View>
+            <View style={styles.section} accessibilityRole="radiogroup" accessibilityLabel="Colour options">
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Colour</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
+                {colorsList.map((color) => {
+                  const isSelected = selectedColor === color;
+                  return (
+                    <TouchableOpacity
+                      key={color}
+                      style={[
+                        styles.colorOptionButton,
+                        { borderColor: isSelected ? colors.tint : colors.border },
+                        isSelected && { backgroundColor: colors.card },
+                      ]}
+                      onPress={() => setSelectedColor(color)}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`Select colour ${color}`}
+                      accessibilityState={{ selected: isSelected }}
+                    >
+                      <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{color}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
           )}
 
           {/* Size Selection */}
           {product.sizes && product.sizes.length > 0 && (
-            <View style={styles.section}>
+            <View style={styles.section} accessibilityRole="radiogroup" accessibilityLabel="Size options">
               <View style={styles.sizeHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Size</Text>
                 <View style={styles.sizeHeaderActions}>
@@ -456,7 +477,7 @@ export default function ProductDetailScreen() {
                         ]}
                         onPress={() => !isOutOfStock && setSelectedSize(s)}
                         disabled={isOutOfStock}
-                        accessibilityRole="button"
+                        accessibilityRole="radio"
                         accessibilityLabel={`Select size ${s}`}
                         accessibilityHint={isOutOfStock ? `Size ${s} is out of stock` : `Selects ${s} as the size option`}
                         accessibilityState={{ selected: isSelected, disabled: isOutOfStock }}
@@ -636,8 +657,7 @@ export default function ProductDetailScreen() {
                   selectedColor || undefined,
                   selectedStock ?? undefined,
                 );
-                setAddedToBag(true);
-                setTimeout(() => setAddedToBag(false), 2000);
+                announceAddedToBag();
               }
             }}
             disabled={!canPurchase}
@@ -654,7 +674,7 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
 
           {addedToBag && (
-            <View style={[styles.addedToast, { backgroundColor: colors.tint }]}>
+            <View accessibilityLiveRegion="polite" style={[styles.addedToast, { backgroundColor: colors.tint }]}>
               <IconSymbol name="checkmark" size={14} color={colors.onTint} />
               <Text style={[styles.addedToastText, { color: colors.onTint }]}>Added to Bag!</Text>
             </View>
@@ -783,7 +803,8 @@ const styles = StyleSheet.create({
   sectionTitle: { ...Type.bodyLargeStrong, marginBottom: Spacing.md },
   description: { fontSize: 15, lineHeight: 24 },
   optionsList: { gap: Spacing.md, paddingRight: Spacing.xl },
-  optionButton: { paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
+  optionButton: { minHeight: 44, paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
+  colorOptionButton: { minHeight: 44, paddingHorizontal: Spacing.lg, justifyContent: 'center', borderRadius: Radius.pill, borderWidth: 1 },
   optionText: { fontSize: 15, fontWeight: "600" },
   quantityRow: { flexDirection: "row", alignItems: "center", gap: Spacing.lg },
   quantityBtn: {
