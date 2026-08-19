@@ -27,7 +27,7 @@ import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
 
 // Enable LayoutAnimation on Android (Legacy Architecture only)
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(global as any).nativeFabricUIManager) {
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -420,11 +420,11 @@ export default function AuthScreen() {
       <StatusBar barStyle="light-content" />
 
       {/* Background */}
-      <Image source={BG_IMAGE} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+      <Image source={BG_IMAGE} style={StyleSheet.absoluteFill} contentFit="cover" />
       <LinearGradient
         colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.75)', 'rgba(10,10,10,0.98)']}
         locations={[0, 0.45, 1]}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
 
       <KeyboardAvoidingView

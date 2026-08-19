@@ -45,7 +45,9 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
 
   // The app is dark-first by design; fall back to that, not 'light', when the
   // OS gives no value.
-  const scheme: ResolvedScheme = preference === 'system' ? systemScheme ?? 'dark' : preference;
+  const scheme: ResolvedScheme = preference === 'system'
+    ? (systemScheme === 'light' || systemScheme === 'dark' ? systemScheme : 'dark')
+    : preference;
 
   const value = useMemo(
     () => ({ preference, scheme, setPreference, loaded }),

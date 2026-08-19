@@ -19,5 +19,5 @@ export function useColorScheme(): 'light' | 'dark' {
 
   if (!hasHydrated) return 'light';
 
-  return themeContext?.scheme ?? systemScheme ?? 'dark';
+  return themeContext?.scheme ?? (systemScheme === 'light' || systemScheme === 'dark' ? systemScheme : 'dark');
 }

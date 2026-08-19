@@ -277,13 +277,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   frameBorder: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.5)',
     borderRadius: 8,
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     ...Type.caption,
   },
   processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',

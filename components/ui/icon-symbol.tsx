@@ -1,12 +1,11 @@
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
-type IconSymbolName = keyof typeof MAPPING;
+type IconMapping = Record<string, ComponentProps<typeof MaterialIcons>['name']>;
 
 /**
  * Add your SF Symbols to Material Icons mappings here.
@@ -19,6 +18,7 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'chevron.left': 'chevron-left',
   'chevron.down': 'expand-more',
+  'chevron.up': 'expand-less',
   'chevron.left.forwardslash.chevron.right': 'code',
   'arrow.left': 'arrow-back',
   'arrow.up.arrow.down': 'swap-vert',
@@ -28,6 +28,7 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'arrow.up.circle.fill': 'send',
   'envelope.fill': 'email',
+  'bubble.left.and.bubble.right': 'forum',
 
   // Commerce & Shopping
   'bag': 'shopping-bag',
@@ -42,6 +43,7 @@ const MAPPING = {
   'qrcode.viewfinder': 'qr-code-scanner',
   'photo.fill': 'photo',
   'cube.transparent': 'view-in-ar',
+  'cube.fill': 'view-in-ar',
 
   // Actions
   'plus': 'add',
@@ -50,7 +52,10 @@ const MAPPING = {
   'checkmark.circle': 'check-circle-outline',
   'checkmark.circle.fill': 'check-circle',
   'xmark.circle': 'cancel',
+  'xmark.circle.fill': 'cancel',
   'trash.fill': 'delete',
+  'trash': 'delete',
+  'square.and.arrow.up': 'share',
   'delete.left': 'backspace',
 
   // Status & Alerts
@@ -68,9 +73,12 @@ const MAPPING = {
   'eye.slash.fill': 'visibility-off',
   'gear': 'settings',
   'questionmark.circle': 'help-outline',
+  'questionmark.circle.fill': 'help',
+  'checkmark.seal.fill': 'verified',
 
   // Wardrobe & Fashion
   'tshirt': 'checkroom',
+  'tshirt.fill': 'checkroom',
   'hanger': 'checkroom',
   'sparkles': 'auto-awesome',
   'ruler.fill': 'straighten',
@@ -112,7 +120,9 @@ const MAPPING = {
   'lightbulb': 'lightbulb',
   'speaker.wave.2.fill': 'volume-up',
   'figure.stand': 'accessibility-new',
-} as IconMapping;
+} as const satisfies IconMapping;
+
+type IconSymbolName = keyof typeof MAPPING;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.

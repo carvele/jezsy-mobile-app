@@ -557,7 +557,7 @@ export default function BodyScanScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
-  safeArea: { ...StyleSheet.absoluteFillObject, justifyContent: "space-between" },
+  safeArea: { ...StyleSheet.absoluteFill, justifyContent: "space-between" },
   header: {
     flexDirection: "row",
     alignItems: "center",

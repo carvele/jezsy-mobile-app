@@ -145,7 +145,7 @@ export default function OutfitBuilderScreen() {
   const [shuffling, setShuffling]         = useState(false);
 
   const [viewMode, setViewMode]           = useState<'slots' | 'canvas'>('slots');
-  const viewShotRef                       = React.useRef<ViewShot>(null);
+  const viewShotRef                       = React.useRef<React.ElementRef<typeof ViewShot>>(null);
 
   // Picker state
   const [pickerTab, setPickerTab]         = useState<ItemSource>('wardrobe');
@@ -1032,7 +1032,7 @@ const styles = StyleSheet.create({
   },
   confirmBtnText: { fontWeight: '800', fontSize: 15 },
   processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
