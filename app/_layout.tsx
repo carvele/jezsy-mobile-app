@@ -22,7 +22,6 @@ import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
 import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
 import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoticeModal';
-import { registerOfflineSyncListener } from '@/src/services/offlineSync';
 import { initSentry, wrapRootComponent } from '@/src/utils/sentry';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -86,36 +85,49 @@ function InitialLayout() {
   // "does not sign you out" copy), just surface once so it isn't silently
   // forgotten in the queue.
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
+  const [pendingDeletionStatus, setPendingDeletionStatus] = useState<'pending' | 'auth_revocation_pending' | null>(null);
   const [deletionNoticeDismissed, setDeletionNoticeDismissed] = useState(false);
   useEffect(() => {
     if (!session?.user?.id) {
       setPendingDeletionId(null);
+      setPendingDeletionStatus(null);
       return;
     }
     let cancelled = false;
     getPendingDeletionRequest(session.user.id).then((req) => {
-      if (!cancelled) setPendingDeletionId(req?.id ?? null);
+      if (!cancelled) {
+        setPendingDeletionId(req?.id ?? null);
+        setPendingDeletionStatus(req?.status ?? null);
+      }
     });
     return () => { cancelled = true; };
   }, [session?.user?.id]);
 
   // Activity Heartbeat — keeps admin dashboard "Last active" & green dot accurately synced
-  // Only pings when the app is in the foreground to avoid battery drain.
+  // Only pings while foregrounded, and never mutates profiles.updated_at (which
+  // is reserved for profile changes rather than presence/activity).
   useEffect(() => {
     if (!session?.user?.id) return;
     let interval: ReturnType<typeof setInterval> | null = null;
+    let lastPingAt = 0;
+    const PING_INTERVAL_MS = 10 * 60 * 1000;
 
     const updateActivityPing = async () => {
+      const now = Date.now();
+      if (now - lastPingAt < PING_INTERVAL_MS) return;
+      lastPingAt = now;
       const nowIso = new Date().toISOString();
-      await (supabase
+      const { error } = await supabase
         .from('profiles')
-        .update({ updated_at: nowIso, last_online: nowIso, last_activity: nowIso } as any)
-        .eq('id', session.user.id));
+        .update({ last_online: nowIso, last_activity: nowIso } as any)
+        .eq('id', session.user.id);
+      if (error) console.warn('[Activity] Could not update presence:', error.message);
     };
 
     const startPinging = () => {
+      if (interval) return;
       updateActivityPing();
-      interval = setInterval(updateActivityPing, 2 * 60 * 1000);
+      interval = setInterval(updateActivityPing, PING_INTERVAL_MS);
     };
 
     const stopPinging = () => {
@@ -236,13 +248,6 @@ function InitialLayout() {
     }
   }, [hasBootstrapped]);
 
-  // Register global offline-sync listener. Flushes the local order queue as
-  // soon as connectivity is restored. Cleaned up on unmount (hot reload etc.).
-  useEffect(() => {
-    const unsubscribe = registerOfflineSyncListener();
-    return unsubscribe;
-  }, []);
-
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
@@ -262,8 +267,10 @@ function InitialLayout() {
         <PendingDeletionNoticeModal
           visible
           requestId={pendingDeletionId}
+          status={pendingDeletionStatus ?? 'pending'}
           onResolved={() => {
             setPendingDeletionId(null);
+            setPendingDeletionStatus(null);
             setDeletionNoticeDismissed(true);
           }}
           onDismiss={() => setDeletionNoticeDismissed(true)}

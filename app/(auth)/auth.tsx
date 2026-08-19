@@ -432,7 +432,14 @@ export default function AuthScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {/* Back button */}
-        <TouchableOpacity style={[styles.backBtn, { top: insets.top + 12 }]} onPress={goBack} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={[styles.backBtn, { top: insets.top + 12 }]}
+          onPress={goBack}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          accessibilityHint="Returns to the previous authentication screen"
+        >
           <ArrowLeft size={22} color="#fff" />
         </TouchableOpacity>
 
@@ -494,6 +501,9 @@ export default function AuthScreen() {
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeBtn}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                    accessibilityState={{ expanded: showPassword }}
                   >
                     {showPassword ? (
                       <EyeOff size={20} color="rgba(255,255,255,0.4)" />
@@ -527,6 +537,9 @@ export default function AuthScreen() {
                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                     style={styles.eyeBtn}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    accessibilityState={{ expanded: showConfirmPassword }}
                   >
                     {showConfirmPassword ? (
                       <EyeOff size={20} color="rgba(255,255,255,0.4)" />
@@ -548,6 +561,9 @@ export default function AuthScreen() {
                   activeOpacity={1}
                   style={styles.otpWrapper}
                   onPress={() => otpInputRef.current?.focus()}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Verification code, ${otpCode.length} of 6 digits entered`}
+                  accessibilityHint="Double tap to enter the six digit verification code"
                 >
                   {Array.from({ length: 6 }).map((_, index) => {
                     const digit = otpCode[index] || '';
@@ -580,6 +596,8 @@ export default function AuthScreen() {
                   maxLength={6}
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
+                  accessibilityLabel="Six digit verification code"
+                  accessibilityHint="Enter the code sent to your email"
                 />
 
                 {/* Resend Code row */}
@@ -587,7 +605,14 @@ export default function AuthScreen() {
                   {timer > 0 ? (
                     <Text style={styles.timerText}>Resend code in {timer}s</Text>
                   ) : (
-                    <TouchableOpacity onPress={handleResendCode} disabled={loading} hitSlop={10}>
+                    <TouchableOpacity
+                      onPress={handleResendCode}
+                      disabled={loading}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel="Resend verification code"
+                      accessibilityState={{ disabled: loading, busy: loading }}
+                    >
                       <Text style={styles.resendText}>Resend Code</Text>
                     </TouchableOpacity>
                   )}
@@ -598,10 +623,20 @@ export default function AuthScreen() {
             {/* Login helper buttons (forgot password / OTP switch) */}
             {mode === 'login' && (
               <View style={styles.linksRow}>
-                <TouchableOpacity onPress={() => transitionMode('otp_request')} hitSlop={10}>
+                  <TouchableOpacity
+                    onPress={() => transitionMode('otp_request')}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Log in with a verification code instead"
+                  >
                   <Text style={styles.linkText}>Log in with code instead</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => transitionMode('forgot')} hitSlop={10}>
+                  <TouchableOpacity
+                    onPress={() => transitionMode('forgot')}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Forgot password"
+                  >
                   <Text style={styles.linkText}>Forgot password?</Text>
                 </TouchableOpacity>
               </View>
@@ -625,6 +660,8 @@ export default function AuthScreen() {
                 <TouchableOpacity
                   onPress={() => transitionMode(mode === 'login' ? 'signup' : 'login')}
                   hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={mode === 'login' ? 'Create an account' : 'Log in'}
                 >
                   <Text style={styles.toggleLink}>
                     {mode === 'login' ? 'Sign Up' : 'Log In'}
@@ -638,6 +675,8 @@ export default function AuthScreen() {
               <TouchableOpacity
                 onPress={() => transitionMode('login')}
                 style={styles.toggleRow}
+                accessibilityRole="button"
+                accessibilityLabel="Return to password login"
               >
                 <Text style={styles.toggleLabel}>Go back to </Text>
                 <Text style={styles.toggleLink}>Password Login</Text>

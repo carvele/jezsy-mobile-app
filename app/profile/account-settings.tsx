@@ -26,6 +26,7 @@ import {
   submitDeletionRequest,
   withdrawDeletionRequest,
   UnsettledBalanceResult,
+  DeletionRequestStatus,
 } from '@/src/utils/accountDeletion';
 
 export default function AccountSettingsScreen() {
@@ -41,6 +42,7 @@ export default function AccountSettingsScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
+  const [pendingDeletionStatus, setPendingDeletionStatus] = useState<DeletionRequestStatus | null>(null);
   const [unsettledInfo, setUnsettledInfo] = useState<UnsettledBalanceResult | null>(null);
   const [deletionBusy, setDeletionBusy] = useState(false);
 
@@ -49,7 +51,10 @@ export default function AccountSettingsScreen() {
     let cancelled = false;
 
     getPendingDeletionRequest(user.id).then((req) => {
-      if (!cancelled) setPendingDeletionId(req?.id ?? null);
+      if (!cancelled) {
+        setPendingDeletionId(req?.id ?? null);
+        setPendingDeletionStatus(req?.status ?? null);
+      }
     });
 
     getUserUnsettledBalance(user.id).then((info) => {
@@ -71,6 +76,7 @@ export default function AccountSettingsScreen() {
     try {
       const id = await submitDeletionRequest(user.id, reason || deletionReason);
       setPendingDeletionId(id);
+      setPendingDeletionStatus('pending');
       showToast('Deletion request submitted with 7-day grace period.', 'success');
     } catch (err: any) {
       showToast(err.message ?? 'Could not submit your request.', 'error');
@@ -110,6 +116,7 @@ export default function AccountSettingsScreen() {
     try {
       await withdrawDeletionRequest(pendingDeletionId);
       setPendingDeletionId(null);
+      setPendingDeletionStatus(null);
       showToast('Deletion request withdrawn.', 'success');
     } catch (err: any) {
       showToast(err.message ?? 'Could not withdraw your request.', 'error');
@@ -235,7 +242,14 @@ export default function AccountSettingsScreen() {
           <View style={[styles.section, { borderColor: colors.border, borderBottomWidth: 0 }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Delete Account</Text>
 
-            {pendingDeletionId ? (
+            {pendingDeletionId && pendingDeletionStatus === 'auth_revocation_pending' ? (
+              <View style={[styles.noticeBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                <IconSymbol name="lock.fill" size={18} color={colors.tint} />
+                <Text style={[styles.noticeText, { color: colors.secondaryText }]}>
+                  Your data has been erased and account access is being finalized. No further action is needed; please contact support if you can still sign in after a few minutes.
+                </Text>
+              </View>
+            ) : pendingDeletionId ? (
               <>
                 <View style={[styles.noticeBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
                   <IconSymbol name="clock.arrow.circlepath" size={18} color={colors.tint} />

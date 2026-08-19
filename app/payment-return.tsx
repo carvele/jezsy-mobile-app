@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Stack } from 'expo-router';
+import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
-  getLatestPayment,
   getPaymentStatus,
   TERMINAL_PAYMENT_STATUSES,
   PaymentStatus,
@@ -27,6 +26,7 @@ const POLL_TIMEOUT_MS = 90000;
 
 export default function PaymentReturnScreen() {
   const router = useRouter();
+  const { payment_id: paymentId } = useLocalSearchParams<{ payment_id?: string }>();
   const theme = useColorScheme();
   const colors = Colors[theme];
 
@@ -78,29 +78,30 @@ export default function PaymentReturnScreen() {
     };
 
     (async () => {
-      const latest = await getLatestPayment();
-      if (cancelled) return;
-
-      // No payment row at all means this deep link arrived without a checkout
-      // behind it; drop the customer somewhere useful rather than stranding
-      // them on a spinner.
-      if (!latest) {
+      if (!paymentId || !/^[0-9a-f-]{36}$/i.test(paymentId)) {
         router.replace('/reservations');
         return;
       }
 
-      setStatus(latest.status);
-      if (TERMINAL_PAYMENT_STATUSES.includes(latest.status)) {
-        finish(latest.status);
+      const current = await getPaymentStatus(paymentId);
+      if (cancelled) return;
+      if (!current) {
+        router.replace('/reservations');
         return;
       }
-      tick(latest.id);
+
+      setStatus(current);
+      if (TERMINAL_PAYMENT_STATUSES.includes(current)) {
+        finish(current);
+        return;
+      }
+      tick(paymentId);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [finish, router]);
+  }, [finish, paymentId, router]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>

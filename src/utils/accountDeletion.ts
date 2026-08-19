@@ -72,14 +72,19 @@ export async function getUserUnsettledBalance(userId: string): Promise<Unsettled
   };
 }
 
-export async function getPendingDeletionRequest(userId: string): Promise<{ id: string } | null> {
+export type DeletionRequestStatus = 'pending' | 'auth_revocation_pending';
+
+export async function getPendingDeletionRequest(
+  userId: string,
+): Promise<{ id: string; status: DeletionRequestStatus } | null> {
   const { data } = await supabase
     .from('account_deletion_requests')
-    .select('id')
+    .select('id, status')
     .eq('user_id', userId)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'auth_revocation_pending'])
     .maybeSingle();
-  return data ?? null;
+  if (!data || (data.status !== 'pending' && data.status !== 'auth_revocation_pending')) return null;
+  return { id: data.id, status: data.status as DeletionRequestStatus };
 }
 
 export async function submitDeletionRequest(userId: string, reason?: string): Promise<string> {

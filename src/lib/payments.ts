@@ -20,6 +20,28 @@ export type StartedPayment = {
   checkoutUrl: string;
 };
 
+const PAYMONGO_CHECKOUT_HOSTS = new Set(['checkout.paymongo.com']);
+export const PAYMENT_RETURN_SCHEME = 'jezsymobileapp:';
+
+export function isAllowedCheckoutUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && PAYMONGO_CHECKOUT_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function isPaymentReturnUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === PAYMENT_RETURN_SCHEME && url.hostname === 'payment-return' &&
+      (url.pathname === '' || url.pathname === '/');
+  } catch {
+    return false;
+  }
+}
+
 // Asks the payments-create Edge Function to open a PayMongo Checkout Session.
 // Deliberately sends only the reservation id: the amount is resolved server-side
 // from reservations.deposit, so a tampered client cannot choose what it pays.
@@ -34,22 +56,6 @@ export async function startReservationPayment(reservationId: string): Promise<St
   }
 
   return { paymentId: data.payment_id, checkoutUrl: data.checkout_url };
-}
-
-// PayMongo's return URL carries no payment id, so the deep-link screen has to
-// find the attempt it just came back from. Newest row for this customer is
-// that attempt: payments-create reuses an open session rather than stacking
-// them, so a customer cannot have two in flight at once.
-export async function getLatestPayment(): Promise<{ id: string; status: PaymentStatus } | null> {
-  const { data } = await supabase
-    .from('payments' as any)
-    .select('id, status')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!data) return null;
-  return { id: (data as any).id, status: (data as any).status as PaymentStatus };
 }
 
 // The webhook is what settles a payment, so the client can only observe. Reading

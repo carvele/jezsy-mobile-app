@@ -26,6 +26,8 @@ const { height } = Dimensions.get('window');
 
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1469334031218-e382a71b716b?q=85&w=1200&auto=format&fit=crop';
+const TERMS_URL = process.env.EXPO_PUBLIC_TERMS_URL;
+const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
 
 // Official Google "G" logo with correct brand colors
 const GoogleLogo = () => (
@@ -48,6 +50,18 @@ export default function WelcomeScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = React.useState(false);
+
+  const openLegalDocument = async (label: string, url?: string) => {
+    if (!url) {
+      showToast(`${label} link is not configured yet.`, 'info');
+      return;
+    }
+    try {
+      await Linking.openURL(url);
+    } catch {
+      showToast(`Could not open the ${label}.`, 'error');
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -150,6 +164,9 @@ export default function WelcomeScreen() {
           activeOpacity={0.85}
           onPress={handleGoogleSignIn}
           disabled={googleLoading}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Google"
+          accessibilityState={{ disabled: googleLoading, busy: googleLoading }}
         >
           {googleLoading ? (
             <ActivityIndicator color="#fff" size="small" />
@@ -175,11 +192,24 @@ export default function WelcomeScreen() {
           dark
         />
 
-        <Text style={styles.termsText}>
-          By continuing, you agree to our{' '}
-          <Text style={styles.termsLink}>Terms of Service</Text> &{' '}
-          <Text style={styles.termsLink}>Privacy Policy</Text>
-        </Text>
+        <View style={styles.termsRow}>
+          <Text style={styles.termsText}>By continuing, you agree to our </Text>
+          <TouchableOpacity
+            accessibilityRole="link"
+            accessibilityLabel="Terms of Service"
+            onPress={() => openLegalDocument('Terms of Service', TERMS_URL)}
+          >
+            <Text style={styles.termsLink}>Terms of Service</Text>
+          </TouchableOpacity>
+          <Text style={styles.termsText}> and </Text>
+          <TouchableOpacity
+            accessibilityRole="link"
+            accessibilityLabel="Privacy Policy"
+            onPress={() => openLegalDocument('Privacy Policy', PRIVACY_URL)}
+          >
+            <Text style={styles.termsLink}>Privacy Policy</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -275,11 +305,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  termsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
   termsText: {
     textAlign: 'center',
     color: 'rgba(255,255,255,0.35)',
     fontSize: 12,
-    marginTop: Spacing.sm,
     lineHeight: 18,
   },
   termsLink: {

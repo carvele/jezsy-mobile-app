@@ -22,6 +22,9 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Expo health checks
+        run: npx expo-doctor
+
       - name: Lint
         run: npm run lint
 
