@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ViewStyle, StyleProp } from 'react-native';
+import { AccessibilityInfo, ViewStyle, StyleProp } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing } from 'react-native-reanimated';
 import { Motion } from '@/constants/theme';
 
@@ -29,11 +29,22 @@ const MAX_STAGGER_INDEX = 8;
  */
 export function FadeInView({ children, index = 0, offset = 12, style }: Props) {
   const progress = useSharedValue(0);
+  const [reduceMotion, setReduceMotion] = React.useState(false);
 
   useEffect(() => {
+    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      progress.value = 1;
+      return;
+    }
     const delay = Math.min(index, MAX_STAGGER_INDEX) * Motion.stagger;
     progress.value = withDelay(delay, withTiming(1, { duration: Motion.base, easing: EASE }));
-  }, [progress, index]);
+  }, [progress, index, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: progress.value,

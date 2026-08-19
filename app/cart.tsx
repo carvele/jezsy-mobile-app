@@ -24,6 +24,7 @@ export default function CartScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingItem, setEditingItem] = useState<CartItem | null>(null);
   const [priceWarnings, setPriceWarnings] = useState<Set<string>>(new Set());
+  const [livePrices, setLivePrices] = useState<Map<string, number>>(new Map());
 
   // H-1: Re-validate prices against live DB on every screen focus
   useFocusEffect(
@@ -39,6 +40,7 @@ export default function CartScreen() {
         if (!data || !active) return;
 
         const warnings = new Set<string>();
+        const nextLivePrices = new Map<string, number>();
         const priceMap = new Map(data.map((p) => [p.id, p]));
         items.forEach((item) => {
           const live = priceMap.get(item.product.id);
@@ -49,9 +51,11 @@ export default function CartScreen() {
               : item.product.price;
           const livePrice =
             live.on_sale && live.sale_price ? live.sale_price : live.price;
+          nextLivePrices.set(item.id, livePrice || 0);
           if (cachedPrice !== livePrice) warnings.add(item.id);
         });
         setPriceWarnings(warnings);
+        setLivePrices(nextLivePrices);
       };
       refreshPrices();
       return () => {
@@ -99,10 +103,11 @@ export default function CartScreen() {
   const selectedItems = items.filter((i) => selectedIds.has(i.id));
   const selectedCount = selectedItems.reduce((sum, i) => sum + i.quantity, 0);
   const selectedTotal = selectedItems.reduce((sum, i) => {
-    const unitPrice =
+    const unitPrice = livePrices.get(i.id) ?? (
       i.product.on_sale && i.product.sale_price
         ? i.product.sale_price
-        : i.product.price || 0;
+        : i.product.price || 0
+    );
     return sum + unitPrice * i.quantity;
   }, 0);
 
@@ -113,6 +118,12 @@ export default function CartScreen() {
     const maxQty = item.maxQuantity ?? Infinity;
     const atMaxQty = item.quantity >= maxQty;
     const isSelected = selectedIds.has(item.id);
+    const displayedPrice = livePrices.get(item.id) ?? (
+      item.product.on_sale && item.product.sale_price
+        ? item.product.sale_price
+        : item.product.price || 0
+    );
+    const hasPriceChanged = priceWarnings.has(item.id);
 
     return (
     <View
@@ -162,13 +173,16 @@ export default function CartScreen() {
           </Text>
         </TouchableOpacity>
         <Text style={[styles.itemPrice, { color: colors.text }]}>
-          ₱
-          {(
-            item.product.on_sale && item.product.sale_price
-              ? item.product.sale_price
-              : item.product.price || 0
-          ).toLocaleString()}
+          ₱{displayedPrice.toLocaleString()}
         </Text>
+        {hasPriceChanged && (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={[styles.priceUpdated, { color: colors.warning }]}
+          >
+            Price updated since you added this item
+          </Text>
+        )}
 
         <View style={styles.variants}>
           {item.selectedSize && (
@@ -492,6 +506,11 @@ const styles = StyleSheet.create({
   itemPrice: {
     fontSize: 16,
     fontWeight: "700",
+  },
+  priceUpdated: {
+    ...Type.caption,
+    fontWeight: "700",
+    marginTop: Spacing.xs,
   },
   variants: {
     flexDirection: "row",
