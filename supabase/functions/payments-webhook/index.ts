@@ -82,9 +82,6 @@ serve(async (req) => {
     // PayMongo redeliver indefinitely.
     if (!payment) return json({ received: true, ignored: "unknown session" });
 
-    // Idempotency: PayMongo retries, and a repeat must not apply twice.
-    if (payment.last_event_id === eventId) return json({ received: true, duplicate: true });
-
     const nextStatus = resolveNextPaymentStatus(eventType);
 
     if (!nextStatus) {
@@ -95,37 +92,21 @@ serve(async (req) => {
       return json({ received: true, ignored: eventType });
     }
 
-    // Never walk a settled payment backwards.
-    if (payment.status === "paid" && nextStatus !== "paid") {
-      return json({ received: true, ignored: "already paid" });
-    }
-
     const paymentResource =
       resource?.type === "payment"
         ? resource
         : resource?.attributes?.payments?.[0]?.data ?? null;
 
-    await admin
-      .from("payments")
-      .update({
-        status: nextStatus,
-        method: paymentResource?.attributes?.source?.type ?? null,
-        provider_payment_id: paymentResource?.id ?? null,
-        last_event_id: eventId,
-        last_event: event,
-      })
-      .eq("id", payment.id);
-
-    // Only payment_status moves. Confirming a reservation also means committing
-    // stock and an appointment slot, which stays a staff decision.
-    if (nextStatus === "paid" && payment.reservation_id) {
-      await admin
-        .from("reservations")
-        .update({ payment_status: "Paid" })
-        .eq("id", payment.reservation_id);
-    }
-
-    return json({ received: true, status: nextStatus });
+    const { data: result, error: settlementError } = await admin.rpc('settle_payment_webhook', {
+      _payment_id: payment.id,
+      _next_status: nextStatus,
+      _method: paymentResource?.attributes?.source?.type ?? null,
+      _provider_payment_id: paymentResource?.id ?? null,
+      _event_id: eventId,
+      _event: event,
+    });
+    if (settlementError) throw settlementError;
+    return json({ received: true, ...result });
   } catch (error) {
     console.error(error);
     // 500 so PayMongo retries a genuine processing failure.
