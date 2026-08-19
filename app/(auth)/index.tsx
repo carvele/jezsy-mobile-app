@@ -67,8 +67,8 @@ export default function Onboarding() {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         bounces={false}
-        renderItem={({ item }) => (
-          <View style={styles.slide}>
+          renderItem={({ item }) => (
+          <View style={styles.slide} accessible accessibilityLabel={`${item.title.replace('\n', ' ')}. ${item.description}`}>
             <Image source={item.image} style={styles.image} contentFit="cover" />
             <View style={styles.overlay} />
             <View style={styles.content}>
@@ -92,12 +92,25 @@ export default function Onboarding() {
             />
           ))}
         </View>
+        <Text style={srOnly} accessibilityLiveRegion="polite">
+          Slide {currentIndex + 1} of {SLIDES.length}: {SLIDES[currentIndex].title.replace('\n', ' ')}
+        </Text>
 
         <View style={styles.actions}>
-          <TouchableOpacity onPress={skip} style={styles.skipButton}>
+          <TouchableOpacity
+            onPress={skip}
+            style={styles.skipButton}
+            accessibilityRole="button"
+            accessibilityLabel="Skip onboarding"
+          >
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={nextSlide} style={styles.nextButton}>
+          <TouchableOpacity
+            onPress={nextSlide}
+            style={styles.nextButton}
+            accessibilityRole="button"
+            accessibilityLabel={currentIndex === SLIDES.length - 1 ? 'Get started' : 'Next onboarding slide'}
+          >
             <Text style={styles.nextText}>{currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}</Text>
             <ArrowRight size={20} color={c.onTint} />
           </TouchableOpacity>
@@ -106,6 +119,13 @@ export default function Onboarding() {
     </View>
   );
 }
+
+const srOnly = {
+  position: 'absolute' as const,
+  width: 1,
+  height: 1,
+  opacity: 0,
+};
 
 // Deliberately not theme-aware. The background is a full-bleed image carousel under a dark overlay,
 // so white text on it is correct whatever the system theme is -- lightening

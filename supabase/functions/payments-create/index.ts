@@ -187,6 +187,8 @@ serve(async (req) => {
     }
 
     const returnUrl = Deno.env.get("PAYMONGO_RETURN_URL") ?? "jezsymobileapp://payment-return";
+    const separator = returnUrl.includes("?") ? "&" : "?";
+    const paymentReturnUrl = `${returnUrl}${separator}payment_id=${encodeURIComponent(paymentId)}`;
 
     const createRes = await fetch(`${PAYMONGO_API}/checkout_sessions`, {
       method: "POST",
@@ -199,8 +201,8 @@ serve(async (req) => {
             show_line_items: true,
             description,
             payment_method_types: PAYMENT_METHODS,
-            success_url: returnUrl,
-            cancel_url: returnUrl,
+             success_url: paymentReturnUrl,
+             cancel_url: paymentReturnUrl,
             line_items: [
               { name: description, quantity: 1, amount: amountCentavos, currency: "PHP" },
             ],

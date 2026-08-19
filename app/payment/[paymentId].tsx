@@ -6,7 +6,13 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { getPaymentStatus, TERMINAL_PAYMENT_STATUSES, PaymentStatus } from '@/src/lib/payments';
+import {
+  getPaymentStatus,
+  isAllowedCheckoutUrl,
+  isPaymentReturnUrl,
+  TERMINAL_PAYMENT_STATUSES,
+  PaymentStatus,
+} from '@/src/lib/payments';
 
 // How long to keep checking after the checkout page hands control back. The
 // webhook is usually in within a couple of seconds, but GCash can lag.
@@ -27,6 +33,7 @@ export default function PaymentScreen() {
   // whole time.
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const startedAt = useRef<number | null>(null);
+  const checkoutUrl = typeof url === 'string' && isAllowedCheckoutUrl(url) ? url : null;
 
   const finish = useCallback(
     (finalStatus: PaymentStatus | null) => {
@@ -90,14 +97,14 @@ export default function PaymentScreen() {
   const handleNavigation = (navState: { url: string }) => {
     // The success and cancel URLs are both our own scheme, so either one means
     // the hosted page is done with us.
-    if (navState.url?.startsWith('jezsymobileapp://')) {
+    if (isPaymentReturnUrl(navState.url)) {
       setSettling(true);
       return false;
     }
-    return true;
+    return isAllowedCheckoutUrl(navState.url);
   };
 
-  if (!url) {
+  if (!checkoutUrl) {
     return (
       <SafeAreaView style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>This payment link is no longer valid.</Text>
@@ -139,7 +146,7 @@ export default function PaymentScreen() {
         </View>
       ) : (
         <WebView
-          source={{ uri: String(url) }}
+          source={{ uri: checkoutUrl }}
           onShouldStartLoadWithRequest={handleNavigation}
           startInLoadingState
           renderLoading={() => (

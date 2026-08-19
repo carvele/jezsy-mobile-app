@@ -4,11 +4,13 @@ import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { withdrawDeletionRequest } from '@/src/utils/accountDeletion';
+import type { DeletionRequestStatus } from '@/src/utils/accountDeletion';
 import { useToast } from '@/src/context/ToastContext';
 
 interface PendingDeletionNoticeModalProps {
   visible: boolean;
   requestId: string;
+  status: DeletionRequestStatus;
   onResolved: () => void;
   onDismiss: () => void;
 }
@@ -22,13 +24,14 @@ interface PendingDeletionNoticeModalProps {
  * having a pending request -- see account-settings.tsx's own copy -- so this
  * is a notice, not a login gate.
  */
-export function PendingDeletionNoticeModal({ visible, requestId, onResolved, onDismiss }: PendingDeletionNoticeModalProps) {
+export function PendingDeletionNoticeModal({ visible, requestId, status, onResolved, onDismiss }: PendingDeletionNoticeModalProps) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
 
   const handleKeepAccount = async () => {
+    if (status !== 'pending') return;
     setBusy(true);
     try {
       await withdrawDeletionRequest(requestId);
@@ -49,14 +52,16 @@ export function PendingDeletionNoticeModal({ visible, requestId, onResolved, onD
             <IconSymbol name="clock.arrow.circlepath" size={28} color={colors.tint} />
           </View>
 
-          <Text style={[styles.title, { color: colors.text }]}>Account deletion pending</Text>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {status === 'pending' ? 'Account deletion pending' : 'Account deletion is being finalized'}
+          </Text>
           <Text style={[styles.body, { color: colors.secondaryText }]}>
-            You have a pending request to delete this account. It hasn&apos;t been processed yet,
-            so nothing has been removed. If you&apos;d like to keep using JezSy, confirm below and
-            we&apos;ll cancel the request.
+            {status === 'pending'
+              ? 'You have a pending request to delete this account. It hasn\'t been processed yet, so nothing has been removed. If you\'d like to keep using JezSy, confirm below and we\'ll cancel the request.'
+              : 'Your data has been erased and account access is being revoked. No action is required. Contact support if you can still sign in after a few minutes.'}
           </Text>
 
-          <TouchableOpacity
+          {status === 'pending' && <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.tint, opacity: busy ? 0.7 : 1 }]}
             onPress={handleKeepAccount}
             disabled={busy}
@@ -66,17 +71,17 @@ export function PendingDeletionNoticeModal({ visible, requestId, onResolved, onD
             {busy ? <ActivityIndicator color={colors.onTint} /> : (
               <Text style={[styles.primaryBtnText, { color: colors.onTint }]}>Keep My Account</Text>
             )}
-          </TouchableOpacity>
+          </TouchableOpacity>}
 
           <TouchableOpacity
             onPress={onDismiss}
             disabled={busy}
             style={styles.dismissBtn}
             accessibilityRole="button"
-            accessibilityLabel="Not now, I still want my account deleted"
+            accessibilityLabel={status === 'pending' ? 'Not now, I still want my account deleted' : 'Close deletion status notice'}
           >
             <Text style={[styles.dismissText, { color: colors.secondaryText }]}>
-              Not now -- I still want it deleted
+              {status === 'pending' ? 'Not now -- I still want it deleted' : 'Close'}
             </Text>
           </TouchableOpacity>
         </View>

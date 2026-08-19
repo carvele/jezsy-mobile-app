@@ -8,21 +8,30 @@ interface ConsentModalProps {
   visible: boolean;
   onAccept: () => void;
   onDecline: () => void;
+  onPrivacyPress?: () => void;
 }
 
-export function ConsentModal({ visible, onAccept, onDecline }: ConsentModalProps) {
+export function ConsentModal({ visible, onAccept, onDecline, onPrivacyPress }: ConsentModalProps) {
   const theme = useColorScheme();
   const colors = Colors[theme];
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      accessibilityViewIsModal
+      onRequestClose={onDecline}
+    >
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <View style={styles.iconContainer}>
             <IconSymbol name="camera.viewfinder" size={48} color={colors.tint} />
           </View>
           
-          <Text style={[styles.title, { color: colors.text }]}>Body Measurement Camera</Text>
+          <Text style={[styles.title, { color: colors.text }]} accessibilityRole="header">
+            Body Measurement Camera
+          </Text>
           
           <View style={styles.bulletList}>
             <View style={styles.bulletItem}>
@@ -39,14 +48,26 @@ export function ConsentModal({ visible, onAccept, onDecline }: ConsentModalProps
             </View>
           </View>
 
-          <Text style={[styles.legalText, { color: colors.secondaryText }]}>
-            By proceeding, you explicitly consent to the temporary processing of your biometric image data for the sole purpose of estimating body measurements, in accordance with our Privacy Policy.
-          </Text>
+          <View style={styles.legalRow}>
+            <Text style={[styles.legalText, { color: colors.secondaryText }]}>By proceeding, you explicitly consent to the temporary processing of your biometric image data for the sole purpose of estimating body measurements, in accordance with our </Text>
+            <TouchableOpacity
+              onPress={onPrivacyPress}
+              disabled={!onPrivacyPress}
+              accessibilityRole="link"
+              accessibilityLabel="Privacy Policy"
+              accessibilityState={{ disabled: !onPrivacyPress }}
+            >
+              <Text style={[styles.legalText, styles.privacyLink, { color: colors.tint }]}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <Text style={[styles.legalText, { color: colors.secondaryText }]}>.</Text>
+          </View>
 
           <View style={styles.actionRow}>
             <TouchableOpacity 
               style={[styles.btn, styles.declineBtn, { borderColor: colors.border }]} 
               onPress={onDecline}
+              accessibilityRole="button"
+              accessibilityLabel="Decline body measurement camera consent"
             >
               <Text style={[styles.btnText, { color: colors.text }]}>Decline</Text>
             </TouchableOpacity>
@@ -54,6 +75,8 @@ export function ConsentModal({ visible, onAccept, onDecline }: ConsentModalProps
             <TouchableOpacity 
               style={[styles.btn, styles.acceptBtn, { backgroundColor: colors.tint }]} 
               onPress={onAccept}
+              accessibilityRole="button"
+              accessibilityLabel="Consent to body measurement camera processing"
             >
               <Text style={[styles.btnText, styles.acceptText]}>I Consent</Text>
             </TouchableOpacity>
@@ -106,7 +129,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     textAlign: 'center',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 32,
+  },
+  privacyLink: {
+    textDecorationLine: 'underline',
   },
   actionRow: {
     flexDirection: 'row',

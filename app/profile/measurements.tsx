@@ -10,6 +10,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { sanitizeForStorage } from '@/src/utils/measurementPrivacy';
 import { useToast } from '@/src/context/ToastContext';
+import { consumeScanSession } from '@/src/utils/scanSession';
 
 type LengthUnit = 'cm' | 'in';
 const UNIT_STORAGE_KEY = '@jezsy_length_unit';
@@ -102,19 +103,18 @@ export default function MeasurementsScreen() {
     AsyncStorage.setItem(UNIT_STORAGE_KEY, nextUnit).catch(() => {});
   };
 
-  const scanDataProcessedRef = React.useRef<string | null>(null);
-
   // `unit` is read once this fires (gated by unitReady); it must NOT re-run
   // when the user later toggles units, or it would re-derive from the
   // original scan data and fight the plain field-by-field conversion
   // toggleUnit already does.
   useEffect(() => {
     if (!unitReady) return;
-    const rawScanData = params.scanData as string | undefined;
-    if (params.scanned === 'true' && rawScanData && scanDataProcessedRef.current !== rawScanData) {
+    const scanId = params.scanId as string | undefined;
+    if (scanId) {
       try {
-        scanDataProcessedRef.current = rawScanData;
-        const scanData = JSON.parse(rawScanData);
+        const session = consumeScanSession(scanId);
+        if (!session) return;
+        const scanData = session.measurements as any;
 
         if (scanData.bust) setBust(cmToUnit(scanData.bust.toString(), unit));
         if (scanData.waist) setWaist(cmToUnit(scanData.waist.toString(), unit));
@@ -129,8 +129,8 @@ export default function MeasurementsScreen() {
         if (scanData.overallConfidence) setScanConfidence(scanData.overallConfidence);
         if (scanData.confidence) setFieldConfidence(scanData.confidence);
 
-        if (params.height) setHeight(cmToUnit(String(params.height), unit));
-        if (params.weight) setWeight(String(params.weight));
+        if (session.height !== null) setHeight(cmToUnit(String(session.height), unit));
+        if (session.weight !== null) setWeight(String(session.weight));
 
         setSource('camera_scan');
         setShowAdvanced(true);
@@ -138,13 +138,13 @@ export default function MeasurementsScreen() {
         console.error("Failed to parse scan data", e);
       }
     }
-  }, [params.scanned, params.scanData, params.height, params.weight, unitReady, unit]);
+  }, [params.scanId, unitReady, unit]);
 
   // Same reasoning as the scan-results effect above: `unit` must be read once
   // at load, not re-applied every time the user toggles it afterward.
   useEffect(() => {
     if (!unitReady) return;
-    const fromScan = params.scanned === 'true';
+    const fromScan = Boolean(params.scanId);
     const fetchMeasurements = async () => {
       if (!user) { setLoading(false); return; }
       try {

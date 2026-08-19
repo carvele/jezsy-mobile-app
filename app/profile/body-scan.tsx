@@ -14,6 +14,7 @@ import {
   type PoseDetectionResultBundle,
 } from "@/src/utils/nativeVision";
 import * as Speech from "expo-speech";
+import * as Linking from "expo-linking";
 
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors, Radius, Spacing, Type } from "@/constants/theme";
@@ -40,12 +41,14 @@ import {
 import { extractBodyExtents, type BodyExtents, type MaskLike } from "@/src/utils/bodyMask";
 import { BurstCollector } from "@/src/utils/burstAverager";
 import { useToast } from '@/src/context/ToastContext';
+import { createScanSession } from '@/src/utils/scanSession';
 
 // CPU (default) delegate. GPU delegate is a device-tuning follow-up: an
 // unsupported delegate fails the whole model load, so correctness-first we
 // run on CPU and only opt into GPU once validated per-platform on real
 // hardware (same rationale as the original tflite pipeline this replaced).
 const POSE_DELEGATE = Delegate.CPU;
+const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
 
 export default function BodyScanScreen() {
   const { showToast } = useToast();
@@ -66,6 +69,18 @@ export default function BodyScanScreen() {
   const [prepDone, setPrepDone] = useState(false);
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("front");
+
+  const openPrivacyPolicy = useCallback(async () => {
+    if (!PRIVACY_URL) {
+      showToast('Privacy Policy link is not configured yet.', 'info');
+      return;
+    }
+    try {
+      await Linking.openURL(PRIVACY_URL);
+    } catch {
+      showToast('Could not open the Privacy Policy.', 'error');
+    }
+  }, [showToast]);
 
   const [isTiltValid, setIsTiltValid] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -190,9 +205,15 @@ export default function BodyScanScreen() {
     setIsProcessing(true);
     Speech.stop();
     Speech.speak("Got it! Here are your measurements.");
+    const scanId = createScanSession({
+      measurements: final,
+      height,
+      weight,
+      gender,
+    });
     router.replace({
       pathname: "/profile/measurements",
-      params: { scanned: "true", scanData: JSON.stringify(final), height, weight, gender },
+      params: { scanId },
     });
   }, [router, height, weight, gender, speakIfNew]);
 
@@ -359,7 +380,12 @@ export default function BodyScanScreen() {
   if (!consentGranted) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <ConsentModal visible={showConsent} onAccept={handleConsentAccept} onDecline={handleConsentDecline} />
+        <ConsentModal
+          visible={showConsent}
+          onAccept={handleConsentAccept}
+          onDecline={handleConsentDecline}
+          onPrivacyPress={openPrivacyPolicy}
+        />
       </View>
     );
   }
