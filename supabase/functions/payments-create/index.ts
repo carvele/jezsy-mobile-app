@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders, handleCors } from "../_shared/cors.ts";
 
 // Opens a PayMongo Checkout Session for a reservation and records it in
 // public.payments.
@@ -16,26 +17,30 @@ const PAYMONGO_API = "https://api.paymongo.com/v1";
 // account has activated.
 const PAYMENT_METHODS = ["gcash"];
 
-function json(body: unknown, status = 200) {
+function json(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { ...corsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  // Handle CORS preflight from mobile WebView and any browser client.
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
+
+  if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
 
   try {
     const secretKey = Deno.env.get("PAYMONGO_SECRET_KEY");
     if (!secretKey) {
       console.error("PAYMONGO_SECRET_KEY is not set");
-      return json({ error: "Payments are not configured." }, 503);
+      return json(req, { error: "Payments are not configured." }, 503);
     }
-    const basicAuth = `Basic ${btoa(`${secretKey}:`)}`;
+    const basicAuth = "Basic " + btoa(secretKey + ":");
 
     const authHeader = req.headers.get("Authorization") ?? "";
-    if (!authHeader) return json({ error: "Authentication required." }, 401);
+    if (!authHeader) return json(req, { error: "Authentication required." }, 401);
 
     // Two clients on purpose: the anon one only resolves who is calling, the
     // service-role one does every read and write that follows.
@@ -47,7 +52,7 @@ serve(async (req) => {
 
     const { data: userData, error: userError } = await caller.auth.getUser();
     const userId = userData?.user?.id;
-    if (userError || !userId) return json({ error: "Authentication required." }, 401);
+    if (userError || !userId) return json(req, { error: "Authentication required." }, 401);
 
     // Every call here opens (or reuses) a real PayMongo Checkout Session --
     // the abuse surface is a scripted burst of session-creation calls, not
@@ -56,18 +61,18 @@ serve(async (req) => {
     // this is an abuse guard, not the payment's authorization check, so
     // availability wins over strictness here.
     const { data: withinLimit, error: rateLimitError } = await admin.rpc("check_rate_limit", {
-      p_key: `payments-create:${userId}`,
+      p_key: "payments-create:" + userId,
       p_max_requests: 5,
       p_window_seconds: 60,
     });
     if (rateLimitError) console.error("Rate limit check failed (failing open):", rateLimitError);
     if (withinLimit === false) {
-      return json({ error: "Too many payment attempts. Please wait a moment and try again." }, 429);
+      return json(req, { error: "Too many payment attempts. Please wait a moment and try again." }, 429);
     }
 
     const body = await req.json().catch(() => null);
     const reservationId: string | undefined = body?.reservation_id;
-    if (!reservationId) return json({ error: "reservation_id is required." }, 400);
+    if (!reservationId) return json(req, { error: "reservation_id is required." }, 400);
 
     // Ownership and amount both come from the row itself.
     const { data: reservation, error: reservationError } = await admin
@@ -76,10 +81,10 @@ serve(async (req) => {
       .eq("id", reservationId)
       .maybeSingle();
 
-    if (reservationError || !reservation) return json({ error: "Reservation not found." }, 404);
-    if (reservation.customer_id !== userId) return json({ error: "Not your reservation." }, 403);
+    if (reservationError || !reservation) return json(req, { error: "Reservation not found." }, 404);
+    if (reservation.customer_id !== userId) return json(req, { error: "Not your reservation." }, 403);
     if (String(reservation.payment_status).toLowerCase() === "paid") {
-      return json({ error: "This reservation is already paid." }, 409);
+      return json(req, { error: "This reservation is already paid." }, 409);
     }
 
     // Payment opens only after staff accept, matching
@@ -90,17 +95,13 @@ serve(async (req) => {
     // reservation-status vocabulary transition; drop once no live row uses them.
     const status = String(reservation.status ?? "").toLowerCase();
     if (status !== "confirmed" && status !== "approved" && status !== "to pay") {
-      return json(
-        {
-          error:
-            status === "cancelled"
-              ? "This reservation was cancelled."
-              : status === "pending"
-                ? "This reservation has not been accepted yet."
-                : "This reservation is no longer awaiting payment.",
-        },
-        409,
-      );
+      const errMsg =
+        status === "cancelled"
+          ? "This reservation was cancelled."
+          : status === "pending"
+            ? "This reservation has not been accepted yet."
+            : "This reservation is no longer awaiting payment.";
+      return json(req, { error: errMsg }, 409);
     }
 
     // Server-side deadline check. The sweep runs every five minutes, so a
@@ -108,24 +109,24 @@ serve(async (req) => {
     // customer could pay into that gap and then have it cancelled underneath
     // them.
     if (reservation.payment_due_at && new Date(reservation.payment_due_at).getTime() < Date.now()) {
-      return json({ error: "The payment window for this reservation has closed." }, 409);
+      return json(req, { error: "The payment window for this reservation has closed." }, 409);
     }
 
     const amountPesos = Number(reservation.deposit ?? 0);
     if (!Number.isFinite(amountPesos) || amountPesos <= 0) {
-      return json({ error: "Nothing to pay." }, 400);
+      return json(req, { error: "Nothing to pay." }, 400);
     }
 
     // PayMongo works in centavos and enforces a 100-centavo floor.
     const amountCentavos = Math.round(amountPesos * 100);
-    if (amountCentavos < 100) return json({ error: "Amount is below the minimum." }, 400);
+    if (amountCentavos < 100) return json(req, { error: "Amount is below the minimum." }, 400);
 
     // Wording follows what is actually being charged: a customer paying the
     // whole price was still shown "Deposit for ..." on the checkout page.
     const label = String(reservation.payment_type ?? "").toLowerCase() === "full"
       ? "Full payment for"
       : "Deposit for";
-    const description = `${label} ${reservation.product_name ?? "reservation"} (${reservation.display_id})`;
+    const description = label + " " + (reservation.product_name ?? "reservation") + " (" + reservation.display_id + ")";
 
     // Reuse an open session rather than stacking them; the partial unique index
     // would reject a second one anyway.
@@ -137,14 +138,14 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existing?.provider_ref && existing.amount_centavos === amountCentavos) {
-      const session = await fetch(`${PAYMONGO_API}/checkout_sessions/${existing.provider_ref}`, {
+      const session = await fetch(PAYMONGO_API + "/checkout_sessions/" + existing.provider_ref, {
         headers: { Authorization: basicAuth },
       })
         .then((r) => r.json())
         .catch(() => null);
 
       const url = session?.data?.attributes?.checkout_url;
-      if (url) return json({ payment_id: existing.id, checkout_url: url, reused: true });
+      if (url) return json(req, { payment_id: existing.id, checkout_url: url, reused: true });
     }
 
     // Record the payment attempt BEFORE calling PayMongo, not after. The
@@ -163,7 +164,7 @@ serve(async (req) => {
         .eq("id", existing.id);
       if (resetError) {
         console.error("Could not reset payment row", resetError);
-        return json({ error: "Could not start the payment." }, 500);
+        return json(req, { error: "Could not start the payment." }, 500);
       }
     } else {
       const { data: inserted, error: insertError } = await admin
@@ -181,16 +182,16 @@ serve(async (req) => {
 
       if (insertError || !inserted) {
         console.error("Could not record payment", insertError);
-        return json({ error: "Could not start the payment." }, 500);
+        return json(req, { error: "Could not start the payment." }, 500);
       }
       paymentId = inserted.id;
     }
 
     const returnUrl = Deno.env.get("PAYMONGO_RETURN_URL") ?? "jezsymobileapp://payment-return";
     const separator = returnUrl.includes("?") ? "&" : "?";
-    const paymentReturnUrl = `${returnUrl}${separator}payment_id=${encodeURIComponent(paymentId)}`;
+    const paymentReturnUrl = returnUrl + separator + "payment_id=" + encodeURIComponent(paymentId);
 
-    const createRes = await fetch(`${PAYMONGO_API}/checkout_sessions`, {
+    const createRes = await fetch(PAYMONGO_API + "/checkout_sessions", {
       method: "POST",
       headers: { Authorization: basicAuth, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -201,8 +202,8 @@ serve(async (req) => {
             show_line_items: true,
             description,
             payment_method_types: PAYMENT_METHODS,
-             success_url: paymentReturnUrl,
-             cancel_url: paymentReturnUrl,
+            success_url: paymentReturnUrl,
+            cancel_url: paymentReturnUrl,
             line_items: [
               { name: description, quantity: 1, amount: amountCentavos, currency: "PHP" },
             ],
@@ -217,7 +218,7 @@ serve(async (req) => {
 
     if (!createRes.ok || !sessionId || !checkoutUrl) {
       console.error("PayMongo session creation failed", JSON.stringify(created));
-      return json({ error: "Could not start the payment." }, 502);
+      return json(req, { error: "Could not start the payment." }, 502);
     }
 
     const { error: updateError } = await admin
@@ -227,12 +228,12 @@ serve(async (req) => {
 
     if (updateError) {
       console.error("Could not link payment to session", updateError);
-      return json({ error: "Could not start the payment." }, 500);
+      return json(req, { error: "Could not start the payment." }, 500);
     }
 
-    return json({ payment_id: paymentId, checkout_url: checkoutUrl, reused: false });
+    return json(req, { payment_id: paymentId, checkout_url: checkoutUrl, reused: false });
   } catch (error) {
     console.error(error);
-    return json({ error: "Unexpected error." }, 500);
+    return json(req, { error: "Unexpected error." }, 500);
   }
 });
