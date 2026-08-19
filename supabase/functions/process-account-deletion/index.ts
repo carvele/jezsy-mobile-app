@@ -94,10 +94,22 @@ Deno.serve(async (req) => {
       return json(req, { error: 'Too many requests. Please wait a moment and try again.' }, 429);
     }
 
-    const { data: rpcData, error: rpcError } = await callerClient.rpc(
-      'process_account_deletion',
-      { _request_id: requestId },
-    );
+    const { data: requestRow, error: requestLookupError } = await adminClient
+      .from('account_deletion_requests')
+      .select('user_id, status')
+      .eq('id', requestId)
+      .maybeSingle();
+    if (requestLookupError || !requestRow) return json(req, { error: 'Deletion request not found.' }, 404);
+
+    let rpcData = null;
+    let rpcError = null;
+    if (requestRow.status === 'auth_revocation_pending') {
+      rpcData = { blocked: false, user_id: requestRow.user_id };
+    } else {
+      const result = await callerClient.rpc('process_account_deletion', { _request_id: requestId });
+      rpcData = result.data;
+      rpcError = result.error;
+    }
 
     if (rpcError) {
       // is_staff_or_admin() failures, already-processed requests, and
@@ -106,6 +118,7 @@ Deno.serve(async (req) => {
     }
 
     if (rpcData?.blocked) {
+      await adminClient.from('account_deletion_requests').update({ status: 'auth_revocation_pending' }).eq('id', requestId);
       return json(req, {
         blocked: true,
         blockingReservations: rpcData.blocking_reservations,
@@ -134,6 +147,12 @@ Deno.serve(async (req) => {
       }, 207);
     }
 
+    const { error: finalizeError } = await adminClient
+      .from('account_deletion_requests')
+      .update({ status: 'completed', processed_at: new Date().toISOString() })
+      .eq('id', requestId)
+      .eq('status', 'auth_revocation_pending');
+    if (finalizeError) throw finalizeError;
     return json(req, { blocked: false, dataErased: true, loginRevoked: true }, 200);
   } catch (err) {
     console.error('[process-account-deletion] Unexpected error:', err);

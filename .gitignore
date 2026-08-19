@@ -38,6 +38,7 @@ google-services.json
 
 # local tooling and editor state
 .agents/
+.claude/
 .vs/
 supabase/.temp/
 

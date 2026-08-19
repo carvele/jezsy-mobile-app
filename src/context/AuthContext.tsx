@@ -46,7 +46,8 @@ const AuthContext = createContext<AuthContextType>({
   endPasswordRecovery: () => {},
 });
 
-const PROFILE_CACHE_KEY = 'jezsy_profile_cache';
+const PROFILE_CACHE_PREFIX = 'jezsy_profile_cache:';
+const profileCacheKey = (userId: string) => `${PROFILE_CACHE_PREFIX}${userId}`;
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -69,23 +70,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
       if (error) {
         // Network/server error — fall back to cached profile
-        const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
-        const nextProfile = cached ? JSON.parse(cached) : null;
+        const cached = await AsyncStorage.getItem(profileCacheKey(userId));
+        const parsed = cached ? JSON.parse(cached) : null;
+        const nextProfile = parsed?.id === userId ? parsed : null;
         setProfile(nextProfile);
         return nextProfile;
       }
       const nextProfile = data ?? null;
       // Cache successful fetches for offline resilience
       if (nextProfile) {
-        await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(nextProfile));
+        await AsyncStorage.setItem(profileCacheKey(userId), JSON.stringify(nextProfile));
       }
       setProfile(nextProfile);
       return nextProfile;
     } catch {
       // Total failure — try cache before giving up
       try {
-        const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
-        const nextProfile = cached ? JSON.parse(cached) : null;
+        const cached = await AsyncStorage.getItem(profileCacheKey(userId));
+        const parsed = cached ? JSON.parse(cached) : null;
+        const nextProfile = parsed?.id === userId ? parsed : null;
         setProfile(nextProfile);
         return nextProfile;
       } catch {
@@ -159,8 +162,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         let fallback = existing ?? null;
         if (!fallback) {
           try {
-            const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
-            fallback = cached ? JSON.parse(cached) : null;
+            const cached = await AsyncStorage.getItem(profileCacheKey(authUser.id));
+            const parsed = cached ? JSON.parse(cached) : null;
+            fallback = parsed?.id === authUser.id ? parsed : null;
           } catch { /* ignore */ }
         }
         setProfile(fallback);
@@ -170,7 +174,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const nextProfile = data ?? existing ?? null;
       // Cache successful profiles for offline resilience
       if (nextProfile) {
-        await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(nextProfile)).catch(() => {});
+        await AsyncStorage.setItem(profileCacheKey(authUser.id), JSON.stringify(nextProfile)).catch(() => {});
       }
       setProfile(nextProfile);
       savePushTokenToProfile(authUser.id);
@@ -188,7 +192,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = useCallback(async () => {
     try {
-      await AsyncStorage.multiRemove(['jezsy_cart', PROFILE_CACHE_KEY]);
+      // Profile caches are user-scoped; remove the legacy shared key as part of
+      // the migration so it can never be used by an older build after logout.
+      await AsyncStorage.multiRemove(['jezsy_cart', 'jezsy_profile_cache']);
     } catch (e) {}
     await supabase.auth.signOut();
   }, []);
