@@ -442,7 +442,7 @@ export default function ProfileSetupScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} />
-      <LinearGradient colors={[colors.background, colors.surface]} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient colors={[colors.background, colors.surface]} style={StyleSheet.absoluteFill} />
 
       {/* Top step indicator */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>

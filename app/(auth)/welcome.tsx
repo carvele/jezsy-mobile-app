@@ -138,7 +138,7 @@ export default function WelcomeScreen() {
       {/* Full-screen background image */}
       <Image
         source={HERO_IMAGE}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         contentFit="cover"
         transition={600}
       />
@@ -147,7 +147,7 @@ export default function WelcomeScreen() {
       <LinearGradient
         colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)', 'rgba(13,13,13,0.97)']}
         locations={[0, 0.55, 1]}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       />
 
       {/* Branding */}

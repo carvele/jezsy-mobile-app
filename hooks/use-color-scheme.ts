@@ -10,5 +10,5 @@ export function useColorScheme(): 'light' | 'dark' {
 
   // The app is dark-first by design (see Colors.dark usage throughout); fall
   // back to that, not 'light', when neither a provider nor the OS gives a value.
-  return themeContext?.scheme ?? systemScheme ?? 'dark';
+  return themeContext?.scheme ?? (systemScheme === 'light' || systemScheme === 'dark' ? systemScheme : 'dark');
 }

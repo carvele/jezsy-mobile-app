@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   // before any product was visible.
   cardGrid: { width: GRID_CARD_WIDTH, height: GRID_CARD_HEIGHT },
   cardRail: { width: SCREEN_WIDTH * 0.42, aspectRatio: 4 / 3 },
-  image: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  image: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },
   textRow: {
     position: 'absolute',
