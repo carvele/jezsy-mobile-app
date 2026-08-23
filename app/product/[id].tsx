@@ -103,8 +103,11 @@ export default function ProductDetailScreen() {
 
             // Default selections
             if (data.sizes && data.sizes.length > 0) {
+              const initColor = data.color ? data.color.split(",")[0].trim() : undefined;
               const availableSize = data.sizes.find(s => {
-                const inv = invRes.data?.find(i => i.size === s);
+                const inv = invRes.data?.find((i: any) =>
+                  i.size === s && (!initColor || !i.color || i.color === initColor)
+                );
                 return !inv || (inv.available || 0) > 0;
               });
               setSelectedSize((prev) => prev || availableSize || data.sizes?.[0] || "");
@@ -267,8 +270,11 @@ export default function ProductDetailScreen() {
     imageGallery.push(RNImage.resolveAssetSource(require("@/assets/images/partial-react-logo.png")).uri);
   }
 
-  const getStockInfo = (size: string) => {
-    const inv = inventory.find(i => i.size === size);
+  const getStockInfo = (size: string, color?: string) => {
+    const inv = inventory.find((i: any) =>
+      i.size === size &&
+      (!color || !i.color || i.color === color)
+    );
     if (!inv) return null; // Fallback to assumed available if no tracking
     return inv.available || 0;
   };
@@ -279,7 +285,7 @@ export default function ProductDetailScreen() {
   // so both actions must re-check stock rather than trust the selection.
   const needsSize = !!(product.sizes && product.sizes.length > 0);
   const needsColor = !!product.color;
-  const selectedStock = selectedSize ? getStockInfo(selectedSize) : null;
+  const selectedStock = selectedSize ? getStockInfo(selectedSize, selectedColor || undefined) : null;
   const selectedSizeOutOfStock = selectedStock !== null && selectedStock <= 0;
   const hasRequiredSelection =
     (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor);
@@ -463,7 +469,7 @@ export default function ProductDetailScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
                 {product.sizes.map((s, index) => {
                   const isSelected = selectedSize === s;
-                  const stock = getStockInfo(s);
+                  const stock = getStockInfo(s, selectedColor || undefined);
                   const isOutOfStock = stock !== null && stock <= 0;
                   
                   return (
