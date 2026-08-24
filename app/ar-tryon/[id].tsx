@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -176,13 +176,17 @@ export default function ARTryOnScreen() {
     ],
   }));
 
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const screenWidth = Math.min(winWidth || 360, 480);
+  const screenHeight = Math.min(winHeight || 640, 800);
+
   const handlePoseResults = useCallback(
     (landmarks: Landmark[]) => {
       // 1. Continuous real-time auto-sizing, auto-tracking, and auto-fitting
       const autoFit = calculateGarmentAutoFit(landmarks, {
         isMirrored: true,
-        screenWidth: 320,
-        screenHeight: 400,
+        screenWidth,
+        screenHeight,
         fitEase: 1.0,
       });
 
@@ -217,8 +221,8 @@ export default function ARTryOnScreen() {
       if (currentPose) {
         const match = evaluatePoseMatch(landmarks, currentPose.name, {
           isMirrored: true,
-          screenWidth: 320,
-          screenHeight: 400,
+          screenWidth,
+          screenHeight,
         });
         setMatchScore(match.score);
         setIsMatched(match.isMatched);
@@ -228,7 +232,7 @@ export default function ARTryOnScreen() {
         setIsMatched(false);
       }
     },
-    [currentPose, translateX, translateY, scale, rotateDeg, opacity]
+    [currentPose, screenWidth, screenHeight, translateX, translateY, scale, rotateDeg, opacity]
   );
   
   // Pose Detection Hook (Native)

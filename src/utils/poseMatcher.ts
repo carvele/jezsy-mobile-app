@@ -112,62 +112,50 @@ export function calculateGarmentAutoFit(
   const heightFactor = options?.screenHeight ?? 340;
   const fitEase = options?.fitEase ?? 1.0;
 
-  // 1. Apparent 2D shoulder span
-  const apparentWidth = dist(leftShoulder, rightShoulder);
+  // 1. Apparent 2D shoulder span (in raw camera: leftShoulder is at x > rightShoulder)
+  const dx = leftShoulder.x - rightShoulder.x;
+  const apparentWidth = Math.sqrt(Math.pow(dx, 2) + Math.pow(leftShoulder.y - rightShoulder.y, 2));
 
   // 2. Yaw (body turn) calculation & foreshortening correction using 3D depth (z)
   const deltaZ = (rightShoulder.z ?? 0) - (leftShoulder.z ?? 0);
-  const deltaX = Math.abs(rightShoulder.x - leftShoulder.x);
-  const yawRad = Math.atan2(deltaZ, Math.max(0.01, deltaX));
+  const yawRad = Math.atan2(deltaZ, Math.max(0.01, dx));
   const yawDeg = yawRad * (180 / Math.PI);
-  const cosYaw = Math.max(0.55, Math.abs(Math.cos(yawRad)));
+  const cosYaw = Math.max(0.60, Math.abs(Math.cos(yawRad)));
 
   // Corrected true shoulder width (prevents garment from falsely shrinking when user turns sideways)
   const correctedShoulderWidth = apparentWidth / cosYaw;
 
   // 3. Proportional Auto-Sizing Scale
-  // Standard adult shoulder span takes ~36% of camera frame at typical 1.2m selfie distance
-  const BASELINE_SHOULDER_SPAN = 0.36;
+  // Standard adult shoulder span takes ~34% of camera frame at typical selfie distance
+  const BASELINE_SHOULDER_SPAN = 0.34;
   const rawScale = (correctedShoulderWidth / BASELINE_SHOULDER_SPAN) * fitEase;
-  const targetScale = Math.max(0.55, Math.min(2.4, rawScale));
+  const targetScale = Math.max(0.50, Math.min(2.3, rawScale));
 
   // 4. Auto-Fitting Roll / Tilt Angle (Shoulder Slope)
-  // When user tilts shoulders, garment tilts in unison
+  // In mirrored front camera, user's right shoulder appears on the right side of the screen
   let rollRad: number;
   if (isMirrored) {
-    // In mirrored front camera, horizontal coordinates are visually flipped
-    rollRad = Math.atan2(leftShoulder.y - rightShoulder.y, rightShoulder.x - leftShoulder.x);
+    rollRad = Math.atan2(rightShoulder.y - leftShoulder.y, Math.max(0.01, dx));
   } else {
-    rollRad = Math.atan2(rightShoulder.y - leftShoulder.y, rightShoulder.x - leftShoulder.x);
+    rollRad = Math.atan2(leftShoulder.y - rightShoulder.y, Math.max(0.01, dx));
   }
-  // Clamp roll to +/- 45 degrees to avoid extreme flips
-  const targetRotation = Math.max(-45, Math.min(45, rollRad * (180 / Math.PI)));
+  // Clamp roll to +/- 35 degrees to avoid unnatural flips
+  const targetRotation = Math.max(-35, Math.min(35, rollRad * (180 / Math.PI)));
 
   // 5. Collarline & Torso Anchor Point
-  const midShoulder = midPoint(leftShoulder, rightShoulder);
-  const leftHip = landmarks[L.leftHip];
-  const rightHip = landmarks[L.rightHip];
+  const midX = (leftShoulder.x + rightShoulder.x) / 2;
+  const midY = (leftShoulder.y + rightShoulder.y) / 2;
 
-  let torsoLength: number;
-  if (leftHip && rightHip && leftHip.visibility >= 0.35 && rightHip.visibility >= 0.35) {
-    // Real hip detected
-    const midHipY = (leftHip.y + rightHip.y) / 2;
-    torsoLength = Math.max(0.2, midHipY - midShoulder.y);
-  } else {
-    // Fallback: Extrapolate torso height using standard anatomical proportion (Torso ≈ 1.25 × ShoulderWidth)
-    torsoLength = correctedShoulderWidth * 1.25;
-  }
+  // Upper chest position just below suprasternal notch
+  const chestAnchorX = midX;
+  const chestAnchorY = midY + correctedShoulderWidth * 0.18;
 
-  // Anchor to upper chest (collarline + 22% of torso length down)
-  const chestAnchorY = midShoulder.y + torsoLength * 0.22;
-  const chestAnchorX = midShoulder.x;
+  // Screen horizontal translation (mirrored: visual X is 1 - rawX)
+  const visualChestX = isMirrored ? (1 - chestAnchorX) : chestAnchorX;
+  const targetX = (visualChestX - 0.50) * widthFactor;
 
-  // Horizontal translation with mirror inversion
-  const rawXOffset = isMirrored ? (0.5 - chestAnchorX) : (chestAnchorX - 0.5);
-  const targetX = rawXOffset * widthFactor;
-
-  // Vertical translation (0.40 is neutral center chest in frame)
-  const targetY = (chestAnchorY - 0.40) * heightFactor;
+  // Vertical translation (0.35 is neutral collar anchor in frame)
+  const targetY = (chestAnchorY - 0.35) * heightFactor;
 
   return {
     isTracking: true,
