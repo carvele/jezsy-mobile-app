@@ -322,3 +322,76 @@ export function evaluatePoseMatch(
     autoFit,
   };
 }
+
+export interface OcclusionSegment {
+  name: string;
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  radius: number;
+  depthDelta: number;
+}
+
+/**
+ * Extracts 3D depth-aware foreground occlusion capsules (forearms, hands, chin/neck)
+ * that are positioned in front of the torso for Layer 3 sandwich rendering.
+ */
+export function getForegroundOcclusionSegments(landmarks: Landmark[]): OcclusionSegment[] {
+  if (!landmarks || landmarks.length < 33) return [];
+
+  const leftShoulder = landmarks[L.leftShoulder];
+  const rightShoulder = landmarks[L.rightShoulder];
+  if (!leftShoulder || !rightShoulder) return [];
+
+  const chestZ = ((leftShoulder.z ?? 0) + (rightShoulder.z ?? 0)) / 2;
+  const chestMidX = (leftShoulder.x + rightShoulder.x) / 2;
+  const chestMidY = (leftShoulder.y + rightShoulder.y) / 2;
+  const shoulderSpan = Math.abs(leftShoulder.x - rightShoulder.x) || 0.3;
+
+  const occluders: OcclusionSegment[] = [];
+
+  // Key foreground limb chains: [startJoint, endJoint, radiusRatio]
+  const limbs = [
+    // Left arm: elbow (13) -> wrist (15) -> index (19)
+    { start: landmarks[13], end: landmarks[15], radius: shoulderSpan * 0.22, name: 'leftForearm' },
+    { start: landmarks[15], end: landmarks[19], radius: shoulderSpan * 0.18, name: 'leftHand' },
+    // Right arm: elbow (14) -> wrist (16) -> index (20)
+    { start: landmarks[14], end: landmarks[16], radius: shoulderSpan * 0.22, name: 'rightForearm' },
+    { start: landmarks[16], end: landmarks[20], radius: shoulderSpan * 0.18, name: 'rightHand' },
+    // Chin / Neck: nose (0) -> upper chest notch
+    { start: landmarks[0], end: { x: chestMidX, y: chestMidY - shoulderSpan * 0.15, z: chestZ - 0.05, visibility: 0.9 }, radius: shoulderSpan * 0.16, name: 'chinNeck' },
+  ];
+
+  const torsoLeft = chestMidX - shoulderSpan * 0.65;
+  const torsoRight = chestMidX + shoulderSpan * 0.65;
+  const torsoTop = chestMidY - shoulderSpan * 0.35;
+  const torsoBottom = chestMidY + shoulderSpan * 1.4;
+
+  for (const limb of limbs) {
+    if (!limb.start || !limb.end) continue;
+    if ((limb.start.visibility ?? 1) < 0.35 || (limb.end.visibility ?? 1) < 0.35) continue;
+
+    // A limb is in front of the torso if its Z depth is forward of the chest plane (negative forward in BlazePose)
+    const avgZ = ((limb.start.z ?? 0) + (limb.end.z ?? 0)) / 2;
+    const isForward = avgZ < chestZ + 0.08;
+
+    // Spatial overlap check with torso bounding box
+    const minX = Math.min(limb.start.x, limb.end.x) - limb.radius;
+    const maxX = Math.max(limb.start.x, limb.end.x) + limb.radius;
+    const minY = Math.min(limb.start.y, limb.end.y) - limb.radius;
+    const maxY = Math.max(limb.start.y, limb.end.y) + limb.radius;
+
+    const overlapsTorso = !(maxX < torsoLeft || minX > torsoRight || maxY < torsoTop || minY > torsoBottom);
+
+    if (isForward && overlapsTorso) {
+      occluders.push({
+        name: limb.name,
+        start: { x: limb.start.x, y: limb.start.y },
+        end: { x: limb.end.x, y: limb.end.y },
+        radius: limb.radius,
+        depthDelta: Math.round((avgZ - chestZ) * 100) / 100,
+      });
+    }
+  }
+
+  return occluders;
+}

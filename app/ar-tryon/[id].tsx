@@ -17,7 +17,7 @@ import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { useToast } from '@/src/context/ToastContext';
-import { evaluatePoseMatch, calculateGarmentAutoFit } from '@/src/utils/poseMatcher';
+import { evaluatePoseMatch, calculateGarmentAutoFit, getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -37,6 +37,7 @@ interface WebCameraFeedProps {
 
 function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const occlusionCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const trackerRef = React.useRef<WebPoseTracker | null>(null);
   const animFrameRef = React.useRef<number | null>(null);
   const onPoseResultsRef = React.useRef(onPoseResults);
@@ -96,8 +97,41 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
             try {
               const now = performance.now();
               const landmarks = tracker.detect(videoRef.current, now);
-              if (landmarks && onPoseResultsRef.current) {
-                onPoseResultsRef.current(landmarks);
+              if (landmarks) {
+                if (onPoseResultsRef.current) {
+                  onPoseResultsRef.current(landmarks);
+                }
+
+                // Layer 3 Occlusion Sandwich: Render foreground arms, hands & neck over the garment
+                const canvas = occlusionCanvasRef.current;
+                if (canvas && videoRef.current) {
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    const occluders = getForegroundOcclusionSegments(landmarks);
+                    if (occluders.length > 0) {
+                      ctx.save();
+                      ctx.beginPath();
+                      for (const occ of occluders) {
+                        const sx = occ.start.x * canvas.width;
+                        const sy = occ.start.y * canvas.height;
+                        const ex = occ.end.x * canvas.width;
+                        const ey = occ.end.y * canvas.height;
+                        const r = Math.max(8, occ.radius * canvas.width);
+
+                        ctx.moveTo(sx, sy);
+                        ctx.lineTo(ex, ey);
+                        ctx.lineWidth = r * 2;
+                        ctx.lineCap = 'round';
+                        ctx.strokeStyle = '#FFFFFF';
+                        ctx.stroke();
+                      }
+                      ctx.globalCompositeOperation = 'source-in';
+                      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+                      ctx.restore();
+                    }
+                  }
+                }
               }
             } catch (err) {
               console.warn('Frame processing error:', err);
@@ -129,23 +163,44 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
   }, []);
 
   return (
-    // @ts-ignore
-    <video
-      ref={videoRef}
-      autoPlay
-      playsInline
-      muted
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover',
-        transform: 'scaleX(-1)', // Mirror front selfie camera
-        zIndex: 1,
-      }}
-    />
+    <>
+      {/* Layer 1: Live Camera Video Feed */}
+      {/* @ts-ignore */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          transform: 'scaleX(-1)', // Mirror front selfie camera
+          zIndex: 1,
+        }}
+      />
+      {/* Layer 3: Foreground Arm/Hand Occlusion Canvas (Zero CSS filter overhead, GPU upscaled) */}
+      {/* @ts-ignore */}
+      <canvas
+        ref={occlusionCanvasRef}
+        width={256}
+        height={256}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          transform: 'scaleX(-1)',
+          pointerEvents: 'none',
+          zIndex: 20,
+        }}
+      />
+    </>
   );
 }
 
