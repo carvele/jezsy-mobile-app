@@ -35,6 +35,7 @@ export interface GarmentAutoFitResult {
   targetRotation: number; // In degrees
   targetOpacity: number;
   yawDeg: number;
+  pitchDeg: number;
   shoulderWidth: number;
   feedback: string;
 }
@@ -188,6 +189,7 @@ export function calculateGarmentAutoFit(
       targetRotation: 0,
       targetOpacity: 0,
       yawDeg: 0,
+      pitchDeg: 0,
       shoulderWidth: 0,
       feedback: 'Position yourself in frame',
     };
@@ -205,6 +207,28 @@ export function calculateGarmentAutoFit(
   // 0.35 is neutral collar level on screen. Garment translates dynamically across full screen height
   const targetY = (chestAnchorY - 0.35) * screenH;
 
+  // 5. 3D Pitch Calculation (Forward / Backward spine lean)
+  const leftHip = landmarks[L.leftHip];
+  const rightHip = landmarks[L.rightHip];
+  let pitchDeg = 0;
+
+  const midShoulderZ = ((leftShoulder?.z ?? 0) + (rightShoulder?.z ?? 0)) / 2;
+  const midShoulderY = ((leftShoulder?.y ?? 0) + (rightShoulder?.y ?? 0)) / 2;
+
+  if (leftHip && rightHip && (leftHip.visibility ?? 1) >= 0.35 && (rightHip.visibility ?? 1) >= 0.35) {
+    const midHipZ = ((leftHip.z ?? 0) + (rightHip.z ?? 0)) / 2;
+    const midHipY = ((leftHip.y ?? 0) + (rightHip.y ?? 0)) / 2;
+    const deltaZ = midShoulderZ - midHipZ;
+    const deltaY = Math.max(0.15, midHipY - midShoulderY);
+    const pitchRad = Math.atan2(deltaZ, deltaY);
+    pitchDeg = Math.max(-20, Math.min(20, pitchRad * (180 / Math.PI)));
+  } else if (nose && (nose.visibility ?? 1) >= 0.35) {
+    const deltaZ = (nose.z ?? 0) - midShoulderZ;
+    const deltaY = Math.max(0.1, midShoulderY - (nose.y ?? 0));
+    const pitchRad = Math.atan2(deltaZ, deltaY);
+    pitchDeg = Math.max(-18, Math.min(18, -pitchRad * (180 / Math.PI) * 0.6));
+  }
+
   return {
     isTracking: true,
     targetX,
@@ -213,6 +237,7 @@ export function calculateGarmentAutoFit(
     targetRotation,
     targetOpacity: 1,
     yawDeg,
+    pitchDeg,
     shoulderWidth: correctedShoulderWidth,
     feedback: 'Auto-Fit Active',
   };

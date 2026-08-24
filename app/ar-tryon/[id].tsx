@@ -229,6 +229,7 @@ export default function ARTryOnScreen() {
   const opacity = useSharedValue(0.9);
   const lostFramesRef = React.useRef(0);
   const lastStateUpdateRef = React.useRef(0);
+  const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
 
   const animatedGarmentStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -267,6 +268,18 @@ export default function ARTryOnScreen() {
         scale.value = withTiming(autoFit.targetScale, config);
         rotateDeg.value = withTiming(autoFit.targetRotation, config);
         opacity.value = withTiming(1, { duration: 120 });
+
+        // Continuous 3D Perspective Rotation (Yaw & Pitch) to 3D model-viewer
+        if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
+          iframeRef.current.contentWindow.postMessage(
+            {
+              type: 'UPDATE_3D_POSE',
+              yaw: autoFit.yawDeg,
+              pitch: autoFit.pitchDeg,
+            },
+            '*'
+          );
+        }
       } else {
         lostFramesRef.current += 1;
         // Debounced hysteresis: only return to neutral if lost for >6 consecutive frames (~200ms)
@@ -653,7 +666,8 @@ export default function ARTryOnScreen() {
           id="mv-overlay"
           src="${modelUrl}"
           ios-src="${iosModelUrl}"
-          camera-controls
+          camera-orbit="0deg 75deg 105%"
+          interpolation-decay="80"
           shadow-intensity="0.8"
           shadow-softness="0.8"
           exposure="1.15"
@@ -661,6 +675,20 @@ export default function ARTryOnScreen() {
           environment-image="legacy"
           alt="A 3D model of ${safeName}">
         </model-viewer>
+        <script>
+          const mv = document.getElementById('mv-overlay');
+          window.addEventListener('message', (e) => {
+            if (e.data && e.data.type === 'UPDATE_3D_POSE') {
+              const { yaw, pitch } = e.data;
+              if (mv) {
+                // Invert yaw for mirrored camera display
+                const orbitYaw = (-(yaw || 0)).toFixed(1);
+                const orbitPitch = Math.max(55, Math.min(95, 75 + (pitch || 0))).toFixed(1);
+                mv.cameraOrbit = orbitYaw + 'deg ' + orbitPitch + 'deg 105%';
+              }
+            }
+          });
+        </script>
       </body>
     </html>
   `;
@@ -791,6 +819,7 @@ export default function ARTryOnScreen() {
                 {Platform.OS === 'web' ? (
                   // @ts-ignore
                   <iframe
+                    ref={iframeRef}
                     srcDoc={htmlContentOverlay}
                     style={{
                       width: '100%',
