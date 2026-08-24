@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -41,8 +41,8 @@ export function StreakBadge() {
           pulseAnimation.current?.stop();
           pulseAnimation.current = Animated.loop(
             Animated.sequence([
-              Animated.timing(scaleAnim, { toValue: 1.1, duration: 800, useNativeDriver: true }),
-              Animated.timing(scaleAnim, { toValue: 1, duration: 800, useNativeDriver: true })
+              Animated.timing(scaleAnim, { toValue: 1.1, duration: 800, useNativeDriver: Platform.OS !== 'web' }),
+              Animated.timing(scaleAnim, { toValue: 1, duration: 800, useNativeDriver: Platform.OS !== 'web' })
             ])
           );
           pulseAnimation.current.start();

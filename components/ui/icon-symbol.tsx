@@ -8,11 +8,15 @@ import { OpaqueColorValue, Platform, type StyleProp, type TextStyle } from 'reac
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
   const fontId = 'expo-material-icons-web';
   if (!document.getElementById(fontId)) {
-    const link = document.createElement('link');
-    link.id = fontId;
-    link.rel = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
-    document.head.appendChild(link);
+    const style = document.createElement('style');
+    style.id = fontId;
+    style.textContent = `
+      @font-face {
+        font-family: 'MaterialIcons';
+        src: url('https://fonts.gstatic.com/s/materialicons/v142/flUhRq6tzZclQEJ-Vdg-IuiaDsNc.woff2') format('woff2');
+      }
+    `;
+    document.head.appendChild(style);
   }
 }
 

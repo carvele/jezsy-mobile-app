@@ -11,6 +11,7 @@ import {
   Easing,
   useWindowDimensions,
   Pressable,
+  Platform,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
@@ -308,7 +309,7 @@ export default function HomeScreen() {
               onScroll={Animated.event(
                 [{ nativeEvent: { contentOffset: { x: heroScrollX } } }],
                 {
-                  useNativeDriver: true,
+                  useNativeDriver: Platform.OS !== 'web',
                   listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
                     const step = heroCardWidth + HERO_CARD_GAP;
                     const idx = Math.round(e.nativeEvent.contentOffset.x / step);

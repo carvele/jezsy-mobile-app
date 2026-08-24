@@ -116,8 +116,8 @@ export default function ProfileSetupScreen() {
 
   const transitionTo = (next: number) => {
     Animated.sequence([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 140, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: Platform.OS !== 'web' }),
     ]).start();
     setTimeout(() => setStep(next), 140);
   };
