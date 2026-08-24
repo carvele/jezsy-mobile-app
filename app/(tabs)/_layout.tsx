@@ -65,11 +65,11 @@ export default function TabLayout() {
           left: 16,
           right: 16,
           height: 62,
-          backgroundColor: isDark ? 'rgba(13,13,13,0.88)' : 'rgba(255,255,255,0.92)',
+          backgroundColor: isDark ? '#141414' : '#ffffff',
           borderRadius: 31,
           borderTopWidth: 0,
           borderWidth: isDark ? 1 : 0.5,
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
           paddingBottom: 0,
           paddingTop: 0,
           // Shadow
@@ -79,6 +79,11 @@ export default function TabLayout() {
                 shadowOffset: { width: 0, height: 8 },
                 shadowOpacity: isDark ? 0.5 : 0.15,
                 shadowRadius: 24,
+              }
+            : Platform.OS === 'web'
+            ? {
+                // @ts-ignore
+                boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
               }
             : {
                 elevation: 12,
