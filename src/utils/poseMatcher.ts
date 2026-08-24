@@ -46,7 +46,8 @@ const midPoint = (p1: Landmark, p2: Landmark): Landmark => ({
  */
 export function evaluatePoseMatch(
   landmarks: Landmark[],
-  targetPoseName: string
+  targetPoseName: string,
+  options?: { isMirrored?: boolean; screenWidth?: number; screenHeight?: number }
 ): PoseMatchResult {
   if (!landmarks || landmarks.length < 33) {
     return { score: 0, isMatched: false, feedback: 'No pose detected', transform: null };
@@ -61,14 +62,14 @@ export function evaluatePoseMatch(
 
   // Base confidence check
   const coreJoints = [leftShoulder, rightShoulder, leftHip, rightHip];
-  if (coreJoints.some(j => j.visibility < 0.6)) {
+  if (coreJoints.some(j => j.visibility < 0.45)) {
     return { score: 0, isMatched: false, feedback: 'Position yourself in frame', transform: null };
   }
 
   // Calculate garment transform
-  // Scale based on shoulder width relative to standard frame (e.g., assuming base image shoulder width is ~40% of frame)
+  // Scale based on shoulder width relative to standard frame (assuming normal shoulder span is ~38% of frame)
   const shoulderWidth = dist(leftShoulder, rightShoulder);
-  const scale = Math.max(0.5, Math.min(2.5, shoulderWidth / 0.4));
+  const scale = Math.max(0.65, Math.min(2.0, shoulderWidth / 0.36));
   
   const midShoulder = midPoint(leftShoulder, rightShoulder);
   const midHip = midPoint(leftHip, rightHip);
@@ -76,10 +77,17 @@ export function evaluatePoseMatch(
   // Position garment between shoulders and hips
   const torsoCenter = midPoint(midShoulder, midHip);
   
+  const isMirrored = options?.isMirrored ?? true;
+  const widthFactor = options?.screenWidth ?? 300;
+  const heightFactor = options?.screenHeight ?? 340;
+
+  // For mirrored front camera, horizontal offset is inverted
+  const rawXOffset = isMirrored ? (0.5 - torsoCenter.x) : (torsoCenter.x - 0.5);
+
   const transform: PoseTransform = {
     scale,
-    translateX: (torsoCenter.x - 0.5) * 100, // % offset from center
-    translateY: (torsoCenter.y - 0.5) * 100, // % offset from center
+    translateX: rawXOffset * widthFactor,
+    translateY: (torsoCenter.y - 0.42) * heightFactor,
   };
 
   let score = 0;

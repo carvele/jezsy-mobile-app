@@ -21,30 +21,91 @@ import { evaluatePoseMatch } from '@/src/utils/poseMatcher';
 type Product = Database['public']['Tables']['products']['Row'];
 type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category' | 'image_url' | 'occasion' | 'base_pose_type'>;
 
-function WebCameraFeed() {
+import { WebPoseTracker } from '@/src/utils/webPoseDetection';
+import type { Landmark } from '@/src/utils/poseDetector';
+
+interface WebCameraFeedProps {
+  onPoseResults?: (landmarks: Landmark[]) => void;
+  onTrackerReady?: (ready: boolean) => void;
+}
+
+function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const trackerRef = React.useRef<WebPoseTracker | null>(null);
+  const animFrameRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     let stream: MediaStream | null = null;
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices
-        .getUserMedia({ video: { facingMode: 'user' } })
-        .then((s) => {
-          stream = s;
-          if (videoRef.current) {
-            videoRef.current.srcObject = s;
-          }
-        })
-        .catch((err) => {
-          console.warn('Webcam permission or access failed:', err);
+    let isMounted = true;
+    const tracker = new WebPoseTracker();
+    trackerRef.current = tracker;
+
+    async function initWebcamAndTracking() {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+          audio: false,
         });
+
+        if (!isMounted) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        stream = s;
+        if (videoRef.current) {
+          videoRef.current.srcObject = s;
+          videoRef.current.onloadedmetadata = () => {
+            if (videoRef.current) {
+              videoRef.current.play().catch((e) => console.warn('Video play error:', e));
+            }
+          };
+        }
+
+        // Initialize MediaPipe WASM pose detector
+        const ready = await tracker.init();
+        if (isMounted) {
+          onTrackerReady?.(ready);
+        }
+
+        // Continuous pose detection loop
+        function detectLoop() {
+          if (!isMounted) return;
+          if (videoRef.current && videoRef.current.readyState >= 2) {
+            const now = performance.now();
+            const landmarks = tracker.detect(videoRef.current, now);
+            if (landmarks && onPoseResults) {
+              onPoseResults(landmarks);
+            }
+          }
+          animFrameRef.current = requestAnimationFrame(detectLoop);
+        }
+
+        animFrameRef.current = requestAnimationFrame(detectLoop);
+      } catch (err) {
+        console.warn('Webcam or Tracker init failed:', err);
+      }
     }
+
+    initWebcamAndTracking();
+
     return () => {
+      isMounted = false;
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+      }
       if (stream) {
         stream.getTracks().forEach((t) => t.stop());
       }
+      tracker.close();
     };
-  }, []);
+  }, [onPoseResults, onTrackerReady]);
 
   return (
     // @ts-ignore
@@ -54,10 +115,14 @@ function WebCameraFeed() {
       playsInline
       muted
       style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
         width: '100%',
         height: '100%',
         objectFit: 'cover',
-        transform: 'scaleX(-1)',
+        transform: 'scaleX(-1)', // Mirror front selfie camera
+        zIndex: 1,
       }}
     />
   );
@@ -79,13 +144,31 @@ export default function ARTryOnScreen() {
   const [isMatched, setIsMatched] = useState(false);
   const [matchFeedback, setMatchFeedback] = useState('Align with outline');
   const [garmentTransform, setGarmentTransform] = useState({ scale: 1, translateX: 0, translateY: 0 });
+  const [isTrackerActive, setIsTrackerActive] = useState(false);
+
+  const handlePoseResults = useCallback(
+    (landmarks: Landmark[]) => {
+      if (!currentPose) return;
+      const match = evaluatePoseMatch(landmarks, currentPose.name, {
+        isMirrored: true,
+        screenWidth: 300,
+        screenHeight: 340,
+      });
+      setMatchScore(match.score);
+      setIsMatched(match.isMatched);
+      setMatchFeedback(match.feedback);
+      if (match.transform) {
+        setGarmentTransform(match.transform);
+      }
+    },
+    [currentPose]
+  );
   
-  // Pose Detection Hook
+  // Pose Detection Hook (Native)
   const poseDetection = usePoseDetection({
     onResults: (result) => {
       const landmarks = result.results?.[0]?.landmarks?.[0];
       if (!landmarks || landmarks.length === 0) return;
-      if (!currentPose) return;
       
       // Evaluate pose
       const normalizedLandmarks = landmarks.map(p => ({
@@ -94,13 +177,7 @@ export default function ARTryOnScreen() {
         z: p.z || 0,
         visibility: p.visibility ?? p.presence ?? 0,
       }));
-      const match = evaluatePoseMatch(normalizedLandmarks as any, currentPose.name);
-      setMatchScore(match.score);
-      setIsMatched(match.isMatched);
-      setMatchFeedback(match.feedback);
-      if (match.transform) {
-        setGarmentTransform(match.transform);
-      }
+      handlePoseResults(normalizedLandmarks as any);
     },
     onError: (e) => console.error(e)
   }, RunningMode.LIVE_STREAM, 'pose_landmarker_lite.task', {
@@ -486,7 +563,10 @@ export default function ARTryOnScreen() {
       ) : (
         <View style={styles.webviewContainer}>
           {Platform.OS === 'web' ? (
-            <WebCameraFeed />
+            <WebCameraFeed
+              onPoseResults={handlePoseResults}
+              onTrackerReady={(ready) => setIsTrackerActive(ready)}
+            />
           ) : device ? (
             <Camera
               style={styles.camera}
@@ -502,6 +582,16 @@ export default function ARTryOnScreen() {
             </View>
           )}
           <View style={styles.overlayContainer} pointerEvents="box-none">
+            {/* AI Tracking Status Pill */}
+            {isTrackerActive && (
+              <View style={styles.trackingPill}>
+                <View style={[styles.statusDot, { backgroundColor: isMatched ? '#34C759' : '#00E5FF' }]} />
+                <Text style={styles.trackingPillText}>
+                  {isMatched ? 'Pose Matched' : 'AI Body Tracking Active'}
+                </Text>
+              </View>
+            )}
+
             {/* Reference Pose Picture-in-Picture Box */}
             {currentPose?.image_url && (
               <View style={styles.pipContainer}>
@@ -512,7 +602,7 @@ export default function ARTryOnScreen() {
               </View>
             )}
 
-            <View pointerEvents="none">
+            <View pointerEvents="none" style={styles.garmentWrapper}>
               <Image
                 source={{ uri: product.image_url || '' }}
                 style={[
@@ -523,12 +613,13 @@ export default function ARTryOnScreen() {
                       { translateX: garmentTransform.translateX },
                       { translateY: garmentTransform.translateY },
                     ]
-                  }
+                  },
+                  isMatched && styles.overlayImageMatched,
                 ]}
                 contentFit="contain"
               />
             </View>
-            <View style={[styles.matchBadge, { backgroundColor: isMatched ? 'rgba(52, 199, 89, 0.9)' : 'rgba(0, 0, 0, 0.7)' }]}>
+            <View style={[styles.matchBadge, { backgroundColor: isMatched ? 'rgba(52, 199, 89, 0.92)' : 'rgba(0, 0, 0, 0.72)' }]}>
               <Text style={styles.matchBadgeText}>{matchFeedback}</Text>
             </View>
             <View style={styles.overlayGuide} pointerEvents="box-none">
@@ -673,15 +764,71 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   overlayContainer: {
-    ...StyleSheet.absoluteFill,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
   },
+  garmentWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 15,
+  },
   overlayImage: {
-    width: '80%',
-    height: '60%',
-    opacity: 0.85,
+    width: 270,
+    height: 340,
+    maxWidth: '85%',
+    maxHeight: '62%',
+    opacity: 0.90,
+    ...(Platform.OS === 'web'
+      ? ({
+          transition: 'transform 0.08s ease-out',
+          filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.4))',
+        } as any)
+      : {}),
+  },
+  overlayImageMatched: {
+    opacity: 0.96,
+    ...(Platform.OS === 'web'
+      ? ({
+          filter: 'drop-shadow(0 0 20px rgba(52,199,89,0.7)) drop-shadow(0 8px 24px rgba(0,0,0,0.4))',
+        } as any)
+      : {}),
+  },
+  trackingPill: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    zIndex: 25,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  trackingPillText: {
+    color: '#F8FAFC',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   overlayGuide: {
     position: 'absolute',
