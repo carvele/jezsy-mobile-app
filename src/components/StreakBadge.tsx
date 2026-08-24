@@ -22,19 +22,20 @@ export function StreakBadge() {
     try {
       const { data, error } = await supabase
         .from('user_streaks')
-        .select('*')
+        .select('current_streak, longest_streak')
         .eq('user_id', session.user.id)
-        .maybeSingle();
+        .limit(1);
       
       if (error) {
-        console.error('Error fetching streak:', error);
+        // Silently catch if user_streaks table row does not exist yet
         return;
       }
 
-      if (data) {
-        const nextCurrentStreak = data.current_streak || 0;
+      if (data && data.length > 0) {
+        const streakData = data[0];
+        const nextCurrentStreak = streakData.current_streak || 0;
         setCurrentStreak(nextCurrentStreak);
-        setLongestStreak(data.longest_streak || 0);
+        setLongestStreak(streakData.longest_streak || 0);
         
         // Pulse animation if streak > 0
         if (nextCurrentStreak > 0) {
