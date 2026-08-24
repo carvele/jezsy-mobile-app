@@ -81,7 +81,7 @@ export default function AddWardrobeItemScreen() {
         return;
       }
       
-      if (!removeBg) {
+      if (!removeBg || Platform.OS === 'web') {
         setProcessedImageUri(null);
         return;
       }

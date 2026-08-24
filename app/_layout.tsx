@@ -211,7 +211,10 @@ function InitialLayout() {
           Layout component". Overlaying keeps the same guarantee -- the tabs are
           never visible for a frame -- while the navigator still mounts. */}
       {!routeSettled && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background }]} />
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, zIndex: 999 }]}
+        />
       )}
       {routeSettled && pendingDeletionId && !deletionNoticeDismissed && (
         <PendingDeletionNoticeModal

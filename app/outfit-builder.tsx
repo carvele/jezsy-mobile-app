@@ -284,7 +284,7 @@ export default function OutfitBuilderScreen() {
           const item = pool[Math.floor(Math.random() * pool.length)];
 
           let finalImageUrl = item.image_url || '';
-          if (item.image_url) {
+          if (item.image_url && Platform.OS !== 'web') {
             try {
               finalImageUrl = await removeBackground(item.image_url);
             } catch (e) {
@@ -337,7 +337,7 @@ export default function OutfitBuilderScreen() {
 
     try {
       let finalImageUrl = item.image_url || '';
-      if (item.image_url) {
+      if (item.image_url && Platform.OS !== 'web') {
         try {
           finalImageUrl = await removeBackground(item.image_url);
         } catch (e) {
@@ -372,7 +372,7 @@ export default function OutfitBuilderScreen() {
       // product photo's studio background always showed up in the canvas
       // preview while wardrobe items didn't.
       let finalImageUrl = item.image_url || '';
-      if (item.image_url) {
+      if (item.image_url && Platform.OS !== 'web') {
         try {
           finalImageUrl = await removeBackground(item.image_url);
         } catch (e) {
