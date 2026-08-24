@@ -1,12 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Dimensions, TouchableOpacity } from 'react-native';
+import React, { useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, useWindowDimensions, TouchableOpacity, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Colors, Spacing, Radius } from '@/constants/theme';
 import { ArrowRight } from 'lucide-react-native';
 import { markOnboardingSeen } from '@/src/utils/onboarding';
-
-const { width, height } = Dimensions.get('window');
 
 const SLIDES = [
   {
@@ -31,20 +29,26 @@ const SLIDES = [
 
 export default function Onboarding() {
   const router = useRouter();
+  const { width, height } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
-  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
-    if (viewableItems[0]) {
-      setCurrentIndex(viewableItems[0].index);
+  const handleScrollEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const nextIdx = Math.round(offsetX / width);
+    if (nextIdx >= 0 && nextIdx < SLIDES.length) {
+      setCurrentIndex(nextIdx);
     }
-  }).current;
-
-  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
+  }, [width]);
 
   const nextSlide = () => {
     if (currentIndex < SLIDES.length - 1) {
-      flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
+      const targetIndex = currentIndex + 1;
+      setCurrentIndex(targetIndex);
+      flatListRef.current?.scrollToOffset({
+        offset: targetIndex * width,
+        animated: true,
+      });
     } else {
       markOnboardingSeen();
       router.push('/(auth)/welcome');
@@ -56,6 +60,12 @@ export default function Onboarding() {
     router.push('/(auth)/welcome');
   };
 
+  const getItemLayout = useCallback((_: any, index: number) => ({
+    length: width,
+    offset: width * index,
+    index,
+  }), [width]);
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -64,14 +74,15 @@ export default function Onboarding() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollEndDrag={handleScrollEnd}
+        getItemLayout={getItemLayout}
         bounces={false}
-          renderItem={({ item }) => (
-          <View style={styles.slide} accessible accessibilityLabel={`${item.title.replace('\n', ' ')}. ${item.description}`}>
+        renderItem={({ item }) => (
+          <View style={[styles.slide, { width, height }]} accessible accessibilityLabel={`${item.title.replace('\n', ' ')}. ${item.description}`}>
             <Image source={item.image} style={styles.image} contentFit="cover" />
             <View style={styles.overlay} />
-            <View style={styles.content}>
+            <View style={[styles.content, { bottom: height * 0.25 }]}>
               <Text style={styles.title}>{item.title}</Text>
               <Text style={styles.description}>{item.description}</Text>
             </View>
@@ -138,8 +149,7 @@ const styles = StyleSheet.create({
     backgroundColor: c.background,
   },
   slide: {
-    width,
-    height,
+    flex: 1,
   },
   image: {
     width: '100%',
@@ -151,7 +161,6 @@ const styles = StyleSheet.create({
   },
   content: {
     position: 'absolute',
-    bottom: height * 0.25,
     paddingHorizontal: 30,
     width: '100%',
   },
