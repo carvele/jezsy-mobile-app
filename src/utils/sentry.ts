@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 // Detect if running inside Expo Go -- native crash capture needs the actual
 // linked native module, same reasoning as pushNotifications.ts.
@@ -14,7 +15,7 @@ let sentryModule: any = null;
  * build missing the secret keep working exactly as before.
  */
 export function initSentry(): void {
-  if (IS_EXPO_GO) return;
+  if (IS_EXPO_GO && Platform.OS !== "web") return;
 
   const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
   if (!dsn) {

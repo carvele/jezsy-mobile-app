@@ -69,25 +69,28 @@ export function evaluatePoseMatch(
   // Calculate garment transform
   // Scale based on shoulder width relative to standard frame (assuming normal shoulder span is ~38% of frame)
   const shoulderWidth = dist(leftShoulder, rightShoulder);
-  const scale = Math.max(0.65, Math.min(2.0, shoulderWidth / 0.36));
+  const scale = Math.max(0.60, Math.min(2.2, shoulderWidth / 0.38));
   
   const midShoulder = midPoint(leftShoulder, rightShoulder);
   const midHip = midPoint(leftHip, rightHip);
   
-  // Position garment between shoulders and hips
-  const torsoCenter = midPoint(midShoulder, midHip);
+  // Upper chest position (collar line is at midShoulder, center of shirt is ~35% down to hips)
+  const chestCenter = {
+    x: (midShoulder.x + midHip.x) / 2,
+    y: midShoulder.y + (midHip.y - midShoulder.y) * 0.35,
+  };
   
   const isMirrored = options?.isMirrored ?? true;
   const widthFactor = options?.screenWidth ?? 300;
   const heightFactor = options?.screenHeight ?? 340;
 
   // For mirrored front camera, horizontal offset is inverted
-  const rawXOffset = isMirrored ? (0.5 - torsoCenter.x) : (torsoCenter.x - 0.5);
+  const rawXOffset = isMirrored ? (0.5 - chestCenter.x) : (chestCenter.x - 0.5);
 
   const transform: PoseTransform = {
     scale,
     translateX: rawXOffset * widthFactor,
-    translateY: (torsoCenter.y - 0.42) * heightFactor,
+    translateY: (chestCenter.y - 0.50) * heightFactor,
   };
 
   let score = 0;

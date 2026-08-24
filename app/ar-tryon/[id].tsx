@@ -33,6 +33,13 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const trackerRef = React.useRef<WebPoseTracker | null>(null);
   const animFrameRef = React.useRef<number | null>(null);
+  const onPoseResultsRef = React.useRef(onPoseResults);
+  const onTrackerReadyRef = React.useRef(onTrackerReady);
+
+  React.useEffect(() => {
+    onPoseResultsRef.current = onPoseResults;
+    onTrackerReadyRef.current = onTrackerReady;
+  });
 
   React.useEffect(() => {
     let stream: MediaStream | null = null;
@@ -71,7 +78,7 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
         // Initialize MediaPipe WASM pose detector
         const ready = await tracker.init();
         if (isMounted) {
-          onTrackerReady?.(ready);
+          onTrackerReadyRef.current?.(ready);
         }
 
         // Continuous pose detection loop
@@ -80,8 +87,8 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
           if (videoRef.current && videoRef.current.readyState >= 2) {
             const now = performance.now();
             const landmarks = tracker.detect(videoRef.current, now);
-            if (landmarks && onPoseResults) {
-              onPoseResults(landmarks);
+            if (landmarks && onPoseResultsRef.current) {
+              onPoseResultsRef.current(landmarks);
             }
           }
           animFrameRef.current = requestAnimationFrame(detectLoop);
@@ -105,7 +112,7 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
       }
       tracker.close();
     };
-  }, [onPoseResults, onTrackerReady]);
+  }, []);
 
   return (
     // @ts-ignore
