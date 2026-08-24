@@ -488,6 +488,44 @@ export default function ARTryOnScreen() {
     </html>
   `;
 
+  const htmlContentOverlay = `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <style>
+          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          body, html {
+            width: 100%; height: 100%;
+            background: transparent !important;
+            overflow: hidden;
+          }
+          model-viewer {
+            width: 100%; height: 100%;
+            --poster-color: transparent;
+            background-color: transparent !important;
+          }
+        </style>
+        <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+      </head>
+      <body>
+        <model-viewer
+          id="mv-overlay"
+          src="${modelUrl}"
+          ios-src="${iosModelUrl}"
+          camera-controls
+          shadow-intensity="0.8"
+          shadow-softness="0.8"
+          exposure="1.15"
+          tone-mapping="commerce"
+          environment-image="legacy"
+          alt="A 3D model of ${safeName}">
+        </model-viewer>
+      </body>
+    </html>
+  `;
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
@@ -500,10 +538,11 @@ export default function ARTryOnScreen() {
           onPress={toggleMode}
           style={styles.modeToggle}
           accessibilityRole="button"
-          accessibilityLabel={mode === '3d' ? 'Switch to 2D camera overlay' : 'Switch to 3D model view'}
-          accessibilityHint={mode === '3d' ? 'Uses your camera to overlay the item image' : 'Shows the rotatable 3D model'}
+          accessibilityLabel={mode === '3d' ? 'Switch to live camera AR' : 'Switch to 3D studio view'}
         >
-          <Text style={[styles.modeToggleText, { color: colors.onTint }]}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
+          <Text style={[styles.modeToggleText, { color: colors.onTint }]}>
+            {mode === '3d' ? 'Live Camera AR' : '3D Studio Mode'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -603,10 +642,9 @@ export default function ARTryOnScreen() {
             )}
 
             <View pointerEvents="none" style={styles.garmentWrapper}>
-              <Image
-                source={{ uri: product.image_url || '' }}
+              <View
                 style={[
-                  styles.overlayImage,
+                  styles.overlay3DContainer,
                   {
                     transform: [
                       { scale: garmentTransform.scale },
@@ -616,8 +654,27 @@ export default function ARTryOnScreen() {
                   },
                   isMatched && styles.overlayImageMatched,
                 ]}
-                contentFit="contain"
-              />
+              >
+                {Platform.OS === 'web' ? (
+                  // @ts-ignore
+                  <iframe
+                    srcDoc={htmlContentOverlay}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      border: 'none',
+                      background: 'transparent',
+                    }}
+                    allow="xr-spatial-tracking"
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: product.image_url || '' }}
+                    style={styles.overlayImage}
+                    contentFit="contain"
+                  />
+                )}
+              </View>
             </View>
             <View style={[styles.matchBadge, { backgroundColor: isMatched ? 'rgba(52, 199, 89, 0.92)' : 'rgba(0, 0, 0, 0.72)' }]}>
               <Text style={styles.matchBadgeText}>{matchFeedback}</Text>
@@ -782,6 +839,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 15,
+  },
+  overlay3DContainer: {
+    width: 320,
+    height: 420,
+    maxWidth: '92%',
+    maxHeight: '75%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(Platform.OS === 'web'
+      ? ({
+          transition: 'transform 0.08s ease-out',
+        } as any)
+      : {}),
   },
   overlayImage: {
     width: 270,
