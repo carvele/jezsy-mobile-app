@@ -119,7 +119,7 @@ function InitialLayout() {
       const nowIso = new Date().toISOString();
       const { error } = await supabase
         .from('profiles')
-        .update({ last_online: nowIso, last_activity: nowIso } as any)
+        .update({ last_online: nowIso } as any)
         .eq('id', session.user.id);
       if (error) console.warn('[Activity] Could not update presence:', error.message);
     };

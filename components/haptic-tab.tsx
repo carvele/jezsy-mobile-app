@@ -1,9 +1,9 @@
-import { PlatformPressable } from '@react-navigation/elements';
+import { Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 export function HapticTab(props: any) {
   return (
-    <PlatformPressable
+    <Pressable
       {...props}
       onPressIn={(ev) => {
         if (process.env.EXPO_OS === 'ios') {

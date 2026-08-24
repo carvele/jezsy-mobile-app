@@ -1,14 +1,13 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { Database } from '@/src/types/database.types';
 import { Capsule, CapsuleCard } from '@/src/components/CapsuleCard';
 import { GapAnalysis } from '@/src/components/GapAnalysis';
