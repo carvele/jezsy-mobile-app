@@ -59,11 +59,22 @@ const midPoint = (p1: Landmark, p2: Landmark): Landmark => ({
 });
 
 /**
+ * Helper to detect if a landmark is clipped by the camera boundary or unreliable
+ */
+function isClipped(pt?: Landmark | null): boolean {
+  if (!pt) return true;
+  if (pt.visibility !== undefined && pt.visibility < 0.35) return true;
+  // Boundary buffer: points within 4% of frame edges are vulnerable to model hallucination
+  if (pt.x <= 0.04 || pt.x >= 0.96) return true;
+  if (pt.y <= 0.02 || pt.y >= 0.98) return true;
+  return false;
+}
+
+/**
  * Calculates continuous real-time auto-sizing, auto-tracking (X, Y), and auto-fitting (scale, rotation)
  * of garments from live camera landmarks.
  *
- * Robust in both selfie (bust-shot) and full-body modes by anchoring to the collarbone/shoulders
- * and extrapolating torso height if hips are out of frame.
+ * Robust against edge-of-frame clipping, model hallucination, and bust-shot framing.
  */
 export function calculateGarmentAutoFit(
   landmarks: Landmark[],
@@ -90,10 +101,79 @@ export function calculateGarmentAutoFit(
 
   const leftShoulder = landmarks[L.leftShoulder];
   const rightShoulder = landmarks[L.rightShoulder];
+  const nose = landmarks[L.nose];
+  const leftEye = landmarks[L.leftEye];
+  const rightEye = landmarks[L.rightEye];
 
-  // Base upper-body tracking requires only shoulders to be detected
-  // No hip or face requirement, making it work seamlessly on close-up selfie shots
-  if (!leftShoulder || !rightShoulder || leftShoulder.visibility < 0.30 || rightShoulder.visibility < 0.30) {
+  const leftValid = !isClipped(leftShoulder);
+  const rightValid = !isClipped(rightShoulder);
+
+  const isMirrored = options?.isMirrored ?? true;
+  const widthFactor = options?.screenWidth ?? 300;
+  const heightFactor = options?.screenHeight ?? 340;
+  const fitEase = options?.fitEase ?? 1.0;
+
+  // Compute head center as reference anchor if available
+  let headCenterX = 0.5;
+  if (!isClipped(nose)) {
+    headCenterX = nose.x;
+  } else if (!isClipped(leftEye) && !isClipped(rightEye)) {
+    headCenterX = (leftEye.x + rightEye.x) / 2;
+  }
+
+  let chestAnchorX = 0.5;
+  let chestAnchorY = 0.35;
+  let targetRotation = 0;
+  let correctedShoulderWidth = 0.34;
+  let yawDeg = 0;
+
+  if (leftValid && rightValid) {
+    // Both shoulders fully visible and unclipped
+    const dx = leftShoulder.x - rightShoulder.x;
+    const apparentWidth = Math.sqrt(Math.pow(dx, 2) + Math.pow(leftShoulder.y - rightShoulder.y, 2));
+
+    // Yaw calculation & foreshortening correction using 3D depth (z)
+    const deltaZ = (rightShoulder.z ?? 0) - (leftShoulder.z ?? 0);
+    const yawRad = Math.atan2(deltaZ, Math.max(0.01, dx));
+    yawDeg = yawRad * (180 / Math.PI);
+    const cosYaw = Math.max(0.60, Math.abs(Math.cos(yawRad)));
+    correctedShoulderWidth = apparentWidth / cosYaw;
+
+    // Roll / Tilt with strict anatomical clamp (+/- 18 degrees)
+    let rollRad: number;
+    if (isMirrored) {
+      rollRad = Math.atan2(rightShoulder.y - leftShoulder.y, Math.max(0.01, dx));
+    } else {
+      rollRad = Math.atan2(leftShoulder.y - rightShoulder.y, Math.max(0.01, dx));
+    }
+
+    // Dampen if shoulder vertical disparity is unrealistically large (>12% of screen)
+    if (Math.abs(leftShoulder.y - rightShoulder.y) > 0.12) {
+      rollRad *= 0.4;
+    }
+    targetRotation = Math.max(-18, Math.min(18, rollRad * (180 / Math.PI)));
+
+    chestAnchorX = (leftShoulder.x + rightShoulder.x) / 2;
+    chestAnchorY = (leftShoulder.y + rightShoulder.y) / 2 + correctedShoulderWidth * 0.18;
+  } else if (leftValid && !rightValid) {
+    // Single-shoulder fallback: Right shoulder is clipped/hidden
+    // Anchor X directly under head center, estimate span from visible left half
+    const halfSpan = Math.max(0.12, Math.abs(leftShoulder.x - headCenterX));
+    correctedShoulderWidth = halfSpan * 2;
+    targetRotation = 0; // Force level to prevent skewed rotation when one side is clipped
+
+    chestAnchorX = headCenterX;
+    chestAnchorY = leftShoulder.y + correctedShoulderWidth * 0.18;
+  } else if (!leftValid && rightValid) {
+    // Single-shoulder fallback: Left shoulder is clipped/hidden
+    const halfSpan = Math.max(0.12, Math.abs(rightShoulder.x - headCenterX));
+    correctedShoulderWidth = halfSpan * 2;
+    targetRotation = 0; // Force level
+
+    chestAnchorX = headCenterX;
+    chestAnchorY = rightShoulder.y + correctedShoulderWidth * 0.18;
+  } else {
+    // Neither shoulder is reliably visible
     return {
       isTracking: false,
       targetX: 0,
@@ -107,48 +187,10 @@ export function calculateGarmentAutoFit(
     };
   }
 
-  const isMirrored = options?.isMirrored ?? true;
-  const widthFactor = options?.screenWidth ?? 300;
-  const heightFactor = options?.screenHeight ?? 340;
-  const fitEase = options?.fitEase ?? 1.0;
-
-  // 1. Apparent 2D shoulder span (in raw camera: leftShoulder is at x > rightShoulder)
-  const dx = leftShoulder.x - rightShoulder.x;
-  const apparentWidth = Math.sqrt(Math.pow(dx, 2) + Math.pow(leftShoulder.y - rightShoulder.y, 2));
-
-  // 2. Yaw (body turn) calculation & foreshortening correction using 3D depth (z)
-  const deltaZ = (rightShoulder.z ?? 0) - (leftShoulder.z ?? 0);
-  const yawRad = Math.atan2(deltaZ, Math.max(0.01, dx));
-  const yawDeg = yawRad * (180 / Math.PI);
-  const cosYaw = Math.max(0.60, Math.abs(Math.cos(yawRad)));
-
-  // Corrected true shoulder width (prevents garment from falsely shrinking when user turns sideways)
-  const correctedShoulderWidth = apparentWidth / cosYaw;
-
-  // 3. Proportional Auto-Sizing Scale
-  // Standard adult shoulder span takes ~34% of camera frame at typical selfie distance
+  // Proportional Auto-Sizing Scale
   const BASELINE_SHOULDER_SPAN = 0.34;
   const rawScale = (correctedShoulderWidth / BASELINE_SHOULDER_SPAN) * fitEase;
   const targetScale = Math.max(0.50, Math.min(2.3, rawScale));
-
-  // 4. Auto-Fitting Roll / Tilt Angle (Shoulder Slope)
-  // In mirrored front camera, user's right shoulder appears on the right side of the screen
-  let rollRad: number;
-  if (isMirrored) {
-    rollRad = Math.atan2(rightShoulder.y - leftShoulder.y, Math.max(0.01, dx));
-  } else {
-    rollRad = Math.atan2(leftShoulder.y - rightShoulder.y, Math.max(0.01, dx));
-  }
-  // Clamp roll to +/- 35 degrees to avoid unnatural flips
-  const targetRotation = Math.max(-35, Math.min(35, rollRad * (180 / Math.PI)));
-
-  // 5. Collarline & Torso Anchor Point
-  const midX = (leftShoulder.x + rightShoulder.x) / 2;
-  const midY = (leftShoulder.y + rightShoulder.y) / 2;
-
-  // Upper chest position just below suprasternal notch
-  const chestAnchorX = midX;
-  const chestAnchorY = midY + correctedShoulderWidth * 0.18;
 
   // Screen horizontal translation (mirrored: visual X is 1 - rawX)
   const visualChestX = isMirrored ? (1 - chestAnchorX) : chestAnchorX;
