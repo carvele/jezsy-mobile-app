@@ -2,6 +2,8 @@ import { supabase } from "@/src/lib/supabase";
 import { formatTimeLabel } from "@/src/utils/dateTime";
 import Constants from "expo-constants";
 
+import { Platform } from "react-native";
+
 // Detect if running inside Expo Go.
 const IS_EXPO_GO = Constants.appOwnership === "expo";
 
@@ -17,6 +19,10 @@ export type PushRegistration =
   | { status: "error"; message: string };
 
 export async function registerForPushNotificationsAsync(): Promise<PushRegistration> {
+  if (Platform.OS === "web") {
+    return { status: "no-device" };
+  }
+
   if (IS_EXPO_GO) {
     console.log("Push notifications skipped: running in Expo Go.");
     return { status: "expo-go" };
@@ -24,7 +30,6 @@ export async function registerForPushNotificationsAsync(): Promise<PushRegistrat
 
   let Device: any;
   let Notifications: any;
-  let Platform: any;
 
   // Everything below touches native modules (notification channels, device
   // info, permissions). None of it may ever be allowed to throw out of this
@@ -38,8 +43,6 @@ export async function registerForPushNotificationsAsync(): Promise<PushRegistrat
     // device as "no-device" (undefined is falsy) instead of registering it.
     Device = await import("expo-device");
     Notifications = await import("expo-notifications");
-    const rnModule = await import("react-native");
-    Platform = rnModule.Platform;
 
     Notifications.setNotificationHandler({
       handleNotification: async () => ({

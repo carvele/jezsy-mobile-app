@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, AppState } from 'react-native';
+import { View, Text, StyleSheet, Animated, AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
@@ -51,7 +51,7 @@ function OfflineBanner() {
       Animated.timing(slideAnim, {
         toValue: offline ? 0 : -44,
         duration: 280,
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }).start();
     });
     return unsub;
@@ -101,48 +101,6 @@ function InitialLayout() {
       }
     });
     return () => { cancelled = true; };
-  }, [session?.user?.id]);
-
-  // Activity Heartbeat — keeps admin dashboard "Last active" & green dot accurately synced
-  // Only pings while foregrounded, and never mutates profiles.updated_at (which
-  // is reserved for profile changes rather than presence/activity).
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    let interval: ReturnType<typeof setInterval> | null = null;
-    let lastPingAt = 0;
-    const PING_INTERVAL_MS = 10 * 60 * 1000;
-
-    const updateActivityPing = async () => {
-      const now = Date.now();
-      if (now - lastPingAt < PING_INTERVAL_MS) return;
-      lastPingAt = now;
-      const nowIso = new Date().toISOString();
-      const { error } = await supabase
-        .from('profiles')
-        .update({ last_online: nowIso } as any)
-        .eq('id', session.user.id);
-      if (error) console.warn('[Activity] Could not update presence:', error.message);
-    };
-
-    const startPinging = () => {
-      if (interval) return;
-      updateActivityPing();
-      interval = setInterval(updateActivityPing, PING_INTERVAL_MS);
-    };
-
-    const stopPinging = () => {
-      if (interval) { clearInterval(interval); interval = null; }
-    };
-
-    // Only ping when app is in foreground
-    if (AppState.currentState === 'active') startPinging();
-
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') startPinging();
-      else stopPinging();
-    });
-
-    return () => { stopPinging(); sub.remove(); };
   }, [session?.user?.id]);
 
   // Handle password-recovery deep links (both a cold start from the link and
