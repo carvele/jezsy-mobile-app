@@ -3,22 +3,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
-import { OpaqueColorValue, Platform, type StyleProp, type TextStyle } from 'react-native';
-
-if (Platform.OS === 'web' && typeof document !== 'undefined') {
-  const fontId = 'expo-material-icons-web';
-  if (!document.getElementById(fontId)) {
-    const style = document.createElement('style');
-    style.id = fontId;
-    style.textContent = `
-      @font-face {
-        font-family: 'MaterialIcons';
-        src: url('https://fonts.gstatic.com/s/materialicons/v142/flUhRq6tzZclQEJ-Vdg-IuiaDsNc.woff2') format('woff2');
-      }
-    `;
-    document.head.appendChild(style);
-  }
-}
+import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
 type IconMapping = Record<string, ComponentProps<typeof MaterialIcons>['name']>;
 
