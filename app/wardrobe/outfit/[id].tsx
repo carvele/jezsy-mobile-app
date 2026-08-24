@@ -146,11 +146,11 @@ export default function OutfitDetailScreen() {
               </View>
             );
             return slotItem.product_id ? (
-              <Link key={index} href={`/product/${slotItem.product_id}`} asChild>
-                <TouchableOpacity activeOpacity={0.85}>{card}</TouchableOpacity>
+              <Link key={index} href={`/product/${slotItem.product_id}`} asChild style={styles.itemWrapper}>
+                <TouchableOpacity style={styles.itemWrapper} activeOpacity={0.85}>{card}</TouchableOpacity>
               </Link>
             ) : (
-              <View key={index}>{card}</View>
+              <View key={index} style={styles.itemWrapper}>{card}</View>
             );
           })}
         </View>
@@ -180,8 +180,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: Spacing.lg,
   },
-  itemCard: {
+  itemWrapper: {
     width: '48%',
+  },
+  itemCard: {
+    width: '100%',
     borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 1,

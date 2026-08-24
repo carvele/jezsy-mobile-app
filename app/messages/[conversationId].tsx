@@ -936,8 +936,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    padding: Spacing.lg,
-    paddingBottom: Spacing.xxl,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl,
+    paddingBottom: 48,
   },
   messageRow: {
     flexDirection: 'row',
@@ -1056,7 +1057,7 @@ const styles = StyleSheet.create({
   actionRowText: { ...Type.bodyStrong },
   dateSeparator: {
     alignItems: 'center',
-    marginTop: Spacing.xs,
+    marginTop: Spacing.sm,
     marginBottom: Spacing.lg,
   },
   dateSeparatorText: {
