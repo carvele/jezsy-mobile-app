@@ -218,11 +218,12 @@ export default function ARTryOnScreen() {
   }
 
   const toggleMode = async () => {
+    if (!NATIVE_VISION_AVAILABLE) {
+      showToast('3D Interactive Model View is active.', 'info');
+      setMode('3d');
+      return;
+    }
     if (mode === '3d') {
-      if (!NATIVE_VISION_AVAILABLE) {
-        setMode('2d'); // Falls through to the "unavailable" screen above with an explicit exit.
-        return;
-      }
       if (!hasPermission) {
         const granted = await requestPermission();
         if (!granted) {
@@ -345,7 +346,7 @@ export default function ARTryOnScreen() {
           src="${modelUrl}"
           ios-src="${iosModelUrl}"
           ar
-          ar-modes="webxr scene-viewer quick-look"
+          ar-modes="webxr quick-look scene-viewer"
           camera-controls
           auto-rotate
           rotation-per-second="18deg"
@@ -400,26 +401,24 @@ export default function ARTryOnScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          accessibilityHint="Returns to the previous screen"
-        >
+        <TouchableOpacity onPress={handleBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>AR Try-On</Text>
 
-        <TouchableOpacity
-          onPress={toggleMode}
-          style={styles.modeToggle}
-          accessibilityRole="button"
-          accessibilityLabel={mode === '3d' ? 'Switch to 2D camera overlay' : 'Switch to 3D model view'}
-          accessibilityHint={mode === '3d' ? 'Uses your camera to overlay the item image' : 'Shows the rotatable 3D model'}
-        >
-          <Text style={[styles.modeToggleText, { color: colors.onTint }]}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
-        </TouchableOpacity>
+        {NATIVE_VISION_AVAILABLE ? (
+          <TouchableOpacity
+            onPress={toggleMode}
+            style={styles.modeToggle}
+            accessibilityRole="button"
+            accessibilityLabel={mode === '3d' ? 'Switch to 2D camera overlay' : 'Switch to 3D model view'}
+            accessibilityHint={mode === '3d' ? 'Uses your camera to overlay the item image' : 'Shows the rotatable 3D model'}
+          >
+            <Text style={[styles.modeToggleText, { color: colors.onTint }]}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 44 }} />
+        )}
       </View>
 
       {mode === '3d' ? (
