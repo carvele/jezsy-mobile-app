@@ -168,21 +168,13 @@ function InitialLayout() {
     // updateUser succeeds (or they sign out from the screen itself).
     if (isPasswordRecovery) {
       if (!onResetPassword) router.replace('/(auth)/reset-password' as any);
-    } else if (!session) {
-      if (!inAuthGroup) {
-        // Returning (or already-onboarded) users skip straight past the
-        // marketing carousel to the login/welcome screen.
-        router.replace(onboardingSeen ? '/(auth)/welcome' : '/(auth)');
-      }
     } else if (profile?.deleted) {
-      // Staff already erased this account server-side (process_account_deletion
-      // scrubs profiles and sets deleted=true, but does not itself end the
-      // session -- that happens on a best-effort second step that can fail).
-      // A lingering session on a scrubbed, nameless profile would otherwise
-      // fall into the !profile.first_name branch below and route to
-      // profile-setup, letting the customer "revive" a profile staff just
-      // deleted. Sign out instead of routing anywhere in the app.
       signOut();
+    } else if (!session) {
+      // First time cold start on root path without onboarding
+      if (!onboardingSeen && pathSegments.length === 0) {
+        router.replace('/(auth)');
+      }
     } else {
       // User is logged in
       if (!profile || !profile.first_name) {

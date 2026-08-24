@@ -28,8 +28,8 @@ export default function TabLayout() {
   // enforcement point, and effects run after mount, so a deep link straight
   // into a tab rendered an authenticated screen for a frame before bouncing.
   // Declared after the hooks above so hook order stays stable.
-  if (!session || isPasswordRecovery) {
-    return <Redirect href="/(auth)" />;
+  if (isPasswordRecovery) {
+    return <Redirect href="/(auth)/reset-password" />;
   }
 
   return (
