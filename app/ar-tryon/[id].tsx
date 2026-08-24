@@ -87,14 +87,22 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
           onTrackerReadyRef.current?.(ready);
         }
 
-        // Continuous pose detection loop
+        // Continuous pose detection loop with concurrency guard
+        let isProcessing = false;
         function detectLoop() {
           if (!isMounted) return;
-          if (videoRef.current && videoRef.current.readyState >= 2) {
-            const now = performance.now();
-            const landmarks = tracker.detect(videoRef.current, now);
-            if (landmarks && onPoseResultsRef.current) {
-              onPoseResultsRef.current(landmarks);
+          if (videoRef.current && videoRef.current.readyState >= 2 && !isProcessing) {
+            isProcessing = true;
+            try {
+              const now = performance.now();
+              const landmarks = tracker.detect(videoRef.current, now);
+              if (landmarks && onPoseResultsRef.current) {
+                onPoseResultsRef.current(landmarks);
+              }
+            } catch (err) {
+              console.warn('Frame processing error:', err);
+            } finally {
+              isProcessing = false;
             }
           }
           animFrameRef.current = requestAnimationFrame(detectLoop);
@@ -165,6 +173,7 @@ export default function ARTryOnScreen() {
   const rotateDeg = useSharedValue(0);
   const opacity = useSharedValue(0.9);
   const lostFramesRef = React.useRef(0);
+  const lastStateUpdateRef = React.useRef(0);
 
   const animatedGarmentStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -177,22 +186,21 @@ export default function ARTryOnScreen() {
   }));
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
-  const screenWidth = Math.min(winWidth || 360, 480);
-  const screenHeight = Math.min(winHeight || 640, 800);
+  const screenWidth = Math.min(winWidth || 390, 480);
+  const screenHeight = Math.min(winHeight || 844, 900);
 
   const handlePoseResults = useCallback(
     (landmarks: Landmark[]) => {
-      // 1. Continuous real-time auto-sizing, auto-tracking, and auto-fitting
+      // 1. Continuous real-time auto-sizing, auto-tracking, and auto-fitting (UI Thread)
       const autoFit = calculateGarmentAutoFit(landmarks, {
         isMirrored: true,
         screenWidth,
         screenHeight,
-        fitEase: 1.0,
+        fitEase: 1.05,
       });
 
       if (autoFit.isTracking) {
         lostFramesRef.current = 0;
-        setIsTrackerActive(true);
 
         const config = {
           duration: 45,
@@ -208,7 +216,6 @@ export default function ARTryOnScreen() {
         lostFramesRef.current += 1;
         // Debounced hysteresis: only return to neutral if lost for >6 consecutive frames (~200ms)
         if (lostFramesRef.current > 6) {
-          setIsTrackerActive(false);
           translateX.value = withTiming(0, { duration: 250 });
           translateY.value = withTiming(0, { duration: 250 });
           scale.value = withTiming(1, { duration: 250 });
@@ -217,19 +224,25 @@ export default function ARTryOnScreen() {
         }
       }
 
-      // 2. Evaluate target pose guide score if a guide is active
-      if (currentPose) {
-        const match = evaluatePoseMatch(landmarks, currentPose.name, {
-          isMirrored: true,
-          screenWidth,
-          screenHeight,
-        });
-        setMatchScore(match.score);
-        setIsMatched(match.isMatched);
-        setMatchFeedback(match.feedback);
-      } else {
-        setMatchFeedback(autoFit.isTracking ? 'Auto-Fit Active' : 'Position yourself in frame');
-        setIsMatched(false);
+      // 2. Throttled React state updates (every 200ms) to eliminate main-thread re-render stutter
+      const now = performance.now();
+      if (now - lastStateUpdateRef.current > 200) {
+        lastStateUpdateRef.current = now;
+        setIsTrackerActive(autoFit.isTracking);
+
+        if (currentPose) {
+          const match = evaluatePoseMatch(landmarks, currentPose.name, {
+            isMirrored: true,
+            screenWidth,
+            screenHeight,
+          });
+          setMatchScore(match.score);
+          setIsMatched(match.isMatched);
+          setMatchFeedback(match.feedback);
+        } else {
+          setMatchFeedback(autoFit.isTracking ? 'Auto-Fit Active' : 'Position yourself in frame');
+          setIsMatched(false);
+        }
       }
     },
     [currentPose, screenWidth, screenHeight, translateX, translateY, scale, rotateDeg, opacity]
