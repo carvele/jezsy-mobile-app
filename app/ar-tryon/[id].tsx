@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +20,48 @@ import { useToast } from '@/src/context/ToastContext';
 import { evaluatePoseMatch } from '@/src/utils/poseMatcher';
 type Product = Database['public']['Tables']['products']['Row'];
 type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category' | 'image_url' | 'occasion' | 'base_pose_type'>;
+
+function WebCameraFeed() {
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+
+  React.useEffect(() => {
+    let stream: MediaStream | null = null;
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: 'user' } })
+        .then((s) => {
+          stream = s;
+          if (videoRef.current) {
+            videoRef.current.srcObject = s;
+          }
+        })
+        .catch((err) => {
+          console.warn('Webcam permission or access failed:', err);
+        });
+    }
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  return (
+    // @ts-ignore
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        transform: 'scaleX(-1)',
+      }}
+    />
+  );
+}
 
 export default function ARTryOnScreen() {
   const { showToast } = useToast();
@@ -66,6 +108,49 @@ export default function ARTryOnScreen() {
     delegate: Delegate.CPU
   });
 
+  const fetchProduct = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
+      if (error) throw error;
+      setProduct(data);
+    } catch (err) {
+      console.error('Error fetching product for AR:', err);
+      showToast('Could not load product details.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, showToast]);
+
+  const fetchPoseGuides = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pose_guides')
+        .select('id, name, category, image_url, occasion, base_pose_type')
+        .eq('deleted', false)
+        .order('created_at');
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setPoseGuides(data);
+        if (stylePoseId) {
+          const matchedIdx = data.findIndex(p => p.id === stylePoseId);
+          if (matchedIdx !== -1) {
+            setPoseIndex(matchedIdx);
+            setMode('2d');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching pose guides:', err);
+    }
+  }, [stylePoseId]);
+
+  useEffect(() => {
+    fetchProduct();
+    fetchPoseGuides();
+  }, [fetchProduct, fetchPoseGuides]);
+
   const [showHintModal, setShowHintModal] = useState(false);
 
   useEffect(() => {
@@ -79,8 +164,14 @@ export default function ARTryOnScreen() {
     AsyncStorage.setItem('ar_hint_seen', 'true');
   };
 
-  // Fit guidance: overlay how this garment's recommended size sits against the
-  // user's own measurements. Guidance only, not a physical simulation.
+  const handleShufflePose = () => {
+    if (poseGuides.length === 0) return;
+    setPoseIndex((i) => (i + 1) % poseGuides.length);
+    setIsMatched(false);
+    setMatchScore(0);
+    setMatchFeedback('Align with outline');
+  };
+
   const { measurements: sizingMeasurements, fitPreference, ready: sizingReady } = useSizingProfile();
   const [showFit, setShowFit] = useState(true);
   const recommendedSize = useMemo(
@@ -103,76 +194,11 @@ export default function ARTryOnScreen() {
   const handleBack = goBack;
 
   useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        const isUuid = Boolean(id) && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
-        const query = isUuid
-          ? supabase.from('products').select('*').eq('id', id).single()
-          : supabase.from('products').select('*').or(`sku.eq.${id},display_id.eq.${id}`).limit(1).maybeSingle();
-
-        const { data, error } = await query;
-
-        if (error) throw error;
-        setProduct(data);
-      } catch (err) {
-        console.error('Error fetching product for AR Try-On:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProduct();
-  }, [id]);
-
-  useEffect(() => {
-    const fetchPoseGuides = async () => {
-      const { data, error } = await supabase
-        .from('pose_guides')
-        .select('id,name,category,image_url,occasion,base_pose_type')
-        .eq('deleted', false)
-        .order('created_at');
-
-      if (!error && data) {
-        let sorted = data as PoseGuide[];
-        if (stylePoseId) {
-          const matchIdx = sorted.findIndex((p) => p.id === stylePoseId);
-          if (matchIdx > -1) {
-            const [target] = sorted.splice(matchIdx, 1);
-            sorted = [target, ...sorted];
-          }
-          setMode('2d'); // Automatically switch to 2D camera mode when recreating a style pose
-        }
-        setPoseGuides(sorted);
-      }
-    };
-
-    fetchPoseGuides();
-  }, [stylePoseId]);
-
-  useEffect(() => {
-    if (mode === '2d' && currentPose) {
-      Speech.speak(`Try this pose: ${currentPose.name}`);
-    }
-    return () => {
+    if (isMatched && matchFeedback && mode === '2d') {
       Speech.stop();
-    };
-  }, [mode, currentPose?.id]);
-
-  // Hands-free auto capture
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    if (isMatched && mode === '2d') {
-      timer = setTimeout(() => {
-        // In a full implementation, we would call cameraRef.current.takePhoto() here
-        showToast('📸 Pose captured successfully!', 'success');
-      }, 2000);
+      Speech.speak(matchFeedback, { rate: 1.0, pitch: 1.0 });
     }
-    return () => clearTimeout(timer);
-  }, [isMatched, mode]);
-
-  const handleShufflePose = () => {
-    setPoseIndex((i) => (i + 1) % poseGuides.length);
-  };
+  }, [isMatched, matchFeedback, mode]);
 
   if (loading) {
     return (
@@ -183,19 +209,13 @@ export default function ARTryOnScreen() {
     );
   }
 
-  if (mode === '2d' && !hasPermission) {
+  if (mode === '2d' && Platform.OS !== 'web' && !hasPermission) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>
-          {NATIVE_VISION_AVAILABLE
-            ? 'We need your permission to show the camera'
-            : 'The 2D camera overlay is unavailable on this device.'}
-        </Text>
-        {NATIVE_VISION_AVAILABLE && (
-          <TouchableOpacity onPress={requestPermission} style={{ marginTop: 20 }}>
-            <Text style={{ color: colors.tint }}>Grant Permission</Text>
-          </TouchableOpacity>
-        )}
+        <Text style={{ color: colors.text }}>We need your permission to show the camera</Text>
+        <TouchableOpacity onPress={requestPermission} style={{ marginTop: 20 }}>
+          <Text style={{ color: colors.tint }}>Grant Permission</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setMode('3d')} style={{ marginTop: 20 }}>
           <Text style={{ color: colors.tint }}>Switch to 3D View</Text>
         </TouchableOpacity>
@@ -218,13 +238,8 @@ export default function ARTryOnScreen() {
   }
 
   const toggleMode = async () => {
-    if (!NATIVE_VISION_AVAILABLE) {
-      showToast('3D Interactive Model View is active.', 'info');
-      setMode('3d');
-      return;
-    }
     if (mode === '3d') {
-      if (!hasPermission) {
+      if (Platform.OS !== 'web' && !hasPermission) {
         const granted = await requestPermission();
         if (!granted) {
           showToast("Camera access is needed for the 2D overlay.", 'info');
@@ -237,9 +252,7 @@ export default function ARTryOnScreen() {
     }
   };
 
-  // Fallback 3D model if product doesn't have one
   const rawModelUrl = product.model_3d_url || 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
-  // Sanitize URL for safe HTML injection — only allow http/https URLs
   const validatedUrl = /^https?:\/\//.test(rawModelUrl) ? rawModelUrl : 'https://modelviewer.dev/shared-assets/models/Astronaut.glb';
   // Attempt to map to USDZ for iOS QuickLook — only if not the fallback
   const rawIosModelUrl = product.model_3d_url ? validatedUrl.replace(/\.glb$/i, '.usdz') : '';
@@ -316,7 +329,7 @@ export default function ARTryOnScreen() {
           #error-state span { font-size: 36px; }
           #controls-bar {
             position: absolute;
-            bottom: 60px;
+            top: 20px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -406,19 +419,15 @@ export default function ARTryOnScreen() {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>AR Try-On</Text>
 
-        {NATIVE_VISION_AVAILABLE ? (
-          <TouchableOpacity
-            onPress={toggleMode}
-            style={styles.modeToggle}
-            accessibilityRole="button"
-            accessibilityLabel={mode === '3d' ? 'Switch to 2D camera overlay' : 'Switch to 3D model view'}
-            accessibilityHint={mode === '3d' ? 'Uses your camera to overlay the item image' : 'Shows the rotatable 3D model'}
-          >
-            <Text style={[styles.modeToggleText, { color: colors.onTint }]}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 44 }} />
-        )}
+        <TouchableOpacity
+          onPress={toggleMode}
+          style={styles.modeToggle}
+          accessibilityRole="button"
+          accessibilityLabel={mode === '3d' ? 'Switch to 2D camera overlay' : 'Switch to 3D model view'}
+          accessibilityHint={mode === '3d' ? 'Uses your camera to overlay the item image' : 'Shows the rotatable 3D model'}
+        >
+          <Text style={[styles.modeToggleText, { color: colors.onTint }]}>{mode === '3d' ? 'Use 2D Overlay' : 'Use 3D Model'}</Text>
+        </TouchableOpacity>
       </View>
 
       {mode === '3d' ? (
@@ -476,7 +485,9 @@ export default function ARTryOnScreen() {
         </View>
       ) : (
         <View style={styles.webviewContainer}>
-          {device ? (
+          {Platform.OS === 'web' ? (
+            <WebCameraFeed />
+          ) : device ? (
             <Camera
               style={styles.camera}
               device={device}
