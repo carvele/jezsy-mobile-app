@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -144,6 +144,12 @@ export default function PaymentScreen() {
               : 'This usually takes a few seconds. Please do not close the app.'}
           </Text>
         </View>
+      ) : Platform.OS === 'web' ? (
+        // @ts-ignore
+        <iframe
+          src={checkoutUrl}
+          style={{ width: '100%', height: '100%', border: 'none' }}
+        />
       ) : (
         <WebView
           source={{ uri: checkoutUrl }}

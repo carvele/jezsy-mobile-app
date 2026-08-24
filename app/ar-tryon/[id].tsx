@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -424,47 +424,56 @@ export default function ARTryOnScreen() {
 
       {mode === '3d' ? (
         <View style={styles.webviewContainer}>
-          <WebView
-          originWhitelist={['https://*', 'http://*']}
-          source={{ html: htmlContent }}
-          style={styles.webview}
-          scrollEnabled={false}
-          bounces={false}
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-          allowsInlineMediaPlayback={true}
-          allowsFullscreenVideo={true}
-          mediaPlaybackRequiresUserAction={false}
-          onShouldStartLoadWithRequest={(request) => {
-            const { url } = request;
-            // Pass through normal http/https/blob/data URLs
-            if (
-              url.startsWith('http://') ||
-              url.startsWith('https://') ||
-              url.startsWith('blob:') ||
-              url.startsWith('data:') ||
-              url === 'about:blank'
-            ) {
-              return true;
-            }
-            // For intent:// and other native scheme URLs (Google Scene Viewer AR),
-            // hand off to the OS via Linking so the native handler can open it.
-            Linking.openURL(url).catch(() => {
-              Alert.alert(
-                'AR Not Supported',
-                'AR is not available on this device. Make sure Google Play Services for AR is installed.',
-                [{ text: 'OK' }]
-              );
-            });
-            return false; // Prevent WebView from loading it (it can't handle intent://)
-          }}
-        />
-        
-        {!product.model_3d_url && (
-          <View style={styles.demoWarning}>
-            <Text style={styles.demoWarningText}>Showing Demo Model</Text>
-          </View>
-        )}
+          {Platform.OS === 'web' ? (
+            // @ts-ignore
+            <iframe
+              srcDoc={htmlContent}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              allow="camera; microphone; xr-spatial-tracking; fullscreen"
+            />
+          ) : (
+            <WebView
+              originWhitelist={['https://*', 'http://*']}
+              source={{ html: htmlContent }}
+              style={styles.webview}
+              scrollEnabled={false}
+              bounces={false}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              allowsInlineMediaPlayback={true}
+              allowsFullscreenVideo={true}
+              mediaPlaybackRequiresUserAction={false}
+              onShouldStartLoadWithRequest={(request) => {
+                const { url } = request;
+                // Pass through normal http/https/blob/data URLs
+                if (
+                  url.startsWith('http://') ||
+                  url.startsWith('https://') ||
+                  url.startsWith('blob:') ||
+                  url.startsWith('data:') ||
+                  url === 'about:blank'
+                ) {
+                  return true;
+                }
+                // For intent:// and other native scheme URLs (Google Scene Viewer AR),
+                // hand off to the OS via Linking so the native handler can open it.
+                Linking.openURL(url).catch(() => {
+                  Alert.alert(
+                    'AR Not Supported',
+                    'AR is not available on this device. Make sure Google Play Services for AR is installed.',
+                    [{ text: 'OK' }]
+                  );
+                });
+                return false; // Prevent WebView from loading it (it can't handle intent://)
+              }}
+            />
+          )}
+          
+          {!product.model_3d_url && (
+            <View style={styles.demoWarning}>
+              <Text style={styles.demoWarningText}>Showing Demo Model</Text>
+            </View>
+          )}
         </View>
       ) : (
         <View style={styles.webviewContainer}>
