@@ -41,9 +41,9 @@ export class WebPoseTracker {
         },
         runningMode: 'VIDEO',
         numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
+        minPoseDetectionConfidence: 0.35,
+        minPosePresenceConfidence: 0.35,
+        minTrackingConfidence: 0.35,
       });
 
       this.isReady = true;
@@ -69,6 +69,9 @@ export class WebPoseTracker {
           },
           runningMode: 'VIDEO',
           numPoses: 1,
+          minPoseDetectionConfidence: 0.35,
+          minPosePresenceConfidence: 0.35,
+          minTrackingConfidence: 0.35,
         });
 
         this.isReady = true;
