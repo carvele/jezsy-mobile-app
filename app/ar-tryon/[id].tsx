@@ -17,7 +17,13 @@ import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { useToast } from '@/src/context/ToastContext';
-import { evaluatePoseMatch } from '@/src/utils/poseMatcher';
+import { evaluatePoseMatch, calculateGarmentAutoFit } from '@/src/utils/poseMatcher';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 type Product = Database['public']['Tables']['products']['Row'];
 type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category' | 'image_url' | 'occasion' | 'base_pose_type'>;
 
@@ -150,25 +156,79 @@ export default function ARTryOnScreen() {
   const [matchScore, setMatchScore] = useState(0);
   const [isMatched, setIsMatched] = useState(false);
   const [matchFeedback, setMatchFeedback] = useState('Align with outline');
-  const [garmentTransform, setGarmentTransform] = useState({ scale: 1, translateX: 0, translateY: 0 });
   const [isTrackerActive, setIsTrackerActive] = useState(false);
+
+  // Reanimated SharedValues for 60FPS UI-thread smooth garment positioning
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const rotateDeg = useSharedValue(0);
+  const opacity = useSharedValue(0.9);
+  const lostFramesRef = React.useRef(0);
+
+  const animatedGarmentStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+      { rotate: `${rotateDeg.value}deg` },
+    ],
+  }));
 
   const handlePoseResults = useCallback(
     (landmarks: Landmark[]) => {
-      if (!currentPose) return;
-      const match = evaluatePoseMatch(landmarks, currentPose.name, {
+      // 1. Continuous real-time auto-sizing, auto-tracking, and auto-fitting
+      const autoFit = calculateGarmentAutoFit(landmarks, {
         isMirrored: true,
-        screenWidth: 300,
-        screenHeight: 340,
+        screenWidth: 320,
+        screenHeight: 400,
+        fitEase: 1.0,
       });
-      setMatchScore(match.score);
-      setIsMatched(match.isMatched);
-      setMatchFeedback(match.feedback);
-      if (match.transform) {
-        setGarmentTransform(match.transform);
+
+      if (autoFit.isTracking) {
+        lostFramesRef.current = 0;
+        setIsTrackerActive(true);
+
+        const config = {
+          duration: 45,
+          easing: Easing.out(Easing.quad),
+        };
+
+        translateX.value = withTiming(autoFit.targetX, config);
+        translateY.value = withTiming(autoFit.targetY, config);
+        scale.value = withTiming(autoFit.targetScale, config);
+        rotateDeg.value = withTiming(autoFit.targetRotation, config);
+        opacity.value = withTiming(1, { duration: 120 });
+      } else {
+        lostFramesRef.current += 1;
+        // Debounced hysteresis: only return to neutral if lost for >6 consecutive frames (~200ms)
+        if (lostFramesRef.current > 6) {
+          setIsTrackerActive(false);
+          translateX.value = withTiming(0, { duration: 250 });
+          translateY.value = withTiming(0, { duration: 250 });
+          scale.value = withTiming(1, { duration: 250 });
+          rotateDeg.value = withTiming(0, { duration: 250 });
+          opacity.value = withTiming(0.85, { duration: 200 });
+        }
+      }
+
+      // 2. Evaluate target pose guide score if a guide is active
+      if (currentPose) {
+        const match = evaluatePoseMatch(landmarks, currentPose.name, {
+          isMirrored: true,
+          screenWidth: 320,
+          screenHeight: 400,
+        });
+        setMatchScore(match.score);
+        setIsMatched(match.isMatched);
+        setMatchFeedback(match.feedback);
+      } else {
+        setMatchFeedback(autoFit.isTracking ? 'Auto-Fit Active' : 'Position yourself in frame');
+        setIsMatched(false);
       }
     },
-    [currentPose]
+    [currentPose, translateX, translateY, scale, rotateDeg, opacity]
   );
   
   // Pose Detection Hook (Native)
@@ -649,16 +709,10 @@ export default function ARTryOnScreen() {
             )}
 
             <View pointerEvents="none" style={styles.garmentWrapper}>
-              <View
+              <Animated.View
                 style={[
                   styles.overlay3DContainer,
-                  {
-                    transform: [
-                      { scale: garmentTransform.scale },
-                      { translateX: garmentTransform.translateX },
-                      { translateY: garmentTransform.translateY },
-                    ]
-                  },
+                  animatedGarmentStyle,
                   isMatched && styles.overlayImageMatched,
                 ]}
               >
@@ -681,7 +735,7 @@ export default function ARTryOnScreen() {
                     contentFit="contain"
                   />
                 )}
-              </View>
+              </Animated.View>
             </View>
             <View style={[styles.matchBadge, { backgroundColor: isMatched ? 'rgba(52, 199, 89, 0.92)' : 'rgba(0, 0, 0, 0.72)' }]}>
               <Text style={styles.matchBadgeText}>{matchFeedback}</Text>
@@ -854,11 +908,7 @@ const styles = StyleSheet.create({
     maxHeight: '75%',
     justifyContent: 'center',
     alignItems: 'center',
-    ...(Platform.OS === 'web'
-      ? ({
-          transition: 'transform 0.08s ease-out',
-        } as any)
-      : {}),
+    transformOrigin: '50% 18%',
   },
   overlayImage: {
     width: 270,
@@ -866,9 +916,9 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
     maxHeight: '62%',
     opacity: 0.90,
+    transformOrigin: '50% 18%',
     ...(Platform.OS === 'web'
       ? ({
-          transition: 'transform 0.08s ease-out',
           filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.4))',
         } as any)
       : {}),
