@@ -7,6 +7,7 @@ import {
   StatusBar,
   Dimensions,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -66,6 +67,18 @@ export default function WelcomeScreen() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
+      if (Platform.OS === 'web') {
+        const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo,
+          },
+        });
+        if (error) throw error;
+        return;
+      }
+
       // Linking.createURL generates the correct deep link for the current environment:
       //   Expo Go  → exp://192.168.x.x:8081/--/auth/callback
       //   Dev build → jezsymobileapp://auth/callback
