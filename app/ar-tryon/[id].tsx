@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Camera, useCameraDevice, useCameraPermission, usePoseDetection, RunningMode, Delegate, NATIVE_VISION_AVAILABLE } from '@/src/utils/nativeVision';
@@ -463,12 +464,32 @@ export default function ARTryOnScreen() {
   const goBack = useSafeBack('/');
   const handleBack = goBack;
 
+  const isFocused = useIsFocused();
+  const lastSpokenSpeechRef = React.useRef<string>('');
+  const isSpeechThrottledRef = React.useRef<boolean>(false);
+  const speechTimeoutRef = React.useRef<any>(null);
+
   useEffect(() => {
-    if (isMatched && matchFeedback && mode === '2d') {
-      Speech.stop();
-      Speech.speak(matchFeedback, { rate: 1.0, pitch: 1.0 });
+    if (isMatched && matchFeedback && mode === '2d' && isFocused) {
+      if (matchFeedback !== lastSpokenSpeechRef.current && !isSpeechThrottledRef.current) {
+        Speech.stop();
+        Speech.speak(matchFeedback, { rate: 1.0, pitch: 1.0 });
+        lastSpokenSpeechRef.current = matchFeedback;
+        isSpeechThrottledRef.current = true;
+        if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
+        speechTimeoutRef.current = setTimeout(() => {
+          isSpeechThrottledRef.current = false;
+        }, 3000);
+      }
     }
-  }, [isMatched, matchFeedback, mode]);
+  }, [isMatched, matchFeedback, mode, isFocused]);
+
+  useEffect(() => {
+    return () => {
+      Speech.stop();
+      if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
+    };
+  }, []);
 
   if (hasConsented === false) {
     return (
@@ -845,7 +866,7 @@ export default function ARTryOnScreen() {
             <Camera
               style={styles.camera}
               device={device}
-              isActive={mode === '2d'}
+              isActive={mode === '2d' && isFocused}
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
               onLayout={poseDetection.cameraViewLayoutChangeHandler}
