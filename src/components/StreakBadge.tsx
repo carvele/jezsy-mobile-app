@@ -14,6 +14,7 @@ export function StreakBadge() {
   const [currentStreak, setCurrentStreak] = useState(0);
   const [longestStreak, setLongestStreak] = useState(0);
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
   const pulseAnimation = useRef<Animated.CompositeAnimation | null>(null);
 
   const fetchStreak = useCallback(async () => {
@@ -31,22 +32,26 @@ export function StreakBadge() {
         return;
       }
 
-      if (data) {
-        const nextCurrentStreak = data.current_streak || 0;
-        setCurrentStreak(nextCurrentStreak);
-        setLongestStreak(data.longest_streak || 0);
+      const streakVal = data?.current_streak ?? 0;
+      if (streakVal > 0) {
+        setCurrentStreak(streakVal);
+        setLongestStreak(data?.longest_streak ?? 0);
         
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: Platform.OS !== 'web',
+        }).start();
+
         // Pulse animation if streak > 0
-        if (nextCurrentStreak > 0) {
-          pulseAnimation.current?.stop();
-          pulseAnimation.current = Animated.loop(
-            Animated.sequence([
-              Animated.timing(scaleAnim, { toValue: 1.1, duration: 800, useNativeDriver: Platform.OS !== 'web' }),
-              Animated.timing(scaleAnim, { toValue: 1, duration: 800, useNativeDriver: Platform.OS !== 'web' })
-            ])
-          );
-          pulseAnimation.current.start();
-        }
+        pulseAnimation.current?.stop();
+        pulseAnimation.current = Animated.loop(
+          Animated.sequence([
+            Animated.timing(scaleAnim, { toValue: 1.1, duration: 800, useNativeDriver: Platform.OS !== 'web' }),
+            Animated.timing(scaleAnim, { toValue: 1, duration: 800, useNativeDriver: Platform.OS !== 'web' })
+          ])
+        );
+        pulseAnimation.current.start();
       } else {
         setCurrentStreak(0);
         setLongestStreak(0);
@@ -54,7 +59,7 @@ export function StreakBadge() {
     } catch (err) {
       console.error(err);
     }
-  }, [session?.user?.id, scaleAnim]);
+  }, [session?.user?.id, scaleAnim, opacityAnim]);
 
   useEffect(() => {
     fetchStreak();
@@ -68,7 +73,16 @@ export function StreakBadge() {
   if (currentStreak === 0) return null; // Don't show if no streak yet
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+          opacity: opacityAnim,
+        },
+      ]}
+    >
       <Animated.View style={[styles.iconContainer, { transform: [{ scale: scaleAnim }] }]}>
         <IconSymbol name="flame.fill" size={24} color="#FF5A5F" />
       </Animated.View>
@@ -76,7 +90,7 @@ export function StreakBadge() {
         <Text style={[styles.title, { color: colors.text }]}>{currentStreak} Day Streak!</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>Personal Best: {longestStreak}</Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
