@@ -160,36 +160,36 @@ export function circumferencesFromCrossSections(
   };
 }
 
+function clamp(val: number, min: number, max: number): number {
+  return Math.min(Math.max(val, min), max);
+}
+
 /**
  * Computes all body measurements from pose ratios and biometric inputs.
  */
 export function computeMeasurements(input: MeasurementInput): EstimatedMeasurements {
   const { bodyRatios, heightCm, weightKg, gender, crossSections } = input;
   const bmi = computeBMI(weightKg, heightCm);
-  const bmiDelta = Math.max(0, bmi - 22); // deviation above normal BMI
+  // Symmetrical depth correction around reference BMI 22.0
+  const bmiDelta = Math.max(-6, Math.min(18, bmi - 22.0));
 
   // Scale factor: how many cm per unit of normalized ratio
-  // bodyRatios are normalized to head-to-ankle height, so 1.0 ratio = heightCm
   const cmPerUnit = heightCm;
 
-  // --- Linear measurements (direct pixel scaling) ---
-  const shoulderWidth = bodyRatios.shoulderWidthRatio * cmPerUnit;
-  const armLength     = bodyRatios.armLengthRatio     * cmPerUnit;
-  const torsoLength   = bodyRatios.torsoLengthRatio   * cmPerUnit;
-  const legLength     = bodyRatios.legLengthRatio      * cmPerUnit;
-  const inseam        = bodyRatios.inseamRatio         * cmPerUnit;
-  const bustWidth     = bodyRatios.bustWidthRatio      * cmPerUnit;
-  const hipWidth      = bodyRatios.hipWidthRatio       * cmPerUnit;
+  // --- Linear measurements (direct calibrated pixel scaling) ---
+  const rawShoulderWidth = bodyRatios.shoulderWidthRatio * cmPerUnit;
+  const rawArmLength     = bodyRatios.armLengthRatio     * cmPerUnit;
+  const rawTorsoLength   = bodyRatios.torsoLengthRatio   * cmPerUnit;
+  const rawLegLength     = bodyRatios.legLengthRatio      * cmPerUnit;
+  const rawInseam        = bodyRatios.inseamRatio         * cmPerUnit;
+  const rawBustWidth     = bodyRatios.bustWidthRatio      * cmPerUnit;
+  const rawHipWidth      = bodyRatios.hipWidthRatio       * cmPerUnit;
 
   const dm  = DEPTH_MULTIPLIERS[gender];
   const bma = BMI_ADJUSTMENTS[gender];
   const wr  = WAIST_RATIO[gender];
 
   // --- Circumference estimates ---
-  // With a side scan the cross-section is measured: width from the front
-  // mask, depth from the side one, and the perimeter follows directly.
-  // Without one, depth is unknown and has to be inferred from width and BMI,
-  // which is the older and materially weaker path.
   const measured = crossSections
     ? {
         bust: ellipsePerimeter(
@@ -207,41 +207,48 @@ export function computeMeasurements(input: MeasurementInput): EstimatedMeasureme
       }
     : null;
 
-  const bust = Math.round(
-    measured?.bust || bustWidth * dm.bust + bma.bust * bmiDelta,
+  const rawBust = Math.round(
+    measured?.bust || rawBustWidth * dm.bust + bma.bust * bmiDelta,
   );
-  const waist = Math.round(
-    measured?.waist || hipWidth * wr * dm.waist + bma.waist * bmiDelta,
+  const rawWaist = Math.round(
+    measured?.waist || rawHipWidth * wr * dm.waist + bma.waist * bmiDelta,
   );
-  const hips = Math.round(
-    measured?.hips || hipWidth * dm.hips + bma.hips * bmiDelta,
+  const rawHips = Math.round(
+    measured?.hips || rawHipWidth * dm.hips + bma.hips * bmiDelta,
   );
 
-  // --- Confidence scores ---
+  // --- Physiological Sanity Clamping (Adult boundaries) ---
+  const shoulderWidth = clamp(Math.round(rawShoulderWidth), 30, 58);
+  const armLength     = clamp(Math.round(rawArmLength), 45, 95);
+  const torsoLength   = clamp(Math.round(rawTorsoLength), 35, 75);
+  const legLength     = clamp(Math.round(rawLegLength), 65, 120);
+  const inseam        = clamp(Math.round(rawInseam), 55, 105);
+  const bust          = clamp(rawBust, 65, 145);
+  const waist         = clamp(rawWaist, 50, 135);
+  const hips          = clamp(rawHips, 70, 150);
+
+  // --- Dynamic Empirical Confidence Scores ---
   const confidence = {
     shoulderWidth: ratioConfidence(bodyRatios.shoulderWidthRatio, 0.18, 0.35),
     armLength:     ratioConfidence(bodyRatios.armLengthRatio,     0.28, 0.45),
     torsoLength:   ratioConfidence(bodyRatios.torsoLengthRatio,   0.25, 0.40),
     legLength:     ratioConfidence(bodyRatios.legLengthRatio,     0.40, 0.58),
     inseam:        ratioConfidence(bodyRatios.inseamRatio,        0.35, 0.52),
-    // A measured cross-section is a real perimeter rather than a regression
-    // on width alone, so it is scored higher. Without one the waist stays the
-    // weakest figure: it is not measured at all, only derived from hip width.
-    bust:  measured ? 0.95 : ratioConfidence(bodyRatios.bustWidthRatio, 0.19, 0.38),
-    waist: measured ? 0.95 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.9,
-    hips:  measured ? 0.95 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28),
+    bust:  measured ? 0.92 : ratioConfidence(bodyRatios.bustWidthRatio, 0.19, 0.38) * 0.85,
+    waist: measured ? 0.90 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.75,
+    hips:  measured ? 0.92 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.85,
   };
 
-  const overallConfidence =
-    Object.values(confidence).reduce((a, b) => a + b, 0) /
-    Object.values(confidence).length;
+  const overallConfidence = Math.round(
+    (Object.values(confidence).reduce((a, b) => a + b, 0) / Object.values(confidence).length) * 100
+  ) / 100;
 
   return {
-    shoulderWidth: Math.round(shoulderWidth),
-    armLength:     Math.round(armLength),
-    torsoLength:   Math.round(torsoLength),
-    legLength:     Math.round(legLength),
-    inseam:        Math.round(inseam),
+    shoulderWidth,
+    armLength,
+    torsoLength,
+    legLength,
+    inseam,
     bust,
     waist,
     hips,

@@ -196,19 +196,28 @@ export function calculateGarmentAutoFit(
     };
   }
 
-  // 3. Proportional Auto-Sizing Scale
+  // 3. 2D Similarity Transform Scaling
   const BASELINE_SHOULDER_SPAN = 0.35;
   const rawScale = (correctedShoulderWidth / BASELINE_SHOULDER_SPAN) * fitEase;
   const targetScale = Math.max(0.70, Math.min(2.4, rawScale));
 
-  // 4. Centered Pixel Translations
+  // 4. Centered Stage Pixel Translations
   const visualChestX = isMirrored ? (1 - chestAnchorX) : chestAnchorX;
   const targetX = (visualChestX - 0.50) * screenW;
-
-  // 0.35 is neutral collar level on screen. Garment translates dynamically across full screen height
   const targetY = (chestAnchorY - 0.35) * screenH;
 
-  // 5. 3D Pitch Calculation (Forward / Backward spine lean)
+  // 5. Yaw Rejection & Opacity Attenuation (2D overlays cannot model extreme perspective)
+  let targetOpacity = 1.0;
+  let feedback = 'Auto-Fit Active';
+  const absYaw = Math.abs(yawDeg);
+
+  if (absYaw > 25) {
+    // Gracefully attenuate opacity when user turns past 25 degrees
+    targetOpacity = Math.max(0.15, 1.0 - (absYaw - 25) / 15);
+    feedback = 'Face forward for 2D fitting';
+  }
+
+  // 6. 3D Pitch Calculation (Forward / Backward spine lean)
   const leftHip = landmarks[L.leftHip];
   const rightHip = landmarks[L.rightHip];
   let pitchDeg = 0;
@@ -216,14 +225,14 @@ export function calculateGarmentAutoFit(
   const midShoulderZ = ((leftShoulder?.z ?? 0) + (rightShoulder?.z ?? 0)) / 2;
   const midShoulderY = ((leftShoulder?.y ?? 0) + (rightShoulder?.y ?? 0)) / 2;
 
-  if (leftHip && rightHip && (leftHip.visibility ?? 1) >= 0.35 && (rightHip.visibility ?? 1) >= 0.35) {
+  if (leftHip && rightHip && (leftHip.visibility ?? 0) >= 0.4 && (rightHip.visibility ?? 0) >= 0.4) {
     const midHipZ = ((leftHip.z ?? 0) + (rightHip.z ?? 0)) / 2;
     const midHipY = ((leftHip.y ?? 0) + (rightHip.y ?? 0)) / 2;
     const deltaZ = midShoulderZ - midHipZ;
     const deltaY = Math.max(0.15, midHipY - midShoulderY);
     const pitchRad = Math.atan2(deltaZ, deltaY);
     pitchDeg = Math.max(-20, Math.min(20, pitchRad * (180 / Math.PI)));
-  } else if (nose && (nose.visibility ?? 1) >= 0.35) {
+  } else if (nose && (nose.visibility ?? 0) >= 0.4) {
     const deltaZ = (nose.z ?? 0) - midShoulderZ;
     const deltaY = Math.max(0.1, midShoulderY - (nose.y ?? 0));
     const pitchRad = Math.atan2(deltaZ, deltaY);
@@ -236,16 +245,17 @@ export function calculateGarmentAutoFit(
     targetY,
     targetScale,
     targetRotation,
-    targetOpacity: 1,
+    targetOpacity,
     yawDeg,
     pitchDeg,
     shoulderWidth: correctedShoulderWidth,
-    feedback: 'Auto-Fit Active',
+    feedback,
   };
 }
 
 /**
- * Evaluates live landmarks against a target pose name.
+ * Evaluates live landmarks against a target pose type or pose name.
+ * Uses continuous posture angle calculations and avoids false-positive defaults.
  */
 export function evaluatePoseMatch(
   landmarks: Landmark[],
@@ -282,60 +292,64 @@ export function evaluatePoseMatch(
   const poseKey = (targetPoseName || '').toLowerCase();
   const shoulderWidth = dist(leftShoulder, rightShoulder);
 
-  // Evaluate specific poses or base pose types
-  if (poseKey === 'front t-pose') {
+  if (poseKey.includes('t-pose') || poseKey === 'front t-pose') {
     // Check if arms are extended horizontally
-    const leftArmHorizontal = Math.abs(leftWrist.y - leftShoulder.y) < 0.18;
-    const rightArmHorizontal = Math.abs(rightWrist.y - rightShoulder.y) < 0.18;
-    const armsExtended = dist(leftWrist, rightWrist) > shoulderWidth * 1.8;
+    const leftArmHorizontal = Math.abs(leftWrist.y - leftShoulder.y) < 0.15;
+    const rightArmHorizontal = Math.abs(rightWrist.y - rightShoulder.y) < 0.15;
+    const armsExtended = dist(leftWrist, rightWrist) > shoulderWidth * 1.7;
 
     if (leftArmHorizontal && rightArmHorizontal && armsExtended) {
       score = 92;
       feedback = 'Pose Matched!';
     } else {
-      score = 45;
+      score = Math.min(65, Math.round((dist(leftWrist, rightWrist) / (shoulderWidth * 1.7)) * 70));
       feedback = 'Extend arms horizontally';
     }
-  } else if (poseKey === 'side profile' || poseKey.includes('side')) {
-    // Shoulders should be close together horizontally or high yaw
-    if (shoulderWidth < 0.20 || Math.abs(autoFit.yawDeg) > 35) {
+  } else if (poseKey.includes('side') || poseKey.includes('profile')) {
+    // Side pose requires significant yaw or narrow horizontal shoulder separation
+    if (shoulderWidth < 0.22 || Math.abs(autoFit.yawDeg) > 30) {
       score = 88;
       feedback = 'Pose Matched!';
     } else {
-      score = 35;
+      score = Math.min(60, Math.round((Math.abs(autoFit.yawDeg) / 30) * 60));
       feedback = 'Turn to the side';
     }
-  } else if (poseKey === 'walking stride' || poseKey.includes('walking') || poseKey.includes('stride')) {
+  } else if (poseKey.includes('walking') || poseKey.includes('stride')) {
     const leftAnkle = landmarks[L.leftAnkle];
     const rightAnkle = landmarks[L.rightAnkle];
 
-    if (leftAnkle && rightAnkle && leftAnkle.visibility > 0.4 && rightAnkle.visibility > 0.4) {
+    if (leftAnkle && rightAnkle && (leftAnkle.visibility ?? 0) > 0.4 && (rightAnkle.visibility ?? 0) > 0.4) {
       const ankleDistX = Math.abs(leftAnkle.x - rightAnkle.x);
       if (ankleDistX > 0.10) {
         score = 88;
         feedback = 'Pose Matched!';
       } else {
-        score = 45;
+        score = 50;
         feedback = 'Step one foot forward';
       }
     } else {
-      score = 40;
-      feedback = 'Step back to show legs';
+      score = 30;
+      feedback = 'Step back to show full body';
     }
-  } else if (poseKey.includes('front') || poseKey.includes('standing') || poseKey.includes('gala')) {
-    // Generic front standing pose
+  } else if (poseKey.includes('front') || poseKey.includes('standing') || poseKey.includes('gala') || poseKey === 'default') {
+    // Front standing pose: upright posture, shoulders level, facing forward
     const shoulderTilt = Math.abs(leftShoulder.y - rightShoulder.y);
-    if (shoulderTilt < 0.14) {
-      score = 88;
+    const isFacingForward = Math.abs(autoFit.yawDeg) <= 20;
+
+    if (shoulderTilt < 0.10 && isFacingForward) {
+      score = Math.round(85 + (1 - shoulderTilt / 0.10) * 12);
       feedback = 'Pose Matched!';
+    } else if (!isFacingForward) {
+      score = 45;
+      feedback = 'Face forward';
     } else {
       score = 50;
       feedback = 'Stand up straight';
     }
   } else {
-    // Default fallback: Upper body tracked successfully
-    score = 85;
-    feedback = 'Auto-Fit Active';
+    // Unknown pose type: return unverified status (never false-positive match)
+    score = 0;
+    feedback = 'Align with silhouette';
   }
 
   const isMatched = score >= 80;

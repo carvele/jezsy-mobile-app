@@ -16,6 +16,7 @@ import { useSafeBack } from '@/src/hooks/useSafeBack';
 import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
+import { ConsentModal } from '@/src/components/ConsentModal';
 import { useToast } from '@/src/context/ToastContext';
 import { evaluatePoseMatch, calculateGarmentAutoFit, getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
 import Animated, {
@@ -76,7 +77,13 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
         if (videoRef.current) {
           videoRef.current.srcObject = s;
           videoRef.current.onloadedmetadata = () => {
-            if (videoRef.current) {
+            if (videoRef.current && isMounted) {
+              const vw = videoRef.current.videoWidth || 640;
+              const vh = videoRef.current.videoHeight || 480;
+              if (occlusionCanvasRef.current) {
+                occlusionCanvasRef.current.width = vw;
+                occlusionCanvasRef.current.height = vh;
+              }
               videoRef.current.play().catch((e) => console.warn('Video play error:', e));
             }
           };
@@ -88,22 +95,34 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
           onTrackerReadyRef.current?.(ready);
         }
 
-        // Continuous pose detection loop with concurrency guard
+        if (!ready) return;
+
+        // Continuous pose detection loop with ~20 FPS inference budget
         let isProcessing = false;
+        let lastInferenceTime = 0;
+
         function detectLoop() {
           if (!isMounted) return;
-          if (videoRef.current && videoRef.current.readyState >= 2 && !isProcessing) {
+          const now = performance.now();
+
+          if (
+            now - lastInferenceTime >= 48 &&
+            videoRef.current &&
+            videoRef.current.readyState >= 2 &&
+            !isProcessing
+          ) {
             isProcessing = true;
+            lastInferenceTime = now;
             try {
-              const now = performance.now();
               const landmarks = tracker.detect(videoRef.current, now);
+              const canvas = occlusionCanvasRef.current;
+
               if (landmarks) {
                 if (onPoseResultsRef.current) {
                   onPoseResultsRef.current(landmarks);
                 }
 
                 // Layer 3 Occlusion Sandwich: Render foreground arms, hands & neck over the garment
-                const canvas = occlusionCanvasRef.current;
                 if (canvas && videoRef.current) {
                   const ctx = canvas.getContext('2d');
                   if (ctx) {
@@ -131,6 +150,12 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                       ctx.restore();
                     }
                   }
+                }
+              } else {
+                // Tracking lost: clear occlusion canvas immediately to prevent stale cutouts
+                if (canvas) {
+                  const ctx = canvas.getContext('2d');
+                  ctx?.clearRect(0, 0, canvas.width, canvas.height);
                 }
               }
             } catch (err) {
@@ -182,12 +207,12 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
           zIndex: 1,
         }}
       />
-      {/* Layer 3: Foreground Arm/Hand Occlusion Canvas (Zero CSS filter overhead, GPU upscaled) */}
+      {/* Layer 3: Foreground Arm/Hand Occlusion Canvas */}
       {/* @ts-ignore */}
       <canvas
         ref={occlusionCanvasRef}
-        width={256}
-        height={256}
+        width={640}
+        height={480}
         style={{
           position: 'absolute',
           top: 0,
@@ -209,6 +234,8 @@ export default function ARTryOnScreen() {
   const { id, stylePoseId } = useLocalSearchParams<{ id: string; stylePoseId?: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasConsented, setHasConsented] = useState<boolean | null>(null);
+  const [stageLayout, setStageLayout] = useState<{ width: number; height: number }>({ width: 390, height: 600 });
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
@@ -242,16 +269,30 @@ export default function ARTryOnScreen() {
   }));
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
-  const screenWidth = Math.min(winWidth || 390, 480);
-  const screenHeight = Math.min(winHeight || 844, 900);
+  const stageWidth = stageLayout.width || Math.min(winWidth || 390, 480);
+  const stageHeight = stageLayout.height || Math.min(winHeight || 844, 900);
+
+  // Biometric consent check on mount
+  useEffect(() => {
+    AsyncStorage.getItem('@jezsy_camera_biometric_consent').then((val) => {
+      setHasConsented(val === 'granted');
+    });
+  }, []);
+
+  // Global Speech cleanup on unmount
+  useEffect(() => {
+    return () => {
+      Speech.stop();
+    };
+  }, []);
 
   const handlePoseResults = useCallback(
     (landmarks: Landmark[]) => {
-      // 1. Continuous real-time auto-sizing, auto-tracking, and auto-fitting (UI Thread)
+      // 1. Continuous real-time 2D similarity transform auto-fit
       const autoFit = calculateGarmentAutoFit(landmarks, {
         isMirrored: true,
-        screenWidth,
-        screenHeight,
+        screenWidth: stageWidth,
+        screenHeight: stageHeight,
         fitEase: 1.05,
       });
 
@@ -267,7 +308,7 @@ export default function ARTryOnScreen() {
         translateY.value = withTiming(autoFit.targetY, config);
         scale.value = withTiming(autoFit.targetScale, config);
         rotateDeg.value = withTiming(autoFit.targetRotation, config);
-        opacity.value = withTiming(1, { duration: 120 });
+        opacity.value = withTiming(autoFit.targetOpacity, { duration: 120 });
 
         // Continuous 3D Perspective Rotation (Yaw & Pitch) to 3D model-viewer
         if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
@@ -301,19 +342,19 @@ export default function ARTryOnScreen() {
         if (currentPose) {
           const match = evaluatePoseMatch(landmarks, currentPose.name, {
             isMirrored: true,
-            screenWidth,
-            screenHeight,
+            screenWidth: stageWidth,
+            screenHeight: stageHeight,
           });
           setMatchScore(match.score);
           setIsMatched(match.isMatched);
           setMatchFeedback(match.feedback);
         } else {
-          setMatchFeedback(autoFit.isTracking ? 'Auto-Fit Active' : 'Position yourself in frame');
+          setMatchFeedback(autoFit.isTracking ? autoFit.feedback : 'Position yourself in frame');
           setIsMatched(false);
         }
       }
     },
-    [currentPose, screenWidth, screenHeight, translateX, translateY, scale, rotateDeg, opacity]
+    [currentPose, stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity]
   );
   
   // Pose Detection Hook (Native)
@@ -428,6 +469,25 @@ export default function ARTryOnScreen() {
       Speech.speak(matchFeedback, { rate: 1.0, pitch: 1.0 });
     }
   }, [isMatched, matchFeedback, mode]);
+
+  if (hasConsented === false) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ConsentModal
+          visible={true}
+          onAccept={async () => {
+            await AsyncStorage.setItem('@jezsy_camera_biometric_consent', 'granted');
+            setHasConsented(true);
+          }}
+          onDecline={handleBack}
+          onPrivacyPress={() => {
+            const privacyUrl = process.env.EXPO_PUBLIC_PRIVACY_URL;
+            if (privacyUrl) Linking.openURL(privacyUrl).catch(() => {});
+          }}
+        />
+      </View>
+    );
+  }
 
   if (loading) {
     return (
@@ -767,7 +827,15 @@ export default function ARTryOnScreen() {
           )}
         </View>
       ) : (
-        <View style={styles.webviewContainer}>
+        <View 
+          style={styles.webviewContainer}
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout;
+            if (width > 0 && height > 0) {
+              setStageLayout({ width, height });
+            }
+          }}
+        >
           {Platform.OS === 'web' ? (
             <WebCameraFeed
               onPoseResults={handlePoseResults}

@@ -152,10 +152,12 @@ export function getPoseConfidence(landmarks: Landmark[]): number {
 export function extractBodyRatios(landmarks: Landmark[]): BodyRatios {
   const lm = landmarks;
 
-  // Reference span: nose to avg ankle (in normalized coords)
+  // Reference span: nose to avg ankle represents ~83% of total standing stature
+  // (Cranial crown-to-nose offset: ~12%, Ankle-to-sole/floor offset: ~5%)
   const noseY = lm[L.nose].y;
   const ankleY = (lm[L.leftAnkle].y + lm[L.rightAnkle].y) / 2;
-  const totalHeight = Math.abs(ankleY - noseY) || 1; // avoid divide-by-zero
+  const rawNoseToAnkleSpan = Math.abs(ankleY - noseY) || 1;
+  const estimatedFullStatureSpan = rawNoseToAnkleSpan / 0.83; // Calibrated stature denominator
 
   const dist = (a: Landmark, b: Landmark) =>
     Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
@@ -199,17 +201,17 @@ export function extractBodyRatios(landmarks: Landmark[]): BodyRatios {
     (midHipY - ankleY) ** 2
   );
 
-  // Bust width proxy: outer shoulder width (1.05x shoulder span is a typical axillary approximation)
-  const bustWidth = shoulderWidth * 1.05;
+  // Bust width proxy: outer shoulder width
+  const bustWidth = shoulderWidth * 1.02;
 
   return {
-    shoulderWidthRatio:  shoulderWidth / totalHeight,
-    hipWidthRatio:       hipWidth / totalHeight,
-    torsoLengthRatio:    torsoLength / totalHeight,
-    armLengthRatio:      armLength / totalHeight,
-    legLengthRatio:      legLength / totalHeight,
-    inseamRatio:         inseam / totalHeight,
-    headToAnkleRatio:    1.0, // by definition (normalized to self)
-    bustWidthRatio:      bustWidth / totalHeight,
+    shoulderWidthRatio:  shoulderWidth / estimatedFullStatureSpan,
+    hipWidthRatio:       hipWidth / estimatedFullStatureSpan,
+    torsoLengthRatio:    torsoLength / estimatedFullStatureSpan,
+    armLengthRatio:      armLength / estimatedFullStatureSpan,
+    legLengthRatio:      legLength / estimatedFullStatureSpan,
+    inseamRatio:         inseam / estimatedFullStatureSpan,
+    headToAnkleRatio:    rawNoseToAnkleSpan / estimatedFullStatureSpan,
+    bustWidthRatio:      bustWidth / estimatedFullStatureSpan,
   };
 }

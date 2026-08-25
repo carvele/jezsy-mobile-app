@@ -11,27 +11,35 @@ interface Props {
 type GuideState = 'tilt_down' | 'tilt_up' | 'hold_steady';
 
 export function TiltGuide({ onTiltValid, onGuideState }: Props) {
-  // Tracks the discrete guide state rather than the raw pitch, so a render
-  // (and effect re-run, since this was in the accelerometer effect's own
-  // state) doesn't fire on every ~16ms sample -- only on an actual crossing.
   const [guideState, setGuideState] = useState<GuideState>('hold_steady');
 
+  const onTiltValidRef = React.useRef(onTiltValid);
+  const onGuideStateRef = React.useRef(onGuideState);
+
+  React.useEffect(() => {
+    onTiltValidRef.current = onTiltValid;
+    onGuideStateRef.current = onGuideState;
+  });
+
   useEffect(() => {
-    // Set update interval to ~60fps
-    Accelerometer.setUpdateInterval(16);
+    // 20Hz sensor update interval (50ms) to conserve battery and CPU
+    Accelerometer.setUpdateInterval(50);
 
-    const subscription = Accelerometer.addListener(({ y, z }) => {
+    const subscription = Accelerometer.addListener(({ x, y, z }) => {
       // Calculate pitch angle in degrees from gravity vector
-      // y is up/down axis, z is front/back axis
-      const angle = Math.atan2(y, z) * (180 / Math.PI);
+      const pitchAngle = Math.atan2(y, z) * (180 / Math.PI);
+      // Calculate roll angle in degrees
+      const rollAngle = Math.atan2(x, Math.sqrt(y * y + z * z)) * (180 / Math.PI);
 
-      // Standardize so 0 is perfectly vertical
-      let normalizedPitch = angle - 90;
+      let normalizedPitch = pitchAngle - 90;
       if (normalizedPitch < -180) normalizedPitch += 360;
 
-      // Valid if phone is within ±15 degrees of vertical
-      const isValid = Math.abs(normalizedPitch) <= 15;
-      onTiltValid(isValid);
+      // Valid if phone is within ±15 degrees of vertical pitch and ±10 degrees roll
+      const isPitchValid = Math.abs(normalizedPitch) <= 15;
+      const isRollValid = Math.abs(rollAngle) <= 10;
+      const isValid = isPitchValid && isRollValid;
+
+      onTiltValidRef.current(isValid);
 
       let currentState: GuideState = 'hold_steady';
       if (normalizedPitch > 15) {
@@ -42,13 +50,13 @@ export function TiltGuide({ onTiltValid, onGuideState }: Props) {
 
       setGuideState(prev => {
         if (prev === currentState) return prev;
-        onGuideState?.(currentState);
+        onGuideStateRef.current?.(currentState);
         return currentState;
       });
     });
 
     return () => subscription.remove();
-  }, [onTiltValid, onGuideState]);
+  }, []);
 
   let message = 'Hold steady';
   let icon = 'checkmark.circle.fill';
