@@ -32,68 +32,61 @@ export default function TabLayout() {
     return <Redirect href="/(auth)/reset-password" />;
   }
 
+  const screenOptions = React.useMemo(() => ({
+    tabBarActiveTintColor: colors.tint,
+    tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
+    headerShown: false,
+    tabBarButton: HapticTab,
+    tabBarShowLabel: true,
+    tabBarLabelStyle: {
+      fontSize: 12,
+      fontWeight: '600' as const,
+      letterSpacing: 0.3,
+    },
+    tabBarBadgeStyle: {
+      fontSize: 11,
+      lineHeight: 14,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+    },
+    tabBarStyle: {
+      position: 'absolute' as const,
+      bottom: barBottom,
+      left: 16,
+      right: 16,
+      height: 62,
+      backgroundColor: isDark ? '#141414' : '#ffffff',
+      borderRadius: 31,
+      borderTopWidth: 0,
+      borderWidth: isDark ? 1 : 0.5,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+      paddingBottom: 0,
+      paddingTop: 0,
+      ...(Platform.OS === 'ios'
+        ? {
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: isDark ? 0.5 : 0.15,
+            shadowRadius: 24,
+          }
+        : Platform.OS === 'web'
+        ? {
+            // @ts-ignore
+            boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+          }
+        : {
+            elevation: 12,
+          }),
+    },
+    tabBarItemStyle: {
+      paddingTop: 8,
+      paddingBottom: 8,
+    },
+  }), [colors.tint, isDark, barBottom]);
+
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: colors.tint,
-        tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
-        headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarShowLabel: true,
-        // Not Type.caption: that is 12/500 and these labels are 600. Navigator
-        // config rather than app styles, and no slot matches exactly, so the
-        // literals stay rather than lightening every tab label to fit one.
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-          letterSpacing: 0.3,
-        },
-        // Badge sized to sit on a 58pt pill rather than a full-width bar, where
-        // the default overflowed the rounded edge.
-        // Not Type.label either: same size, but label carries the tracking that
-        // makes uppercase eyebrows legible, and this is a number in a circle.
-        tabBarBadgeStyle: {
-          fontSize: 11,
-          lineHeight: 14,
-          minWidth: 18,
-          height: 18,
-          borderRadius: 9,
-        },
-        tabBarStyle: {
-          position: 'absolute',
-          bottom: barBottom,
-          left: 16,
-          right: 16,
-          height: 62,
-          backgroundColor: isDark ? '#141414' : '#ffffff',
-          borderRadius: 31,
-          borderTopWidth: 0,
-          borderWidth: isDark ? 1 : 0.5,
-          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-          paddingBottom: 0,
-          paddingTop: 0,
-          // Shadow
-          ...(Platform.OS === 'ios'
-            ? {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: isDark ? 0.5 : 0.15,
-                shadowRadius: 24,
-              }
-            : Platform.OS === 'web'
-            ? {
-                // @ts-ignore
-                boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-              }
-            : {
-                elevation: 12,
-              }),
-        },
-        tabBarItemStyle: {
-          paddingTop: 8,
-          paddingBottom: 8,
-        },
-      }}>
+    <Tabs screenOptions={screenOptions}>
       <Tabs.Screen
         name="index"
         options={{

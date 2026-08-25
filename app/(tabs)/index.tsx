@@ -183,17 +183,21 @@ export default function HomeScreen() {
   // Focus, not mount-only: Shop by Category's order depends on affinity
   // counts that recordCategoryVisit writes when the user taps into a
   // category, so coming back from Explore needs a re-sort, not just the
-  // Home tab's very first load.
+  // Home tab's very first load. Only re-sort categories rather than re-fetching
+  // the entire product catalog, which caused the hero carousel to re-render and jitter.
   useFocusEffect(
     useCallback(() => {
-      fetchProducts();
+      getCategoryAffinity().then((affinity) => {
+        setTopCategories((prev) => (prev.length > 0 ? sortByAffinity(prev, affinity) : prev));
+      });
     }, [])
   );
 
   // Seed UI from cached data immediately on cold start, then let the network
-  // call (above) overwrite with fresher data when it resolves.
+  // call overwrite with fresher data when it resolves.
   useEffect(() => {
     fetchProducts(true);
+    fetchProducts(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
