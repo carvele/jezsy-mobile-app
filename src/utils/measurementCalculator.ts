@@ -202,7 +202,24 @@ export function computeMeasurements(input: MeasurementInput): EstimatedMeasureme
     const bustDepth = Math.max(12, rawBustWidth * dr.bust + bda.bust * bmiDelta);
     rawBust = Math.round(ellipsePerimeter(rawBustWidth, bustDepth));
 
-    const waistWidth = rawHipWidth * wr;
+    // Dynamic Waist Width Calculation:
+    // If rawWaistWidthRatio is present, apply dynamic BMI expansion factor to the natural anatomical pinch.
+    // Higher BMI transitions from hourglass/taper to cylindrical or convex abdominal expansion.
+    const BASE_PINCH = {
+      female: 0.86,
+      male: 0.92,
+      'non-binary': 0.89,
+      'prefer_not_to_say': 0.89,
+    } as const;
+
+    let waistWidth: number;
+    if (bodyRatios.rawWaistWidthRatio) {
+      const dynamicPinch = BASE_PINCH[gender] + Math.max(0, bmi - 22) * 0.012;
+      waistWidth = bodyRatios.rawWaistWidthRatio * cmPerUnit * dynamicPinch;
+    } else {
+      waistWidth = rawHipWidth * wr;
+    }
+
     const waistDepth = Math.max(10, waistWidth * dr.waist + bda.waist * bmiDelta);
     rawWaist = Math.round(ellipsePerimeter(waistWidth, waistDepth));
 

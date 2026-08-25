@@ -382,10 +382,20 @@ export function getForegroundOcclusionSegments(landmarks: Landmark[]): Occlusion
   const rightShoulder = landmarks[L.rightShoulder];
   if (!leftShoulder || !rightShoulder) return [];
 
+  // Back-facing guard: If nose is obscured but shoulders are visible, user is facing backward
+  const nose = landmarks[L.nose];
+  const isBackFacing =
+    (nose?.visibility ?? 0) < 0.25 &&
+    (leftShoulder.visibility ?? 0) > 0.5 &&
+    (rightShoulder.visibility ?? 0) > 0.5;
+  if (isBackFacing) return [];
+
   const chestZ = ((leftShoulder.z ?? 0) + (rightShoulder.z ?? 0)) / 2;
   const chestMidX = (leftShoulder.x + rightShoulder.x) / 2;
   const chestMidY = (leftShoulder.y + rightShoulder.y) / 2;
-  const shoulderSpan = Math.abs(leftShoulder.x - rightShoulder.x) || 0.3;
+  const shoulderSpan = Math.sqrt(
+    (rightShoulder.x - leftShoulder.x) ** 2 + (rightShoulder.y - leftShoulder.y) ** 2
+  ) || 0.3;
 
   const occluders: OcclusionSegment[] = [];
 
@@ -401,10 +411,23 @@ export function getForegroundOcclusionSegments(landmarks: Landmark[]): Occlusion
     { start: landmarks[0], end: { x: chestMidX, y: chestMidY - shoulderSpan * 0.15, z: chestZ - 0.05, visibility: 0.9 }, radius: shoulderSpan * 0.16, name: 'chinNeck' },
   ];
 
-  const torsoLeft = chestMidX - shoulderSpan * 0.65;
-  const torsoRight = chestMidX + shoulderSpan * 0.65;
-  const torsoTop = chestMidY - shoulderSpan * 0.35;
-  const torsoBottom = chestMidY + shoulderSpan * 1.4;
+  // Oriented Bounding Box (OBB) alignment with torso roll angle
+  const rollRad = Math.atan2(rightShoulder.y - leftShoulder.y, rightShoulder.x - leftShoulder.x);
+  const cosR = Math.cos(-rollRad);
+  const sinR = Math.sin(-rollRad);
+
+  const rotatePoint = (p: { x: number; y: number }) => {
+    const dx = p.x - chestMidX;
+    const dy = p.y - chestMidY;
+    return {
+      x: dx * cosR - dy * sinR,
+      y: dx * sinR + dy * cosR,
+    };
+  };
+
+  const halfWidth = shoulderSpan * 0.70;
+  const topBound = -shoulderSpan * 0.35;
+  const bottomBound = shoulderSpan * 1.50;
 
   for (const limb of limbs) {
     if (!limb.start || !limb.end) continue;
@@ -414,13 +437,15 @@ export function getForegroundOcclusionSegments(landmarks: Landmark[]): Occlusion
     const avgZ = ((limb.start.z ?? 0) + (limb.end.z ?? 0)) / 2;
     const isForward = avgZ < chestZ + 0.08;
 
-    // Spatial overlap check with torso bounding box
-    const minX = Math.min(limb.start.x, limb.end.x) - limb.radius;
-    const maxX = Math.max(limb.start.x, limb.end.x) + limb.radius;
-    const minY = Math.min(limb.start.y, limb.end.y) - limb.radius;
-    const maxY = Math.max(limb.start.y, limb.end.y) + limb.radius;
+    // Spatial overlap check using Torso-Aligned OBB
+    const p1 = rotatePoint(limb.start);
+    const p2 = rotatePoint(limb.end);
+    const minX = Math.min(p1.x, p2.x) - limb.radius;
+    const maxX = Math.max(p1.x, p2.x) + limb.radius;
+    const minY = Math.min(p1.y, p2.y) - limb.radius;
+    const maxY = Math.max(p1.y, p2.y) + limb.radius;
 
-    const overlapsTorso = !(maxX < torsoLeft || minX > torsoRight || maxY < torsoTop || minY > torsoBottom);
+    const overlapsTorso = !(maxX < -halfWidth || minX > halfWidth || maxY < topBound || minY > bottomBound);
 
     if (isForward && overlapsTorso) {
       occluders.push({

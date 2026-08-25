@@ -24,6 +24,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSpring,
   Easing,
 } from 'react-native-reanimated';
 type Product = Database['public']['Tables']['products']['Row'];
@@ -130,12 +131,19 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                 // Layer 3 Occlusion Sandwich: Render foreground arms, hands & neck over the garment
                 if (canvas && videoRef.current) {
                   const ctx = canvas.getContext('2d');
-                  if (ctx) {
+                  const videoWidth = videoRef.current.videoWidth || canvas.width;
+                  const videoHeight = videoRef.current.videoHeight || canvas.height;
+
+                  if (ctx && videoWidth > 0) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     const occluders = getForegroundOcclusionSegments(landmarks);
                     if (occluders.length > 0) {
                       ctx.save();
-                      ctx.beginPath();
+                      let minX = canvas.width;
+                      let minY = canvas.height;
+                      let maxX = 0;
+                      let maxY = 0;
+
                       for (const occ of occluders) {
                         const sx = occ.start.x * canvas.width;
                         const sy = occ.start.y * canvas.height;
@@ -143,6 +151,12 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                         const ey = occ.end.y * canvas.height;
                         const r = Math.max(8, occ.radius * canvas.width);
 
+                        minX = Math.min(minX, sx - r, ex - r);
+                        minY = Math.min(minY, sy - r, ey - r);
+                        maxX = Math.max(maxX, sx + r, ex + r);
+                        maxY = Math.max(maxY, sy + r, ey + r);
+
+                        ctx.beginPath();
                         ctx.moveTo(sx, sy);
                         ctx.lineTo(ex, ey);
                         ctx.lineWidth = r * 2;
@@ -150,8 +164,28 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                         ctx.strokeStyle = '#FFFFFF';
                         ctx.stroke();
                       }
+
+                      // Clamp bounding box to canvas dimensions
+                      const cropX = Math.max(0, Math.floor(minX));
+                      const cropY = Math.max(0, Math.floor(minY));
+                      const cropW = Math.max(1, Math.min(canvas.width - cropX, Math.ceil(maxX - cropX)));
+                      const cropH = Math.max(1, Math.min(canvas.height - cropY, Math.ceil(maxY - cropY)));
+
+                      // Scale to native video dimensions for 9-arg drawImage sub-rect copy
+                      const scaleX = videoWidth / canvas.width;
+                      const scaleY = videoHeight / canvas.height;
+
+                      const sourceX = cropX * scaleX;
+                      const sourceY = cropY * scaleY;
+                      const sourceW = cropW * scaleX;
+                      const sourceH = cropH * scaleY;
+
                       ctx.globalCompositeOperation = 'source-in';
-                      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+                      ctx.drawImage(
+                        videoRef.current,
+                        sourceX, sourceY, sourceW, sourceH,
+                        cropX, cropY, cropW, cropH
+                      );
                       ctx.restore();
                     }
                   }
@@ -304,15 +338,17 @@ export default function ARTryOnScreen() {
       if (autoFit.isTracking) {
         lostFramesRef.current = 0;
 
-        const config = {
-          duration: 45,
-          easing: Easing.out(Easing.quad),
+        const trackingSpring = {
+          mass: 0.5,
+          damping: 25,
+          stiffness: 250,
+          overshootClamping: true,
         };
 
-        translateX.value = withTiming(autoFit.targetX, config);
-        translateY.value = withTiming(autoFit.targetY, config);
-        scale.value = withTiming(autoFit.targetScale, config);
-        rotateDeg.value = withTiming(autoFit.targetRotation, config);
+        translateX.value = withSpring(autoFit.targetX, trackingSpring);
+        translateY.value = withSpring(autoFit.targetY, trackingSpring);
+        scale.value = withSpring(autoFit.targetScale, trackingSpring);
+        rotateDeg.value = withSpring(autoFit.targetRotation, trackingSpring);
         opacity.value = withTiming(autoFit.targetOpacity, { duration: 120 });
 
         // Continuous 3D Perspective Rotation (Yaw & Pitch) to 3D model-viewer
