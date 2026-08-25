@@ -26,6 +26,7 @@ import { removeBackground } from '@six33/react-native-bg-removal';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { useToast } from '@/src/context/ToastContext';
 import { ImageCropModal } from '@/src/components/ImageCropModal';
+import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 
 const { width } = Dimensions.get('window');
 
@@ -207,10 +208,6 @@ export default function AddWardrobeItemScreen() {
       let finalUri = (removeBg && processedImageUri) ? processedImageUri : imageUri;
 
       setStatusMessage('Uploading to storage...');
-      const ext = finalUri.includes('.')
-        ? finalUri.substring(finalUri.lastIndexOf('.') + 1).split('?')[0]
-        : 'jpg';
-      const fileName = `${session.user.id}/${Date.now()}.${ext}`;
 
       // Read the bytes ourselves rather than handing Supabase a FormData wrapper
       // around a file:// uri -- that silently produced a zero-byte body and
@@ -224,14 +221,18 @@ export default function AddWardrobeItemScreen() {
       if (!response.ok && response.status !== 0) {
         throw new Error('Unable to read selected image.');
       }
+      const headerContentType = response.headers?.get('content-type');
       const bytes = await response.arrayBuffer();
       if (!bytes || bytes.byteLength === 0) {
         throw new Error('Selected image file is empty.');
       }
 
+      const { contentType, ext } = resolveImageFileInfo(finalUri, headerContentType);
+      const fileName = `${session.user.id}/${Date.now()}.${ext}`;
+
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('wardrobe-images')
-        .upload(fileName, bytes, { upsert: false, contentType: `image/${ext}` });
+        .upload(fileName, bytes, { upsert: false, contentType });
 
       if (uploadError) throw uploadError;
 

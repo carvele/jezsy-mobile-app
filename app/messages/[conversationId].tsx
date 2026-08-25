@@ -18,6 +18,7 @@ import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
 import { formatDateSeparator, formatReceiptTime, shouldStartMessageGroup } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
+import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 
 // One reaction per person per message, so this is a shortlist rather than a
 // full picker -- matching the set the admin dashboard already offers.
@@ -404,12 +405,12 @@ export default function ChatScreen() {
       };
       setMessages(prev => [...prev, tempMsg]);
 
-      const ext = asset.uri.split('.').pop() || 'jpg';
+      const { contentType, ext } = resolveImageFileInfo(asset.uri);
       const fileName = `${Date.now()}.${ext}`;
       const filePath = `${session?.user.id}/${fileName}`;
 
       let uploadedPath = '';
-      const { error } = await supabase.storage.from('chat-images').upload(filePath, decode(asset.base64), { contentType: `image/${ext}` });
+      const { error } = await supabase.storage.from('chat-images').upload(filePath, decode(asset.base64), { contentType });
 
       if (!error) {
         uploadedPath = filePath;

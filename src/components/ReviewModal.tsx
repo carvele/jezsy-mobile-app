@@ -9,6 +9,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
+import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 
 const MAX_REVIEW_IMAGES = 4;
 
@@ -27,7 +28,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
   
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
-  const [images, setImages] = useState<{ uri: string; base64: string; ext: string }[]>([]);
+  const [images, setImages] = useState<{ uri: string; base64: string; ext: string; contentType: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const handlePickImage = async () => {
@@ -41,8 +42,8 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
     if (result.canceled) return;
     const asset = result.assets[0];
     if (!asset?.base64) return;
-    const ext = asset.uri.split('.').pop() || 'jpg';
-    setImages(prev => [...prev, { uri: asset.uri, base64: asset.base64!, ext }]);
+    const { contentType, ext } = resolveImageFileInfo(asset.uri);
+    setImages(prev => [...prev, { uri: asset.uri, base64: asset.base64!, ext, contentType }]);
   };
 
   const removeImage = (uri: string) => {
@@ -63,7 +64,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
         const filePath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${img.ext}`;
         const { error: uploadError } = await supabase.storage
           .from('review-images')
-          .upload(filePath, decode(img.base64), { contentType: `image/${img.ext}` });
+          .upload(filePath, decode(img.base64), { contentType: img.contentType });
         if (uploadError) throw uploadError;
         const { data: publicUrl } = supabase.storage.from('review-images').getPublicUrl(filePath);
         uploadedUrls.push(publicUrl.publicUrl);
