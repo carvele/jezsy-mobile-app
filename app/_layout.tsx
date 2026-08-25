@@ -171,9 +171,9 @@ function InitialLayout() {
     } else if (profile?.deleted) {
       signOut();
     } else if (!session) {
-      // First time cold start on root path without onboarding
-      if (!onboardingSeen && pathSegments.length === 0) {
-        router.replace('/(auth)');
+      // Require authentication -- guests must create an account or sign in
+      if (!inAuthGroup) {
+        router.replace(onboardingSeen ? '/(auth)/welcome' : '/(auth)');
       }
     } else {
       // User is logged in

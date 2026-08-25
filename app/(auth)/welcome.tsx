@@ -205,16 +205,6 @@ export default function WelcomeScreen() {
           dark
         />
 
-        {/* Explore as Guest Option */}
-        <TouchableOpacity
-          style={styles.guestButton}
-          onPress={() => router.replace('/(tabs)')}
-          accessibilityRole="button"
-          accessibilityLabel="Explore JezSy as guest"
-        >
-          <Text style={styles.guestButtonText}>Explore as Guest →</Text>
-        </TouchableOpacity>
-
         <View style={styles.termsRow}>
           <Text style={styles.termsText}>By continuing, you agree to our </Text>
           <TouchableOpacity
@@ -328,23 +318,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  guestButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-  },
-  guestButtonText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
   termsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: Spacing.sm,
+    marginTop: Spacing.md,
   },
   termsText: {
     textAlign: 'center',

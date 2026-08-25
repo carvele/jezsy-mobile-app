@@ -90,7 +90,7 @@ export default function ResetPasswordScreen() {
             <IconSymbol name="lock.fill" size={18} color={colors.secondaryText} />
             <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text }]}
-              placeholder="New password"
+              placeholder="Enter new password (min. 6 chars)"
               placeholderTextColor={colors.secondaryText}
               secureTextEntry={!showPassword}
               value={password}
@@ -127,6 +127,18 @@ export default function ResetPasswordScreen() {
               returnKeyType="done"
               onSubmitEditing={handleSubmit}
             />
+            <TouchableOpacity
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            >
+              <IconSymbol
+                name={showPassword ? 'eye.fill' : 'eye.slash.fill'}
+                size={18}
+                color={colors.secondaryText}
+              />
+            </TouchableOpacity>
           </View>
 
           <PrimaryButton

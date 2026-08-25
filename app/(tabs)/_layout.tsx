@@ -15,7 +15,7 @@ export default function TabLayout() {
   const colors = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
   const { unreadCount } = useMessages();
-  const { isPasswordRecovery } = useAuth();
+  const { session, isPasswordRecovery } = useAuth();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
 
@@ -32,9 +32,13 @@ export default function TabLayout() {
   const barHeight = isCompact ? 64 : 68;
   const iconSize = isCompact ? 20 : 22;
 
-  // Defence in depth for password recovery bounce.
+  // Defence in depth for password recovery and non-authenticated users
   if (isPasswordRecovery) {
     return <Redirect href="/(auth)/reset-password" />;
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)/welcome" />;
   }
 
   const screenOptions = React.useMemo(() => ({

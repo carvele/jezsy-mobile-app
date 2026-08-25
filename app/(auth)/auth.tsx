@@ -462,11 +462,11 @@ export default function AuthScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Email</Text>
                 <View style={styles.inputRow}>
-                  <Mail size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
+                  <Mail size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.input}
-                    placeholder="you@example.com"
-                    placeholderTextColor="rgba(255,255,255,0.25)"
+                    placeholder={mode === 'forgot' ? 'Enter your registered email' : 'name@example.com'}
+                    placeholderTextColor="rgba(255,255,255,0.45)"
                     value={email}
                     onChangeText={setEmail}
                     autoCapitalize="none"
@@ -484,11 +484,11 @@ export default function AuthScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Password</Text>
                 <View style={styles.inputRow}>
-                  <Lock size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
+                  <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.inputWithAction}
-                    placeholder={mode === 'signup' ? 'Min. 6 characters' : 'Enter password'}
-                    placeholderTextColor="rgba(255,255,255,0.25)"
+                    placeholder={mode === 'signup' ? 'Create password (min. 6 chars)' : 'Enter your password'}
+                    placeholderTextColor="rgba(255,255,255,0.45)"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
@@ -506,9 +506,9 @@ export default function AuthScreen() {
                     accessibilityState={{ expanded: showPassword }}
                   >
                     {showPassword ? (
-                      <EyeOff size={20} color="rgba(255,255,255,0.4)" />
+                      <EyeOff size={20} color="rgba(255,255,255,0.6)" />
                     ) : (
-                      <Eye size={20} color="rgba(255,255,255,0.4)" />
+                      <Eye size={20} color="rgba(255,255,255,0.6)" />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -520,11 +520,11 @@ export default function AuthScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Confirm password</Text>
                 <View style={styles.inputRow}>
-                  <Lock size={18} color="rgba(255,255,255,0.35)" style={styles.inputIcon} />
+                  <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.inputWithAction}
-                    placeholder="Re-enter password"
-                    placeholderTextColor="rgba(255,255,255,0.25)"
+                    placeholder="Confirm your password"
+                    placeholderTextColor="rgba(255,255,255,0.45)"
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
                     secureTextEntry={!showConfirmPassword}
@@ -542,9 +542,9 @@ export default function AuthScreen() {
                     accessibilityState={{ expanded: showConfirmPassword }}
                   >
                     {showConfirmPassword ? (
-                      <EyeOff size={20} color="rgba(255,255,255,0.4)" />
+                      <EyeOff size={20} color="rgba(255,255,255,0.6)" />
                     ) : (
-                      <Eye size={20} color="rgba(255,255,255,0.4)" />
+                      <Eye size={20} color="rgba(255,255,255,0.6)" />
                     )}
                   </TouchableOpacity>
                 </View>
