@@ -254,9 +254,22 @@ export default function AddWardrobeItemScreen() {
 
       if (dbError) throw dbError;
 
-      Alert.alert('Item Added', 'Item added to your wardrobe.', [
-        { text: 'Done', onPress: () => router.back() }
-      ]);
+      setImageUri(null);
+      setProcessedImageUri(null);
+      setRawPickedUri(null);
+      setRawPickedSize(null);
+      setGarmentType(null);
+      setSelectedColors([]);
+      setSubCategory('');
+
+      if (Platform.OS === 'web') {
+        showToast('Item added to your wardrobe.', 'success');
+        router.back();
+      } else {
+        Alert.alert('Item Added', 'Item added to your wardrobe.', [
+          { text: 'Done', onPress: () => router.back() }
+        ]);
+      }
     } catch (err: any) {
       console.error('Error saving wardrobe item:', err);
       showToast(err.message || 'Failed to save item. Try again.', 'error');
