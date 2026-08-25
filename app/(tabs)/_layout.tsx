@@ -1,6 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -15,75 +15,86 @@ export default function TabLayout() {
   const colors = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
   const { unreadCount } = useMessages();
-  const { session, isPasswordRecovery } = useAuth();
+  const { isPasswordRecovery } = useAuth();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
 
-  // The bar floats, so its offset has to clear whatever the system puts below
-  // it. That is a gesture pill on some devices and a three-button navigation bar
-  // on others -- the previous hardcoded 20 on Android sat behind the buttons on
-  // the latter. A small floor keeps it off the very edge where the inset is 0.
+  // Responsive horizontal constraints:
+  // - Wide screens (tablet, desktop web > 540px): constrain & center the pill to max 500px.
+  // - Compact screens (< 360px): use 10px margins for tab breathing room.
+  // - Standard mobile: 16px margins.
+  const isWide = windowWidth > 540;
+  const isCompact = windowWidth < 360;
+  const horizontalMargin = isWide ? Math.max(16, (windowWidth - 500) / 2) : isCompact ? 10 : 16;
+
+  // The bar floats, so its offset clears the system gesture pill or 3-button nav.
   const barBottom = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 10) + 8;
+  const barHeight = isCompact ? 64 : 68;
+  const iconSize = isCompact ? 20 : 22;
 
-  // Defence in depth. The root layout's redirect effect was the single
-  // enforcement point, and effects run after mount, so a deep link straight
-  // into a tab rendered an authenticated screen for a frame before bouncing.
-  // Declared after the hooks above so hook order stays stable.
+  // Defence in depth for password recovery bounce.
   if (isPasswordRecovery) {
     return <Redirect href="/(auth)/reset-password" />;
   }
 
   const screenOptions = React.useMemo(() => ({
     tabBarActiveTintColor: colors.tint,
-    tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
+    tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)',
     headerShown: false,
     tabBarButton: HapticTab,
     tabBarShowLabel: true,
     tabBarLabelStyle: {
-      fontSize: 12,
+      fontSize: isCompact ? 10 : 11,
       fontWeight: '600' as const,
-      letterSpacing: 0.3,
+      letterSpacing: 0.2,
+      lineHeight: isCompact ? 12 : 14,
+      marginTop: 2,
+      marginBottom: 2,
     },
     tabBarBadgeStyle: {
-      fontSize: 11,
-      lineHeight: 14,
-      minWidth: 18,
-      height: 18,
-      borderRadius: 9,
+      fontSize: 10,
+      lineHeight: 12,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      top: -2,
     },
     tabBarStyle: {
       position: 'absolute' as const,
       bottom: barBottom,
-      left: 16,
-      right: 16,
-      height: 62,
-      backgroundColor: isDark ? '#141414' : '#ffffff',
-      borderRadius: 31,
+      left: horizontalMargin,
+      right: horizontalMargin,
+      height: barHeight,
+      backgroundColor: isDark ? '#121212' : '#ffffff',
+      borderRadius: barHeight / 2,
       borderTopWidth: 0,
       borderWidth: isDark ? 1 : 0.5,
-      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
       paddingBottom: 0,
       paddingTop: 0,
       ...(Platform.OS === 'ios'
         ? {
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: isDark ? 0.5 : 0.15,
+            shadowOpacity: isDark ? 0.6 : 0.15,
             shadowRadius: 24,
           }
         : Platform.OS === 'web'
         ? {
             // @ts-ignore
-            boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
           }
         : {
             elevation: 12,
           }),
     },
     tabBarItemStyle: {
-      paddingTop: 8,
-      paddingBottom: 8,
+      paddingTop: 6,
+      paddingBottom: 6,
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
     },
-  }), [colors.tint, isDark, barBottom]);
+  }), [colors.tint, isDark, barBottom, horizontalMargin, barHeight, isCompact]);
 
   return (
     <Tabs screenOptions={screenOptions}>
@@ -91,28 +102,28 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={iconSize} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="magnifyingglass" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={iconSize} name="magnifyingglass" color={color} />,
         }}
       />
       <Tabs.Screen
         name="wardrobe"
         options={{
           title: 'Wardrobe',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="tshirt" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={iconSize} name="tshirt" color={color} />,
         }}
       />
       <Tabs.Screen
         name="messages"
         options={{
           title: 'Inbox',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="envelope.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={iconSize} name="envelope.fill" color={color} />,
           tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
         }}
       />
@@ -120,7 +131,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="person.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={iconSize} name="person.fill" color={color} />,
         }}
       />
     </Tabs>
