@@ -26,6 +26,18 @@ export function initSentry(): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- must be synchronous, called once at startup before anything else
     sentryModule = require("@sentry/react-native");
+
+    const integrations: any[] = [];
+    if (typeof sentryModule.mobileReplayIntegration === "function") {
+      integrations.push(
+        sentryModule.mobileReplayIntegration({
+          maskAllText: true,
+          maskAllImages: true,
+          maskAllVectors: true,
+        })
+      );
+    }
+
     sentryModule.init({
       dsn,
       debug: __DEV__,
@@ -34,6 +46,9 @@ export function initSentry(): void {
       // high-traffic service where 100% tracing would be a real cost.
       enableAutoSessionTracking: true,
       tracesSampleRate: 0.2,
+      replaysSessionSampleRate: 0.1,
+      replaysOnErrorSampleRate: 1.0,
+      integrations,
     });
   } catch (e) {
     console.error("Sentry init failed (non-fatal):", e);
