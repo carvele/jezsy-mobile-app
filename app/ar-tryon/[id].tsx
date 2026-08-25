@@ -144,6 +144,7 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                       let maxX = 0;
                       let maxY = 0;
 
+
                       for (const occ of occluders) {
                         const sx = occ.start.x * canvas.width;
                         const sy = occ.start.y * canvas.height;
@@ -191,6 +192,7 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                   }
                 }
               } else {
+                filter.reset();
                 // Tracking lost: clear occlusion canvas immediately to prevent stale cutouts
                 if (canvas) {
                   const ctx = canvas.getContext('2d');
@@ -406,8 +408,11 @@ export default function ARTryOnScreen() {
   // Pose Detection Hook (Native)
   const poseDetection = usePoseDetection({
     onResults: (result) => {
-      const landmarks = result.results?.[0]?.landmarks?.[0];
-      if (!landmarks || landmarks.length === 0) return;
+      const landmarks = result.results?.[0];
+      if (!landmarks || landmarks.length === 0) {
+        nativeFilterRef.current?.reset();
+        return;
+      }
       
       // Evaluate pose
       const normalizedLandmarks = landmarks.map(p => ({
