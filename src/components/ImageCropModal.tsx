@@ -19,6 +19,7 @@ const MAX_SCALE = 4;
 interface Props {
   visible: boolean;
   uri: string | null;
+  initialSize?: { width: number; height: number } | null;
   onCancel: () => void;
   onConfirm: (croppedUri: string) => void;
 }
@@ -29,12 +30,38 @@ interface Props {
 // portrait aspect on a tall phone), leaving users staring at a crop frame
 // with no visible way to proceed. This is fully our own View hierarchy, so
 // the buttons are always exactly where this component puts them.
-export function ImageCropModal({ visible, uri, onCancel, onConfirm }: Props) {
+export function ImageCropModal({ visible, uri, initialSize, onCancel, onConfirm }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
 
   const [imgSize, setImgSize] = useState<{ width: number; height: number } | null>(null);
   const [processing, setProcessing] = useState(false);
+
+  React.useEffect(() => {
+    if (!uri) {
+      setImgSize(null);
+      return;
+    }
+    if (initialSize && initialSize.width > 0 && initialSize.height > 0) {
+      setImgSize(initialSize);
+      return;
+    }
+    let active = true;
+    RNImage.getSize(
+      uri,
+      (width, height) => {
+        if (active && width && height) {
+          setImgSize({ width, height });
+        }
+      },
+      () => {
+        // If getSize fails (e.g. some blob URIs on web), hidden RNImage onLoad will handle it
+      }
+    );
+    return () => {
+      active = false;
+    };
+  }, [uri, initialSize]);
 
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -211,10 +238,13 @@ export function ImageCropModal({ visible, uri, onCancel, onConfirm }: Props) {
             {!imgSize && uri && (
               <RNImage
                 source={{ uri }}
-                style={{ width: 0, height: 0 }}
-                onLoad={(e) => {
-                  const { width: w, height: h } = e.nativeEvent.source;
-                  if (w && h) setImgSize({ width: w, height: h });
+                style={{ width: 0, height: 0, position: 'absolute', opacity: 0 }}
+                onLoad={(e: any) => {
+                  const source = e?.nativeEvent?.source;
+                  const target = e?.nativeEvent?.target || e?.target;
+                  const w = source?.width ?? target?.naturalWidth ?? target?.width ?? e?.nativeEvent?.width;
+                  const h = source?.height ?? target?.naturalHeight ?? target?.height ?? e?.nativeEvent?.height;
+                  if (w && h) setImgSize((prev) => prev ?? { width: w, height: h });
                 }}
               />
             )}

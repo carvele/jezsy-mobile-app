@@ -54,6 +54,7 @@ export default function AddWardrobeItemScreen() {
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [rawPickedUri, setRawPickedUri] = useState<string | null>(null);
+  const [rawPickedSize, setRawPickedSize] = useState<{ width: number; height: number } | null>(null);
   const [cropModalVisible, setCropModalVisible] = useState(false);
   const [processedImageUri, setProcessedImageUri] = useState<string | null>(null);
   const [isProcessingBg, setIsProcessingBg] = useState<boolean>(false);
@@ -150,7 +151,13 @@ export default function AddWardrobeItemScreen() {
       }
 
       if (!result.canceled && result.assets?.[0]) {
-        setRawPickedUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setRawPickedUri(asset.uri);
+        if (asset.width && asset.height) {
+          setRawPickedSize({ width: asset.width, height: asset.height });
+        } else {
+          setRawPickedSize(null);
+        }
         setCropModalVisible(true);
       }
     } catch (e) {
@@ -162,12 +169,14 @@ export default function AddWardrobeItemScreen() {
   const handleCropCancel = () => {
     setCropModalVisible(false);
     setRawPickedUri(null);
+    setRawPickedSize(null);
   };
 
   const handleCropConfirm = (croppedUri: string) => {
     setImageUri(croppedUri);
     setCropModalVisible(false);
     setRawPickedUri(null);
+    setRawPickedSize(null);
   };
 
   const toggleColor = (colorName: string) => {
@@ -468,6 +477,7 @@ export default function AddWardrobeItemScreen() {
       <ImageCropModal
         visible={cropModalVisible}
         uri={rawPickedUri}
+        initialSize={rawPickedSize}
         onCancel={handleCropCancel}
         onConfirm={handleCropConfirm}
       />

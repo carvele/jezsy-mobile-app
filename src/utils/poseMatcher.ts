@@ -95,6 +95,7 @@ export function calculateGarmentAutoFit(
       targetRotation: 0,
       targetOpacity: 0,
       yawDeg: 0,
+      pitchDeg: 0,
       shoulderWidth: 0,
       feedback: 'Position yourself in frame',
     };
