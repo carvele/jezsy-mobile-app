@@ -24,18 +24,17 @@ export function StreakBadge() {
         .from('user_streaks')
         .select('current_streak, longest_streak')
         .eq('user_id', session.user.id)
-        .limit(1);
+        .maybeSingle();
       
       if (error) {
-        // Silently catch if user_streaks table row does not exist yet
+        // Silently catch if table row does not exist or user is unauthenticated
         return;
       }
 
-      if (data && data.length > 0) {
-        const streakData = data[0];
-        const nextCurrentStreak = streakData.current_streak || 0;
+      if (data) {
+        const nextCurrentStreak = data.current_streak || 0;
         setCurrentStreak(nextCurrentStreak);
-        setLongestStreak(streakData.longest_streak || 0);
+        setLongestStreak(data.longest_streak || 0);
         
         // Pulse animation if streak > 0
         if (nextCurrentStreak > 0) {
@@ -48,6 +47,9 @@ export function StreakBadge() {
           );
           pulseAnimation.current.start();
         }
+      } else {
+        setCurrentStreak(0);
+        setLongestStreak(0);
       }
     } catch (err) {
       console.error(err);

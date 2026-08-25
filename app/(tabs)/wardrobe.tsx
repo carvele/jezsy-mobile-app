@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -51,12 +51,13 @@ export default function WardrobeScreen() {
   const [wearFilter, setWearFilter] = useState<WearFilter>('all');
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedOnce = useRef(false);
 
   const fetchWardrobeData = useCallback(async (isRefresh = false) => {
     if (!session?.user?.id) return;
 
     try {
-      if (!isRefresh) setLoading(true);
+      if (!isRefresh && !hasLoadedOnce.current) setLoading(true);
       const [itemsRes, outfitsRes, capsulesRes] = await Promise.all([
         supabase
           .from('wardrobe_items')
@@ -103,6 +104,7 @@ export default function WardrobeScreen() {
       console.error('Error fetching wardrobe data:', error);
       showToast('Could not load your wardrobe. Please try again.', 'error');
     } finally {
+      hasLoadedOnce.current = true;
       setLoading(false);
     }
   }, [session?.user?.id, showToast]);
