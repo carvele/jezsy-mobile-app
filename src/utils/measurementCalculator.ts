@@ -71,24 +71,22 @@ export interface EstimatedMeasurements {
   overallConfidence: number;
 }
 
-// Gender-differentiated depth multipliers (width-to-circumference ratio).
-// These approximate the elliptical cross-section of human body segments.
-// Based on mean anterior-posterior depth / lateral width ratios from ANSUR-II.
-const DEPTH_MULTIPLIERS = {
-  female: { bust: 2.62, waist: 2.48, hips: 2.71 },
-  male:   { bust: 2.45, waist: 2.55, hips: 2.40 },
-  // Non-binary / prefer not to say: weighted average
-  'non-binary':          { bust: 2.54, waist: 2.52, hips: 2.56 },
-  'prefer_not_to_say':   { bust: 2.54, waist: 2.52, hips: 2.56 },
+// Gender-differentiated sagittal depth-to-breadth ratios (depth = width * depthRatio).
+// Derived from mean anterior-posterior depth / lateral width ratios from ANSUR-II.
+const DEPTH_RATIOS = {
+  female: { bust: 0.72, waist: 0.68, hips: 0.76 },
+  male:   { bust: 0.66, waist: 0.71, hips: 0.64 },
+  'non-binary':        { bust: 0.69, waist: 0.70, hips: 0.70 },
+  'prefer_not_to_say': { bust: 0.69, waist: 0.70, hips: 0.70 },
 } as const;
 
-// BMI adjustment coefficients for circumference correction.
-// Accounts for the fact that a higher BMI adds depth disproportionately.
-const BMI_ADJUSTMENTS = {
-  female: { bust: 0.45, waist: 0.80, hips: 0.65 },
-  male:   { bust: 0.38, waist: 0.85, hips: 0.50 },
-  'non-binary':          { bust: 0.42, waist: 0.82, hips: 0.58 },
-  'prefer_not_to_say':   { bust: 0.42, waist: 0.82, hips: 0.58 },
+// BMI depth adjustment coefficients (cm depth per unit of BMI delta).
+// Symmetrical expansion/contraction around reference BMI 22.0.
+const BMI_DEPTH_ADJUSTMENTS = {
+  female: { bust: 0.28, waist: 0.45, hips: 0.38 },
+  male:   { bust: 0.24, waist: 0.48, hips: 0.32 },
+  'non-binary':        { bust: 0.26, waist: 0.46, hips: 0.35 },
+  'prefer_not_to_say': { bust: 0.26, waist: 0.46, hips: 0.35 },
 } as const;
 
 // Waist narrows relative to hips/shoulders; this factor accounts for the
@@ -106,14 +104,12 @@ function computeBMI(weightKg: number, heightCm: number): number {
 }
 
 /**
- * Ramanujan's approximation of an ellipse perimeter, accurate to better than
+ * Ramanujan's second approximation of an ellipse perimeter, accurate to better than
  * 1e-5 for human body eccentricities.
  *
- * With a measured depth the cross-section is a real ellipse, so this replaces
- * the width x depth_multiplier shortcut entirely -- that multiplier existed
- * only because depth was unknown.
+ * P ≈ π(a + b) * [ 1 + (3h) / (10 + √(4 - 3h)) ] where h = (a - b)² / (a + b)²
  */
-function ellipsePerimeter(widthCm: number, depthCm: number): number {
+export function ellipsePerimeter(widthCm: number, depthCm: number): number {
   const a = widthCm / 2;
   const b = depthCm / 2;
   if (a <= 0 || b <= 0) return 0;
@@ -136,11 +132,6 @@ function ratioConfidence(ratio: number, expectedMin: number, expectedMax: number
 
 /**
  * Circumferences from measured cross-sections alone.
- *
- * Exposed so the scan can apply a side pass after the front burst has already
- * been averaged, rather than re-running the whole estimate: the linear
- * measurements are unaffected by depth and there is no reason to disturb
- * their outlier rejection.
  */
 export function circumferencesFromCrossSections(
   crossSections: { bust: CrossSection; waist: CrossSection; hips: CrossSection },
@@ -165,7 +156,8 @@ function clamp(val: number, min: number, max: number): number {
 }
 
 /**
- * Computes all body measurements from pose ratios and biometric inputs.
+ * Computes all body measurements from pose ratios and biometric inputs using
+ * Ramanujan's 2nd Elliptic Approximation and ANSUR-II depth regression models.
  */
 export function computeMeasurements(input: MeasurementInput): EstimatedMeasurements {
   const { bodyRatios, heightCm, weightKg, gender, crossSections } = input;
@@ -185,37 +177,38 @@ export function computeMeasurements(input: MeasurementInput): EstimatedMeasureme
   const rawBustWidth     = bodyRatios.bustWidthRatio      * cmPerUnit;
   const rawHipWidth      = bodyRatios.hipWidthRatio       * cmPerUnit;
 
-  const dm  = DEPTH_MULTIPLIERS[gender];
-  const bma = BMI_ADJUSTMENTS[gender];
+  const dr  = DEPTH_RATIOS[gender];
+  const bda = BMI_DEPTH_ADJUSTMENTS[gender];
   const wr  = WAIST_RATIO[gender];
 
-  // --- Circumference estimates ---
-  const measured = crossSections
-    ? {
-        bust: ellipsePerimeter(
-          crossSections.bust.widthRatio * cmPerUnit,
-          crossSections.bust.depthRatio * cmPerUnit,
-        ),
-        waist: ellipsePerimeter(
-          crossSections.waist.widthRatio * cmPerUnit,
-          crossSections.waist.depthRatio * cmPerUnit,
-        ),
-        hips: ellipsePerimeter(
-          crossSections.hips.widthRatio * cmPerUnit,
-          crossSections.hips.depthRatio * cmPerUnit,
-        ),
-      }
-    : null;
+  // --- Circumference estimates via Ramanujan's 2nd Elliptic Approximation ---
+  let rawBust: number;
+  let rawWaist: number;
+  let rawHips: number;
 
-  const rawBust = Math.round(
-    measured?.bust || rawBustWidth * dm.bust + bma.bust * bmiDelta,
-  );
-  const rawWaist = Math.round(
-    measured?.waist || rawHipWidth * wr * dm.waist + bma.waist * bmiDelta,
-  );
-  const rawHips = Math.round(
-    measured?.hips || rawHipWidth * dm.hips + bma.hips * bmiDelta,
-  );
+  if (crossSections) {
+    // Dual-view cross-section scan: measured width & measured depth
+    rawBust = Math.round(
+      ellipsePerimeter(crossSections.bust.widthRatio * cmPerUnit, crossSections.bust.depthRatio * cmPerUnit)
+    );
+    rawWaist = Math.round(
+      ellipsePerimeter(crossSections.waist.widthRatio * cmPerUnit, crossSections.waist.depthRatio * cmPerUnit)
+    );
+    rawHips = Math.round(
+      ellipsePerimeter(crossSections.hips.widthRatio * cmPerUnit, crossSections.hips.depthRatio * cmPerUnit)
+    );
+  } else {
+    // Single monocular frontal scan: Ramanujan ellipse with ANSUR-II demographic depth regression
+    const bustDepth = Math.max(12, rawBustWidth * dr.bust + bda.bust * bmiDelta);
+    rawBust = Math.round(ellipsePerimeter(rawBustWidth, bustDepth));
+
+    const waistWidth = rawHipWidth * wr;
+    const waistDepth = Math.max(10, waistWidth * dr.waist + bda.waist * bmiDelta);
+    rawWaist = Math.round(ellipsePerimeter(waistWidth, waistDepth));
+
+    const hipDepth = Math.max(14, rawHipWidth * dr.hips + bda.hips * bmiDelta);
+    rawHips = Math.round(ellipsePerimeter(rawHipWidth, hipDepth));
+  }
 
   // --- Physiological Sanity Clamping (Adult boundaries) ---
   const shoulderWidth = clamp(Math.round(rawShoulderWidth), 30, 58);
@@ -234,9 +227,9 @@ export function computeMeasurements(input: MeasurementInput): EstimatedMeasureme
     torsoLength:   ratioConfidence(bodyRatios.torsoLengthRatio,   0.25, 0.40),
     legLength:     ratioConfidence(bodyRatios.legLengthRatio,     0.40, 0.58),
     inseam:        ratioConfidence(bodyRatios.inseamRatio,        0.35, 0.52),
-    bust:  measured ? 0.92 : ratioConfidence(bodyRatios.bustWidthRatio, 0.19, 0.38) * 0.85,
-    waist: measured ? 0.90 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.75,
-    hips:  measured ? 0.92 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.85,
+    bust:  crossSections ? 0.92 : ratioConfidence(bodyRatios.bustWidthRatio, 0.19, 0.38) * 0.85,
+    waist: crossSections ? 0.90 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.75,
+    hips:  crossSections ? 0.92 : ratioConfidence(bodyRatios.hipWidthRatio,  0.14, 0.28) * 0.85,
   };
 
   const overallConfidence = Math.round(

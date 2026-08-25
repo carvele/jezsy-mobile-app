@@ -30,6 +30,7 @@ type Product = Database['public']['Tables']['products']['Row'];
 type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category' | 'image_url' | 'occasion' | 'base_pose_type'>;
 
 import { WebPoseTracker } from '@/src/utils/webPoseDetection';
+import { PoseLandmarkFilter } from '@/src/utils/oneEuroFilter';
 import type { Landmark } from '@/src/utils/poseDetector';
 
 interface WebCameraFeedProps {
@@ -102,6 +103,8 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
         let isProcessing = false;
         let lastInferenceTime = 0;
 
+        const filter = new PoseLandmarkFilter(1.2, 0.015, 1.0);
+
         function detectLoop() {
           if (!isMounted) return;
           const now = performance.now();
@@ -115,10 +118,11 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
             isProcessing = true;
             lastInferenceTime = now;
             try {
-              const landmarks = tracker.detect(videoRef.current, now);
+              const rawLandmarks = tracker.detect(videoRef.current, now);
               const canvas = occlusionCanvasRef.current;
 
-              if (landmarks) {
+              if (rawLandmarks) {
+                const landmarks = filter.filterLandmarks(rawLandmarks, now);
                 if (onPoseResultsRef.current) {
                   onPoseResultsRef.current(landmarks);
                 }
@@ -358,6 +362,11 @@ export default function ARTryOnScreen() {
     [currentPose, stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity]
   );
   
+  const nativeFilterRef = React.useRef<PoseLandmarkFilter | null>(null);
+  if (!nativeFilterRef.current) {
+    nativeFilterRef.current = new PoseLandmarkFilter(1.2, 0.015, 1.0);
+  }
+
   // Pose Detection Hook (Native)
   const poseDetection = usePoseDetection({
     onResults: (result) => {
@@ -371,7 +380,8 @@ export default function ARTryOnScreen() {
         z: p.z || 0,
         visibility: p.visibility ?? p.presence ?? 0,
       }));
-      handlePoseResults(normalizedLandmarks as any);
+      const smoothedLandmarks = nativeFilterRef.current?.filterLandmarks(normalizedLandmarks as any) ?? normalizedLandmarks;
+      handlePoseResults(smoothedLandmarks as any);
     },
     onError: (e) => console.error(e)
   }, RunningMode.LIVE_STREAM, 'pose_landmarker_lite.task', {
