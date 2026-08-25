@@ -13,6 +13,7 @@ import { useCart } from '@/src/context/CartContext';
 import { StreakBadge } from '@/src/components/StreakBadge';
 import { useToast } from '@/src/context/ToastContext';
 import { statusBucket } from '@/src/utils/reservationStatus';
+import { SystemTourModal } from '@/src/components/SystemTourModal';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
@@ -20,6 +21,7 @@ export default function ProfileScreen() {
   const { showToast } = useToast();
   const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [showTour, setShowTour] = useState(false);
   const router = useRouter();
   const { wishlistIds } = useWishlist();
   const { itemCount } = useCart();
@@ -270,6 +272,12 @@ export default function ProfileScreen() {
               () => router.push('/profile/notifications-settings' as any),
             )}
             {renderSettingItem(
+              'sparkles',
+              'App Tour & Feature Guide',
+              'Digital wardrobe, AR try-on, and AI styling overview',
+              () => setShowTour(true),
+            )}
+            {renderSettingItem(
               'questionmark.circle',
               'Help & FAQ',
               'Rentals, fittings, payments, & returns',
@@ -294,6 +302,8 @@ export default function ProfileScreen() {
           <Text style={[styles.signOutText, { color: colors.error }]}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <SystemTourModal visible={showTour} onClose={() => setShowTour(false)} />
     </SafeAreaView>
   );
 }

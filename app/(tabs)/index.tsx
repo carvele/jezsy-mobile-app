@@ -36,6 +36,9 @@ import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 import { StyleGallery } from '@/components/StyleGallery';
 import { useWishlist } from '@/src/context/WishlistContext';
+import { useAuth } from '@/src/context/AuthContext';
+import { SystemTourModal } from '@/src/components/SystemTourModal';
+import { hasSeenSystemTour, markSystemTourSeen } from '@/src/utils/tutorial';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -77,7 +80,33 @@ export default function HomeScreen() {
   const colors = Colors[theme];
   const { showToast } = useToast();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { session } = useAuth();
   const router = useRouter();
+
+  const [showTour, setShowTour] = useState(false);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let isCancelled = false;
+    hasSeenSystemTour(session.user.id).then((seen) => {
+      if (!seen && !isCancelled) {
+        const timer = setTimeout(() => {
+          if (!isCancelled) setShowTour(true);
+        }, 800);
+        return () => clearTimeout(timer);
+      }
+    });
+    return () => {
+      isCancelled = true;
+    };
+  }, [session?.user?.id]);
+
+  const handleCloseTour = useCallback(() => {
+    setShowTour(false);
+    if (session?.user?.id) {
+      markSystemTourSeen(session.user.id);
+    }
+  }, [session?.user?.id]);
 
   const fetchProducts = async (fromCache = false) => {
     // Immediately seed UI from cache so there's something to look at before the
@@ -523,6 +552,8 @@ export default function HomeScreen() {
 
         <RecentlyViewed />
       </ScrollView>
+
+      <SystemTourModal visible={showTour} onClose={handleCloseTour} />
     </SafeAreaView>
   );
 }
