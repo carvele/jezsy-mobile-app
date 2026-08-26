@@ -168,12 +168,12 @@ function InitialLayout() {
     const onResetPassword = pathSegments[1] === 'reset-password';
 
     // CRITICAL: If we've already confirmed a fully authenticated session at
-    // least once this mount, AND the user is inside the tabs group, skip ALL
+    // least once this mount, AND the user is inside the app (not in auth), skip ALL
     // redirects. Supabase silent token refreshes and syncProfile() calls
     // temporarily set isProfileLoading=true (making flagsReady=false) and can
     // transiently null out profile — which would otherwise redirect the user
-    // back to auth/home while they're mid-tab-switch on web.
-    if (hasAuthenticated.current && inTabsGroup && !isPasswordRecovery && !profile?.deleted) {
+    // back to auth/home while they're navigating anywhere in the app.
+    if (hasAuthenticated.current && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
       setRouteSettled(true);
       return;
     }
