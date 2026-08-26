@@ -1,11 +1,4 @@
-/**
- * measurementCalculator.ts
- *
- * Anthropometric measurement engine prioritizing multi-view cross-sectional
- * extraction for circumferences.
- */
-
-import type { BodyRatios } from './poseDetector';
+import type { BodyRatios, WorldLandmark } from './poseDetector';
 
 export type Gender = 'male' | 'female' | 'non-binary' | 'prefer_not_to_say';
 
@@ -19,6 +12,7 @@ export interface MeasurementInput {
   heightCm: number;
   weightKg: number;
   gender: Gender;
+  worldLandmarks?: WorldLandmark[];
   /**
    * Dual-view cross-section data (width from front scan, depth from side scan).
    * This is the primary driver of accurate circumference measurements.
@@ -65,25 +59,38 @@ export function ellipsePerimeter(widthCm: number, depthCm: number): number {
  * Computes all body measurements from pose ratios and cross-sections.
  */
 export function computeMeasurements(input: MeasurementInput): EstimatedMeasurements {
-  const { bodyRatios, heightCm, crossSections } = input;
+  const { bodyRatios, heightCm, crossSections, worldLandmarks } = input;
   
   // Base linear scale (pixels to cm) calibrated entirely on user height
   const cmPerUnit = heightCm;
 
-  // --- Linear measurements (direct calibrated pixel scaling) ---
-  // Baseline uncertainty for linear body spans is roughly ±3cm depending on camera focal length distortion
-  const linearUncertainty = 3.5;
+  // --- Linear measurements (direct calibrated pixel scaling or metric 3D points) ---
+  const linearUncertainty = worldLandmarks ? 1.5 : 3.5;
 
-  const getLinear = (ratio: number): MeasurementEstimate => ({
+  const getLinearFallback = (ratio: number): MeasurementEstimate => ({
     valueCm: Math.round(ratio * cmPerUnit * 10) / 10,
     uncertaintyCm: linearUncertainty
   });
 
-  const shoulderWidth = getLinear(bodyRatios.shoulderWidthRatio);
-  const armLength = getLinear(bodyRatios.armLengthRatio);
-  const torsoLength = getLinear(bodyRatios.torsoLengthRatio);
-  const legLength = getLinear(bodyRatios.legLengthRatio);
-  const inseam = getLinear(bodyRatios.inseamRatio);
+  const getMetricDistance = (idxA: number, idxB: number, fallbackRatio: number): MeasurementEstimate => {
+    if (worldLandmarks && worldLandmarks[idxA] && worldLandmarks[idxB]) {
+      const p1 = worldLandmarks[idxA];
+      const p2 = worldLandmarks[idxB];
+      const dx = p1.x - p2.x;
+      const dy = p1.y - p2.y;
+      const dz = p1.z - p2.z;
+      // World landmarks are in meters, convert to cm
+      const distCm = Math.sqrt(dx*dx + dy*dy + dz*dz) * 100;
+      return { valueCm: Math.round(distCm * 10) / 10, uncertaintyCm: linearUncertainty };
+    }
+    return getLinearFallback(fallbackRatio);
+  };
+
+  const shoulderWidth = getMetricDistance(11, 12, bodyRatios.shoulderWidthRatio);
+  const armLength = getMetricDistance(12, 16, bodyRatios.armLengthRatio); // Right shoulder to right wrist
+  const torsoLength = getMetricDistance(11, 23, bodyRatios.torsoLengthRatio); // Left shoulder to left hip
+  const legLength = getMetricDistance(23, 27, bodyRatios.legLengthRatio); // Left hip to left ankle
+  const inseam = getLinearFallback(bodyRatios.inseamRatio);
 
   // --- Circumference estimates ---
   let bust: MeasurementEstimate;

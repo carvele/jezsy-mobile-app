@@ -18,8 +18,16 @@
 export interface Landmark {
   x: number;      // normalized [0, 1] horizontal position
   y: number;      // normalized [0, 1] vertical position
-  z: number;      // depth (relative, less reliable from single camera)
+  z?: number;     // depth (relative, less reliable from single camera)
   visibility: number; // confidence [0, 1]
+}
+
+export interface WorldLandmark extends Landmark {
+  z: number;      // Metric depth in meters
+}
+
+export interface StageLandmark extends Landmark {
+  z: number;
 }
 
 export interface BodyRatios {
@@ -168,7 +176,10 @@ function cross(a: Vec3, b: Vec3): Vec3 {
 }
 
 /**
- * Builds a robust Body Coordinate Frame from the torso polygon.
+ * Builds a robust Body Coordinate Frame from the torso polygon using Metric 3D world landmarks.
+ * Assumes a coordinate system where +X is right, +Y is up (or down), and handles them correctly.
+ * For MediaPipe world landmarks: +X is right, +Y is down, +Z is forward/away from camera.
+ * 
  * - Right axis: Left shoulder -> Right shoulder
  * - Up axis: Mid-hip -> Mid-shoulder
  * - Forward axis: Cross product of Right and Up
@@ -191,13 +202,13 @@ export function extractBodyCoordinateFrame(landmarks: Landmark[]): BodyCoordinat
   const midShoulder = {
     x: (leftShoulder.x + rightShoulder.x) / 2,
     y: (leftShoulder.y + rightShoulder.y) / 2,
-    z: (leftShoulder.z ?? 0 + (rightShoulder.z ?? 0)) / 2
+    z: ((leftShoulder.z ?? 0) + (rightShoulder.z ?? 0)) / 2
   };
 
   const midHip = {
     x: (leftHip.x + rightHip.x) / 2,
     y: (leftHip.y + rightHip.y) / 2,
-    z: (leftHip.z ?? 0 + (rightHip.z ?? 0)) / 2
+    z: ((leftHip.z ?? 0) + (rightHip.z ?? 0)) / 2
   };
 
   // Right axis: vector pointing from left shoulder to right shoulder
@@ -209,14 +220,25 @@ export function extractBodyCoordinateFrame(landmarks: Landmark[]): BodyCoordinat
   const right = normalize(rightRaw);
 
   // Up axis: vector pointing from mid-hip to mid-shoulder
+  // In MediaPipe, Y is down, so midShoulder.y < midHip.y. 
+  // If we want 'up' to point anatomically up towards the head, we use midShoulder - midHip
+  // which will have a negative Y component in MediaPipe space.
   const upRaw = {
     x: midShoulder.x - midHip.x,
     y: midShoulder.y - midHip.y,
-    z: midShoulder.z - midHip.z
+    z: (midShoulder.z ?? 0) - (midHip.z ?? 0)
   };
-  // Ensure 'up' is exactly orthogonal to 'right'
-  const forwardRaw = cross(right, normalize(upRaw));
+  const upNormalized = normalize(upRaw);
+  
+  // Forward axis: orthogonal to right and up.
+  // In a right-handed system (X right, Y down, Z away):
+  // right x up points backwards (-Z) towards camera.
+  // Let's ensure forward points IN towards the scene (+Z in MediaPipe).
+  const forwardRaw = cross(right, upNormalized);
   const forward = normalize(forwardRaw);
+  
+  // Enforce strict Gram-Schmidt orthogonalization for 'up'
+  // so that (right, up, forward) is a perfectly orthogonal 3D basis.
   const up = cross(forward, right);
 
   return {

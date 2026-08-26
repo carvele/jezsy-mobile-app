@@ -35,10 +35,11 @@ type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' |
 import { WebPoseTracker } from '@/src/utils/webPoseDetection';
 import { PoseLandmarkFilter } from '@/src/utils/oneEuroFilter';
 import type { Landmark } from '@/src/utils/poseDetector';
+import type { PoseFrame } from '@/src/types/pose';
 import { GarmentRenderer } from '@/src/components/AR/GarmentRenderer';
 
 interface WebCameraFeedProps {
-  onPoseResults?: (landmarks: Landmark[]) => void;
+  onPoseResults?: (poseFrame: PoseFrame) => void;
   onTrackerReady?: (ready: boolean) => void;
 }
 
@@ -130,72 +131,12 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                 const worldLandmarks = detectResult.worldLandmarks;
                 const landmarks = filter.filterLandmarks(rawLandmarks, now);
                 if (onPoseResultsRef.current) {
-                  // @ts-ignore - Handle expanded args
-                  onPoseResultsRef.current(landmarks, worldLandmarks);
-                }
-
-                // Layer 3 Occlusion Sandwich: Render foreground arms, hands & neck over the garment
-                if (canvas && videoRef.current) {
-                  const ctx = canvas.getContext('2d');
-                  const videoWidth = videoRef.current.videoWidth || canvas.width;
-                  const videoHeight = videoRef.current.videoHeight || canvas.height;
-
-                  if (ctx && videoWidth > 0) {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    const occluders = getForegroundOcclusionSegments(landmarks);
-                    if (occluders.length > 0) {
-                      ctx.save();
-                      let minX = canvas.width;
-                      let minY = canvas.height;
-                      let maxX = 0;
-                      let maxY = 0;
-
-
-                      for (const occ of occluders) {
-                        const sx = occ.start.x * canvas.width;
-                        const sy = occ.start.y * canvas.height;
-                        const ex = occ.end.x * canvas.width;
-                        const ey = occ.end.y * canvas.height;
-                        const r = Math.max(8, occ.radius * canvas.width);
-
-                        minX = Math.min(minX, sx - r, ex - r);
-                        minY = Math.min(minY, sy - r, ey - r);
-                        maxX = Math.max(maxX, sx + r, ex + r);
-                        maxY = Math.max(maxY, sy + r, ey + r);
-
-                        ctx.beginPath();
-                        ctx.moveTo(sx, sy);
-                        ctx.lineTo(ex, ey);
-                        ctx.lineWidth = r * 2;
-                        ctx.lineCap = 'round';
-                        ctx.strokeStyle = '#FFFFFF';
-                        ctx.stroke();
-                      }
-
-                      // Clamp bounding box to canvas dimensions
-                      const cropX = Math.max(0, Math.floor(minX));
-                      const cropY = Math.max(0, Math.floor(minY));
-                      const cropW = Math.max(1, Math.min(canvas.width - cropX, Math.ceil(maxX - cropX)));
-                      const cropH = Math.max(1, Math.min(canvas.height - cropY, Math.ceil(maxY - cropY)));
-
-                      // Scale to native video dimensions for 9-arg drawImage sub-rect copy
-                      const scaleX = videoWidth / canvas.width;
-                      const scaleY = videoHeight / canvas.height;
-
-                      const sourceX = cropX * scaleX;
-                      const sourceY = cropY * scaleY;
-                      const sourceW = cropW * scaleX;
-                      const sourceH = cropH * scaleY;
-
-                      ctx.globalCompositeOperation = 'source-in';
-                      ctx.drawImage(
-                        videoRef.current,
-                        sourceX, sourceY, sourceW, sourceH,
-                        cropX, cropY, cropW, cropH
-                      );
-                      ctx.restore();
-                    }
-                  }
+                  onPoseResultsRef.current({
+                    normalizedLandmarks: landmarks,
+                    worldLandmarks: worldLandmarks as any,
+                    segmentation: detectResult.segmentation,
+                    timestamp: now
+                  });
                 }
               } else {
                 filter.reset();
@@ -314,6 +255,31 @@ export default function ARTryOnScreen() {
   const stageWidth = stageLayout.width || Math.min(winWidth || 390, 480);
   const stageHeight = stageLayout.height || Math.min(winHeight || 844, 900);
 
+  // Phase 5: Simulated Ingestion Metadata (Normally fetched from the backend)
+  const garmentMetadata = React.useMemo<import('@/src/types/garment').GarmentMetadata>(() => {
+    const cat = (product?.category || 'shirt').toLowerCase();
+    return {
+      id: product?.id || 'mock',
+      category: cat as any,
+      calibrationVersion: '1.0.0',
+      ingestionStatus: 'AR_READY',
+      anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
+      restPoseMetricWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
+      boneMap: {
+        'Spine': 'mixamorigSpine',
+        'Spine1': 'mixamorigSpine1',
+        'Spine2': 'mixamorigSpine2',
+        'LeftShoulder': 'mixamorigLeftShoulder',
+        'LeftArm': 'mixamorigLeftArm',
+        'LeftForeArm': 'mixamorigLeftForeArm',
+        'RightShoulder': 'mixamorigRightShoulder',
+        'RightArm': 'mixamorigRightArm',
+        'RightForeArm': 'mixamorigRightForeArm'
+      },
+      restPose: 'A_POSE'
+    };
+  }, [product]);
+
   // Biometric consent check on mount
   useEffect(() => {
     AsyncStorage.getItem('@jezsy_camera_biometric_consent').then((val) => {
@@ -329,7 +295,9 @@ export default function ARTryOnScreen() {
   }, []);
 
   const handlePoseResults = useCallback(
-    (landmarks: Landmark[], worldLandmarks?: Landmark[]) => {
+    (poseFrame: PoseFrame) => {
+      const { normalizedLandmarks: landmarks, worldLandmarks, segmentation } = poseFrame;
+
       // 1. Construct canonical BodyPose
       const transformCtx = {
         videoWidth: stageWidth,
@@ -339,15 +307,24 @@ export default function ARTryOnScreen() {
         isMirrored: true,
         objectFit: 'cover' as const
       };
-      const pose = constructBodyPose(landmarks, landmarks, transformCtx);
+      
+      const pose = constructBodyPose(landmarks, landmarks, (worldLandmarks || []) as any, transformCtx);
 
       // 2. Generate GarmentFitState driven by garment profile
+      const cat = (product?.category || 'shirt').toLowerCase();
       const garmentProfile: GarmentFitProfile = {
-        category: 'shirt',
+        category: cat as any,
         anchors: {},
-        dimensions: { shoulderWidth: 0.35, chestWidth: 0.4, length: 0.8 }
+        dimensions: {
+          shoulderWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
+          chestWidth: cat === 'dress' ? 0.42 : 0.40,
+          length: cat === 'dress' ? 1.2 : (cat === 'jacket' ? 0.9 : 0.75)
+        }
       };
-      const fitState = calculateGarmentFit(pose, garmentProfile, stageWidth, stageHeight);
+
+
+
+      const fitState = calculateGarmentFit(pose, garmentProfile, stageWidth, stageHeight, garmentMetadata);
       
       const isTracking = pose.trackingState === 'GOOD_FIT' || pose.trackingState === 'TURN_TOO_FAR';
 
@@ -367,10 +344,16 @@ export default function ARTryOnScreen() {
 
         // Phase 4A/4B: Push 3D transform and skinning data directly to the WebGL prototype
         if (garmentRendererRef.current) {
+          const { calculateBoneRotations } = require('@/src/utils/skeletalRetargeter');
+          const boneRotations = calculateBoneRotations(pose.worldLandmarks);
+          
           garmentRendererRef.current.updateTransform(
             { x: fitState.anchor.x, y: fitState.anchor.y, z: fitState.anchor.z },
             fitState.rotation,
             fitState.scale.x,
+            boneRotations,
+            segmentation,
+            landmarks,
             worldLandmarks
           );
         }
@@ -435,12 +418,40 @@ export default function ARTryOnScreen() {
         visibility: p.visibility ?? p.presence ?? 0,
       }));
       const smoothedLandmarks = nativeFilterRef.current?.filterLandmarks(normalizedLandmarks as any) ?? normalizedLandmarks;
-      handlePoseResults(smoothedLandmarks as any, worldLandmarks as any);
+      
+      const smoothedWorldLandmarks = worldLandmarks && worldLandmarks.length > 0 
+        ? nativeFilterRef.current?.filterWorldLandmarks(worldLandmarks as any) 
+        : worldLandmarks;
+        
+      const rawMask = result.results?.[0]?.segmentationMasks?.[0];
+      let segmentation: import('@/src/types/pose').SegmentationFrame | undefined = undefined;
+      const timestamp = Date.now();
+      
+      if (rawMask) {
+        segmentation = {
+          width: 0, // Should be populated from native frame dimensions if available
+          height: 0,
+          timestamp,
+          source: 'native-buffer',
+          data: rawMask
+        };
+      }
+
+      handlePoseResults({
+        normalizedLandmarks: smoothedLandmarks as any,
+        worldLandmarks: smoothedWorldLandmarks as any,
+        segmentation,
+        timestamp
+      });
     },
     onError: (e) => console.error(e)
   }, RunningMode.LIVE_STREAM, 'pose_landmarker_lite.task', {
     numPoses: 1,
-    delegate: Delegate.CPU
+    minPoseDetectionConfidence: 0.35,
+    minPosePresenceConfidence: 0.35,
+    minTrackingConfidence: 0.35,
+    delegate: Delegate.GPU,
+    shouldOutputSegmentationMasks: true,
   });
 
   const fetchProduct = useCallback(async () => {
@@ -978,6 +989,7 @@ export default function ARTryOnScreen() {
                 <GarmentRenderer
                   ref={garmentRendererRef}
                   modelUrl={modelUrl}
+                  metadata={garmentMetadata}
                 />
               </Animated.View>
             </View>
