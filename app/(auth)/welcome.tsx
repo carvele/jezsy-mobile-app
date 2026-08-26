@@ -8,6 +8,8 @@ import {
   Dimensions,
   ActivityIndicator,
   Platform,
+  Modal,
+  SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -51,6 +53,7 @@ export default function WelcomeScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = React.useState(false);
+  const [legalDoc, setLegalDoc] = React.useState<{ label: string; url: string } | null>(null);
 
   const openLegalDocument = async (label: string, url?: string) => {
     if (!url) {
@@ -59,7 +62,7 @@ export default function WelcomeScreen() {
     }
     try {
       if (Platform.OS === 'web') {
-        window.open(url, '_blank');
+        setLegalDoc({ label, url });
       } else {
         await WebBrowser.openBrowserAsync(url, {
           presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
@@ -229,7 +232,29 @@ export default function WelcomeScreen() {
             <Text style={styles.termsLink}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>
+        </View>
       </View>
+
+      {/* Web Legal Modal */}
+      {Platform.OS === 'web' && legalDoc && (
+        <Modal transparent visible animationType="fade" onRequestClose={() => setLegalDoc(null)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{legalDoc.label}</Text>
+                <TouchableOpacity onPress={() => setLegalDoc(null)} style={styles.closeBtn}>
+                  <Text style={styles.closeBtnText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              {/* @ts-ignore */}
+              <iframe
+                src={legalDoc.url}
+                style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -339,6 +364,45 @@ const styles = StyleSheet.create({
   },
   termsLink: {
     color: c.tint,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 600,
+    height: '80%',
+    backgroundColor: '#121212',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#1C1C1E',
+  },
+  modalTitle: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  closeBtn: {
+    padding: Spacing.xs,
+  },
+  closeBtnText: {
+    color: c.tint,
+    fontSize: 16,
     fontWeight: '600',
   },
 });
