@@ -111,7 +111,7 @@ const pushRegistrationPromises = new Map<string, Promise<PushRegistration>>();
 // itself. Still never throws: it also runs fire-and-forget from the login path,
 // where an unhandled rejection must not be able to degrade sign-in.
 export async function savePushTokenToProfile(userId: string): Promise<PushRegistration> {
-  if (IS_EXPO_GO) return { status: "expo-go" };
+  if (IS_EXPO_GO || Platform.OS === 'web') return { status: "expo-go" };
 
   const existingPromise = pushRegistrationPromises.get(userId);
   if (existingPromise) {
