@@ -46,8 +46,9 @@ export function MannequinOutfitPreview({
       {sortedItems.map((item, index) => {
         if (!item.image_url) return null;
 
-        const gType = item.garment_type || item.slot || 'Top';
-        const placement = CATEGORY_PLACEMENT_DEFAULTS[gType] || DEFAULT_FALLBACK_PLACEMENT;
+        const rawType = item.garment_type || item.slot || 'Top';
+        const normalizedType = rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase();
+        const placement = CATEGORY_PLACEMENT_DEFAULTS[normalizedType] || CATEGORY_PLACEMENT_DEFAULTS[rawType] || DEFAULT_FALLBACK_PLACEMENT;
         const baseItemWidth = canvasWidth * (placement.widthPercent || 0.34);
         const baseItemHeight = baseItemWidth * 1.25;
 
