@@ -32,15 +32,6 @@ export default function TabLayout() {
   const barHeight = isCompact ? 64 : 68;
   const iconSize = isCompact ? 20 : 22;
 
-  // Defence in depth for password recovery and non-authenticated users
-  if (isPasswordRecovery) {
-    return <Redirect href="/(auth)/reset-password" />;
-  }
-
-  if (!session) {
-    return <Redirect href="/(auth)/welcome" />;
-  }
-
   const screenOptions = React.useMemo(() => ({
     tabBarActiveTintColor: colors.tint,
     tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)',
@@ -99,6 +90,15 @@ export default function TabLayout() {
       alignItems: 'center' as const,
     },
   }), [colors.tint, isDark, barBottom, horizontalMargin, barHeight, isCompact]);
+
+  // Defence in depth for password recovery and non-authenticated users
+  if (isPasswordRecovery) {
+    return <Redirect href="/(auth)/reset-password" />;
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)/welcome" />;
+  }
 
   return (
     <Tabs screenOptions={screenOptions}>
