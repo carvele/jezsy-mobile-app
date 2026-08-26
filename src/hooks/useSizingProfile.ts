@@ -35,7 +35,21 @@ export function useSizingProfile() {
 
         setFitPreference(profile?.fit_preference || 'regular');
 
-        const m = (metrics?.measurements as UserMeasurements) || null;
+        let m: UserMeasurements | null = null;
+        if (metrics?.measurements) {
+          const raw = metrics.measurements as Record<string, { valueCm: number }>;
+          m = {
+            bust: raw.bust?.valueCm,
+            waist: raw.waist?.valueCm,
+            hips: raw.hips?.valueCm,
+            inseam: raw.inseam?.valueCm,
+            shoulderWidth: raw.shoulderWidth?.valueCm,
+            armLength: raw.armLength?.valueCm,
+            torsoLength: raw.torsoLength?.valueCm,
+            legLength: raw.legLength?.valueCm,
+          };
+        }
+        
         // recommendSize needs at least one of bust/waist/hips to return a size.
         const hasPrimary = !!(m && (m.bust || m.waist || m.hips));
         setMeasurements(hasPrimary ? m : null);

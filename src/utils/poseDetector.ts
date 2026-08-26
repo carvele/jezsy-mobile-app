@@ -145,90 +145,140 @@ export function getPoseConfidence(landmarks: Landmark[]): number {
   );
 }
 
+import type { BodyCoordinateFrame, Vec3 } from '../types/pose';
+
+/**
+ * Normalizes a 3D vector
+ */
+function normalize(v: Vec3): Vec3 {
+  const len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+  if (len < 1e-6) return { x: 0, y: 0, z: 0 };
+  return { x: v.x / len, y: v.y / len, z: v.z / len };
+}
+
+/**
+ * Cross product of two 3D vectors
+ */
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x
+  };
+}
+
+/**
+ * Builds a robust Body Coordinate Frame from the torso polygon.
+ * - Right axis: Left shoulder -> Right shoulder
+ * - Up axis: Mid-hip -> Mid-shoulder
+ * - Forward axis: Cross product of Right and Up
+ */
+export function extractBodyCoordinateFrame(landmarks: Landmark[]): BodyCoordinateFrame {
+  if (landmarks.length < 33) {
+    return {
+      origin: { x: 0, y: 0, z: 0 },
+      right: { x: 1, y: 0, z: 0 },
+      up: { x: 0, y: -1, z: 0 },
+      forward: { x: 0, y: 0, z: 1 }
+    };
+  }
+
+  const leftShoulder = landmarks[L.leftShoulder];
+  const rightShoulder = landmarks[L.rightShoulder];
+  const leftHip = landmarks[L.leftHip];
+  const rightHip = landmarks[L.rightHip];
+
+  const midShoulder = {
+    x: (leftShoulder.x + rightShoulder.x) / 2,
+    y: (leftShoulder.y + rightShoulder.y) / 2,
+    z: (leftShoulder.z ?? 0 + (rightShoulder.z ?? 0)) / 2
+  };
+
+  const midHip = {
+    x: (leftHip.x + rightHip.x) / 2,
+    y: (leftHip.y + rightHip.y) / 2,
+    z: (leftHip.z ?? 0 + (rightHip.z ?? 0)) / 2
+  };
+
+  // Right axis: vector pointing from left shoulder to right shoulder
+  const rightRaw = {
+    x: rightShoulder.x - leftShoulder.x,
+    y: rightShoulder.y - leftShoulder.y,
+    z: (rightShoulder.z ?? 0) - (leftShoulder.z ?? 0)
+  };
+  const right = normalize(rightRaw);
+
+  // Up axis: vector pointing from mid-hip to mid-shoulder
+  const upRaw = {
+    x: midShoulder.x - midHip.x,
+    y: midShoulder.y - midHip.y,
+    z: midShoulder.z - midHip.z
+  };
+  // Ensure 'up' is exactly orthogonal to 'right'
+  const forwardRaw = cross(right, normalize(upRaw));
+  const forward = normalize(forwardRaw);
+  const up = cross(forward, right);
+
+  return {
+    origin: midShoulder,
+    right,
+    up,
+    forward
+  };
+}
+
 /**
  * Extracts normalized body proportion ratios from landmarks.
- * All ratios are relative to the total head-to-ankle pixel height,
- * making them resolution-independent.
+ * All ratios are relative to the measured anatomical nose-to-ankle span.
+ * Note: Z-coordinates in these distances are uncalibrated and relative;
+ * they are NOT true metric 3D distances.
  */
 export function extractBodyRatios(landmarks: Landmark[]): BodyRatios {
   const lm = landmarks;
 
-  // 1. 3D Euclidean Distance calculation (invariant to camera tilt and pitch)
-  const dist3D = (
-    a: Landmark | { x: number; y: number; z: number },
-    b: Landmark | { x: number; y: number; z: number }
-  ) => {
+  const dist2D = (a: { x: number; y: number }, b: { x: number; y: number }) => {
     const dx = a.x - b.x;
     const dy = a.y - b.y;
-    const dz = (a.z ?? 0) - (b.z ?? 0);
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    return Math.sqrt(dx * dx + dy * dy);
   };
 
   const getMidpoint = (a: Landmark, b: Landmark) => ({
     x: (a.x + b.x) / 2,
     y: (a.y + b.y) / 2,
-    z: ((a.z ?? 0) + (b.z ?? 0)) / 2,
   });
 
   const midShoulder = getMidpoint(lm[L.leftShoulder], lm[L.rightShoulder]);
   const midHip = getMidpoint(lm[L.leftHip], lm[L.rightHip]);
   const midAnkle = getMidpoint(lm[L.leftAnkle], lm[L.rightAnkle]);
 
-  // 2. Segmented 3D Height Chain (unrolled anatomical segments)
-  const headToShoulder = dist3D(lm[L.nose], midShoulder);
-  const torsoLength = dist3D(midShoulder, midHip);
-  const legLengthBase = dist3D(midHip, midAnkle);
+  const headToShoulder = dist2D(lm[L.nose], midShoulder);
+  const torsoLength = dist2D(midShoulder, midHip);
+  const legLengthBase = dist2D(midHip, midAnkle);
 
-  // Nose-to-ankle chain represents ~83% of total standing stature
-  const unrolledNoseToAnkle = headToShoulder + torsoLength + legLengthBase;
-  const estimatedFullStatureSpan = Math.max(0.01, unrolledNoseToAnkle / 0.83);
+  // Use the directly observable anatomical span as the denominator,
+  // without applying unverified 0.83 stature assumptions.
+  const visualBodySpan = Math.max(0.01, headToShoulder + torsoLength + legLengthBase);
 
-  // 3. True 3D Widths and Appendages
-  const shoulderWidth = dist3D(lm[L.leftShoulder], lm[L.rightShoulder]);
-  const hipWidth = dist3D(lm[L.leftHip], lm[L.rightHip]);
+  const shoulderWidth = dist2D(lm[L.leftShoulder], lm[L.rightShoulder]);
+  const hipWidth = dist2D(lm[L.leftHip], lm[L.rightHip]);
 
-  const leftArm =
-    dist3D(lm[L.leftShoulder], lm[L.leftElbow]) +
-    dist3D(lm[L.leftElbow], lm[L.leftWrist]);
-  const rightArm =
-    dist3D(lm[L.rightShoulder], lm[L.rightElbow]) +
-    dist3D(lm[L.rightElbow], lm[L.rightWrist]);
+  const leftArm = dist2D(lm[L.leftShoulder], lm[L.leftElbow]) + dist2D(lm[L.leftElbow], lm[L.leftWrist]);
+  const rightArm = dist2D(lm[L.rightShoulder], lm[L.rightElbow]) + dist2D(lm[L.rightElbow], lm[L.rightWrist]);
   const armLength = (leftArm + rightArm) / 2;
 
-  const leftLeg =
-    dist3D(lm[L.leftHip], lm[L.leftKnee]) +
-    dist3D(lm[L.leftKnee], lm[L.leftAnkle]);
-  const rightLeg =
-    dist3D(lm[L.rightHip], lm[L.rightKnee]) +
-    dist3D(lm[L.rightKnee], lm[L.rightAnkle]);
+  const leftLeg = dist2D(lm[L.leftHip], lm[L.leftKnee]) + dist2D(lm[L.leftKnee], lm[L.leftAnkle]);
+  const rightLeg = dist2D(lm[L.rightHip], lm[L.rightKnee]) + dist2D(lm[L.rightKnee], lm[L.rightAnkle]);
   const legLength = (leftLeg + rightLeg) / 2;
 
-  const inseam = legLengthBase * 0.92;
-  const bustWidth = shoulderWidth * 1.05;
-
-  // 4. Dynamic Waist Derivation (Using 3D interpolation along shoulder-to-hip line)
-  const WAIST_DROP_RATIO = 0.42;
-  const leftWaist = {
-    x: lm[L.leftShoulder].x + (lm[L.leftHip].x - lm[L.leftShoulder].x) * WAIST_DROP_RATIO,
-    y: lm[L.leftShoulder].y + (lm[L.leftHip].y - lm[L.leftShoulder].y) * WAIST_DROP_RATIO,
-    z: (lm[L.leftShoulder].z ?? 0) + ((lm[L.leftHip].z ?? 0) - (lm[L.leftShoulder].z ?? 0)) * WAIST_DROP_RATIO,
-  };
-  const rightWaist = {
-    x: lm[L.rightShoulder].x + (lm[L.rightHip].x - lm[L.rightShoulder].x) * WAIST_DROP_RATIO,
-    y: lm[L.rightShoulder].y + (lm[L.rightHip].y - lm[L.rightShoulder].y) * WAIST_DROP_RATIO,
-    z: (lm[L.rightShoulder].z ?? 0) + ((lm[L.rightHip].z ?? 0) - (lm[L.rightShoulder].z ?? 0)) * WAIST_DROP_RATIO,
-  };
-  const rawWaistWidth = dist3D(leftWaist, rightWaist);
-
+  // Derive uncalibrated ratios
   return {
-    shoulderWidthRatio:  shoulderWidth / estimatedFullStatureSpan,
-    hipWidthRatio:       hipWidth / estimatedFullStatureSpan,
-    torsoLengthRatio:    torsoLength / estimatedFullStatureSpan,
-    armLengthRatio:      armLength / estimatedFullStatureSpan,
-    legLengthRatio:      legLength / estimatedFullStatureSpan,
-    inseamRatio:         inseam / estimatedFullStatureSpan,
-    headToAnkleRatio:    unrolledNoseToAnkle / estimatedFullStatureSpan,
-    bustWidthRatio:      bustWidth / estimatedFullStatureSpan,
-    rawWaistWidthRatio:  rawWaistWidth / estimatedFullStatureSpan,
+    shoulderWidthRatio:  shoulderWidth / visualBodySpan,
+    hipWidthRatio:       hipWidth / visualBodySpan,
+    torsoLengthRatio:    torsoLength / visualBodySpan,
+    armLengthRatio:      armLength / visualBodySpan,
+    legLengthRatio:      legLength / visualBodySpan,
+    inseamRatio:         (legLengthBase * 0.92) / visualBodySpan,
+    headToAnkleRatio:    1.0, // Baseline normalized to itself
+    bustWidthRatio:      (shoulderWidth * 1.05) / visualBodySpan,
   };
 }

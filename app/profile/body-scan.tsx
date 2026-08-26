@@ -35,7 +35,7 @@ import {
 } from "@/src/utils/poseDetector";
 import {
   computeMeasurements,
-  circumferencesFromCrossSections,
+  ellipsePerimeter,
   type Gender,
 } from "@/src/utils/measurementCalculator";
 import { extractBodyExtents, type BodyExtents, type MaskLike } from "@/src/utils/bodyMask";
@@ -187,18 +187,18 @@ export default function BodyScanScreen() {
     let final = result;
 
     if (width && depth && height) {
-      const measured = circumferencesFromCrossSections(
-        {
-          bust: { widthRatio: width.bust, depthRatio: depth.bust },
-          waist: { widthRatio: width.waist, depthRatio: depth.waist },
-          hips: { widthRatio: width.hips, depthRatio: depth.hips },
-        },
-        height,
-      );
+      // Re-calculate circumferences directly using the primary cross-section pipeline
+      const baseUncertainty = 4.8;
+      const bustVal = Math.round(ellipsePerimeter(width.bust * height, depth.bust * height));
+      const waistVal = Math.round(ellipsePerimeter(width.waist * height, depth.waist * height));
+      const hipsVal = Math.round(ellipsePerimeter(width.hips * height, depth.hips * height));
+      
       final = {
         ...result,
-        ...measured,
-        confidence: { ...result.confidence, bust: 0.95, waist: 0.95, hips: 0.95 },
+        bust: { valueCm: bustVal, uncertaintyCm: baseUncertainty },
+        waist: { valueCm: waistVal, uncertaintyCm: baseUncertainty },
+        hips: { valueCm: hipsVal, uncertaintyCm: baseUncertainty },
+        overallConfidence: 0.9,
       };
     }
 

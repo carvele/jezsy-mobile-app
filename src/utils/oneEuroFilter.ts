@@ -101,8 +101,26 @@ export class PoseLandmarkFilter {
   private yFilters: OneEuroFilter[] = [];
   private zFilters: OneEuroFilter[] = [];
 
-  constructor(minCutoff = 1.2, beta = 0.015, dCutoff = 1.0) {
+  constructor(defaultMinCutoff = 1.2, defaultBeta = 0.015, dCutoff = 1.0) {
     for (let i = 0; i < 33; i++) {
+      let minCutoff = defaultMinCutoff;
+      let beta = defaultBeta;
+
+      // Joint-specific configuration for AR stability vs responsiveness
+      if ([11, 12, 23, 24].includes(i)) {
+        // Torso polygon (shoulders, hips): Needs extremely stable, heavy filtering to prevent garment jitter
+        minCutoff = 0.5;
+        beta = 0.005;
+      } else if ([15, 16, 17, 18, 19, 20, 21, 22].includes(i)) {
+        // Hands and wrists: Need highly responsive, lighter filtering for occlusion and gestural tracking
+        minCutoff = 3.0;
+        beta = 0.05;
+      } else if ([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(i)) {
+        // Head/Face: Moderate filtering
+        minCutoff = 1.0;
+        beta = 0.01;
+      }
+
       this.xFilters.push(new OneEuroFilter(minCutoff, beta, dCutoff));
       this.yFilters.push(new OneEuroFilter(minCutoff, beta, dCutoff));
       this.zFilters.push(new OneEuroFilter(minCutoff * 0.8, beta * 0.5, dCutoff));

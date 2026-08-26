@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform, useWindowDimensions } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Camera, useCameraDevice, useCameraPermission, usePoseDetection, RunningMode, Delegate, NATIVE_VISION_AVAILABLE } from '@/src/utils/nativeVision';
@@ -19,7 +18,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { ConsentModal } from '@/src/components/ConsentModal';
 import { useToast } from '@/src/context/ToastContext';
-import { evaluatePoseMatch, calculateGarmentAutoFit, getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
+import { evaluatePoseMatch, getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
+import { constructBodyPose } from '@/src/utils/poseConstructor';
+import { calculateGarmentFit } from '@/src/utils/garmentFitter';
+import type { GarmentFitProfile } from '@/src/types/garment';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -33,6 +35,7 @@ type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' |
 import { WebPoseTracker } from '@/src/utils/webPoseDetection';
 import { PoseLandmarkFilter } from '@/src/utils/oneEuroFilter';
 import type { Landmark } from '@/src/utils/poseDetector';
+import { GarmentRenderer } from '@/src/components/AR/GarmentRenderer';
 
 interface WebCameraFeedProps {
   onPoseResults?: (landmarks: Landmark[]) => void;
@@ -119,13 +122,16 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
             isProcessing = true;
             lastInferenceTime = now;
             try {
-              const rawLandmarks = tracker.detect(videoRef.current, now);
+              const detectResult = tracker.detect(videoRef.current, now);
               const canvas = occlusionCanvasRef.current;
 
-              if (rawLandmarks) {
+              if (detectResult) {
+                const rawLandmarks = detectResult.landmarks;
+                const worldLandmarks = detectResult.worldLandmarks;
                 const landmarks = filter.filterLandmarks(rawLandmarks, now);
                 if (onPoseResultsRef.current) {
-                  onPoseResultsRef.current(landmarks);
+                  // @ts-ignore - Handle expanded args
+                  onPoseResultsRef.current(landmarks, worldLandmarks);
                 }
 
                 // Layer 3 Occlusion Sandwich: Render foreground arms, hands & neck over the garment
@@ -297,16 +303,11 @@ export default function ARTryOnScreen() {
   const opacity = useSharedValue(0.9);
   const lostFramesRef = React.useRef(0);
   const lastStateUpdateRef = React.useRef(0);
-  const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
+  const garmentRendererRef = React.useRef<any>(null);
 
   const animatedGarmentStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-      { rotate: `${rotateDeg.value}deg` },
-    ],
+    // Phase 4A/4B: Full 3D transform is applied inside GarmentRenderer's WebGL context.
   }));
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
@@ -328,45 +329,54 @@ export default function ARTryOnScreen() {
   }, []);
 
   const handlePoseResults = useCallback(
-    (landmarks: Landmark[]) => {
-      // 1. Continuous real-time 2D similarity transform auto-fit
-      const autoFit = calculateGarmentAutoFit(landmarks, {
+    (landmarks: Landmark[], worldLandmarks?: Landmark[]) => {
+      // 1. Construct canonical BodyPose
+      const transformCtx = {
+        videoWidth: stageWidth,
+        videoHeight: stageHeight,
+        stageWidth,
+        stageHeight,
         isMirrored: true,
-        screenWidth: stageWidth,
-        screenHeight: stageHeight,
-        fitEase: 1.05,
-      });
+        objectFit: 'cover' as const
+      };
+      const pose = constructBodyPose(landmarks, landmarks, transformCtx);
 
-      if (autoFit.isTracking) {
+      // 2. Generate GarmentFitState driven by garment profile
+      const garmentProfile: GarmentFitProfile = {
+        category: 'shirt',
+        anchors: {},
+        dimensions: { shoulderWidth: 0.35, chestWidth: 0.4, length: 0.8 }
+      };
+      const fitState = calculateGarmentFit(pose, garmentProfile, stageWidth, stageHeight);
+      
+      const isTracking = pose.trackingState === 'GOOD_FIT' || pose.trackingState === 'TURN_TOO_FAR';
+
+      if (isTracking) {
         lostFramesRef.current = 0;
 
-        const trackingSpring = {
-          mass: 0.5,
-          damping: 25,
-          stiffness: 250,
-          overshootClamping: true,
-        };
+        // Phase 2: Direct filter binding. We bypass withSpring because One Euro already smoothes the coordinate frame!
+        translateX.value = fitState.anchor.x;
+        translateY.value = fitState.anchor.y;
+        scale.value = fitState.scale.x;
+        
+        const rollDeg = 2 * Math.acos(fitState.rotation.w) * (180 / Math.PI);
+        rotateDeg.value = fitState.rotation.z >= 0 ? rollDeg : -rollDeg;
+        
+        const targetOpacity = pose.trackingState === 'TURN_TOO_FAR' ? 0.3 : 1.0;
+        opacity.value = withTiming(targetOpacity, { duration: 120 }); // Opacity still gets a timing transition for UX
 
-        translateX.value = withSpring(autoFit.targetX, trackingSpring);
-        translateY.value = withSpring(autoFit.targetY, trackingSpring);
-        scale.value = withSpring(autoFit.targetScale, trackingSpring);
-        rotateDeg.value = withSpring(autoFit.targetRotation, trackingSpring);
-        opacity.value = withTiming(autoFit.targetOpacity, { duration: 120 });
-
-        // Continuous 3D Perspective Rotation (Yaw & Pitch) to 3D model-viewer
-        if (Platform.OS === 'web' && iframeRef.current?.contentWindow) {
-          iframeRef.current.contentWindow.postMessage(
-            {
-              type: 'UPDATE_3D_POSE',
-              yaw: autoFit.yawDeg,
-              pitch: autoFit.pitchDeg,
-            },
-            '*'
+        // Phase 4A/4B: Push 3D transform and skinning data directly to the WebGL prototype
+        if (garmentRendererRef.current) {
+          garmentRendererRef.current.updateTransform(
+            { x: fitState.anchor.x, y: fitState.anchor.y, z: fitState.anchor.z },
+            fitState.rotation,
+            fitState.scale.x,
+            worldLandmarks
           );
         }
       } else {
         lostFramesRef.current += 1;
-        // Debounced hysteresis: only return to neutral if lost for >6 consecutive frames (~200ms)
+        // Debounced hysteresis
         if (lostFramesRef.current > 6) {
           translateX.value = withTiming(0, { duration: 250 });
           translateY.value = withTiming(0, { duration: 250 });
@@ -376,13 +386,14 @@ export default function ARTryOnScreen() {
         }
       }
 
-      // 2. Throttled React state updates (every 200ms) to eliminate main-thread re-render stutter
+      // 3. Throttled React state updates (every 200ms)
       const now = performance.now();
       if (now - lastStateUpdateRef.current > 200) {
         lastStateUpdateRef.current = now;
-        setIsTrackerActive(autoFit.isTracking);
+        setIsTrackerActive(isTracking);
 
         if (currentPose) {
+          // V1 evaluatePoseMatch still requires raw normalized landmarks for now
           const match = evaluatePoseMatch(landmarks, currentPose.name, {
             isMirrored: true,
             screenWidth: stageWidth,
@@ -392,7 +403,7 @@ export default function ARTryOnScreen() {
           setIsMatched(match.isMatched);
           setMatchFeedback(match.feedback);
         } else {
-          setMatchFeedback(autoFit.isTracking ? autoFit.feedback : 'Position yourself in frame');
+          setMatchFeedback(isTracking ? (pose.trackingState === 'TURN_TOO_FAR' ? 'Face forward for 2D fitting' : 'Auto-Fit Active') : 'Position yourself in frame');
           setIsMatched(false);
         }
       }
@@ -409,6 +420,8 @@ export default function ARTryOnScreen() {
   const poseDetection = usePoseDetection({
     onResults: (result) => {
       const landmarks = result.results?.[0]?.landmarks?.[0];
+      const worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
+      
       if (!landmarks || landmarks.length === 0) {
         nativeFilterRef.current?.reset();
         return;
@@ -422,7 +435,7 @@ export default function ARTryOnScreen() {
         visibility: p.visibility ?? p.presence ?? 0,
       }));
       const smoothedLandmarks = nativeFilterRef.current?.filterLandmarks(normalizedLandmarks as any) ?? normalizedLandmarks;
-      handlePoseResults(smoothedLandmarks as any);
+      handlePoseResults(smoothedLandmarks as any, worldLandmarks as any);
     },
     onError: (e) => console.error(e)
   }, RunningMode.LIVE_STREAM, 'pose_landmarker_lite.task', {
@@ -515,7 +528,13 @@ export default function ARTryOnScreen() {
   const goBack = useSafeBack('/');
   const handleBack = goBack;
 
-  const isFocused = useIsFocused();
+  const [isFocused, setIsFocused] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
+  );
   const lastSpokenSpeechRef = React.useRef<string>('');
   const isSpeechThrottledRef = React.useRef<boolean>(false);
   const speechTimeoutRef = React.useRef<any>(null);
@@ -956,26 +975,10 @@ export default function ARTryOnScreen() {
                   isMatched && styles.overlayImageMatched,
                 ]}
               >
-                {Platform.OS === 'web' ? (
-                  // @ts-ignore
-                  <iframe
-                    ref={iframeRef}
-                    srcDoc={htmlContentOverlay}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      border: 'none',
-                      background: 'transparent',
-                    }}
-                    allow="xr-spatial-tracking"
-                  />
-                ) : (
-                  <Image
-                    source={{ uri: product.image_url || '' }}
-                    style={styles.overlayImage}
-                    contentFit="contain"
-                  />
-                )}
+                <GarmentRenderer
+                  ref={garmentRendererRef}
+                  modelUrl={modelUrl}
+                />
               </Animated.View>
             </View>
             <View style={[styles.matchBadge, { backgroundColor: isMatched ? 'rgba(52, 199, 89, 0.92)' : 'rgba(0, 0, 0, 0.72)' }]}>

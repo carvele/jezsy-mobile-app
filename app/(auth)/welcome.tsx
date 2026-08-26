@@ -232,7 +232,6 @@ export default function WelcomeScreen() {
             <Text style={styles.termsLink}>Privacy Policy</Text>
           </TouchableOpacity>
         </View>
-        </View>
       </View>
 
       {/* Web Legal Modal */}

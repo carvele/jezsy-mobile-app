@@ -49,6 +49,7 @@ export class WebPoseTracker {
             minPoseDetectionConfidence: 0.35,
             minPosePresenceConfidence: 0.35,
             minTrackingConfidence: 0.35,
+            outputSegmentationMasks: true,
           });
         } catch (gpuErr) {
           console.warn('GPU delegate failed, attempting CPU fallback:', gpuErr);
@@ -64,6 +65,7 @@ export class WebPoseTracker {
             minPoseDetectionConfidence: 0.35,
             minPosePresenceConfidence: 0.35,
             minTrackingConfidence: 0.35,
+            outputSegmentationMasks: true,
           });
         }
 
@@ -85,7 +87,7 @@ export class WebPoseTracker {
     return this.initPromise;
   }
 
-  detect(videoElement: HTMLVideoElement, timestampMs: number): Landmark[] | null {
+  detect(videoElement: HTMLVideoElement, timestampMs: number): { landmarks: Landmark[], worldLandmarks: Landmark[], segmentationMask?: any } | null {
     if (!this.isReady || !this.poseLandmarker || !videoElement || this.isDisposed) return null;
     if (videoElement.readyState < 2) return null; // HAVE_CURRENT_DATA
 
@@ -96,14 +98,24 @@ export class WebPoseTracker {
 
         if (results && results.landmarks && results.landmarks.length > 0) {
           const rawLandmarks = results.landmarks[0];
-          // Map to standard BlazePose 33-point Landmark structure
-          // Strict confidence: default to 0 if visibility or presence is missing
-          return rawLandmarks.map((pt: any) => ({
-            x: pt.x,
-            y: pt.y,
-            z: pt.z || 0,
-            visibility: pt.visibility !== undefined ? pt.visibility : (pt.presence ?? 0),
-          }));
+          const rawWorldLandmarks = results.worldLandmarks?.[0] || [];
+          const mask = results.segmentationMasks?.[0];
+          
+          return {
+            landmarks: rawLandmarks.map((pt: any) => ({
+              x: pt.x,
+              y: pt.y,
+              z: pt.z || 0,
+              visibility: pt.visibility !== undefined ? pt.visibility : (pt.presence ?? 0),
+            })),
+            worldLandmarks: rawWorldLandmarks.map((pt: any) => ({
+              x: pt.x,
+              y: pt.y,
+              z: pt.z || 0,
+              visibility: pt.visibility !== undefined ? pt.visibility : (pt.presence ?? 0),
+            })),
+            segmentationMask: mask
+          };
         }
       }
     } catch (e) {

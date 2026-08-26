@@ -58,10 +58,6 @@ export class BurstCollector {
     this.samples = [];
   }
 
-  /**
-   * Compute the averaged result with outlier rejection.
-   * Returns null if fewer than MIN_FRAMES samples were collected.
-   */
   getResult(): EstimatedMeasurements | null {
     if (this.samples.length < MIN_FRAMES) return null;
 
@@ -69,7 +65,7 @@ export class BurstCollector {
 
     // Build per-field arrays
     for (const key of NUMERIC_KEYS) {
-      filtered[key] = this.samples.map((s) => s[key] as number);
+      filtered[key] = this.samples.map((s) => s[key].valueCm);
     }
 
     // Outlier rejection: remove samples where any field is >2 SD from mean
@@ -86,41 +82,26 @@ export class BurstCollector {
       NUMERIC_KEYS.every((key) => {
         const sd = globalSDs[key];
         if (sd === 0) return true;
-        const z = Math.abs((s[key] as number) - globalMeans[key]) / sd;
+        const z = Math.abs((s[key].valueCm) - globalMeans[key]) / sd;
         return z <= 2.0;
       })
     );
 
     const finalSamples = keptSamples.length >= MIN_FRAMES ? keptSamples : this.samples;
 
-    // Average remaining samples per field
-    const avgMeasurements: Partial<Record<NumericMeasurementKey, number>> = {};
+    const result = {} as EstimatedMeasurements;
     for (const key of NUMERIC_KEYS) {
-      avgMeasurements[key] = Math.round(
-        mean(finalSamples.map((s) => s[key] as number))
-      );
+      const values = finalSamples.map((s) => s[key].valueCm);
+      const uncertainties = finalSamples.map((s) => s[key].uncertaintyCm);
+      result[key] = {
+        valueCm: Math.round(mean(values) * 10) / 10,
+        uncertaintyCm: Math.max(...uncertainties)
+      };
     }
 
-    // Average confidence values
-    const avgConfidence = {
-      shoulderWidth: mean(finalSamples.map((s) => s.confidence.shoulderWidth)),
-      armLength:     mean(finalSamples.map((s) => s.confidence.armLength)),
-      torsoLength:   mean(finalSamples.map((s) => s.confidence.torsoLength)),
-      legLength:     mean(finalSamples.map((s) => s.confidence.legLength)),
-      inseam:        mean(finalSamples.map((s) => s.confidence.inseam)),
-      bust:          mean(finalSamples.map((s) => s.confidence.bust)),
-      waist:         mean(finalSamples.map((s) => s.confidence.waist)),
-      hips:          mean(finalSamples.map((s) => s.confidence.hips)),
-    };
+    const confidences = finalSamples.map((s) => s.overallConfidence).sort();
+    result.overallConfidence = confidences[Math.floor(confidences.length / 2)];
 
-    const overallConfidence =
-      Object.values(avgConfidence).reduce((a, b) => a + b, 0) /
-      Object.values(avgConfidence).length;
-
-    return {
-      ...(avgMeasurements as Required<typeof avgMeasurements>),
-      confidence: avgConfidence,
-      overallConfidence,
-    };
+    return result;
   }
 }

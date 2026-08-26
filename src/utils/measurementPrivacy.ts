@@ -5,9 +5,9 @@
 import { supabase } from '../lib/supabase';
 import type { EstimatedMeasurements } from './measurementCalculator';
 
-export type SanitizedMeasurements = Omit<EstimatedMeasurements, 'confidence' | 'overallConfidence'> & {
+export type SanitizedMeasurements = Omit<EstimatedMeasurements, 'overallConfidence'> & {
   scan_confidence: number;
-  per_field_confidence: EstimatedMeasurements['confidence'];
+  per_field_confidence: Record<string, number>; // Legacy column, fill with dummy or map from uncertainty
 };
 
 /**
@@ -15,11 +15,19 @@ export type SanitizedMeasurements = Omit<EstimatedMeasurements, 'confidence' | '
  * Restructures confidence metrics for the DB schema.
  */
 export function sanitizeForStorage(measurements: EstimatedMeasurements): SanitizedMeasurements {
-  const { confidence, overallConfidence, ...numericalMeasurements } = measurements;
+  const { overallConfidence, ...numericalMeasurements } = measurements;
+  
+  // Map uncertainty back to a 0-1 confidence scale for legacy DB column
+  const per_field_confidence: Record<string, number> = {};
+  for (const [key, estimate] of Object.entries(numericalMeasurements)) {
+    // 3cm uncertainty -> ~0.9 confidence. 12cm uncertainty -> ~0.3 confidence.
+    per_field_confidence[key] = Math.max(0.1, 1.0 - ((estimate.uncertaintyCm - 2) / 10));
+  }
+
   return {
     ...numericalMeasurements,
     scan_confidence: overallConfidence,
-    per_field_confidence: confidence,
+    per_field_confidence,
   };
 }
 
