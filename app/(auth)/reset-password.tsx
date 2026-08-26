@@ -90,7 +90,7 @@ export default function ResetPasswordScreen() {
             <IconSymbol name="lock.fill" size={18} color={colors.secondaryText} />
             <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text }]}
-              placeholder="Enter new password (min. 6 chars)"
+              placeholder="Enter new password (min. 8 chars)"
               placeholderTextColor={colors.secondaryText}
               secureTextEntry={!showPassword}
               value={password}

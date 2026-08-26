@@ -58,7 +58,13 @@ export default function WelcomeScreen() {
       return;
     }
     try {
-      await Linking.openURL(url);
+      if (Platform.OS === 'web') {
+        window.open(url, '_blank');
+      } else {
+        await WebBrowser.openBrowserAsync(url, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+        });
+      }
     } catch {
       showToast(`Could not open the ${label}.`, 'error');
     }

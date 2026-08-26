@@ -408,7 +408,7 @@ export default function ARTryOnScreen() {
   // Pose Detection Hook (Native)
   const poseDetection = usePoseDetection({
     onResults: (result) => {
-      const landmarks = result.results?.[0];
+      const landmarks = result.results?.[0]?.landmarks?.[0];
       if (!landmarks || landmarks.length === 0) {
         nativeFilterRef.current?.reset();
         return;

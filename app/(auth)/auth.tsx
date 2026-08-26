@@ -465,7 +465,7 @@ export default function AuthScreen() {
                   <Mail size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.input}
-                    placeholder={mode === 'forgot' ? 'Enter your registered email' : 'name@example.com'}
+                    placeholder={mode === 'forgot' ? 'Enter your registered email' : 'Enter your email'}
                     placeholderTextColor="rgba(255,255,255,0.45)"
                     value={email}
                     onChangeText={setEmail}
@@ -487,7 +487,7 @@ export default function AuthScreen() {
                   <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.inputWithAction}
-                    placeholder={mode === 'signup' ? 'Create password (min. 6 chars)' : 'Enter your password'}
+                    placeholder={mode === 'signup' ? 'Create password (min. 8 chars)' : 'Enter your password'}
                     placeholderTextColor="rgba(255,255,255,0.45)"
                     value={password}
                     onChangeText={setPassword}
