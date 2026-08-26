@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { WebView } from 'react-native-webview';
 import { Colors, Spacing } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
@@ -60,17 +61,7 @@ export default function WelcomeScreen() {
       showToast(`${label} link is not configured yet.`, 'info');
       return;
     }
-    try {
-      if (Platform.OS === 'web') {
-        setLegalDoc({ label, url });
-      } else {
-        await WebBrowser.openBrowserAsync(url, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-        });
-      }
-    } catch {
-      showToast(`Could not open the ${label}.`, 'error');
-    }
+    setLegalDoc({ label, url });
   };
 
   const handleGoogleSignIn = async () => {
@@ -234,8 +225,8 @@ export default function WelcomeScreen() {
         </View>
       </View>
 
-      {/* Web Legal Modal */}
-      {Platform.OS === 'web' && legalDoc && (
+      {/* Internal Legal Modal */}
+      {legalDoc && (
         <Modal transparent visible animationType="fade" onRequestClose={() => setLegalDoc(null)}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -245,11 +236,18 @@ export default function WelcomeScreen() {
                   <Text style={styles.closeBtnText}>Done</Text>
                 </TouchableOpacity>
               </View>
-              {/* @ts-ignore */}
-              <iframe
-                src={legalDoc.url}
-                style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
-              />
+              {Platform.OS === 'web' ? (
+                /* @ts-ignore */
+                <iframe
+                  src={legalDoc.url}
+                  style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                />
+              ) : (
+                <WebView
+                  source={{ uri: legalDoc.url }}
+                  style={{ flex: 1, width: '100%', height: '100%' }}
+                />
+              )}
             </View>
           </View>
         </Modal>

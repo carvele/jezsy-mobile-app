@@ -120,6 +120,8 @@ const TOUR_STEPS: TourStep[] = [
         description: 'Message support directly for order adjustments, sizing advice, and custom fittings.',
       },
     ],
+    actionRoute: '/(tabs)/inbox',
+    actionLabel: 'Open Inbox',
   },
 ];
 
@@ -242,7 +244,7 @@ export function SystemTourModal({ visible, onClose }: SystemTourModalProps) {
               ))}
             </View>
 
-            {/* Buttons Row */}
+            {/* Action or Next Row */}
             <View style={styles.buttonsRow}>
               {currentStepIndex > 0 && (
                 <TouchableOpacity
@@ -256,13 +258,33 @@ export function SystemTourModal({ visible, onClose }: SystemTourModalProps) {
               )}
 
               <View style={{ flex: 1 }}>
-                <PrimaryButton
-                  label={isLastStep ? 'Get Started' : 'Next Step →'}
-                  onPress={handleNext}
-                  dark={isDark}
-                />
+                {step.actionLabel && step.actionRoute ? (
+                  <PrimaryButton
+                    label={step.actionLabel}
+                    onPress={() => handleActionClick(step.actionRoute)}
+                    dark={isDark}
+                  />
+                ) : (
+                  <PrimaryButton
+                    label={isLastStep ? 'Finish Tour' : 'Next Step'}
+                    onPress={handleNext}
+                    dark={isDark}
+                  />
+                )}
               </View>
             </View>
+            
+            {/* If there's an action button, we should still allow them to just continue the tour */}
+            {step.actionLabel && step.actionRoute && !isLastStep && (
+              <TouchableOpacity
+                onPress={handleNext}
+                style={{ alignSelf: 'center', marginTop: 16 }}
+              >
+                <Text style={{ color: colors.secondaryText, fontSize: 14, fontWeight: '500' }}>
+                  Or continue tour
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
