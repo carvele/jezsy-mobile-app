@@ -7,26 +7,18 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useWishlist } from '@/src/context/WishlistContext';
-import { gridCardWidth } from '@/src/utils/layout';
+import { useGridCardWidth } from '@/src/utils/layout';
 import { getCategoryLabel } from '@/src/utils/categoryDisplay';
 import { isNewArrival } from '@/src/utils/newArrival';
 
 
-// 'grid' fills half the row in a two-column list; 'rail' is a fixed width for
+// 'grid' fills half the row in a dynamic-column list; 'rail' is a fixed width for
 // horizontal strips. Both share one set of internals -- the point of this
 // component is that there is only one place to change a product card.
 export type ProductCardVariant = 'grid' | 'rail';
 
 const RAIL_WIDTH = 150;
 const LOW_STOCK_THRESHOLD = 5;
-
-// A percentage width does not resolve for this card in either grid it lives in
-// -- the FlatList column wrapper on Explore or the wrapping row on Home -- so
-// the card fell back to its content width, filling the row and pushing its
-// neighbour off screen. Both containers leave the same usable width, which
-// gridCardWidth derives from the shared grid tokens rather than restating the
-// screens' padding as literals here.
-const GRID_CARD_WIDTH = gridCardWidth();
 
 type Props = {
   product: any;
@@ -45,6 +37,7 @@ export function ProductCard({
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { cardWidth } = useGridCardWidth();
 
   const onSale = !!(product.on_sale && product.sale_price);
   const price = onSale ? product.sale_price : product.price || 0;
@@ -61,10 +54,10 @@ export function ProductCard({
   const stockLabel = !hasStock
     ? null
     : outOfStock
-      ? 'Out of stock'
-      : lowStock
-        ? `Only ${stock} left`
-        : `${stock} in stock`;
+    ? 'Out of stock'
+    : lowStock
+    ? `Only ${stock} left`
+    : `${stock} in stock`;
 
   const stockColor = outOfStock ? colors.error : lowStock ? colors.warning : colors.secondaryText;
 
@@ -84,7 +77,7 @@ export function ProductCard({
     // Layout lives on this wrapper, not on the Touchable: <Link asChild>
     // clones its child and passes its own style prop down, which silently
     // discarded the card's width and margins entirely.
-    <View style={[styles.card, variant === 'rail' ? styles.cardRail : styles.cardGrid]}>
+    <View style={[styles.card, variant === 'rail' ? styles.cardRail : [styles.cardGrid, { width: cardWidth }]]}>
     <Link href={`/product/${product.id}`} asChild>
       <TouchableOpacity
         activeOpacity={0.85}
@@ -194,7 +187,7 @@ export function ProductCard({
 
 const styles = StyleSheet.create({
   card: { marginBottom: 20 },
-  cardGrid: { width: GRID_CARD_WIDTH },
+  cardGrid: {},
   cardRail: { width: RAIL_WIDTH, marginRight: 14, marginBottom: 0 },
   imageWrap: {
     width: '100%',

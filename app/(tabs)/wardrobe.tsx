@@ -19,6 +19,7 @@ import { FadeInView } from '@/src/components/FadeInView';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { FlourishDivider } from '@/src/components/BrandFlourish';
 import { tapLight } from '@/src/utils/haptics';
+import { useGridCardWidth } from '@/src/utils/layout';
 import { useToast } from '@/src/context/ToastContext';
 import { MannequinView } from '@/src/components/Mannequin/MannequinView';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
@@ -35,6 +36,7 @@ const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessor
 const NEGLECT_MS = 60 * 86_400_000;
 
 export default function WardrobeScreen() {
+  const { cardWidth, columns } = useGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
@@ -182,7 +184,7 @@ export default function WardrobeScreen() {
     return (
       <FadeInView index={index}>
       <TouchableOpacity
-        style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border, width: cardWidth }]}
         onPress={() => router.push(`/wardrobe/item/${item.id}` as any)}
         activeOpacity={0.8}
         accessibilityRole="button"
@@ -439,7 +441,8 @@ export default function WardrobeScreen() {
           data={visibleItems}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          numColumns={2}
+          key={`items-grid-${columns}`}
+          numColumns={columns}
           columnWrapperStyle={styles.columnWrapper}
           contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
           ListHeaderComponent={itemsHeader}
@@ -636,7 +639,6 @@ const styles = StyleSheet.create({
     rowGap: 16,
   },
   itemCard: {
-    width: (width - 56) / 2,
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,

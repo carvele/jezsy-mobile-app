@@ -29,7 +29,7 @@ import { CategoryCard } from '@/src/components/CategoryCard';
 import { recordCategoryVisit } from '@/src/utils/categoryAffinity';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
-import { GRID_GUTTER, GRID_COLUMN_GAP } from '@/src/utils/layout';
+import { GRID_GUTTER, GRID_COLUMN_GAP, useGridCardWidth } from '@/src/utils/layout';
 import { isInStock } from '@/src/utils/stock';
 import { isNewArrival } from '@/src/utils/newArrival';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
@@ -68,6 +68,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function ExploreScreen() {
+  const { columns } = useGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
@@ -873,7 +874,8 @@ export default function ExploreScreen() {
                 data={processedProducts}
                 renderItem={renderProductItem}
                 keyExtractor={(item) => item.id}
-                numColumns={2}
+                key={`grid-${columns}`}
+                numColumns={columns}
                 contentContainerStyle={styles.productList}
                 columnWrapperStyle={styles.productRow}
                 initialNumToRender={6}
@@ -1005,7 +1007,8 @@ export default function ExploreScreen() {
                   data={processedProducts}
                   renderItem={renderProductItem}
                   keyExtractor={(item) => item.id}
-                  numColumns={2}
+                  key={`grid-${columns}`}
+                  numColumns={columns}
                   contentContainerStyle={styles.productList}
                   columnWrapperStyle={styles.productRow}
                   initialNumToRender={6}

@@ -293,8 +293,9 @@ const styles = StyleSheet.create({
   ctaContainer: {
     position: 'absolute',
     bottom: 0,
-    left: 0,
-    right: 0,
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
     paddingHorizontal: 28,
     paddingBottom: 50,
     paddingTop: Spacing.xl,

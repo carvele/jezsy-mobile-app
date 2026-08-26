@@ -709,6 +709,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'flex-end',
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
     paddingHorizontal: Spacing.xxl,
     paddingBottom: 40,
   },

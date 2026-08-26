@@ -340,7 +340,7 @@ export default function ProductDetailScreen() {
             accessibilityLabel="Go back"
             accessibilityHint="Returns to the previous screen"
           >
-            <BlurView intensity={40} tint="light" style={[styles.glassFill, styles.glassChrome]}>
+            <BlurView intensity={40} tint="dark" style={[styles.glassFill, styles.glassChrome]}>
               <IconSymbol name="chevron.left" size={24} color="#FFF" />
             </BlurView>
           </TouchableOpacity>
@@ -351,7 +351,7 @@ export default function ProductDetailScreen() {
             accessibilityLabel={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
             accessibilityHint={isInWishlist(product.id) ? "Removes this item from your favorites list" : "Saves this item to your favorites list"}
           >
-            <BlurView intensity={40} tint="light" style={[styles.glassFill, styles.glassChrome]}>
+            <BlurView intensity={40} tint="dark" style={[styles.glassFill, styles.glassChrome]}>
               <IconSymbol name={isInWishlist(product.id) ? "heart.fill" : "heart"} size={24} color={isInWishlist(product.id) ? Colors.dark.blushFill : "#FFF"} />
             </BlurView>
           </TouchableOpacity>
@@ -361,7 +361,7 @@ export default function ProductDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel="Share this item"
           >
-            <BlurView intensity={40} tint="light" style={[styles.glassFill, styles.glassChrome]}>
+            <BlurView intensity={40} tint="dark" style={[styles.glassFill, styles.glassChrome]}>
               <IconSymbol name="paperplane.fill" size={22} color="#FFF" />
             </BlurView>
           </TouchableOpacity>
@@ -374,7 +374,7 @@ export default function ProductDetailScreen() {
               accessibilityHint="Launches the AR viewer to see this clothing item on your camera feed"
             >
               <IconSymbol name="cube.transparent" size={24} color={colors.onTint} />
-              <Text style={styles.arButtonText}>Try in AR</Text>
+              <Text style={[styles.arButtonText, { color: colors.onTint }]}>Try in AR</Text>
             </TouchableOpacity>
           )}
         </View>
