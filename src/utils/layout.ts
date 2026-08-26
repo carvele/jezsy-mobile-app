@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Dimensions, useWindowDimensions } from 'react-native';
 import { Spacing } from '@/constants/theme';
 
@@ -20,9 +21,14 @@ export const GRID_GUTTER = Spacing.lg; // 16
 /** Space between columns. */
 export const GRID_COLUMN_GAP = Spacing.md; // 12
 
-import { useEffect, useState } from 'react';
-
-/** Usable width for one card in an evenly-divided grid. */
+/** Usable width for one card in an evenly-divided grid.
+ *
+ * Uses a `mounted` guard so the server-render and first hydration pass always
+ * emit the same 2-column layout (effectiveWidth = 400). After mount the hook
+ * re-runs with the real window width and switches to the correct column count.
+ * Without this guard, useWindowDimensions returns different values on the
+ * server vs. client, which triggers React hydration error #418.
+ */
 export function useGridCardWidth(): { cardWidth: number; columns: number } {
   const { width } = useWindowDimensions();
   const [mounted, setMounted] = useState(false);
@@ -31,7 +37,7 @@ export function useGridCardWidth(): { cardWidth: number; columns: number } {
     setMounted(true);
   }, []);
 
-  // SSR and pre-hydration: assume mobile (width 0 or small) to prevent hydration mismatches
+  // SSR / pre-hydration: pin to a standard mobile width to match the server render.
   const effectiveWidth = mounted ? width : 400;
 
   // Phones get 2 cols, small tablets 3, large tablets/web 4+

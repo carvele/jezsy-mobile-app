@@ -15,6 +15,8 @@ export function CountryPickerModal({ visible, selectedCountry, onSelect, onClose
   const theme = useColorScheme();
   const colors = Colors[theme];
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>

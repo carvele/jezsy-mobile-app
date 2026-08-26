@@ -97,6 +97,8 @@ export function StepUpAuthModal({ visible, email, onClose, onVerified }: StepUpA
     if (cleaned.length === 6) verifyCode(cleaned);
   };
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>

@@ -105,6 +105,8 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
     }
   };
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>

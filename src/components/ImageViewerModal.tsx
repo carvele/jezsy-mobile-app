@@ -89,6 +89,8 @@ export function ImageViewerModal({ visible, uri, onClose }: ImageViewerModalProp
 
   if (!uri) return null;
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <View style={styles.container}>

@@ -68,6 +68,8 @@ export function EditVariantModal({ visible, product, currentSize, currentColor, 
     onClose();
   };
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>

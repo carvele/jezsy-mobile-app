@@ -52,6 +52,8 @@ export function DobPickerModal({ visible, value, onConfirm, onClose }: Props) {
     onConfirm(`${mm}/${dd}/${year}`);
   };
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>

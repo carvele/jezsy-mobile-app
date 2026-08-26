@@ -44,6 +44,8 @@ export function PendingDeletionNoticeModal({ visible, requestId, status, onResol
     }
   };
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
       <View style={styles.overlay}>

@@ -39,6 +39,8 @@ export function SizeChartModal({ visible, measurements, sizes, recommendedSize, 
     return unit === 'cm' ? String(cm) : (cm * CM_TO_IN).toFixed(1);
   };
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>

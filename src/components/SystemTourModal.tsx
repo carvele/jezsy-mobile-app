@@ -159,6 +159,13 @@ export function SystemTourModal({ visible, onClose }: SystemTourModalProps) {
     }
   };
 
+  // On web, React Native Web keeps the Modal mounted in the DOM with
+  // aria-hidden="true" when visible=false. Any focusable children (buttons,
+  // links) inside the hidden container trigger a WCAG/ARIA violation:
+  // "aria-hidden element must not contain focusable elements". Guard here so
+  // we simply don't render anything when the modal is closed.
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>

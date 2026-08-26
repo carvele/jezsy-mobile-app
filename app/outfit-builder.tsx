@@ -803,6 +803,7 @@ export default function OutfitBuilderScreen() {
       </Modal>
 
       {/* ── Save Outfit Modal ── */}
+      {saveVisible && (
       <Modal visible={saveVisible} animationType="slide" transparent>
         <KeyboardAvoidingView
           style={styles.saveOverlay}
@@ -842,6 +843,7 @@ export default function OutfitBuilderScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      )}
     </SafeAreaView>
   );
 }

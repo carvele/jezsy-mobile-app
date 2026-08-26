@@ -25,6 +25,8 @@ export function FirstUseHintModal({ visible, icon, title, message, actionLabel =
   const theme = useColorScheme();
   const colors = Colors[theme];
 
+  if (!visible) return null;
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onAcknowledge}>
       <View style={styles.overlay}>
