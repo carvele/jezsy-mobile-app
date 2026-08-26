@@ -370,20 +370,56 @@ export default function WardrobeScreen() {
       </View>
 
       <View style={[styles.tabRow, { borderColor: colors.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScrollContainer}>
-          {(['items', 'outfits', 'capsules', 'mannequin'] as Tab[]).map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && { borderBottomColor: colors.tint, borderBottomWidth: 2 }]}
-              onPress={() => { tapLight(); setActiveTab(tab); }}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === tab }}
-            >
-              <Text style={[styles.tabText, { color: activeTab === tab ? colors.tint : colors.secondaryText }]}>
-                {tab === 'items' ? 'My Items' : tab === 'outfits' ? 'Saved Outfits' : tab === 'capsules' ? 'Capsules' : 'My Mannequin'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabScrollContainer}
+        >
+          {([
+            { key: 'items' as Tab, label: 'Items' },
+            { key: 'outfits' as Tab, label: 'Outfits' },
+            { key: 'capsules' as Tab, label: 'Capsules' },
+            { key: 'mannequin' as Tab, label: 'Mannequin', icon: 'sparkles' },
+          ]).map((tabItem) => {
+            const isSelected = activeTab === tabItem.key;
+            return (
+              <TouchableOpacity
+                key={tabItem.key}
+                style={[
+                  styles.tab,
+                  isSelected && { borderBottomColor: colors.tint, borderBottomWidth: 2.5 }
+                ]}
+                onPress={() => {
+                  tapLight();
+                  setActiveTab(tabItem.key);
+                }}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isSelected }}
+              >
+                <View style={styles.tabInner}>
+                  {tabItem.icon && (
+                    <IconSymbol
+                      name={tabItem.icon as any}
+                      size={13}
+                      color={isSelected ? colors.tint : colors.secondaryText}
+                      style={{ marginRight: 4 }}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.tabText,
+                      {
+                        color: isSelected ? colors.tint : colors.secondaryText,
+                        fontWeight: isSelected ? '700' : '600',
+                      }
+                    ]}
+                  >
+                    {tabItem.label}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -531,17 +567,23 @@ const styles = StyleSheet.create({
   },
   tabScrollContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    minWidth: '100%',
   },
   tab: {
-    marginRight: 24,
     paddingVertical: 12,
-    borderBottomWidth: 2,
+    paddingHorizontal: 6,
+    borderBottomWidth: 2.5,
     borderBottomColor: 'transparent',
+  },
+  tabInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   tabText: {
     ...Type.bodyStrong,
-    fontSize: 16,
+    fontSize: 15,
   },
   searchBar: {
     flexDirection: 'row',
