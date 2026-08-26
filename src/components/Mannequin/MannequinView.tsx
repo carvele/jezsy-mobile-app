@@ -643,6 +643,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
       </View>
 
       {/* ── Save Modal ── */}
+      {saveModalVisible && (
       <Modal visible={saveModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -681,8 +682,10 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* ── Load Modal ── */}
+      {loadModalVisible && (
       <Modal visible={loadModalVisible} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.loadContainer, { backgroundColor: colors.background }]}>
           <View style={[styles.loadHeader, { borderBottomColor: colors.border }]}>
@@ -732,6 +735,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
           )}
         </View>
       </Modal>
+      )}
     </ScrollView>
   );
 }
