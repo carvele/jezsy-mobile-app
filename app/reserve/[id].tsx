@@ -23,6 +23,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -267,14 +268,24 @@ export default function ReservationScreen() {
       // No payment here by design: staff vet the booking first, and only then
       // does a payment window open. Taking money before acceptance would mean
       // refunding through PayMongo every time staff turn a booking down.
-      Alert.alert(
-        "Request sent",
+      const alertMessage =
         (priceChanged
           ? `Pricing for one or more items changed while you were booking. Your reservation total is ₱${serverTotal.toFixed(2)}.\n\n`
           : "") +
-          "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).",
-        [{ text: "OK", onPress: () => router.replace("/reservations") }],
-      );
+        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).";
+
+      if (Platform.OS === "web") {
+        if (typeof window !== "undefined" && window.alert) {
+          window.alert(`Request sent\n\n${alertMessage}`);
+        }
+        router.replace("/reservations");
+      } else {
+        Alert.alert(
+          "Request sent",
+          alertMessage,
+          [{ text: "OK", onPress: () => router.replace("/reservations") }],
+        );
+      }
     } catch (error: any) {
       console.error("Reservation error:", error);
       showToast(error.message || "Unable to submit reservation. Try again.", 'error');

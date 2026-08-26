@@ -21,8 +21,13 @@ const MAPPING = {
   'chevron.up': 'expand-less',
   'chevron.left.forwardslash.chevron.right': 'code',
   'arrow.left': 'arrow-back',
+  'arrow.up': 'arrow-upward',
+  'arrow.down': 'arrow-downward',
   'arrow.up.arrow.down': 'swap-vert',
   'xmark': 'close',
+  'folder': 'folder',
+  'folder.fill': 'folder',
+  'hand.tap': 'touch-app',
 
   // Messaging & Communication
   'paperplane.fill': 'send',
@@ -82,6 +87,7 @@ const MAPPING = {
   'hanger': 'checkroom',
   'sparkles': 'auto-awesome',
   'ruler.fill': 'straighten',
+  'paintpalette.fill': 'palette',
 
   // Calendar & Time
   'calendar': 'calendar-today',

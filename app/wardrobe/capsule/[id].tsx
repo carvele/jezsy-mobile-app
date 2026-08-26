@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, FlatList } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -153,27 +153,38 @@ export default function CapsuleDetailScreen() {
     }
   };
 
+  const executeDeleteCapsule = async () => {
+    if (!capsule) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('capsules').delete().eq('id', capsule.id);
+      if (error) throw error;
+      showToast('Capsule deleted.', 'info');
+      router.back();
+    } catch (err) {
+      console.error('Error deleting capsule:', err);
+      showToast('Could not delete this capsule. Please try again.', 'error');
+      setDeleting(false);
+    }
+  };
+
   const handleDeleteCapsule = () => {
     if (!capsule) return;
-    Alert.alert('Delete Capsule', `Delete "${capsule.name}"? Items stay in your wardrobe.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          setDeleting(true);
-          try {
-            const { error } = await supabase.from('capsules').delete().eq('id', capsule.id);
-            if (error) throw error;
-            router.back();
-          } catch (err) {
-            console.error('Error deleting capsule:', err);
-            showToast('Could not delete this capsule. Please try again.', 'error');
-            setDeleting(false);
-          }
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' ? window.confirm(`Delete "${capsule.name}"? Items stay in your wardrobe.`) : true;
+      if (confirmed) {
+        executeDeleteCapsule();
+      }
+    } else {
+      Alert.alert('Delete Capsule', `Delete "${capsule.name}"? Items stay in your wardrobe.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: executeDeleteCapsule,
         },
-      },
-    ]);
+      ]);
+    }
   };
 
   if (loading) {

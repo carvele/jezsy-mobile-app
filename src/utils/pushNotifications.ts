@@ -148,8 +148,8 @@ export async function scheduleReservationReminder(
   appointmentDate: string,
   timeStr: string,
 ): Promise<void> {
-  if (IS_EXPO_GO) {
-    console.log("Skipping push notification scheduling in Expo Go.");
+  if (Platform.OS === "web" || IS_EXPO_GO) {
+    if (IS_EXPO_GO) console.log("Skipping push notification scheduling in Expo Go.");
     return;
   }
 
@@ -195,7 +195,7 @@ export async function scheduleReturnReminder(
   displayId: string,
   returnDateStr: string,
 ): Promise<void> {
-  if (IS_EXPO_GO) return;
+  if (Platform.OS === "web" || IS_EXPO_GO) return;
 
   try {
     const Notifications = await import("expo-notifications");

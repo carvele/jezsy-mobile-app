@@ -20,13 +20,15 @@ import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { FlourishDivider } from '@/src/components/BrandFlourish';
 import { tapLight } from '@/src/utils/haptics';
 import { useToast } from '@/src/context/ToastContext';
+import { MannequinView } from '@/src/components/Mannequin/MannequinView';
+import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
 
-type Tab = 'items' | 'outfits' | 'capsules';
+type Tab = 'items' | 'outfits' | 'capsules' | 'mannequin';
 type WearFilter = 'all' | 'never' | 'neglected';
 
 const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'];
@@ -211,6 +213,7 @@ export default function WardrobeScreen() {
   const renderOutfitItem = useCallback(({ item }: { item: SavedOutfit }) => {
     // items is a JSON array
     const outfitItems: any[] = Array.isArray(item.items) ? item.items : [];
+    const isMannequinStyled = outfitItems.some((i) => typeof i.x === 'number');
 
     return (
       <TouchableOpacity
@@ -221,24 +224,44 @@ export default function WardrobeScreen() {
         accessibilityLabel={`${item.name || 'Outfit'}, ${outfitItems.length} items`}
       >
         <View style={styles.outfitHeader}>
-          <Text style={[styles.outfitName, { color: colors.text }]}>{item.name}</Text>
+          <View>
+            <Text style={[styles.outfitName, { color: colors.text }]}>{item.name}</Text>
+            {isMannequinStyled && (
+              <Text style={{ fontSize: 10, color: colors.tint, fontWeight: '700', marginTop: 1 }}>
+                Styled on Mannequin ✨
+              </Text>
+            )}
+          </View>
           <Text style={[styles.outfitCount, { color: colors.secondaryText }]}>{outfitItems.length} items</Text>
         </View>
-        <View style={styles.outfitGrid}>
-          {outfitItems.slice(0, 4).map((i: any, index) => (
-            <View key={index} style={[styles.outfitThumb, { borderColor: colors.border }]}>
-              <Image source={{ uri: i.image_url }} style={styles.outfitThumbImg} contentFit="cover" />
-            </View>
-          ))}
-          {outfitItems.length > 4 && (
-            <View style={[styles.outfitMore, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.outfitMoreText, { color: colors.text }]}>+{outfitItems.length - 4}</Text>
-            </View>
-          )}
-        </View>
+
+        {isMannequinStyled ? (
+          <View style={[styles.outfitMannequinThumb, { backgroundColor: outfitItems.find((i) => i.canvas_bg)?.canvas_bg || (theme === 'dark' ? '#1c1c1e' : '#FFFFFF'), borderColor: colors.border }]}>
+            <MannequinOutfitPreview
+              items={outfitItems}
+              canvasWidth={OUTFIT_CARD_WIDTH - 32}
+              canvasHeight={200}
+              isDark={theme === 'dark'}
+              backgroundColor={outfitItems.find((i) => i.canvas_bg)?.canvas_bg}
+            />
+          </View>
+        ) : (
+          <View style={styles.outfitGrid}>
+            {outfitItems.slice(0, 4).map((i: any, index) => (
+              <View key={index} style={[styles.outfitThumb, { borderColor: colors.border }]}>
+                <Image source={{ uri: i.image_url }} style={styles.outfitThumbImg} contentFit="cover" />
+              </View>
+            ))}
+            {outfitItems.length > 4 && (
+              <View style={[styles.outfitMore, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.outfitMoreText, { color: colors.text }]}>+{outfitItems.length - 4}</Text>
+              </View>
+            )}
+          </View>
+        )}
       </TouchableOpacity>
     );
-  }, [colors, router]);
+  }, [colors, router, theme]);
 
   // Search, stats and gap analysis scroll with the grid rather than eating
   // fixed height above it.
@@ -347,19 +370,21 @@ export default function WardrobeScreen() {
       </View>
 
       <View style={[styles.tabRow, { borderColor: colors.border }]}>
-        {(['items', 'outfits', 'capsules'] as Tab[]).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && { borderBottomColor: colors.tint, borderBottomWidth: 2 }]}
-            onPress={() => { tapLight(); setActiveTab(tab); }}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === tab }}
-          >
-            <Text style={[styles.tabText, { color: activeTab === tab ? colors.tint : colors.secondaryText }]}>
-              {tab === 'items' ? 'My Items' : tab === 'outfits' ? 'Saved Outfits' : 'Capsules'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScrollContainer}>
+          {(['items', 'outfits', 'capsules', 'mannequin'] as Tab[]).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, activeTab === tab && { borderBottomColor: colors.tint, borderBottomWidth: 2 }]}
+              onPress={() => { tapLight(); setActiveTab(tab); }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activeTab === tab }}
+            >
+              <Text style={[styles.tabText, { color: activeTab === tab ? colors.tint : colors.secondaryText }]}>
+                {tab === 'items' ? 'My Items' : tab === 'outfits' ? 'Saved Outfits' : tab === 'capsules' ? 'Capsules' : 'My Mannequin'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {loading ? (
@@ -374,13 +399,6 @@ export default function WardrobeScreen() {
         </ScrollView>
       ) : activeTab === 'items' ? (
         <FlatList
-          // numColumns differs between this list and the outfits FlatList
-          // below, and both sit at the same position in this ternary --
-          // without distinct keys React updates the same FlatList instance
-          // in place when the tab switches instead of remounting, and
-          // FlatList's own invariant explicitly forbids changing numColumns
-          // that way ("Invariant Violation: Changing numColumns on the fly
-          // is not supported").
           key="items-grid"
           data={visibleItems}
           renderItem={renderItem}
@@ -448,15 +466,15 @@ export default function WardrobeScreen() {
             />
           </ScrollView>
         )
-      ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+      ) : activeTab === 'capsules' ? (
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 }]}>
           {capsules.length > 0 ? (
             <>
-              {capsules.map(capsule => (
+              {capsules.map((c) => (
                 <CapsuleCard
-                  key={capsule.id}
-                  capsule={capsule}
-                  onPress={() => router.push(`/wardrobe/capsule/${capsule.id}` as any)}
+                  key={c.id}
+                  capsule={c}
+                  onPress={() => router.push(`/wardrobe/capsule/${c.id}` as any)}
                 />
               ))}
               <TouchableOpacity
@@ -477,6 +495,8 @@ export default function WardrobeScreen() {
             />
           )}
         </ScrollView>
+      ) : (
+        <MannequinView wardrobeItems={items} onRefreshWardrobe={fetchWardrobeData} />
       )}
     </SafeAreaView>
   );
@@ -507,8 +527,10 @@ const styles = StyleSheet.create({
     ...Type.display,
   },
   tabRow: {
-    flexDirection: 'row',
     borderBottomWidth: 1,
+  },
+  tabScrollContainer: {
+    flexDirection: 'row',
     paddingHorizontal: 20,
   },
   tab: {
@@ -660,6 +682,15 @@ const styles = StyleSheet.create({
   outfitGrid: {
     flexDirection: 'row',
     gap: 8,
+  },
+  outfitMannequinThumb: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   outfitThumb: {
     width: (OUTFIT_CARD_WIDTH - 32 - 32) / 5, // 5 items max visible, minus padding/gaps

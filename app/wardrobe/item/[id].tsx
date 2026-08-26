@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -100,30 +100,41 @@ export default function WardrobeItemDetailScreen() {
     }
   };
 
+  const executeDelete = async () => {
+    if (!item) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('wardrobe_items')
+        .update({ deleted: true })
+        .eq('id', item.id);
+      if (error) throw error;
+      showToast('Item removed from wardrobe.', 'info');
+      router.back();
+    } catch (err) {
+      console.error('Error deleting wardrobe item:', err);
+      showToast('Could not remove this item. Please try again.', 'error');
+      setDeleting(false);
+    }
+  };
+
   const handleDelete = () => {
     if (!item) return;
-    Alert.alert('Remove Item', 'Remove this item from your digital wardrobe?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          setDeleting(true);
-          try {
-            const { error } = await supabase
-              .from('wardrobe_items')
-              .update({ deleted: true })
-              .eq('id', item.id);
-            if (error) throw error;
-            router.back();
-          } catch (err) {
-            console.error('Error deleting wardrobe item:', err);
-            showToast('Could not remove this item. Please try again.', 'error');
-            setDeleting(false);
-          }
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' ? window.confirm('Remove this item from your digital wardrobe?') : true;
+      if (confirmed) {
+        executeDelete();
+      }
+    } else {
+      Alert.alert('Remove Item', 'Remove this item from your digital wardrobe?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: executeDelete,
         },
-      },
-    ]);
+      ]);
+    }
   };
 
   if (loading) {

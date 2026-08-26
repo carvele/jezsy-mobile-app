@@ -23,6 +23,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { removeBackground } from '@six33/react-native-bg-removal';
+import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { useToast } from '@/src/context/ToastContext';
 import { ImageCropModal } from '@/src/components/ImageCropModal';
@@ -83,31 +84,29 @@ export default function AddWardrobeItemScreen() {
         return;
       }
       
-      if (!removeBg || Platform.OS === 'web') {
+      if (!removeBg) {
         setProcessedImageUri(null);
         return;
       }
 
       setIsProcessingBg(true);
       try {
-        // Attempting native background removal (Phase 2: On-Device ML)
-        // Verified to work with Fabric/TurboModules where supported.
-        const bgRemovedUri = await removeBackground(imageUri);
-        if (isMounted && bgRemovedUri) {
-          setProcessedImageUri(bgRemovedUri);
+        if (Platform.OS === 'web') {
+          const webCutoutUri = await removeBackgroundWeb(imageUri);
+          if (isMounted && webCutoutUri) {
+            setProcessedImageUri(webCutoutUri);
+          }
+        } else {
+          // Native background removal on iOS/Android
+          const bgRemovedUri = await removeBackground(imageUri);
+          if (isMounted && bgRemovedUri) {
+            setProcessedImageUri(bgRemovedUri);
+          }
         }
       } catch (e) {
-        console.warn('Native background removal failed, falling back to original image:', e);
+        console.warn('Background removal failed, falling back to original image:', e);
         if (isMounted) {
           setProcessedImageUri(null);
-          // If native module fails (e.g., missing dependencies or unsupported device),
-          // fallback to manual/original image. 
-          Alert.alert(
-            'Background Removal Failed',
-            'On-device background removal is not supported on this device. Using original image instead.',
-            [{ text: 'OK' }]
-          );
-          setRemoveBg(false);
         }
       } finally {
         if (isMounted) setIsProcessingBg(false);

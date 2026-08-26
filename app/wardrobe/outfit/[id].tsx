@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
+import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
 
 type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
 type OutfitSlotItem = {
@@ -77,31 +79,41 @@ export default function OutfitDetailScreen() {
     fetchOutfit();
   }, [fetchOutfit]);
 
+  const executeDelete = async () => {
+    if (!outfit) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('saved_outfits')
+        .update({ deleted: true })
+        .eq('id', outfit.id);
+      if (error) throw error;
+      showToast('Outfit deleted.', 'success');
+      router.back();
+    } catch (err) {
+      console.error('Error deleting outfit:', err);
+      showToast('Could not delete this outfit. Please try again.', 'error');
+      setDeleting(false);
+    }
+  };
+
   const handleDelete = () => {
     if (!outfit) return;
-    Alert.alert('Delete Outfit', `Are you sure you want to delete "${outfit.name || 'this outfit'}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          setDeleting(true);
-          try {
-            const { error } = await supabase
-              .from('saved_outfits')
-              .update({ deleted: true })
-              .eq('id', outfit.id);
-            if (error) throw error;
-            showToast('Outfit deleted.', 'success');
-            router.back();
-          } catch (err) {
-            console.error('Error deleting outfit:', err);
-            showToast('Could not delete this outfit. Please try again.', 'error');
-            setDeleting(false);
-          }
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' ? window.confirm(`Are you sure you want to delete "${outfit.name || 'this outfit'}"?`) : true;
+      if (confirmed) {
+        executeDelete();
+      }
+    } else {
+      Alert.alert('Delete Outfit', `Are you sure you want to delete "${outfit.name || 'this outfit'}"?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: executeDelete,
         },
-      },
-    ]);
+      ]);
+    }
   };
 
   const handleLogWear = async () => {
@@ -163,6 +175,8 @@ export default function OutfitDetailScreen() {
   }
 
   const items: OutfitSlotItem[] = Array.isArray(outfit.items) ? (outfit.items as unknown as OutfitSlotItem[]) : [];
+  const savedBackdrop = (outfit.items as any[])?.find((i) => i.canvas_bg)?.canvas_bg;
+  const cardBg = savedBackdrop || (isDark ? '#1c1c1e' : '#F9F8F5');
   
   // Responsive grid calculation:
   // Compact screens / phones: 2 columns with 12px gap
@@ -210,11 +224,31 @@ export default function OutfitDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={{ width: contentWidth }}>
+          {/* Mannequin Styled Display Card */}
+          <View style={[styles.mannequinCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
+            <View style={styles.mannequinBadgeRow}>
+              <View style={[styles.mannequinBadge, { backgroundColor: colors.tint + '18' }]}>
+                <IconSymbol name="sparkles" size={13} color={colors.tint} />
+                <Text style={[styles.mannequinBadgeText, { color: colors.tint }]}>My Mannequin Styled Look</Text>
+              </View>
+            </View>
+
+            <View style={styles.mannequinPreviewWrapper}>
+              <MannequinOutfitPreview
+                items={items}
+                canvasWidth={contentWidth - 32}
+                canvasHeight={380}
+                isDark={isDark}
+                backgroundColor={savedBackdrop}
+              />
+            </View>
+          </View>
+
           {/* Section Heading */}
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Outfit Breakdown</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Outfit Pieces</Text>
             <Text style={[styles.sectionSubtitle, { color: colors.secondaryText }]}>
-              Tap any boutique piece to view sizes or reserve
+              Garments styled in this mannequin look
             </Text>
           </View>
 
@@ -364,6 +398,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.lg,
     paddingBottom: 100,
+  },
+  mannequinCard: {
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    padding: Spacing.md,
+    marginBottom: Spacing.xl,
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  mannequinBadgeRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginBottom: Spacing.sm,
+  },
+  mannequinBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+  },
+  mannequinBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mannequinPreviewWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
   },
   sectionHeader: {
     marginBottom: Spacing.lg,
