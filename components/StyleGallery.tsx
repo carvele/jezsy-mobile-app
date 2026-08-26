@@ -16,6 +16,8 @@ import { Colors, Spacing, Type as Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 export interface StylePose {
   id: string;
   name: string;
