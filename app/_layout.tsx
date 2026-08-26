@@ -80,6 +80,12 @@ function InitialLayout() {
 
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
 
+  // Latches to true the first time we confirm a fully authenticated + profiled
+  // session. Never resets to false within a mount — protects against transient
+  // null profile/session states from silent token refreshes kicking the user
+  // out of the tabs they are actively navigating.
+  const hasAuthenticated = useRef(false);
+
   // Checked once per cold start, not gated on routing: a pending request
   // shouldn't lock the user out of the app (see account-settings.tsx's own
   // "does not sign you out" copy), just surface once so it isn't silently
@@ -155,21 +161,25 @@ function InitialLayout() {
   // The flash that motivated useLayoutEffect is instead handled by the overlay
   // below, which stays up until this has settled on a route.
   useEffect(() => {
-    if (!flagsReady) return;
-
     const pathSegments = segments as string[];
     const inAuthGroup = pathSegments[0] === '(auth)';
     const inTabsGroup = pathSegments[0] === '(tabs)';
     const onProfileSetup = pathSegments[1] === 'profile-setup';
     const onResetPassword = pathSegments[1] === 'reset-password';
 
-    // Once the route has settled and the user is actively navigating inside
-    // (tabs) with a live session, skip all redirects. This prevents tab
-    // switches from re-triggering the profile check on web, where profile can
-    // momentarily appear null during a re-render between route transitions.
-    if (routeSettled && inTabsGroup && session && !isPasswordRecovery && !profile?.deleted) {
+    // CRITICAL: If we've already confirmed a fully authenticated session at
+    // least once this mount, AND the user is inside the tabs group, skip ALL
+    // redirects. Supabase silent token refreshes and syncProfile() calls
+    // temporarily set isProfileLoading=true (making flagsReady=false) and can
+    // transiently null out profile — which would otherwise redirect the user
+    // back to auth/home while they're mid-tab-switch on web.
+    if (hasAuthenticated.current && inTabsGroup && !isPasswordRecovery && !profile?.deleted) {
+      setRouteSettled(true);
       return;
     }
+
+    // For the initial bootstrap, wait until all async flags are resolved.
+    if (!flagsReady) return;
 
     // A recovery session is a real session, so without this the emailed reset
     // link would function as a full login: satisfy the branches below, reach
@@ -180,7 +190,7 @@ function InitialLayout() {
     } else if (profile?.deleted) {
       signOut();
     } else if (!session) {
-      // Require authentication -- guests must create an account or sign in
+      // Require authentication — guests must create an account or sign in.
       if (!inAuthGroup) {
         router.replace(onboardingSeen ? '/(auth)/welcome' : '/(auth)');
       }
@@ -189,23 +199,18 @@ function InitialLayout() {
       if (!profile || !profile.first_name) {
         if (!onProfileSetup) router.replace('/(auth)/profile-setup');
       } else {
-        // Fully authenticated and set up — if already in tabs, don't redirect.
-        // This prevents mid-tab-switch profile re-checks from bouncing the user
-        // back to home on web when profile momentarily re-renders.
+        // Fully authenticated with a complete profile — latch the flag so
+        // future tab switches and token refreshes never trigger a redirect.
+        hasAuthenticated.current = true;
         if (inAuthGroup) {
           router.replace('/(tabs)');
         }
-        // If already settled inside tabs, do nothing — the user is navigating normally.
       }
     }
 
-    // Whichever branch ran, the correct route is now committed, so the cover
-    // can come down without exposing the default route for a frame.
+    // Whichever branch ran, the correct route is now committed.
     setRouteSettled(true);
-  // NOTE: `segments` is intentionally kept so the guard fires when deep links
-  // or auth changes push the user into/out of (auth). But we skip re-directing
-  // when the user is already in (tabs) and their session+profile are intact.
-  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut, routeSettled]);
+  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut]);
 
   useEffect(() => {
     if (hasBootstrapped) {
