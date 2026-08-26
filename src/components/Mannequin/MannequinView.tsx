@@ -16,8 +16,7 @@ import {
   UIManager,
 } from 'react-native';
 import { Image } from 'expo-image';
-import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
+// react-native-view-shot is not available on web — share is handled via showToast guidance
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -75,7 +74,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
   const { session } = useAuth();
   const { showToast } = useToast();
 
-  const viewShotRef = useRef<React.ElementRef<typeof ViewShot>>(null);
+  const canvasRef = useRef<View>(null);
 
   // Canvas & Drawer States
   const [canvasItems, setCanvasItems] = useState<CanvasItemType[]>([]);
@@ -209,21 +208,10 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
     }
   };
 
-  // Share
+  // Share — screenshot capture is not supported on web; guide users to save instead
   const handleShareLook = async () => {
     if (canvasItems.length === 0) { showToast('Add items first.', 'info'); return; }
-    setSelectedItemId(null);
-    setTimeout(async () => {
-      if (viewShotRef.current?.capture) {
-        try {
-          const uri = await viewShotRef.current.capture();
-          await Sharing.shareAsync(uri, { dialogTitle: 'My Mannequin Look' });
-        } catch (err) {
-          console.error(err);
-          showToast('Could not share outfit image', 'error');
-        }
-      }
-    }, 120);
+    showToast('Save your look first, then share from Saved Outfits!', 'info');
   };
 
   // Save
@@ -509,9 +497,8 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
         onPress={() => setSelectedItemId(null)}
         style={[styles.canvasOuter, { borderColor: colors.border, backgroundColor: canvasBgColor }]}
       >
-        <ViewShot
-          ref={viewShotRef}
-          options={{ format: 'png', quality: 0.9 }}
+        <View
+          ref={canvasRef}
           style={[styles.canvasStage, { width: CANVAS_WIDTH, height: CANVAS_HEIGHT }]}
         >
           {/* Static dress-form silhouette */}
@@ -533,7 +520,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
               onRotateChange={handleRotateChange}
             />
           ))}
-        </ViewShot>
+        </View>
 
         {canvasItems.length === 0 && (
           <View style={[styles.canvasEmptyHint, { pointerEvents: 'none' } as any]}>
