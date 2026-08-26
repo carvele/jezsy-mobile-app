@@ -437,7 +437,6 @@ export default function WardrobeScreen() {
         </ScrollView>
       ) : activeTab === 'items' ? (
         <FlatList
-          key="items-grid"
           data={visibleItems}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
