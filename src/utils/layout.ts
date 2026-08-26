@@ -1,4 +1,4 @@
-import { Dimensions } from 'react-native';
+import { Dimensions, useWindowDimensions } from 'react-native';
 import { Spacing } from '@/constants/theme';
 
 /**
@@ -21,7 +21,11 @@ export const GRID_GUTTER = Spacing.lg; // 16
 export const GRID_COLUMN_GAP = Spacing.md; // 12
 
 /** Usable width for one card in an evenly-divided grid. */
-export function gridCardWidth(columns = 2): number {
+export function useGridCardWidth(): { cardWidth: number; columns: number } {
+  const { width } = useWindowDimensions();
+  // Phones get 2 cols, small tablets 3, large tablets/web 4+
+  const columns = width > 1200 ? 5 : width > 900 ? 4 : width > 600 ? 3 : 2;
   const gaps = GRID_COLUMN_GAP * (columns - 1);
-  return (SCREEN_WIDTH - GRID_GUTTER * 2 - gaps) / columns;
+  const cardWidth = (width - GRID_GUTTER * 2 - gaps) / columns;
+  return { cardWidth, columns };
 }

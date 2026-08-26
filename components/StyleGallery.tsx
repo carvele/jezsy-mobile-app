@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -14,9 +15,6 @@ import { supabase } from '@/src/lib/supabase';
 import { Colors, Spacing, Type as Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = (SCREEN_WIDTH - Spacing.lg * 2 - Spacing.md) / 2;
 
 export interface StylePose {
   id: string;
@@ -33,9 +31,15 @@ export interface StylePose {
 const OCCASIONS = ['All', 'Party', 'Formal', 'Wedding', 'Date Night', 'Casual', 'Festival'];
 
 export function StyleGallery() {
+  const { width } = useWindowDimensions();
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
+  
+  // Don't stretch horizontally to fill half of an iPad screen
+  const cardWidth = Math.min(220, (width - Spacing.lg * 2 - Spacing.md) / 2);
+  const cardHeight = cardWidth / (3 / 4); // Standard 3:4 aspect ratio for clothing
+
   const [poses, setPoses] = useState<StylePose[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOccasion, setSelectedOccasion] = useState('All');
@@ -131,11 +135,11 @@ export function StyleGallery() {
         {filteredPoses.map((pose) => (
           <TouchableOpacity
             key={pose.id}
-            style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+            style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, width: cardWidth }]}
             activeOpacity={0.88}
             onPress={() => router.push(`/style-pose/${pose.id}` as any)}
           >
-            <View style={[styles.imageContainer, { backgroundColor: colors.imagePlaceholder }]}>
+            <View style={[styles.imageContainer, { backgroundColor: colors.imagePlaceholder, height: cardHeight }]}>
               {pose.image_url ? (
                 <Image
                   source={{ uri: pose.image_url }}
@@ -237,7 +241,6 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   card: {
-    width: CARD_WIDTH,
     borderRadius: 14,
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
@@ -251,7 +254,6 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    height: 180,
     backgroundColor: '#1E293B',
     position: 'relative',
   },

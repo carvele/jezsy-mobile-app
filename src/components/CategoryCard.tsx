@@ -5,22 +5,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { gridCardWidth } from '@/src/utils/layout';
+import { useGridCardWidth } from '@/src/utils/layout';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// The grid card needs BOTH dimensions as real numbers. Every child here is
-// absolutely positioned, so the card has no in-flow content to give it a
-// height -- and aspectRatio does not resolve one inside the wrapping flex row
-// the grid uses, so the card collapsed and the whole Categories section
-// rendered blank. (The rail variant gets away with aspectRatio because it
-// lives in a horizontal ScrollView.) Height is derived from the width to keep
-// the intended 3:2 landscape shape.
 // Page padding and column gutter come from the shared grid tokens rather than
 // being restated here, so retokenising the screen's padding resizes the card
 // instead of breaking the two-column layout.
-const GRID_CARD_WIDTH = gridCardWidth();
-const GRID_CARD_HEIGHT = GRID_CARD_WIDTH / (3 / 2);
 
 export type CategoryCardVariant = 'grid' | 'rail';
 
@@ -34,12 +25,14 @@ export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const isRail = variant === 'rail';
+  const { cardWidth } = useGridCardWidth();
+  const cardHeight = cardWidth / (3 / 2);
 
   return (
     <TouchableOpacity
       style={[
         styles.card,
-        isRail ? styles.cardRail : styles.cardGrid,
+        isRail ? styles.cardRail : [styles.cardGrid, { width: cardWidth, height: cardHeight }],
         { backgroundColor: colors.imagePlaceholder },
       ]}
       onPress={onPress}
@@ -90,7 +83,7 @@ const styles = StyleSheet.create({
   // narrow phone as well as a tablet. Both are landscape-ish on purpose: as
   // portrait posters, ten categories cost roughly three screens of scrolling
   // before any product was visible.
-  cardGrid: { width: GRID_CARD_WIDTH, height: GRID_CARD_HEIGHT },
+  cardGrid: {},
   cardRail: { width: SCREEN_WIDTH * 0.42, aspectRatio: 4 / 3 },
   image: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },

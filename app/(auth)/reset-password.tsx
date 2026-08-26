@@ -169,6 +169,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: {
     flex: 1,
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.xxl,
   },

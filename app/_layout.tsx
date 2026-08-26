@@ -84,6 +84,32 @@ function InitialLayout() {
   // shouldn't lock the user out of the app (see account-settings.tsx's own
   // "does not sign you out" copy), just surface once so it isn't silently
   // forgotten in the queue.
+  // Update last_seen on load and when app comes to foreground
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const updateLastSeen = async () => {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ last_seen: new Date().toISOString() })
+          .eq('id', session.user.id);
+      } catch (e) {
+        console.warn('Failed to update last_seen:', e);
+      }
+    };
+
+    updateLastSeen();
+
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') {
+        updateLastSeen();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [session?.user?.id]);
+
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
   const [pendingDeletionStatus, setPendingDeletionStatus] = useState<'pending' | 'auth_revocation_pending' | null>(null);
   const [deletionNoticeDismissed, setDeletionNoticeDismissed] = useState(false);

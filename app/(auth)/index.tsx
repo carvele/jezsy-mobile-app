@@ -163,6 +163,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     paddingHorizontal: 30,
     width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
   },
   title: {
     fontSize: 48,
@@ -180,6 +182,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
     paddingHorizontal: 30,
     paddingBottom: 50,
   },
