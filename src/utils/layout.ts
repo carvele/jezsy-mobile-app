@@ -20,12 +20,23 @@ export const GRID_GUTTER = Spacing.lg; // 16
 /** Space between columns. */
 export const GRID_COLUMN_GAP = Spacing.md; // 12
 
+import { useEffect, useState } from 'react';
+
 /** Usable width for one card in an evenly-divided grid. */
 export function useGridCardWidth(): { cardWidth: number; columns: number } {
   const { width } = useWindowDimensions();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // SSR and pre-hydration: assume mobile (width 0 or small) to prevent hydration mismatches
+  const effectiveWidth = mounted ? width : 400;
+
   // Phones get 2 cols, small tablets 3, large tablets/web 4+
-  const columns = width > 1200 ? 5 : width > 900 ? 4 : width > 600 ? 3 : 2;
+  const columns = effectiveWidth > 1200 ? 5 : effectiveWidth > 900 ? 4 : effectiveWidth > 600 ? 3 : 2;
   const gaps = GRID_COLUMN_GAP * (columns - 1);
-  const cardWidth = (width - GRID_GUTTER * 2 - gaps) / columns;
+  const cardWidth = (effectiveWidth - GRID_GUTTER * 2 - gaps) / columns;
   return { cardWidth, columns };
 }

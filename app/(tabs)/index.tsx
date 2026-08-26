@@ -73,9 +73,13 @@ export default function HomeScreen() {
   const heroScrollRef = useRef<ScrollView>(null);
   const heroExtendedIndexRef = useRef(1);
   const heroInteractingRef = useRef(false);
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: rawScreenWidth } = useWindowDimensions();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const screenWidth = mounted ? rawScreenWidth : 400; // default to mobile size during SSR
   const heroCardWidth = screenWidth / GOLDEN_RATIO;
-
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
