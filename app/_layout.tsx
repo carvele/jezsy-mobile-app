@@ -159,8 +159,17 @@ function InitialLayout() {
 
     const pathSegments = segments as string[];
     const inAuthGroup = pathSegments[0] === '(auth)';
+    const inTabsGroup = pathSegments[0] === '(tabs)';
     const onProfileSetup = pathSegments[1] === 'profile-setup';
     const onResetPassword = pathSegments[1] === 'reset-password';
+
+    // Once the route has settled and the user is actively navigating inside
+    // (tabs) with a live session, skip all redirects. This prevents tab
+    // switches from re-triggering the profile check on web, where profile can
+    // momentarily appear null during a re-render between route transitions.
+    if (routeSettled && inTabsGroup && session && !isPasswordRecovery && !profile?.deleted) {
+      return;
+    }
 
     // A recovery session is a real session, so without this the emailed reset
     // link would function as a full login: satisfy the branches below, reach
@@ -180,17 +189,23 @@ function InitialLayout() {
       if (!profile || !profile.first_name) {
         if (!onProfileSetup) router.replace('/(auth)/profile-setup');
       } else {
-        // Fully authenticated and set up
+        // Fully authenticated and set up — if already in tabs, don't redirect.
+        // This prevents mid-tab-switch profile re-checks from bouncing the user
+        // back to home on web when profile momentarily re-renders.
         if (inAuthGroup) {
           router.replace('/(tabs)');
         }
+        // If already settled inside tabs, do nothing — the user is navigating normally.
       }
     }
 
     // Whichever branch ran, the correct route is now committed, so the cover
     // can come down without exposing the default route for a frame.
     setRouteSettled(true);
-  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut]);
+  // NOTE: `segments` is intentionally kept so the guard fires when deep links
+  // or auth changes push the user into/out of (auth). But we skip re-directing
+  // when the user is already in (tabs) and their session+profile are intact.
+  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut, routeSettled]);
 
   useEffect(() => {
     if (hasBootstrapped) {
