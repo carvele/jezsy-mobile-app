@@ -87,7 +87,7 @@ export class WebPoseTracker {
     return this.initPromise;
   }
 
-  detect(videoElement: HTMLVideoElement, timestampMs: number): { landmarks: Landmark[], worldLandmarks: Landmark[], segmentationMask?: any } | null {
+  detect(videoElement: HTMLVideoElement, timestampMs: number): { landmarks: Landmark[], worldLandmarks: Landmark[], segmentation?: import('../types/pose').SegmentationFrame } | null {
     if (!this.isReady || !this.poseLandmarker || !videoElement || this.isDisposed) return null;
     if (videoElement.readyState < 2) return null; // HAVE_CURRENT_DATA
 
@@ -100,6 +100,17 @@ export class WebPoseTracker {
           const rawLandmarks = results.landmarks[0];
           const rawWorldLandmarks = results.worldLandmarks?.[0] || [];
           const mask = results.segmentationMasks?.[0];
+          
+          let segmentation: import('../types/pose').SegmentationFrame | undefined = undefined;
+          if (mask) {
+            segmentation = {
+              width: mask.width || videoElement.videoWidth,
+              height: mask.height || videoElement.videoHeight,
+              timestamp: timestampMs,
+              source: 'web-gpu-texture', // Treating MPMask as web-gpu-texture equivalent for now
+              data: mask
+            };
+          }
           
           return {
             landmarks: rawLandmarks.map((pt: any) => ({
@@ -114,7 +125,7 @@ export class WebPoseTracker {
               z: pt.z || 0,
               visibility: pt.visibility !== undefined ? pt.visibility : (pt.presence ?? 0),
             })),
-            segmentationMask: mask
+            segmentation
           };
         }
       }

@@ -101,6 +101,11 @@ export class PoseLandmarkFilter {
   private yFilters: OneEuroFilter[] = [];
   private zFilters: OneEuroFilter[] = [];
 
+  // Independent filter state for world (metric) coordinates to avoid cross-contamination
+  private worldXFilters: OneEuroFilter[] = [];
+  private worldYFilters: OneEuroFilter[] = [];
+  private worldZFilters: OneEuroFilter[] = [];
+
   constructor(defaultMinCutoff = 1.2, defaultBeta = 0.015, dCutoff = 1.0) {
     for (let i = 0; i < 33; i++) {
       let minCutoff = defaultMinCutoff;
@@ -124,11 +129,17 @@ export class PoseLandmarkFilter {
       this.xFilters.push(new OneEuroFilter(minCutoff, beta, dCutoff));
       this.yFilters.push(new OneEuroFilter(minCutoff, beta, dCutoff));
       this.zFilters.push(new OneEuroFilter(minCutoff * 0.8, beta * 0.5, dCutoff));
+
+      // For world landmarks (meters), we use slightly more aggressive filtering
+      // because meter scale noise has high impact on 3D retargeting and bone rotations
+      this.worldXFilters.push(new OneEuroFilter(minCutoff * 0.8, beta * 0.8, dCutoff));
+      this.worldYFilters.push(new OneEuroFilter(minCutoff * 0.8, beta * 0.8, dCutoff));
+      this.worldZFilters.push(new OneEuroFilter(minCutoff * 0.5, beta * 0.5, dCutoff));
     }
   }
 
   /**
-   * Filters an array of 33 landmarks, returning a new smoothed landmark array.
+   * Filters an array of 33 normalized landmarks, returning a new smoothed landmark array.
    */
   filterLandmarks(landmarks: Landmark[], timestampMs?: number): Landmark[] {
     if (!landmarks || landmarks.length === 0) return landmarks;
@@ -142,10 +153,34 @@ export class PoseLandmarkFilter {
       const filteredZ = lm.z !== undefined ? this.zFilters[idx].filter(lm.z, now) : 0;
 
       return {
+        ...lm,
         x: filteredX,
         y: filteredY,
         z: filteredZ,
-        visibility: lm.visibility,
+      };
+    });
+  }
+
+  /**
+   * Filters an array of 33 metric world landmarks.
+   * This operates on a completely independent filter state to avoid contaminating the normalized filter.
+   */
+  filterWorldLandmarks<T extends Landmark>(landmarks: T[], timestampMs?: number): T[] {
+    if (!landmarks || landmarks.length === 0) return landmarks;
+    const now = timestampMs ?? (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+    return landmarks.map((lm, idx) => {
+      if (idx >= 33) return lm;
+
+      const filteredX = this.worldXFilters[idx].filter(lm.x, now);
+      const filteredY = this.worldYFilters[idx].filter(lm.y, now);
+      const filteredZ = lm.z !== undefined ? this.worldZFilters[idx].filter(lm.z, now) : 0;
+
+      return {
+        ...lm,
+        x: filteredX,
+        y: filteredY,
+        z: filteredZ,
       };
     });
   }
@@ -154,5 +189,8 @@ export class PoseLandmarkFilter {
     this.xFilters.forEach(f => f.reset());
     this.yFilters.forEach(f => f.reset());
     this.zFilters.forEach(f => f.reset());
+    this.worldXFilters.forEach(f => f.reset());
+    this.worldYFilters.forEach(f => f.reset());
+    this.worldZFilters.forEach(f => f.reset());
   }
 }

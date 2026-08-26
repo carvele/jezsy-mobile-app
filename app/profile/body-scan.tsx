@@ -108,6 +108,13 @@ export default function BodyScanScreen() {
   const isTiltValidRef = useRef(false);
   const isCapturingRef = useRef(false);
 
+  // Temporal smoothing for world metrics
+  const nativeFilterRef = useRef<import('@/src/utils/oneEuroFilter').PoseLandmarkFilter | null>(null);
+  if (!nativeFilterRef.current) {
+    const { PoseLandmarkFilter } = require('@/src/utils/oneEuroFilter');
+    nativeFilterRef.current = new PoseLandmarkFilter(1.2, 0.015, 1.0);
+  }
+
   // Burst collector persists across frames.
   const burstRef = useRef(new BurstCollector());
 
@@ -233,19 +240,35 @@ export default function BodyScanScreen() {
   const handleResults = useCallback(
     (result: PoseDetectionResultBundle) => {
       const pose = result.results[0]?.landmarks?.[0];
+      const worldPose = result.results[0]?.worldLandmarks?.[0];
+
       if (!pose || pose.length < 33) {
         setOverlayLandmarks([]);
+        nativeFilterRef.current?.reset();
         return;
       }
 
       // Normalize the library's optional visibility/presence into our
       // required-visibility Landmark shape; fall back to presence, then 0.
-      const landmarks: Landmark[] = pose.map((p) => ({
+      const rawLandmarks: Landmark[] = pose.map((p) => ({
         x: p.x,
         y: p.y,
         z: p.z,
         visibility: p.visibility ?? p.presence ?? 0,
       }));
+
+      const landmarks = nativeFilterRef.current?.filterLandmarks(rawLandmarks) ?? rawLandmarks;
+
+      const rawWorldLandmarks: Landmark[] | undefined = worldPose?.map((p) => ({
+        x: p.x,
+        y: p.y,
+        z: p.z,
+        visibility: p.visibility ?? p.presence ?? 0,
+      }));
+
+      const worldLandmarks = rawWorldLandmarks 
+        ? (nativeFilterRef.current?.filterWorldLandmarks(rawWorldLandmarks) ?? rawWorldLandmarks) 
+        : undefined;
 
       // Throttle overlay state updates to ~12 FPS (~80ms) to prevent React JS thread lockup
       const now = Date.now();
@@ -313,6 +336,7 @@ export default function BodyScanScreen() {
         heightCm: height,
         weightKg: weight,
         gender,
+        worldLandmarks: worldLandmarks as any, // pass the One-Euro-filtered metric coordinates
       });
       burstRef.current.addSample(measurement);
       if (mask) {
