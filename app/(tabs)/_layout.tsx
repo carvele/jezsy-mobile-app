@@ -15,7 +15,7 @@ export default function TabLayout() {
   const colors = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
   const { unreadCount } = useMessages();
-  const { session, isPasswordRecovery } = useAuth();
+  const { session, isPasswordRecovery, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
 
@@ -90,6 +90,11 @@ export default function TabLayout() {
       alignItems: 'center' as const,
     },
   }), [colors.tint, isDark, barBottom, horizontalMargin, barHeight, isCompact]);
+
+  // While auth is still initializing from storage/network, render nothing so we don't prematurely redirect
+  if (isLoading) {
+    return null;
+  }
 
   // Defence in depth for password recovery and non-authenticated users
   if (isPasswordRecovery) {
