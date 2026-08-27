@@ -1,4 +1,4 @@
--- ARAssets.jsx (admin-dashboard) has always written arStatus, arAlignPoints,
+-- ARAssets.jsx (owner-dashboard) has always written arStatus, arAlignPoints,
 -- and arAlignments as if they were real columns on products. None of them
 -- exist under any name -- confirmed via information_schema before this
 -- migration -- so every AR status toggle and every "Save & Verify Points"
@@ -6,13 +6,13 @@
 -- error surfaced by the try/catch wrapping it. This has never worked.
 --
 -- Chosen over three real columns: AR metadata (status, alignment points,
--- alignment verification state) is admin-configuration for a still-evolving
+-- alignment verification state) is owner-configuration for a still-evolving
 -- feature, read/written from exactly one screen, with no need for it to be
 -- indexed, filtered, or joined on at the SQL level. A jsonb blob keeps
 -- schema churn contained to this migration instead of a new ALTER TABLE
 -- each time the AR config shape grows.
 --
--- Shape written by admin-dashboard (camelCase, converted to/from snake_case
+-- Shape written by owner-dashboard (camelCase, converted to/from snake_case
 -- at the toCamel/toSnake boundary like every other column):
 --   { status: 'Active' | 'Disabled',
 --     alignPoints: { shoulderL, shoulderR, waist, hips } (each "x, y, z" string),

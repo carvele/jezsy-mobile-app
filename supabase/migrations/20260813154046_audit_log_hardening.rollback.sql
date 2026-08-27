@@ -1,6 +1,6 @@
-DROP POLICY IF EXISTS "Staff or admin can view logs" ON public.logs;
-DROP POLICY IF EXISTS "Enable all access for admin/staff" ON public.logs;
-CREATE POLICY "Enable all access for admin/staff"
+DROP POLICY IF EXISTS "Staff or owner can view logs" ON public.logs;
+DROP POLICY IF EXISTS "Enable all access for owner/staff" ON public.logs;
+CREATE POLICY "Enable all access for owner/staff"
 ON public.logs FOR ALL
 USING (public.is_staff_or_admin())
 WITH CHECK (public.is_staff_or_admin());
@@ -18,8 +18,8 @@ BEGIN
     RAISE EXCEPTION 'Only admins or owners can change staff roles';
   END IF;
 
-  IF new_role NOT IN ('staff', 'admin') THEN
-    RAISE EXCEPTION 'Role must be "staff" or "admin"';
+  IF new_role NOT IN ('staff', 'owner') THEN
+    RAISE EXCEPTION 'Role must be "staff" or "owner"';
   END IF;
 
   IF target_user_id = auth.uid() THEN
@@ -34,7 +34,7 @@ BEGIN
     RAISE EXCEPTION 'Target user not found or is deleted';
   END IF;
 
-  IF target_role NOT IN ('staff', 'admin') THEN
+  IF target_role NOT IN ('staff', 'owner') THEN
     RAISE EXCEPTION 'Cannot modify a % role', target_role;
   END IF;
 

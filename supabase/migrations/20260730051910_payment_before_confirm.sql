@@ -172,7 +172,7 @@ GRANT EXECUTE ON FUNCTION public.create_reservation(uuid, text, text, integer, t
 -- Unattended expiry. Without a scheduler the 120-minute rule is not actually
 -- enforced -- a reservation nobody looks at just sits there past its deadline.
 -- pg_cron is additive (it creates a `cron` schema and touches nothing else),
--- but it IS a new extension on the shared database: tell the admin-dashboard
+-- but it IS a new extension on the shared database: tell the owner-dashboard
 -- owner it is there.
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 

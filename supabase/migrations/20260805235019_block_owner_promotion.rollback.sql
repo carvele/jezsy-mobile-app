@@ -21,7 +21,7 @@ BEGIN
       FROM public.profiles
       WHERE id = auth.uid() AND deleted = false;
 
-      IF performer_role IS NULL OR performer_role NOT IN ('admin', 'owner') THEN
+      IF performer_role IS NULL OR performer_role NOT IN ('owner') THEN
         RAISE EXCEPTION 'Only administrators or owners can modify role, employment status, or block status.';
       END IF;
     END IF;
@@ -32,19 +32,19 @@ END;
 $function$;
 
 DROP POLICY IF EXISTS "Staff can view devices" ON public.devices;
-DROP POLICY IF EXISTS "Admin or owner can manage devices" ON public.devices;
-CREATE POLICY "Enable all access for admin/staff"
+DROP POLICY IF EXISTS "Owner or owner can manage devices" ON public.devices;
+CREATE POLICY "Enable all access for owner/staff"
 ON public.devices FOR ALL
 USING (public.is_staff_or_admin())
 WITH CHECK (public.is_staff_or_admin());
 
-DROP POLICY IF EXISTS "Admin or owner can manage store hours" ON public.store_hours;
+DROP POLICY IF EXISTS "Owner or owner can manage store hours" ON public.store_hours;
 CREATE POLICY "Staff manage store hours"
 ON public.store_hours FOR ALL
 USING (public.is_staff_or_admin())
 WITH CHECK (public.is_staff_or_admin());
 
-DROP POLICY IF EXISTS "Admin or owner can manage store closures" ON public.store_closures;
+DROP POLICY IF EXISTS "Owner or owner can manage store closures" ON public.store_closures;
 CREATE POLICY "Staff manage store closures"
 ON public.store_closures FOR ALL
 USING (public.is_staff_or_admin())

@@ -1,7 +1,7 @@
 -- Constrain reservations.status to the agreed vocabulary.
 --
 -- The column is free text with no constraint, which is how the mobile app and
--- the admin dashboard drifted into two different status lists without anything
+-- the owner dashboard drifted into two different status lists without anything
 -- failing. Nothing rejected a typo or a status only one side knew about.
 --
 -- The list below is the union of what both codebases write today, including

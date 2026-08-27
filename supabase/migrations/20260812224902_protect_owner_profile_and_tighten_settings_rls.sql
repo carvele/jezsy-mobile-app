@@ -2,7 +2,7 @@
 -- client-side only (a plain profiles.update({deleted:true}), no RPC). The
 -- existing check_profile_updates trigger blocks the Owner from touching
 -- their OWN row and blocks assigning role='owner', but never checked
--- whether the row being modified already IS the Owner -- so any Admin
+-- whether the row being modified already IS the Owner -- so any Owner
 -- could archive/terminate/block the Owner account directly from the
 -- browser console or any script, bypassing the UI's own protection.
 CREATE OR REPLACE FUNCTION public.check_profile_updates()
@@ -29,7 +29,7 @@ BEGIN
       FROM public.profiles
       WHERE id = auth.uid() AND deleted = false;
 
-      IF performer_role IS NULL OR performer_role NOT IN ('admin', 'owner') THEN
+      IF performer_role IS NULL OR performer_role NOT IN ('owner') THEN
         RAISE EXCEPTION 'Only administrators or owners can modify role, employment status, block status, or deletion status.';
       END IF;
 
@@ -54,8 +54,8 @@ $function$;
 -- code path relies on staff-tier write access here (repo-wide grep found
 -- no reads of these columns from the mobile app at all yet). Tightening to
 -- match the intended access tier before that wiring exists.
-DROP POLICY IF EXISTS "Enable all access for admin/staff" ON public.settings;
-CREATE POLICY "Enable all access for admin/staff"
+DROP POLICY IF EXISTS "Enable all access for owner/staff" ON public.settings;
+CREATE POLICY "Enable all access for owner/staff"
   ON public.settings FOR ALL
   USING (public.is_admin_or_owner())
   WITH CHECK (public.is_admin_or_owner());

@@ -26,11 +26,11 @@ ALTER TABLE public.pose_guide_products ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Anyone can read pose_guide_products"
   ON public.pose_guide_products FOR SELECT USING (true);
 
--- Staff/admin write
+-- Staff/owner write
 CREATE POLICY "Staff can manage pose_guide_products"
   ON public.pose_guide_products FOR ALL
   USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'owner', 'staff'))
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('owner', 'staff'))
   );
 
 -- Add to realtime

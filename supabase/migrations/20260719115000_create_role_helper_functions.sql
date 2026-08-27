@@ -31,7 +31,7 @@ BEGIN
     AND is_blocked = false
     AND coalesce(employment_status, 'active') = 'active';
 
-  RETURN coalesce(user_role IN ('admin', 'staff', 'owner'), false);
+  RETURN coalesce(user_role IN ('staff', 'owner'), false);
 END;
 $function$;
 
@@ -55,6 +55,6 @@ BEGIN
     AND is_blocked = false
     AND coalesce(employment_status, 'active') = 'active';
 
-  RETURN coalesce(user_role IN ('admin', 'owner'), false);
+  RETURN coalesce(user_role IN ('owner'), false);
 END;
 $function$;

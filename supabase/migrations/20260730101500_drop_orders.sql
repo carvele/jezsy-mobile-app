@@ -2,9 +2,9 @@
 -- feeds create_reservation one item at a time, and nothing in the mobile app
 -- calls create_order any more.
 --
--- DESTRUCTIVE, AND NOT ONLY FOR THIS REPO. The admin-dashboard shares this
+-- DESTRUCTIVE, AND NOT ONLY FOR THIS REPO. The owner-dashboard shares this
 -- database and very likely has an Orders screen reading these tables. Dropping
--- them breaks that app instantly. Confirm with the admin-dashboard owner before
+-- them breaks that app instantly. Confirm with the owner-dashboard owner before
 -- applying -- the same warning 20260727080200 carried, for the same reason.
 --
 -- Both tables were empty (0 rows) when this was written, so nothing is lost.

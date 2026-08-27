@@ -2,7 +2,7 @@
 --
 -- The live table already contains a reservation with status 'To Pay', a value
 -- the mobile app has never recognised -- it only ever handled Pending,
--- Confirmed, Completed and Cancelled. The admin dashboard is a separate repo,
+-- Confirmed, Completed and Cancelled. The owner dashboard is a separate repo,
 -- so which label staff acceptance actually writes is not visible from here.
 --
 -- That matters: 20260731170719 hung the payment deadline, the receipt guard

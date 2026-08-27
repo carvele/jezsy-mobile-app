@@ -1,5 +1,5 @@
 -- Adds an atomic stock-delta RPC to close a real race condition found across
--- 3 call sites in admin-dashboard: handleRestock and recordBoutiqueSale in
+-- 3 call sites in owner-dashboard: handleRestock and recordBoutiqueSale in
 -- Inventory.jsx/productService.js, and adjustInventoryForReservation in
 -- reservationService.js (used by every reservation lifecycle action).
 --
@@ -17,7 +17,7 @@
 -- in a single UPDATE statement inside a FOR UPDATE-locked transaction, so
 -- Postgres serializes concurrent callers against the row's live value
 -- instead of a JS-side snapshot. SECURITY INVOKER: inventory's own RLS
--- ("Enable all access for admin/staff", using is_staff_or_admin()) already
+-- ("Enable all access for owner/staff", using is_staff_or_admin()) already
 -- gates writes correctly, so this respects it directly rather than needing
 -- DEFINER privilege escalation.
 

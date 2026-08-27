@@ -99,7 +99,7 @@ Then register the webhook in the PayMongo dashboard against
 
 `payments-webhook` sets `payment_status` only. It does not flip a reservation to
 Confirmed, because confirming also commits stock and an appointment slot — that
-stays a staff decision in the admin dashboard.
+stays a staff decision in the owner dashboard.
 
 Refunds are not implemented. The `refunded` status exists in the check
 constraint, and staff can set it by hand, but nothing calls PayMongo's refund

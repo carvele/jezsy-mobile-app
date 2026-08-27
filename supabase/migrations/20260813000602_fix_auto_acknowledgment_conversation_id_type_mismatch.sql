@@ -26,7 +26,7 @@ BEGIN
 
   IF NEW.sender_id IS NOT NULL AND EXISTS (
     SELECT 1 FROM public.profiles
-    WHERE id = NEW.sender_id AND role IN ('staff', 'admin', 'owner') AND deleted IS DISTINCT FROM true
+    WHERE id = NEW.sender_id AND role IN ('staff', 'owner') AND deleted IS DISTINCT FROM true
   ) THEN
     RETURN NEW;
   END IF;
@@ -51,7 +51,7 @@ BEGIN
     AND sender_id IS NOT NULL
     AND EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE id = messages.sender_id AND role IN ('staff', 'admin', 'owner') AND deleted IS DISTINCT FROM true
+      WHERE id = messages.sender_id AND role IN ('staff', 'owner') AND deleted IS DISTINCT FROM true
     );
 
   SELECT COUNT(*) INTO existing_auto_count

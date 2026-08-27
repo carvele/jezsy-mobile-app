@@ -156,17 +156,17 @@ Client-side validation lives in the screens themselves (e.g. `checkout.tsx` vali
 
 **RLS policy summary** (one line each; all tables have RLS enabled):
 
-- `profiles` — public read; users update their own row; insert for authenticated; admin full access. *(Note: read is open to all users — see Recommendations.)*
-- `products`, `categories`, `inventory`, `color_options`, `color_list`, `pattern_list`, `pose_guides`, `suggested_outfits`, `ar_assets`, `settings` — public/all-user read, admin-only write.
-- `stock_movements` — public read, admin insert, updates/deletes explicitly denied (append-only ledger).
-- `orders`, `order_items`, `reservations` — owner (customer_id/user_id) read/insert/update, admin full access; reservation delete is admin-only.
+- `profiles` — public read; users update their own row; insert for authenticated; owner full access. *(Note: read is open to all users — see Recommendations.)*
+- `products`, `categories`, `inventory`, `color_options`, `color_list`, `pattern_list`, `pose_guides`, `suggested_outfits`, `ar_assets`, `settings` — public/all-user read, owner-only write.
+- `stock_movements` — public read, owner insert, updates/deletes explicitly denied (append-only ledger).
+- `orders`, `order_items`, `reservations` — owner (customer_id/user_id) read/insert/update, owner full access; reservation delete is owner-only.
 - `wishlists`, `capsules`, `capsule_items`, `user_streaks`, `notifications` — strict owner-only CRUD.
-- `user_measurements` — owner-only read/write (plus admin); 9 overlapping policies from successive migrations.
-- `wardrobe_items`, `saved_outfits` — owner-or-admin policies, but also a broader "all authenticated users" policy coexists (see Recommendations).
-- `conversations`, `messages` — participant (customer) or admin/staff read/insert/update.
+- `user_measurements` — owner-only read/write (plus owner); 9 overlapping policies from successive migrations.
+- `wardrobe_items`, `saved_outfits` — owner-or-owner policies, but also a broader "all authenticated users" policy coexists (see Recommendations).
+- `conversations`, `messages` — participant (customer) or owner/staff read/insert/update.
 - `reviews` — public read, owner-managed write.
-- `devices`, `feedback`, `logs`, `ar_sessions` — authenticated insert, admin read/manage.
-- `staff_status_history` — staff/admin read only.
+- `devices`, `feedback`, `logs`, `ar_sessions` — authenticated insert, owner read/manage.
+- `staff_status_history` — staff/owner read only.
 
 **Storage buckets:** `payment_receipts` (private; per-user folder paths; used by `reserve/[id]`), `wardrobe-images` (used by `wardrobe/add-item`), `products` (product imagery; also currently used for chat image uploads — see Recommendations).
 
@@ -213,7 +213,7 @@ Two on-device pipelines exist; one is fully live, one is partially implemented.
 3. "Reserve" opens `reserve/[id]`: it re-reads the product, and `TimeSlotPicker` queries `reservations` for the chosen date to compute slot availability.
 4. The user picks a receipt image (`expo-image-picker`); on submit, the image is uploaded to the private `payment_receipts` bucket under `userId/timestamp.ext`.
 5. The screen inserts a `reservations` row (status `Pending`, 50% deposit, generated `display_id`); RLS ensures `customer_id = auth.uid()`. A local reminder notification is scheduled.
-6. Later, when staff change the reservation status (admin side), a database webhook fires the `notify-status` Edge Function, which inserts a `notifications` row (shown in the Inbox tab) and sends an Expo push. The user sees the reservation in `reservations.tsx`.
+6. Later, when staff change the reservation status (owner side), a database webhook fires the `notify-status` Edge Function, which inserts a `notifications` row (shown in the Inbox tab) and sends an Expo push. The user sees the reservation in `reservations.tsx`.
 
 *The purchase variant:* `product/[id]` → `CartContext.addToCart` (AsyncStorage) → `cart.tsx` → `checkout.tsx`, which validates address/date and calls the `create_order` RPC; the database creates `orders` + `order_items` atomically with server-computed prices; the client clears the cart and routes to `orders/[id]`.
 
@@ -231,7 +231,7 @@ Two on-device pipelines exist; one is fully live, one is partially implemented.
 2. Starting a chat calls `getOrCreateConversation()`, which finds or inserts the user's `conversations` row (one conversation per customer, RLS-scoped).
 3. `messages/[conversationId]` loads the thread from `messages` and subscribes to a Realtime channel filtered to that conversation; `MessagesContext` separately subscribes to `conversations` changes to keep the list and unread badge fresh (both tables are in the `supabase_realtime` publication).
 4. `sendMessage()` inserts a `messages` row, then updates the parent conversation's `last_message` / `last_message_time`. Image attachments are uploaded to storage first and sent as a URL.
-5. Opening a thread triggers `markAsRead()`: resets `conversations.unread_count` and stamps `read_at` on unread incoming messages. The staff side (a separate admin app) sees the same rows via its admin RLS policies; the tab badge updates live via the subscription.
+5. Opening a thread triggers `markAsRead()`: resets `conversations.unread_count` and stamps `read_at` on unread incoming messages. The staff side (a separate owner app) sees the same rows via its owner RLS policies; the tab badge updates live via the subscription.
 
 ---
 
@@ -245,7 +245,7 @@ For development use — ordered roughly by impact.
 2. **Chat images upload to the public `products` bucket** (`messages/[conversationId].tsx:141`). Private conversation attachments land in a bucket meant for catalog imagery with public URLs. Create a `chat-images` bucket with participant-scoped RLS.
 3. **Two inconsistent write paths for commerce.** Checkout correctly goes through the server-side `create_order` RPC (prices computed in-DB), but reservations are a **direct client insert** with client-computed `deposit`, `rental_price`, and a `Date.now()`-based `display_id`. A tampered client could write arbitrary prices. Move reservation creation to an RPC or add DB-side checks/triggers mirroring the order hardening.
 4. **Non-atomic messaging writes.** `sendMessage` inserts the message, then separately updates the conversation; a failure between the two leaves a stale `last_message`. `unread_count` is also maintained client-side (the code itself notes a DB trigger should own this). A trigger on `messages` insert would fix both.
-5. **`profiles` is world-readable** ("Enable read access for all users"), exposing emails and push tokens of all users to any authenticated (or anonymous) client. Restrict to owner + admin, or a limited public view. Also, one update policy matches "based on email" while the app updates by `id` — verify it actually permits the intended writes.
+5. **`profiles` is world-readable** ("Enable read access for all users"), exposing emails and push tokens of all users to any authenticated (or anonymous) client. Restrict to owner + owner, or a limited public view. Also, one update policy matches "based on email" while the app updates by `id` — verify it actually permits the intended writes.
 
 ### 4.2 Coupling and consistency
 

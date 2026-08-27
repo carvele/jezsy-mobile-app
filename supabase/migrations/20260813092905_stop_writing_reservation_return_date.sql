@@ -3,7 +3,7 @@
 -- deliberately dropped this: JezSy is reservation-only, not rental, so there
 -- is no return flow for that date to describe. A later CREATE OR REPLACE
 -- (20260722011025_reservation_respect_sale_price.sql, adding sale-price
--- handling) silently reintroduced the write. admin-dashboard's
+-- handling) silently reintroduced the write. owner-dashboard's
 -- reservationService.js reads and displays this column, so staff have been
 -- seeing a fabricated date with no real business meaning on every
 -- reservation since. This migration is the current function body with the

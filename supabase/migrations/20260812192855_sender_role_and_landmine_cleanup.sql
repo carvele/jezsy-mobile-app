@@ -5,13 +5,13 @@
 -- 1. messages.sender_role was defined in 20260812231500_add_sender_role_and_
 -- fix_pose_guides.sql but that migration was never actually applied (same
 -- never-applied-landmine pattern found repeatedly this session) -- the
--- column plain does not exist live. admin-dashboard's useRealtimeSync.js
+-- column plain does not exist live. owner-dashboard's useRealtimeSync.js
 -- has been checking payload.new.sender_type (a column that has never
 -- existed under any name) to decide whether an incoming message is from a
 -- customer; since that field is always undefined, `undefined !== 'staff'`
 -- is always true, so a staff member's own outgoing message currently
 -- triggers their own "new customer message" alert sound. Adding the column
--- here; the admin-dashboard fix to actually read sender_role ships
+-- here; the owner-dashboard fix to actually read sender_role ships
 -- alongside this in the same PR.
 --
 -- The column is set server-side by a BEFORE INSERT trigger rather than
@@ -29,7 +29,7 @@ SECURITY DEFINER
 SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-  SELECT CASE WHEN p.role IN ('staff', 'admin', 'owner') THEN 'staff' ELSE 'customer' END
+  SELECT CASE WHEN p.role IN ('staff', 'owner') THEN 'staff' ELSE 'customer' END
   INTO NEW.sender_role
   FROM public.profiles p
   WHERE p.id = NEW.sender_id;
@@ -51,20 +51,20 @@ FOR EACH ROW
 EXECUTE FUNCTION public.set_message_sender_role();
 
 -- Backfill: every existing row currently reads the just-added column's
--- default ('customer'). Correct the ones actually sent by staff/admin/owner.
+-- default ('customer'). Correct the ones actually sent by staff/owner/owner.
 UPDATE public.messages m
 SET sender_role = 'staff'
 FROM public.profiles p
 WHERE p.id = m.sender_id
-  AND p.role IN ('staff', 'admin', 'owner')
+  AND p.role IN ('staff', 'owner')
   AND m.sender_role IS DISTINCT FROM 'staff';
 
 -- 2. conversations has no DELETE policy at all (RLS enabled, INSERT/SELECT/
--- UPDATE only), so admin-dashboard's "delete conversation" action fails
--- closed for every role including admin/owner. Not a security gap -- a
+-- UPDATE only), so owner-dashboard's "delete conversation" action fails
+-- closed for every role including owner/owner. Not a security gap -- a
 -- broken feature -- but a one-line fix found in the same sweep.
-DROP POLICY IF EXISTS "Enable delete for admin" ON public.conversations;
-CREATE POLICY "Enable delete for admin"
+DROP POLICY IF EXISTS "Enable delete for owner" ON public.conversations;
+CREATE POLICY "Enable delete for owner"
   ON public.conversations FOR DELETE
   TO authenticated
   USING (public.is_admin_or_owner());

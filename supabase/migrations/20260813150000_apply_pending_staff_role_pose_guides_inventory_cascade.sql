@@ -3,9 +3,9 @@
 -- (confirmed absent from the migration ledger and from the live schema for
 -- all three), while the app code that depends on them already shipped.
 --
--- 1. update_staff_role RPC (admin-dashboard/supabase/migrations/
+-- 1. update_staff_role RPC (owner-dashboard/supabase/migrations/
 --    20260810000001_add_update_staff_role_rpc.sql). StaffManagement.jsx
---    calls this by name -- the admin role-management UI has been broken
+--    calls this by name -- the owner role-management UI has been broken
 --    ("function does not exist") since it merged.
 --
 --    Hardened relative to the original: that version restricted callers to
@@ -13,10 +13,10 @@
 --    Two problems. First, the same is_blocked/employment_status gap
 --    is_staff_or_admin()/is_admin_or_owner() were hardened to close (audit
 --    finding F3). Second, and more fundamental: no profile in this database
---    has role='owner' at all -- confirmed live, only 'staff'/'admin'/
---    'customer' exist. The admin app's own permission matrix
+--    has role='owner' at all -- confirmed live, only 'staff'/'owner'/
+--    'customer' exist. The owner app's own permission matrix
 --    (src/utils/permissions.js: FULL = [OWNER, ADMIN]) and
---    is_admin_or_owner() both already treat 'admin' and 'owner' as the same
+--    is_admin_or_owner() both already treat 'owner' and 'owner' as the same
 --    full-access tier. As originally written, this function would have
 --    rejected every real user in the database, including the actual owner.
 --    Uses is_admin_or_owner() directly instead of a duplicated raw check.
@@ -33,7 +33,7 @@
 --    rather than throwing.
 --
 --    Hardened relative to the original: "Staff can manage
---    pose_guide_products" used a raw `role IN ('admin','owner','staff')`
+--    pose_guide_products" used a raw `role IN ('owner','staff')`
 --    check with no is_blocked/employment_status guard -- same F3-class gap.
 --    Uses is_staff_or_admin() directly instead.
 --
@@ -77,8 +77,8 @@ BEGIN
     RAISE EXCEPTION 'Only admins or owners can change staff roles';
   END IF;
 
-  IF new_role NOT IN ('staff', 'admin') THEN
-    RAISE EXCEPTION 'Role must be "staff" or "admin"';
+  IF new_role NOT IN ('staff', 'owner') THEN
+    RAISE EXCEPTION 'Role must be "staff" or "owner"';
   END IF;
 
   IF target_user_id = auth.uid() THEN
@@ -93,7 +93,7 @@ BEGIN
     RAISE EXCEPTION 'Target user not found or is deleted';
   END IF;
 
-  IF target_role NOT IN ('staff', 'admin') THEN
+  IF target_role NOT IN ('staff', 'owner') THEN
     RAISE EXCEPTION 'Cannot modify a % role', target_role;
   END IF;
 

@@ -15,7 +15,7 @@
 --   * Public buckets serve objects via /storage/v1/object/public/... which
 --     bypasses RLS entirely, so image rendering is unaffected.
 --   * Both apps read exclusively through getPublicUrl() -- mobile
---     ([conversationId].tsx:142, wardrobe/add-item.tsx:198) and admin
+--     ([conversationId].tsx:142, wardrobe/add-item.tsx:198) and owner
 --     (lib/storage.js:21, communicationService.js:48).
 --   * Neither app calls storage .list() or .download(), the two operations
 --     that actually require SELECT on storage.objects (grep-verified, no

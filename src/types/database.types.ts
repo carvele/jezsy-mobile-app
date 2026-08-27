@@ -878,6 +878,7 @@ export type Database = {
       products: {
         Row: {
           ar_data: Json
+          garment_metadata: Json | null
           base_color: string | null
           care_instructions: string | null
           category: string | null
@@ -923,6 +924,7 @@ export type Database = {
         }
         Insert: {
           ar_data?: Json
+          garment_metadata?: Json | null
           base_color?: string | null
           care_instructions?: string | null
           category?: string | null
@@ -968,6 +970,7 @@ export type Database = {
         }
         Update: {
           ar_data?: Json
+          garment_metadata?: Json | null
           base_color?: string | null
           care_instructions?: string | null
           category?: string | null

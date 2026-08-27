@@ -7,15 +7,15 @@
 -- extra round-trip on every send.
 --
 -- This trigger makes the denormalization atomic with the insert and authoritative
--- regardless of which client (customer app or staff/admin app) sent the message.
+-- regardless of which client (customer app or staff/owner app) sent the message.
 -- It only touches last_message / last_message_time -- both are pure functions of
 -- the row just inserted, so the write is idempotent and safe even if a client
 -- also happens to set them.
 --
 -- unread_count is intentionally NOT modified here. Its semantics are shared
--- with the separate staff/admin app (a single counter for a two-party
+-- with the separate staff/owner app (a single counter for a two-party
 -- conversation), and no existing trigger or function in this database touches
--- it, so changing it server-side could double-count against whatever the admin
+-- it, so changing it server-side could double-count against whatever the owner
 -- app currently does. Fixing the customer-side unread badge (which currently
 -- never increments) needs coordination with that app and is left as a
 -- follow-up.

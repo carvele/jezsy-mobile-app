@@ -1,14 +1,14 @@
 -- ============================================================================
 -- INVENTORY FEATURE: FIX RLS ROLE CASING
 -- ============================================================================
--- Migration: Correct all admin-role checks from Title Case to lowercase
+-- Migration: Correct all owner-role checks from Title Case to lowercase
 --
--- Root cause: profiles.role values are stored as lowercase ('admin', 'owner',
+-- Root cause: profiles.role values are stored as lowercase ('owner',
 -- 'staff', 'customer') throughout the entire application. The original RLS
--- migration was written with IN ('Admin', 'Owner') which never matches live
--- data, blocking every admin write operation.
+-- migration was written with IN ('Owner', 'Owner') which never matches live
+-- data, blocking every owner write operation.
 --
--- Fix: Replace all role IN ('Admin', 'Owner') with IN ('admin', 'owner')
+-- Fix: Replace all role IN ('Owner', 'Owner') with IN ('owner')
 -- across stock_movements, products, color_list, and pattern_list policies.
 --
 -- IDEMPOTENT: All DROP ... IF EXISTS before CREATE
@@ -29,7 +29,7 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
@@ -49,7 +49,7 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
@@ -68,7 +68,7 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
@@ -84,7 +84,7 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
@@ -99,7 +99,7 @@ USING (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
@@ -118,7 +118,7 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
@@ -134,7 +134,7 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
@@ -149,7 +149,7 @@ USING (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )

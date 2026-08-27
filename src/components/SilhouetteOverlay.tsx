@@ -13,7 +13,7 @@ export function SilhouetteOverlay({ color }: Props) {
   // head/shoulders/torso shapes stacked with margins -- those never lined up
   // into anything read as a body.
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <View style={styles.container}>
         <Svg width="100%" height="80%" viewBox="0 0 100 260">
           <Path

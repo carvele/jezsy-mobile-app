@@ -2,29 +2,29 @@
 --
 -- DB_AUDIT_2026-07-20.md flagged unread_count as written by nothing that
 -- increments it, leaving the mobile Inbox badge permanently 0. This was
--- deferred pending "admin-app coordination"; that coordination question is
+-- deferred pending "owner-app coordination"; that coordination question is
 -- now resolved by reading both repos:
 --
 --   * mobile READS it (MessagesContext.tsx sums it for the badge) and RESETS
 --     it to 0 in markAsRead() when the customer opens a conversation.
---   * admin NEVER reads it. It only writes: unread_count: 1 when creating a
+--   * owner NEVER reads it. It only writes: unread_count: 1 when creating a
 --     conversation (customerService.js:152), and a no-op on update
 --     (customerService.js:165 evaluates `supabase.rpc ? undefined : 0`, which
 --     is always undefined, so the field is never sent -- its own comment says
 --     "increment handled server-side ideally").
 --
 -- So the counter is unambiguously "messages unread BY THE CUSTOMER", and the
--- server-side increment admin's comment asks for is exactly what's missing.
+-- server-side increment owner's comment asks for is exactly what's missing.
 --
 -- Increment rule: a message increments the count only when its sender is not
 -- the conversation's customer (i.e. staff replied). Customer's own messages
 -- never increment their own unread badge.
 --
--- DOUBLE-COUNT GUARD: admin creates a conversation with unread_count: 1 and
+-- DOUBLE-COUNT GUARD: owner creates a conversation with unread_count: 1 and
 -- then inserts the first message, which would make this trigger bump it to 2.
--- Rather than require a lockstep change in the admin repo, a BEFORE INSERT
+-- Rather than require a lockstep change in the owner repo, a BEFORE INSERT
 -- trigger forces new conversations to start at 0, making this trigger the
--- single authority over the counter. Admin's explicit 1 becomes redundant
+-- single authority over the counter. Owner's explicit 1 becomes redundant
 -- instead of wrong, so both apps keep working unchanged.
 
 CREATE OR REPLACE FUNCTION public.sync_conversation_on_message()

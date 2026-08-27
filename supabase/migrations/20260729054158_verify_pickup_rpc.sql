@@ -2,7 +2,7 @@
 --
 -- Staff-side handoff confirmation. Scans the QR code on a customer's pickup
 -- pass (app/reservations/[id].tsx), which encodes reservations.pickup_token,
--- and marks the reservation Completed. Intended caller is the admin
+-- and marks the reservation Completed. Intended caller is the owner
 -- dashboard, but the function lives here since this repo owns the shared
 -- migration ledger.
 --
@@ -11,9 +11,9 @@
 -- is_staff_or_admin() (not is_admin_or_owner()) so any front-of-house staff
 -- can complete a handoff, not just admins/owners.
 --
--- APPLIED 2026-07-29 as 20260729054158. The admin-dashboard scanning UI does
+-- APPLIED 2026-07-29 as 20260729054158. The owner-dashboard scanning UI does
 -- not exist yet, so nothing calls this function in production: it is inert
--- until that flow is built. The admin-dashboard developer still needs to be
+-- until that flow is built. The owner-dashboard developer still needs to be
 -- told it exists.
 
 CREATE OR REPLACE FUNCTION public.verify_pickup(_pickup_token uuid)

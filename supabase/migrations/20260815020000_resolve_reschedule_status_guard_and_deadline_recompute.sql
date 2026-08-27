@@ -20,7 +20,7 @@
 --    closer pickup. A reservation moved to a LATER slot keeps its old,
 --    closer deadline -- expire_unpaid_reservations() can auto-cancel it
 --    while it still has plenty of runway before the real new appointment.
---    admin-dashboard's src/utils/reservationDeadline.js already computes
+--    owner-dashboard's src/utils/reservationDeadline.js already computes
 --    this correctly for its own separate direct-write reschedule modal;
 --    this RPC (the customer-request/staff-approve path) never had the
 --    equivalent fix.

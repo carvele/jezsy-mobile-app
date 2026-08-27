@@ -14,7 +14,7 @@
 -- public.reservations.return_date is nullable with no default and is read
 -- nowhere in the mobile app (only present in generated types), so omitting it
 -- from the INSERT simply leaves it NULL. The column itself is left in place
--- rather than dropped, since the separate staff/admin app may still select it;
+-- rather than dropped, since the separate staff/owner app may still select it;
 -- dropping it needs coordination with that app.
 --
 -- Everything else about the function is unchanged from

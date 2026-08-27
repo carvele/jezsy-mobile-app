@@ -8,7 +8,7 @@
 -- Verify afterwards with has_function_privilege, not by reading the grant.
 --
 -- sync_product_stock is deliberately excluded: it recomputes derived stock and
--- the admin-dashboard repo may call it directly. Confirm before revoking that
+-- the owner-dashboard repo may call it directly. Confirm before revoking that
 -- one.
 
 REVOKE EXECUTE ON FUNCTION public.notify_order_status_change() FROM PUBLIC, anon, authenticated;

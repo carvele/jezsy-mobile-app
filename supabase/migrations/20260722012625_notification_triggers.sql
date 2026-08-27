@@ -11,7 +11,7 @@
 --     and target them, not an automatic DB trigger.
 --
 -- Both reservations and orders are staff-only writes (RLS: "Enable update
--- for admin only" / "Enable write for staff only"), so these triggers use
+-- for owner only" / "Enable write for staff only"), so these triggers use
 -- SECURITY DEFINER to insert on behalf of the customer regardless of the
 -- acting staff member's own grants on public.notifications.
 

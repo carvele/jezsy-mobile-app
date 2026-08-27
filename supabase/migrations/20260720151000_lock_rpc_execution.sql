@@ -27,8 +27,8 @@
 --     must stay anon-callable. The email-enumeration trade-off is accepted
 --     and documented, not fixed here.
 --   * update_staff_status: already self-guards internally (requires the
---     caller's own profile.role to be admin/owner, blocks self-modification,
---     blocks last-admin lockout) -- verified by reading its body. Revoking
+--     caller's own profile.role to be owner/owner, blocks self-modification,
+--     blocks last-owner lockout) -- verified by reading its body. Revoking
 --     anon removes a pointless attempt surface; authenticated stays granted
 --     since legitimate staff call it as themselves.
 

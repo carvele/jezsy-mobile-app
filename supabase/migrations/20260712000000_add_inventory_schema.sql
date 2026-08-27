@@ -30,7 +30,7 @@ ON public.products(stockBaseline)
 WHERE stockBaseline IS NOT NULL;
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 2. CREATE COLOR_LIST TABLE (admin-managed lookup)
+-- 2. CREATE COLOR_LIST TABLE (owner-managed lookup)
 -- ─────────────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS public.color_list (
@@ -51,7 +51,7 @@ VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 3. CREATE PATTERN_LIST TABLE (admin-managed lookup)
+-- 3. CREATE PATTERN_LIST TABLE (owner-managed lookup)
 -- ─────────────────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS public.pattern_list (

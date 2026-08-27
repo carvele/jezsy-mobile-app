@@ -8,7 +8,7 @@
 --   - Phase 2 (mobile app: Preparing bucket, reservationStatus.ts, stale
 --     status-badge fix, payments-create edge function) is merged, built,
 --     and installed on the test device.
---   - Phase 3/3b (admin-dashboard: Preparing stage, actual stored-value
+--   - Phase 3/3b (owner-dashboard: Preparing stage, actual stored-value
 --     rename Confirmed->To Pay and To Pickup->Ready) is merged and
 --     auto-deployed live.
 --   - Live `reservations.status` distribution was checked immediately

@@ -1,4 +1,4 @@
--- Feature: admin-broadcast announcements for the Inbox Notifications tab.
+-- Feature: owner-broadcast announcements for the Inbox Notifications tab.
 --
 -- public.notifications requires a user_id per row and is only ever written
 -- by two SECURITY DEFINER triggers scoped to one customer's reservation/

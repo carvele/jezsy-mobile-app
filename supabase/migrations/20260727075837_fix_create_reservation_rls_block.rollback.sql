@@ -2,7 +2,7 @@
 --
 -- Restores SECURITY INVOKER and the anon EXECUTE grant. Note that reverting
 -- re-breaks customer reservations: with SECURITY INVOKER the INSERT is again
--- refused by the admin-only reservations INSERT policy.
+-- refused by the owner-only reservations INSERT policy.
 
 ALTER FUNCTION public.create_reservation(uuid, text, text, integer, text, text, text)
   SECURITY INVOKER;

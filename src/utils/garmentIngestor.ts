@@ -40,42 +40,70 @@ export class GarmentIngestor {
     }
 
     // 2. Auto-map bones (heuristic matching)
-    let mappedCount = 0;
     for (const stdBone of STANDARD_BONES) {
-      // Look for exact match, or Mixamo prefix
       if (bones[stdBone]) {
         boneMap[stdBone] = stdBone;
-        mappedCount++;
       } else if (bones['mixamorig' + stdBone]) {
         boneMap[stdBone] = 'mixamorig' + stdBone;
-        mappedCount++;
       }
     }
 
-    const ingestionStatus: IngestionStatus =
-      mappedCount >= 3 ? 'AR_READY' : 'NEEDS_MERCHANT_MAPPING';
-
     // 3. Metric Scale Calibration
-    // In a real Node environment we'd use 'three' package to measure the bounding box.
-    // Here we stub it out because 'three' is loaded via CDN in the frontend WebView.
-    const restPoseMetricWidth = 0.5;
+    let restPoseMetricWidth = 0.5;
+    const THREE = (window as any).THREE;
+    if (THREE) {
+      const leftShoulder = bones[boneMap['LeftShoulder']] || bones[boneMap['LeftArm']];
+      const rightShoulder = bones[boneMap['RightShoulder']] || bones[boneMap['RightArm']];
+      if (leftShoulder && rightShoulder) {
+        const lPos = new THREE.Vector3();
+        const rPos = new THREE.Vector3();
+        leftShoulder.getWorldPosition(lPos);
+        rightShoulder.getWorldPosition(rPos);
+        restPoseMetricWidth = lPos.distanceTo(rPos);
+      } else {
+        // Fallback to bounding box width if shoulders missing
+        const box = new THREE.Box3().setFromObject(scene);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        restPoseMetricWidth = size.x;
+      }
+    }
 
     // 4. Anatomical Anchoring
-    // Instead of Box3 center, we find a specific anchor.
-    // For shirts/dresses, the anchor is the neck/spine top.
     const anchorOffset = { x: 0, y: 0.5, z: 0 };
-    if (boneMap['Spine2']) {
+    let anchorConfidence: 'detected' | 'inferred' | 'merchant_confirmed' = 'inferred';
+    
+    if (THREE && boneMap['Spine2'] && bones[boneMap['Spine2']]) {
       const spine2 = bones[boneMap['Spine2']];
-      // spine2.getWorldPosition(new THREE.Vector3())
-      // We stub this for the typechecker.
+      const pos = new THREE.Vector3();
+      spine2.getWorldPosition(pos);
+      anchorOffset.x = pos.x;
+      anchorOffset.y = pos.y;
+      anchorOffset.z = pos.z;
+      anchorConfidence = 'detected';
+    } else if (THREE) {
+      // Inferred from bounding box top-center
+      const box = new THREE.Box3().setFromObject(scene);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      anchorOffset.x = center.x;
+      anchorOffset.y = box.max.y; // Top of the mesh
+      anchorOffset.z = center.z;
     }
+
+    // 5. Ingestion Status
+    // MVP Rule: MUST have Spine + LeftArm + RightArm. MUST have 'detected' anchor.
+    const hasRequiredBones = boneMap['Spine'] && boneMap['LeftArm'] && boneMap['RightArm'];
+    const ingestionStatus: IngestionStatus =
+      (hasRequiredBones && anchorConfidence === 'detected') ? 'AR_READY' : 'NEEDS_MERCHANT_MAPPING';
 
     return {
       id,
       category,
       calibrationVersion: '1.0.0',
       ingestionStatus,
-      anatomicalAnchorOffset: { x: anchorOffset.x, y: anchorOffset.y, z: anchorOffset.z },
+      anatomicalAnchorOffset: anchorOffset,
+      anchorConfidence,
       restPoseMetricWidth,
       boneMap,
       restPose: 'T_POSE' // Can be heuristically detected by arm angles
@@ -93,6 +121,7 @@ export class GarmentIngestor {
       calibrationVersion: '1.0.0',
       ingestionStatus: status,
       anatomicalAnchorOffset: { x: 0, y: 0, z: 0 },
+      anchorConfidence: 'inferred',
       restPoseMetricWidth: 0.5,
       boneMap: {},
       restPose: 'CUSTOM'

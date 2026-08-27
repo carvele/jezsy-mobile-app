@@ -11,7 +11,7 @@ CREATE POLICY "Customers can view own conversations"
 ON public.conversations FOR SELECT 
 TO authenticated
 USING (auth.uid() = customer_id OR EXISTS (
-  SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'owner')
+  SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('owner')
 ));
 
 DROP POLICY IF EXISTS "Customers can insert own conversations" ON public.conversations;
@@ -25,7 +25,7 @@ CREATE POLICY "Customers can update own conversations"
 ON public.conversations FOR UPDATE 
 TO authenticated
 USING (auth.uid() = customer_id OR EXISTS (
-  SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'owner')
+  SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('owner')
 ));
 
 -- Messages RLS
@@ -38,7 +38,7 @@ USING (
     SELECT 1 FROM public.conversations c 
     WHERE c.id = conversation_id 
     AND (c.customer_id = auth.uid() OR EXISTS (
-      SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'owner')
+      SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('owner')
     ))
   )
 );
@@ -53,7 +53,7 @@ WITH CHECK (
     SELECT 1 FROM public.conversations c 
     WHERE c.id = conversation_id 
     AND (c.customer_id = auth.uid() OR EXISTS (
-      SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'owner')
+      SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('owner')
     ))
   )
 );
@@ -67,7 +67,7 @@ USING (
     SELECT 1 FROM public.conversations c 
     WHERE c.id = conversation_id 
     AND (c.customer_id = auth.uid() OR EXISTS (
-      SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'owner')
+      SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('owner')
     ))
   )
 );

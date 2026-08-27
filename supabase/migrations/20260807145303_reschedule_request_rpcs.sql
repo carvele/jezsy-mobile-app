@@ -83,7 +83,7 @@ BEGIN
   END IF;
 
   SELECT role INTO v_role FROM public.profiles WHERE id = v_actor;
-  IF v_role IS NULL OR v_role NOT IN ('admin', 'staff', 'owner') THEN
+  IF v_role IS NULL OR v_role NOT IN ('staff', 'owner') THEN
     RAISE EXCEPTION 'Only staff can answer a reschedule request.';
   END IF;
 

@@ -28,14 +28,14 @@ proceed regardless.
 
 The reserve screen promises "Balance on collection" and no code implements it.
 `payments-create` charges `reservations.deposit` only, the webhook sets
-`payment_status = 'Paid'`, and the admin's "Hand over" action moves status and
+`payment_status = 'Paid'`, and the owner's "Hand over" action moves status and
 stock without touching money. The remaining 50% is taken in person and nothing
 records it.
 
 `payment_type` already distinguishes `'Deposit'` from `'Full'` correctly. Nothing
 reads it. That column is the hook for all of the below.
 
-### A1. Stop overstating revenue — admin-dashboard, no schema
+### A1. Stop overstating revenue — owner-dashboard, no schema
 
 `src/services/customerService.js:174` and `countsAsRevenue` in
 `src/utils/reservationStatus.js`. Blocked on the question above.
@@ -43,7 +43,7 @@ reads it. That column is the hook for all of the below.
 Ship with a unit test: the repo has `customerService.test.js`, and a deposit
 reservation counting its full price is exactly the case to pin.
 
-### A2. Show the balance at handover — admin-dashboard, no schema
+### A2. Show the balance at handover — owner-dashboard, no schema
 
 Staff currently see "Paid ✓" on a reservation still owing half. The To Pickup
 card and the list row should show `rental_price - deposit` when
@@ -75,10 +75,10 @@ while the dashboard's `CAN_RESCHEDULE_STATUSES` includes `To Pickup` -- so staff
 can move an appointment in a state the customer cannot.
 
 Needs a proposed-date column pair or a requests table, an RPC that writes the
-request rather than the booking, an admin approve/reject action, and a
+request rather than the booking, an owner approve/reject action, and a
 notification back. Schema change, so same confirmation gate as A3.
 
-Sequence after A, since A2 and A3 touch the same admin surfaces and doing them
+Sequence after A, since A2 and A3 touch the same owner surfaces and doing them
 together avoids two passes over the same components.
 
 ---
@@ -148,7 +148,7 @@ Cheap, zero risk, and it is what stopped these being lost this time. Do it first
 
 - No migration applied without explicit confirmation; every one idempotent and
   paired with a rollback.
-- Admin-dashboard work is a separate repo, separate branch and PR.
+- Owner-dashboard work is a separate repo, separate branch and PR.
 - Per stage: `tsc` clean, eslint at or below the 9-problem baseline, device pass
   in both themes.
 - Anything unverifiable gets said so, not claimed.

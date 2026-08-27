@@ -1,13 +1,13 @@
 -- Rollback for 20260720140000_close_price_manipulation_vector.sql
 
-DROP POLICY IF EXISTS "Enable insert for admin only" ON public.reservations;
-DROP POLICY IF EXISTS "Enable update for admin only" ON public.reservations;
+DROP POLICY IF EXISTS "Enable insert for owner only" ON public.reservations;
+DROP POLICY IF EXISTS "Enable update for owner only" ON public.reservations;
 
-CREATE POLICY "Enable insert for own reservations or admin"
+CREATE POLICY "Enable insert for own reservations or owner"
   ON public.reservations FOR INSERT
   WITH CHECK ((customer_id = auth.uid()) OR is_admin_or_owner());
 
-CREATE POLICY "Enable update for own reservations or admin"
+CREATE POLICY "Enable update for own reservations or owner"
   ON public.reservations FOR UPDATE
   USING ((customer_id = auth.uid()) OR is_admin_or_owner())
   WITH CHECK ((customer_id = auth.uid()) OR is_admin_or_owner());

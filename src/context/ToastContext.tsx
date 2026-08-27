@@ -93,8 +93,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             // under the status bar on any device with a taller one.
             { top: insets.top + 12, backgroundColor: colors.card, borderColor: accent },
             animatedStyle,
+            { pointerEvents: 'box-none' }
           ]}
-          pointerEvents="box-none"
           accessibilityLiveRegion="polite"
           accessibilityRole="alert"
         >
@@ -129,6 +129,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     zIndex: 9999,
     ...Platform.select({
+      web: { boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.25)' },
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8 },
       android: { elevation: 8 },
     }),

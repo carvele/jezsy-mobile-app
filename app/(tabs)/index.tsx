@@ -396,7 +396,6 @@ export default function HomeScreen() {
                     activeOpacity={0.9}
                     style={[styles.heroCard, { width: heroCardWidth }, index === loopedHeroProducts.length - 1 && styles.heroCardLast]}
                     onPress={() => router.push(`/product/${item.id}`)}
-                    accessibilityRole="button"
                     accessibilityLabel={`Featured: ${item.name}, ₱${(item.sale_price || item.price || 0).toLocaleString()}`}
                     accessibilityHint="Opens product details"
                   >
@@ -421,7 +420,7 @@ export default function HomeScreen() {
                               </Text>
                             </View>
                           )}
-                          {(item.model_3d_url || (item.tags && item.tags.includes('AR Try-On'))) && (
+                          {!!(item.model_3d_url && item.tags && item.tags.includes('AR Try-On')) && (
                             <View style={{ backgroundColor: '#6366f1', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                               <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
                               <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '800' }}>AR</Text>

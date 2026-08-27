@@ -2,7 +2,7 @@
 
 Machine-readable snapshot of the live project's database-side configuration,
 pulled via the Supabase MCP connection. Intended as context for AI agents and
-for the admin-dashboard collaborator.
+for the owner-dashboard collaborator.
 
 **Scope note:** this covers everything stored *in the database* — RLS, policies,
 functions, grants, triggers, buckets. It does **not** cover Auth dashboard
@@ -44,7 +44,7 @@ These are the real external surface. Each is intentional but worth periodic revi
 | `create_order(jsonb, jsonb)` | trusted write path, server-side price resolution |
 | `is_admin_or_owner()` | authorization helper |
 | `is_staff_or_admin()` | authorization helper |
-| `sync_product_stock(uuid)` | deliberately left callable; admin-dashboard may call it directly |
+| `sync_product_stock(uuid)` | deliberately left callable; owner-dashboard may call it directly |
 | `update_staff_status(...)` | guarded internally |
 
 ### SECURITY DEFINER, authenticated only
@@ -101,7 +101,7 @@ All functions except `rls_auto_enable` (which uses `pg_catalog`) are pinned to
 | `devices` | `approve_device_trigger` | `approve_device` |
 | 10 tables | `trg_touch_updated_at` | `touch_updated_at` |
 
-**For the admin-dashboard developer:** `trg_notify_stock_back_in_stock` on
+**For the owner-dashboard developer:** `trg_notify_stock_back_in_stock` on
 `inventory` fires on every UPDATE but returns immediately unless `available`
 transitions from 0 to greater than 0. On that transition it writes
 `notifications` rows and clears the fulfilled `stock_notify_requests`.
@@ -115,7 +115,7 @@ transitions from 0 to greater than 0. On that transition it writes
   client change first, otherwise duplicate signup dead-ends at OTP.
 - **RLS policy consolidation deferred** — roughly 48 initplan and 17
   multiple-permissive advisor lints, scoped in `DB_IMPLEMENTATION_PLAN.md:111`.
-  Needs one reviewed change coordinated with the admin-dashboard repo.
+  Needs one reviewed change coordinated with the owner-dashboard repo.
 - **Do not act on `unused_index` lints** — artifacts of a small dataset; several
   indexes were added deliberately by `20260720240000_fk_indexes.sql`.
 

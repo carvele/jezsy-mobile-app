@@ -4,7 +4,7 @@
 -- unlinked sources of truth, with a live hit: "White Dress" had
 -- products.stock=32 while its inventory rows summed to 40.
 --
--- admin-dashboard's productService.js already has a client-side function,
+-- owner-dashboard's productService.js already has a client-side function,
 -- syncProductStock(), whose own comment says it exists as "the
 -- Supabase-side replacement for the Firebase Cloud Function
 -- (functions/src/triggers/syncInventory.ts) which never runs here" -- i.e.
@@ -19,11 +19,11 @@
 -- derived from available/reserved), so it can no longer drift regardless of
 -- which client mutates inventory. The client-side syncProductStock becomes
 -- redundant but harmless (it will just write the same values the trigger
--- already computed); removing it from admin-dashboard is a follow-up in
+-- already computed); removing it from owner-dashboard is a follow-up in
 -- that repo, not done here.
 --
 -- Also extends stock_movements.change_type to allow 'sale' and
--- 'reservation', since neither admin's walk-in-sale path nor the mobile
+-- 'reservation', since neither owner's walk-in-sale path nor the mobile
 -- reservation flow currently logs a movement row -- the ledger could never
 -- explain all stock changes. Logging those movements is left as a
 -- DB_IMPLEMENTATION_PLAN.md Batch 4 code change (in both apps); this

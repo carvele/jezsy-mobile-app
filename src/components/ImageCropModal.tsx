@@ -253,7 +253,7 @@ export function ImageCropModal({ visible, uri, initialSize, onCancel, onConfirm 
                 <ActivityIndicator color={colors.tint} size="large" />
               </View>
             )}
-            <View pointerEvents="none" style={styles.frameBorder} />
+            <View style={[styles.frameBorder, { pointerEvents: 'none' }]} />
           </View>
           <Text style={styles.hint}>Pinch to zoom, drag to reposition</Text>
         </View>

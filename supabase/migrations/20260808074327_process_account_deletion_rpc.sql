@@ -1,5 +1,5 @@
 -- Processing side of account_deletion_requests (20260729101500). That
--- migration deliberately left this unbuilt -- "The admin-dashboard repo owns
+-- migration deliberately left this unbuilt -- "The owner-dashboard repo owns
 -- that processing surface" -- but nothing ever built it: filed requests sit
 -- at status='pending' forever, and there is zero function/RPC anywhere that
 -- can move one to 'completed'.
@@ -26,8 +26,8 @@
 -- profiles row is never actually deleted -- only updated. This function does
 -- that work explicitly instead of relying on a cascade that can't trigger.
 --
--- Does NOT touch auth.users -- that requires the GoTrue Admin API
--- (auth.admin.deleteUser), a service-role-only operation that cannot run
+-- Does NOT touch auth.users -- that requires the GoTrue Owner API
+-- (auth.owner.deleteUser), a service-role-only operation that cannot run
 -- inside a plain Postgres function. That call belongs in a server-side
 -- caller (Edge Function) after this RPC returns success, mirroring how
 -- create-staff-account already splits "verify caller, then use a service-role

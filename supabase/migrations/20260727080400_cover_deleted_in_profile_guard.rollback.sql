@@ -24,7 +24,7 @@ BEGIN
       FROM public.profiles
       WHERE id = auth.uid() AND deleted = false;
 
-      IF performer_role IS NULL OR performer_role NOT IN ('admin', 'owner') THEN
+      IF performer_role IS NULL OR performer_role NOT IN ('owner') THEN
         RAISE EXCEPTION 'Only administrators or owners can modify role, employment status, or block status.';
       END IF;
     END IF;

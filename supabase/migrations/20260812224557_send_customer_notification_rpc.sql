@@ -1,4 +1,4 @@
--- admin-dashboard's SendNotificationModal.jsx calls a nonexistent 'send-push'
+-- owner-dashboard's SendNotificationModal.jsx calls a nonexistent 'send-push'
 -- edge function, then falls back to a plain client insert into
 -- public.notifications -- which the table's only RLS policy ("Users can
 -- manage their own notifications", USING/WITH CHECK auth.uid() = user_id)

@@ -3,7 +3,7 @@
 -- the message's own sender edit *any* column on their own row, including
 -- sender_role. sender_role is a trusted, server-derived classification --
 -- set_message_sender_role() (BEFORE INSERT) computes it once from the
--- sender's actual profiles.role, purely so downstream code (the admin
+-- sender's actual profiles.role, purely so downstream code (the owner
 -- dashboard's new-message alert filter in useRealtimeSync.js, message
 -- bubble styling in both apps) can trust it without re-deriving the
 -- sender's role on every read. It was never meant to be editable after
@@ -15,7 +15,7 @@
 -- clause only checks conversation ownership (not this column), and this
 -- trigger's own "sender may edit any column" branch didn't carve it out
 -- either. Making sender_role immutable via UPDATE, for every caller
--- (including staff/admin -- correcting a genuinely wrong classification
+-- (including staff/owner -- correcting a genuinely wrong classification
 -- is an ops/migration task, not a runtime feature), closes it.
 
 CREATE OR REPLACE FUNCTION public.enforce_message_edit_scope()
@@ -25,12 +25,12 @@ SET search_path = 'public', 'pg_temp'
 AS $$
 BEGIN
   -- sender_role is set once at INSERT time and must never change after --
-  -- applies to every caller, including the sender and staff/admin below.
+  -- applies to every caller, including the sender and staff/owner below.
   IF NEW.sender_role IS DISTINCT FROM OLD.sender_role THEN
     RAISE EXCEPTION 'sender_role cannot be changed after the message is sent.';
   END IF;
 
-  -- Sender and staff/admin may edit any other column (unchanged behavior).
+  -- Sender and staff/owner may edit any other column (unchanged behavior).
   IF auth.uid() = OLD.sender_id OR is_staff_or_admin() THEN
     RETURN NEW;
   END IF;

@@ -87,7 +87,7 @@ REVOKE EXECUTE ON FUNCTION public.expire_unpaid_reservations() FROM PUBLIC, anon
 --     is still checked to belong to the caller.
 --   * payment_type stays 'Deposit' rather than becoming 'Reservation Fee'. The
 --     rename the customer asked for is UI wording; changing the stored value
---     could break admin-dashboard filters on a shared table.
+--     could break owner-dashboard filters on a shared table.
 -- The Asia/Manila anchoring is preserved verbatim -- it is load-bearing.
 CREATE OR REPLACE FUNCTION public.create_reservation(
   _product_id uuid,

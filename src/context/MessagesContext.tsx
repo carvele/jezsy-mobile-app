@@ -41,7 +41,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const unreadCount = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
 
   const isStaffOnline = Object.values(onlineUsers).some(
-    (role) => role === 'staff' || role === 'admin' || role === 'owner'
+    (role) => role === 'staff' || role === 'owner'
   );
 
   // Shared presence channel: 'presence:online' is the same channel name the
@@ -178,7 +178,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     if (!session?.user.id) return null;
 
     try {
-      const isStaff = profile?.role === 'staff' || profile?.role === 'admin' || profile?.role === 'owner';
+      const isStaff = profile?.role === 'staff' || profile?.role === 'owner';
       const senderName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : (isStaff ? 'Boutique Support' : 'Customer');
       const payload: any = {
         conversation_id: conversationId,

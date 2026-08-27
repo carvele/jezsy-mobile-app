@@ -1,6 +1,6 @@
 # PayMongo & Sandbox Payment Gateway Integration Guide (Test Mode)
 
-This guide documents how the **JezSy Mobile App** and **Admin Dashboard** interact with the **PayMongo Test Sandbox** for processing GCash and card payments during development.
+This guide documents how the **JezSy Mobile App** and **Owner Dashboard** interact with the **PayMongo Test Sandbox** for processing GCash and card payments during development.
 
 ---
 
@@ -42,8 +42,8 @@ In `jezsy-mobile-app/src/lib/payments.ts`, test payments invoke `supabase.functi
    - User creates a rental request in JezSy app.
    - Initial status is `Pending` / `To Pay`.
 
-2. **Staff Approval (Admin Dashboard)**:
-   - Staff approves request in Admin Dashboard.
+2. **Staff Approval (Owner Dashboard)**:
+   - Staff approves request in Owner Dashboard.
    - Status changes to `Confirmed` / `To Pay`, setting payment deadline `payment_due_at`.
 
 3. **Pay Now (Mobile)**:
@@ -55,4 +55,4 @@ In `jezsy-mobile-app/src/lib/payments.ts`, test payments invoke `supabase.functi
 4. **Webhook & Realtime Sync**:
    - On completion, PayMongo sends `checkout_session.payment.paid` event to `payments-webhook` Edge Function.
    - Edge Function updates `payments.status = 'paid'` and `reservations.payment_status = 'Paid'`.
-   - Admin Dashboard real-time subscription reflects `Paid ✓` instantly.
+   - Owner Dashboard real-time subscription reflects `Paid ✓` instantly.
