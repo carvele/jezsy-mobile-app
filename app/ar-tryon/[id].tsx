@@ -21,6 +21,7 @@ import { useToast } from '@/src/context/ToastContext';
 import { evaluatePoseMatch, getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
 import { constructBodyPose } from '@/src/utils/poseConstructor';
 import { calculateGarmentFit } from '@/src/utils/garmentFitter';
+import { calculateBoneRotations } from '@/src/utils/skeletalRetargeter';
 import type { GarmentFitProfile } from '@/src/types/garment';
 import Animated, {
   useSharedValue,
@@ -255,15 +256,16 @@ export default function ARTryOnScreen() {
   const stageWidth = stageLayout.width || Math.min(winWidth || 390, 480);
   const stageHeight = stageLayout.height || Math.min(winHeight || 844, 900);
 
-  // Phase 5: Simulated Ingestion Metadata (Normally fetched from the backend)
-  const garmentMetadata = React.useMemo<import('@/src/types/garment').GarmentMetadata>(() => {
-    const cat = (product?.category || 'shirt').toLowerCase();
+  // Phase 5B: Real garment metadata from Supabase, with a clearly-labelled fallback
+  const buildFallbackMetadata = (p: typeof product): import('@/src/types/garment').GarmentMetadata => {
+    const cat = (p?.category || 'shirt').toLowerCase();
     return {
-      id: product?.id || 'mock',
+      id: p?.id || 'mock',
       category: cat as any,
       calibrationVersion: '1.0.0',
       ingestionStatus: 'AR_READY',
       anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
+      anchorConfidence: 'inferred',
       restPoseMetricWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
       boneMap: {
         'Spine': 'mixamorigSpine',
@@ -278,6 +280,22 @@ export default function ARTryOnScreen() {
       },
       restPose: 'A_POSE'
     };
+  };
+
+  const [garmentMetadata, setGarmentMetadata] = useState<import('@/src/types/garment').GarmentMetadata | null>(null);
+  const [isDemoRig, setIsDemoRig] = useState(false);
+
+  useEffect(() => {
+    if (!product) return;
+    if (product.garment_metadata) {
+      console.log('[AR] Using real garment_metadata from Supabase');
+      setGarmentMetadata(product.garment_metadata as unknown as import('@/src/types/garment').GarmentMetadata);
+      setIsDemoRig(false);
+    } else {
+      console.log('[AR] No garment_metadata — using fallback (demo rig)');
+      setGarmentMetadata(buildFallbackMetadata(product));
+      setIsDemoRig(true);
+    }
   }, [product]);
 
   // Biometric consent check on mount
@@ -322,11 +340,13 @@ export default function ARTryOnScreen() {
         }
       };
 
-
+      // Null-guard: garmentMetadata is async state — skip this frame if not yet loaded
+      if (!garmentMetadata) return;
 
       const fitState = calculateGarmentFit(pose, garmentProfile, stageWidth, stageHeight, garmentMetadata);
       
       const isTracking = pose.trackingState === 'GOOD_FIT' || pose.trackingState === 'TURN_TOO_FAR';
+
 
       if (isTracking) {
         lostFramesRef.current = 0;
@@ -343,9 +363,8 @@ export default function ARTryOnScreen() {
         opacity.value = withTiming(targetOpacity, { duration: 120 }); // Opacity still gets a timing transition for UX
 
         // Phase 4A/4B: Push 3D transform and skinning data directly to the WebGL prototype
-        if (garmentRendererRef.current) {
-          const { calculateBoneRotations } = require('@/src/utils/skeletalRetargeter');
-          const boneRotations = calculateBoneRotations(pose.worldLandmarks);
+        if (garmentRendererRef.current && garmentMetadata) {
+          const boneRotations = calculateBoneRotations(pose.worldLandmarks, garmentMetadata.restPose);
           
           garmentRendererRef.current.updateTransform(
             { x: fitState.anchor.x, y: fitState.anchor.y, z: fitState.anchor.z },
@@ -861,7 +880,14 @@ export default function ARTryOnScreen() {
         <TouchableOpacity onPress={handleBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>AR Try-On</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>AR Try-On</Text>
+          {isDemoRig && (
+            <View style={{ backgroundColor: '#FFCC00', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <Text style={{ color: '#000', fontSize: 10, fontWeight: 'bold' }}>⚠️ Demo rig</Text>
+            </View>
+          )}
+        </View>
 
         <TouchableOpacity
           onPress={toggleMode}
@@ -989,7 +1015,7 @@ export default function ARTryOnScreen() {
                 <GarmentRenderer
                   ref={garmentRendererRef}
                   modelUrl={modelUrl}
-                  metadata={garmentMetadata}
+                  metadata={garmentMetadata ?? undefined}
                 />
               </Animated.View>
             </View>

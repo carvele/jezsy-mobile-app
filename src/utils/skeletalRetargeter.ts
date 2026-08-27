@@ -59,7 +59,7 @@ export function setFromUnitVectors(vFrom: { x: number; y: number; z: number }, v
  * Y up
  * Z towards viewer (+Z is out of screen).
  */
-export function calculateBoneRotations(worldLandmarks: WorldLandmark[], restPose: 'T_POSE' | 'A_POSE' = 'T_POSE'): Record<string, Quaternion> {
+export function calculateBoneRotations(worldLandmarks: WorldLandmark[], restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_POSE'): Record<string, Quaternion> {
   const boneRotations: Record<string, Quaternion> = {};
   
   if (!worldLandmarks || worldLandmarks.length < 33) return boneRotations;
