@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
       .select('role, deleted, is_blocked, employment_status')
       .eq('id', user.id)
       .maybeSingle();
-    if (!profile || profile.deleted || profile.is_blocked || profile.employment_status === 'terminated' || !['staff', 'owner'].includes((profile.role || '').toLowerCase())) {
+    if (!profile || profile.deleted || profile.is_blocked || profile.employment_status === 'terminated' || !['staff', 'admin', 'owner'].includes((profile.role || '').toLowerCase())) {
       return json(req, { error: 'Staff access required.' }, 403);
     }
 
