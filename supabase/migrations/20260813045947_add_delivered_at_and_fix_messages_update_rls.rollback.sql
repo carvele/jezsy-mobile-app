@@ -1,5 +1,5 @@
 -- Rollback for 20260813045947_add_delivered_at_and_fix_messages_update_rls.sql
--- Restores the narrower admin/owner-only UPDATE policy and drops
+-- Restores the narrower owner/owner-only UPDATE policy and drops
 -- delivered_at. Re-introduces the staff-role RLS gap this migration fixed --
 -- only use this rollback if the delivered_at feature itself needs to be
 -- fully reverted, not merely to "undo" the RLS fix.
@@ -13,7 +13,7 @@ USING (
     WHERE c.id = messages.conversation_id
       AND (c.customer_id = auth.uid() OR EXISTS (
         SELECT 1 FROM public.profiles
-        WHERE profiles.id = auth.uid() AND profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])
+        WHERE profiles.id = auth.uid() AND profiles.role = ANY (ARRAY['owner'::text])
       ))
   )
 );

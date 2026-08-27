@@ -8,7 +8,7 @@
 -- create_reservations_from_cart() unsafe enough to drop.
 --
 -- SECURITY DEFINER is required, not preference: reservations (and now
--- reservation_items) have an admin-only INSERT policy, so an INVOKER RPC
+-- reservation_items) have an owner-only INSERT policy, so an INVOKER RPC
 -- would fail closed for every customer.
 --
 -- Two behaviours differ from the single-item RPC, both deliberate:
@@ -139,7 +139,7 @@ BEGIN
   END LOOP;
 
   -- Legacy parent product columns are filled from the first line so shipped
-  -- app builds and admin screens that still read them show something
+  -- app builds and owner screens that still read them show something
   -- coherent rather than nulls.
   v_first := v_items_resolved -> 0;
 

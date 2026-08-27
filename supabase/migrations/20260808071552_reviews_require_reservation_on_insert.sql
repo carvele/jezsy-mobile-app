@@ -1,5 +1,5 @@
 -- Reviews had no purchase/reservation gate at all: the only INSERT check was
--- "Enable all access for own reviews or admin" WITH CHECK (user_id =
+-- "Enable all access for own reviews or owner" WITH CHECK (user_id =
 -- auth.uid() OR is_staff_or_admin()), which lets any signed-in customer
 -- review any product regardless of whether they ever reserved it.
 -- verified_purchase (see 20260729024656 / 20260808120000) only ever computed
@@ -12,7 +12,7 @@
 -- Only INSERT should require an active reservation; SELECT/UPDATE/DELETE stay
 -- ownership-based, same as before.
 
-DROP POLICY IF EXISTS "Enable all access for own reviews or admin" ON public.reviews;
+DROP POLICY IF EXISTS "Enable all access for own reviews or owner" ON public.reviews;
 DROP POLICY IF EXISTS "Customers can insert reviews for reserved products" ON public.reviews;
 
 CREATE POLICY "Customers can insert reviews for reserved products"

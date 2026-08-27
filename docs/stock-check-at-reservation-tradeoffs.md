@@ -7,7 +7,7 @@ resolves price and availability (`visibility = 'public'`, `deleted = false`) per
 reads a stock/quantity count. A customer can request any size/quantity combination regardless of
 what's physically on the rack.
 
-Stock is only ever touched by staff, in `admin-dashboard`'s `Reservations.jsx`
+Stock is only ever touched by staff, in `owner-dashboard`'s `Reservations.jsx`
 (`adjustStockForReservation`), on approve/cancel/complete -- i.e. stock moves on the *staff
 decision*, not the *customer request*. This was a deliberate prior-session choice, not an
 oversight, and the multi-item RPC didn't add or remove that behavior; it inherited it from the
@@ -52,9 +52,9 @@ already gone" guard, not a hold.
   approval -- same as today, just less frequently triggered.
 - Stock isn't on `products` at all -- it's a separate `inventory` table (`total`/`reserved`/
   `available` per `product_doc_id` + `size`), matched by `adjustInventoryForReservation`
-  (`admin-dashboard/src/services/reservationService.js:199`) via a 3-way fallback lookup
+  (`owner-dashboard/src/services/reservationService.js:199`) via a 3-way fallback lookup
   (`product_doc_id`, then `sku`, then `item` name). The RPC would need to join on the same key
-  admin-dashboard actually populates reliably (`product_doc_id`+`size`) rather than reproduce
+  owner-dashboard actually populates reliably (`product_doc_id`+`size`) rather than reproduce
   the fuzzy fallback -- confirm `product_doc_id` is always set before relying on it, since the
   fallback paths existing at all implies it sometimes isn't.
 

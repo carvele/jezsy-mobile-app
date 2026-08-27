@@ -4,8 +4,8 @@
 -- Context: 20260719000000 added a policy letting an invited user insert their
 -- own profiles row where role = user_metadata.role. That is unsafe:
 -- user_metadata is writable by the user themselves via auth.updateUser({data}),
--- so a logged-in customer could set user_metadata.role = 'admin' and self-insert
--- an admin profile.
+-- so a logged-in customer could set user_metadata.role = 'owner' and self-insert
+-- an owner profile.
 --
 -- Activation now happens in the activate-staff-account edge function under the
 -- service role, reading the role from app_metadata.staff_role (service-role-only,

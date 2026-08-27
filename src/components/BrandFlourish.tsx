@@ -76,8 +76,7 @@ export function LaurelWreath({ width = 140, color = '#C9A96E', opacity = 1 }: La
           rx={l.rx}
           ry={1.9}
           fill="url(#laurelGold)"
-          origin={`${l.x}, ${l.y}`}
-          rotation={l.rot}
+          transform={`rotate(${l.rot}, ${l.x}, ${l.y})`}
         />
       ))}
     </G>
@@ -94,7 +93,7 @@ export function LaurelWreath({ width = 140, color = '#C9A96E', opacity = 1 }: La
       </Defs>
       {half}
       {/* Mirrored rather than redrawn, so both sprigs stay identical. */}
-      <G origin="60, 22" scale="-1 1" translateX={120}>
+      <G transform="translate(120, 0) scale(-1, 1)">
         {half}
       </G>
     </Svg>

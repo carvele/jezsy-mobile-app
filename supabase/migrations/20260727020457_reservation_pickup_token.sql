@@ -1,7 +1,7 @@
 -- Migration: reservation pickup token
 --
 -- Adds an unguessable per-reservation token so a future staff-side
--- verify_pickup RPC (in the admin dashboard repo) can confirm handoff without
+-- verify_pickup RPC (in the owner dashboard repo) can confirm handoff without
 -- trusting the sequential display_id. The customer app surfaces the
 -- reservation as a pickup pass; encoding this token into a scannable code and
 -- the staff verify RPC are follow-ups.

@@ -3,14 +3,14 @@
 --   expression is of type time without time zone
 --
 -- reservations.appointment_time is timestamptz on the shared DB. The
--- admin-dashboard repo owns that shape: src/services/reservationService.js
+-- owner-dashboard repo owns that shape: src/services/reservationService.js
 -- packs date + "HH:MM" into a timestamptz at +08:00 on write and unpacks it
 -- back to "HH:MM" on read. Our RPCs instead cast the client's wall-clock
 -- string with ::time, which has no implicit cast to timestamptz, so every
 -- customer reservation errors out.
 --
 -- Adapt our side to the existing column rather than changing its type --
--- an ALTER to `time` would break the admin dashboard's read and write paths.
+-- an ALTER to `time` would break the owner dashboard's read and write paths.
 --
 -- Store timezone is fixed Asia/Manila (+08, no DST). Anchoring explicitly
 -- matters because the Postgres session timezone is UTC: a 10:00 Manila

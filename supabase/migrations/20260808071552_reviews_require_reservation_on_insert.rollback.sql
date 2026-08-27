@@ -6,7 +6,7 @@ DROP POLICY IF EXISTS "Customers can insert reviews for reserved products" ON pu
 DROP POLICY IF EXISTS "Customers can update own reviews" ON public.reviews;
 DROP POLICY IF EXISTS "Customers can delete own reviews" ON public.reviews;
 
-CREATE POLICY "Enable all access for own reviews or admin"
+CREATE POLICY "Enable all access for own reviews or owner"
   ON public.reviews FOR ALL
   USING (user_id = auth.uid() OR is_staff_or_admin())
   WITH CHECK (user_id = auth.uid() OR is_staff_or_admin());

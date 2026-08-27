@@ -6,7 +6,7 @@
 -- user silently soft-deleting themselves is not a state the app can recover
 -- from in-product.
 --
--- BLAST RADIUS: if the admin-dashboard has a self-service account-deletion
+-- BLAST RADIUS: if the owner-dashboard has a self-service account-deletion
 -- flow that sets deleted on the caller's own row, this will start raising.
 -- Confirm before applying.
 
@@ -33,12 +33,12 @@ BEGIN
         RAISE EXCEPTION 'You cannot modify your own role, employment status, block status, or deletion state.';
       END IF;
 
-      -- Only admin or owner may touch these columns
+      -- Only owner or owner may touch these columns
       SELECT role INTO performer_role
       FROM public.profiles
       WHERE id = auth.uid() AND deleted = false;
 
-      IF performer_role IS NULL OR performer_role NOT IN ('admin', 'owner') THEN
+      IF performer_role IS NULL OR performer_role NOT IN ('owner') THEN
         RAISE EXCEPTION 'Only administrators or owners can modify role, employment status, block status, or deletion state.';
       END IF;
     END IF;

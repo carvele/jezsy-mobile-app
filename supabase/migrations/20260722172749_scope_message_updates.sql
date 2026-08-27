@@ -17,7 +17,7 @@ LANGUAGE plpgsql
 SET search_path = 'public', 'pg_temp'
 AS $$
 BEGIN
-  -- Sender and staff/admin may edit any column (unchanged behavior).
+  -- Sender and staff/owner may edit any column (unchanged behavior).
   IF auth.uid() = OLD.sender_id OR is_staff_or_admin() THEN
     RETURN NEW;
   END IF;

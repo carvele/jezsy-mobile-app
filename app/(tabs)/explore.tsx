@@ -57,6 +57,7 @@ type Category = {
 const FILTER_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 const FILTER_FITS = ['Regular Fit', 'Slim Fit', 'Oversized', 'Relaxed', 'Tailored'];
 const FILTER_MATERIALS = ['Cotton', 'Silk', 'Linen', 'Wool', 'Cashmere', 'Denim', 'Leather', 'Satin', 'Polyester'];
+const FILTER_TAGS = ['Limited Edition', 'Sustainable', 'Unisex', 'Plus Size'];
 
 const SORT_OPTIONS = [
   { id: 'recommended', label: 'Recommended' },
@@ -186,6 +187,7 @@ export default function ExploreScreen() {
   const [selectedMySizeOnly, setSelectedMySizeOnly] = useState(false);
   const [selectedFits, setSelectedFits] = useState<string[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // Sorting State
   const [selectedSort, setSelectedSort] = useState<string>('recommended');
@@ -204,6 +206,7 @@ export default function ExploreScreen() {
   const [tempMySizeOnly, setTempMySizeOnly] = useState(false);
   const [tempFits, setTempFits] = useState<string[]>([]);
   const [tempMaterials, setTempMaterials] = useState<string[]>([]);
+  const [tempTags, setTempTags] = useState<string[]>([]);
 
   // Reset navigation selection down to a specific level
   const resetSelection = (level: number) => {
@@ -459,8 +462,10 @@ export default function ExploreScreen() {
       }
 
       // 5.5 AR Filter
-      if (selectedArOnly && !product.model_3d_url && !(product.tags && product.tags.includes('AR Try-On'))) {
-        return false;
+      if (selectedArOnly) {
+        const hasArUrl = !!product.model_3d_url;
+        const hasArTag = product.tags && product.tags.includes('AR Try-On');
+        if (!hasArUrl || !hasArTag) return false;
       }
 
       // 6. Fit / Cut Filter
@@ -475,6 +480,13 @@ export default function ExploreScreen() {
         const productMat = (product.material || '').trim().toLowerCase();
         const hasMat = selectedMaterials.some((mat) => productMat.includes(mat.toLowerCase()));
         if (!hasMat) return false;
+      }
+
+      // 7.5 Tags Filter
+      if (selectedTags.length > 0) {
+        const productTags = product.tags || [];
+        const hasTag = selectedTags.some((tag) => productTags.includes(tag));
+        if (!hasTag) return false;
       }
 
       // 8. My Size filter (fit-aware): keep only items whose recommended size
@@ -504,6 +516,7 @@ export default function ExploreScreen() {
     recommendedSizes,
     selectedFits,
     selectedMaterials,
+    selectedTags,
   ]);
 
   // Real-Time Client-Side Sorting
@@ -551,6 +564,7 @@ export default function ExploreScreen() {
     setTempMySizeOnly(selectedMySizeOnly);
     setTempFits(selectedFits);
     setTempMaterials(selectedMaterials);
+    setTempTags(selectedTags);
     setIsFilterModalOpen(true);
   };
 
@@ -566,6 +580,7 @@ export default function ExploreScreen() {
     setSelectedMySizeOnly(tempMySizeOnly);
     setSelectedFits(tempFits);
     setSelectedMaterials(tempMaterials);
+    setSelectedTags(tempTags);
     setIsFilterModalOpen(false);
   };
 
@@ -581,6 +596,7 @@ export default function ExploreScreen() {
     setTempMySizeOnly(false);
     setTempFits([]);
     setTempMaterials([]);
+    setTempTags([]);
   };
 
   const clearAllFiltersDirectly = () => {
@@ -595,6 +611,7 @@ export default function ExploreScreen() {
     setSelectedMySizeOnly(false);
     setSelectedFits([]);
     setSelectedMaterials([]);
+    setSelectedTags([]);
   };
 
   // Toggle helpers
@@ -613,6 +630,12 @@ export default function ExploreScreen() {
   const toggleTempFit = (fit: string) => {
     setTempFits((prev) =>
       prev.includes(fit) ? prev.filter((f) => f !== fit) : [...prev, fit]
+    );
+  };
+
+  const toggleTempTag = (tag: string) => {
+    setTempTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
 
@@ -638,6 +661,10 @@ export default function ExploreScreen() {
 
   const removeMaterialFilter = useCallback((material: string) => {
     setSelectedMaterials((prev) => prev.filter((m) => m !== material));
+  }, []);
+
+  const removeTagFilter = useCallback((tag: string) => {
+    setSelectedTags((prev) => prev.filter((t) => t !== tag));
   }, []);
 
   // Breadcrumbs renderer (e.g. Tops > Knits & Sweaters)
@@ -716,9 +743,9 @@ export default function ExploreScreen() {
     return chips;
   }, [
     selectedNewArrivalsOnly, selectedSaleOnly, selectedArOnly, selectedMySizeOnly,
-    selectedSizes, selectedColors, selectedFits, selectedMaterials,
+    selectedSizes, selectedColors, selectedFits, selectedMaterials, selectedTags,
     selectedPriceRange, customMinPrice, customMaxPrice,
-    removeSizeFilter, removeColorFilter, removeFitFilter, removeMaterialFilter,
+    removeSizeFilter, removeColorFilter, removeFitFilter, removeMaterialFilter, removeTagFilter,
   ]);
 
   const activeFiltersCount = activeFilterChips.length;

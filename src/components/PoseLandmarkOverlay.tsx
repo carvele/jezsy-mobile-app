@@ -25,7 +25,7 @@ export function PoseLandmarkOverlay({ landmarks }: Props) {
   if (!landmarks || landmarks.length === 0) return null;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       <Svg width="100%" height="100%">
         {/* Draw connections */}
         {CONNECTIONS.map(([startIdx, endIdx], i) => {

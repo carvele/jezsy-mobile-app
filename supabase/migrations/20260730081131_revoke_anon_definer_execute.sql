@@ -11,12 +11,12 @@
 -- Nothing in the mobile app calls it any more -- checkout was removed when the
 -- buy-and-ship path was retired -- so this closes the hole now rather than
 -- waiting on the conversation about dropping the orders tables outright.
--- If the admin dashboard turns out to need it, it should use service_role,
+-- If the owner dashboard turns out to need it, it should use service_role,
 -- which bypasses grants entirely.
 REVOKE EXECUTE ON FUNCTION public.create_order(jsonb, jsonb) FROM PUBLIC, anon, authenticated;
 
 -- anon only. None of these are called by the mobile client at all, and the
--- admin dashboard calls them as a signed-in staff user, so authenticated keeps
+-- owner dashboard calls them as a signed-in staff user, so authenticated keeps
 -- its grant.
 REVOKE EXECUTE ON FUNCTION public.check_email_exists(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.check_email_exists(text) TO authenticated;
@@ -29,7 +29,7 @@ GRANT EXECUTE ON FUNCTION public.update_staff_status(uuid, text, boolean, text) 
 REVOKE EXECUTE ON FUNCTION public.verify_pickup(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.verify_pickup(uuid) TO authenticated;
 
--- Recomputes derived stock. Kept for authenticated because the admin-dashboard
+-- Recomputes derived stock. Kept for authenticated because the owner-dashboard
 -- may call it directly, per the note in 20260728015951.
 REVOKE EXECUTE ON FUNCTION public.sync_product_stock(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.sync_product_stock(uuid) TO authenticated;

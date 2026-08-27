@@ -4,7 +4,7 @@
 -- visibility status. Verified: 19 of 40 live products are deleted=true and
 -- were all fully readable.
 --
--- admin-dashboard/supabase/migrations/20260810000003_enforce_products_visibility_rls.sql
+-- owner-dashboard/supabase/migrations/20260810000003_enforce_products_visibility_rls.sql
 -- was meant to fix this but was never applied, and would not have worked
 -- even if it had been: it drops two policy names that do not match the
 -- actual live one ("Public can only read visible active products",
@@ -14,7 +14,7 @@
 -- still have won.
 --
 -- Uses is_staff_or_admin() for the staff-bypass clause rather than the
--- raw inline role check that migration used, so staff/admin/owner get
+-- raw inline role check that migration used, so staff/owner/owner get
 -- full visibility without missing the is_blocked/employment_status guards
 -- is_staff_or_admin() already enforces.
 --

@@ -2,9 +2,9 @@
 -- ADD RLS POLICIES FOR CATEGORIES TABLE
 -- ============================================================================
 -- Context: The categories table has RLS enabled but no write policies for
--- admin users. This migration adds SELECT (public), INSERT, UPDATE, DELETE
--- (admin-only) policies using lowercase role values to match the live
--- profiles.role data ('admin', 'owner').
+-- owner users. This migration adds SELECT (public), INSERT, UPDATE, DELETE
+-- (owner-only) policies using lowercase role values to match the live
+-- profiles.role data ('owner').
 --
 -- IDEMPOTENT: All DROP ... IF EXISTS before CREATE
 -- ============================================================================
@@ -23,7 +23,7 @@ ON public.categories FOR SELECT
 USING (true);
 
 -- ─────────────────────────────────────────────────────────────────────────
--- INSERT — Admin-only
+-- INSERT — Owner-only
 -- ─────────────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "Allow admins to create categories"
@@ -35,14 +35,14 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- UPDATE — Admin-only
+-- UPDATE — Owner-only
 -- ─────────────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "Allow admins to update categories"
@@ -55,14 +55,14 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- DELETE — Admin-only
+-- DELETE — Owner-only
 -- ─────────────────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "Allow admins to delete categories"
@@ -74,7 +74,7 @@ USING (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('admin', 'owner')
+    AND profiles.role IN ('owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )

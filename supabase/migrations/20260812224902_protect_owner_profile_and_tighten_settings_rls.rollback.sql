@@ -22,7 +22,7 @@ BEGIN
       FROM public.profiles
       WHERE id = auth.uid() AND deleted = false;
 
-      IF performer_role IS NULL OR performer_role NOT IN ('admin', 'owner') THEN
+      IF performer_role IS NULL OR performer_role NOT IN ('owner') THEN
         RAISE EXCEPTION 'Only administrators or owners can modify role, employment status, block status, or deletion status.';
       END IF;
 
@@ -36,8 +36,8 @@ BEGIN
 END;
 $function$;
 
-DROP POLICY IF EXISTS "Enable all access for admin/staff" ON public.settings;
-CREATE POLICY "Enable all access for admin/staff"
+DROP POLICY IF EXISTS "Enable all access for owner/staff" ON public.settings;
+CREATE POLICY "Enable all access for owner/staff"
   ON public.settings FOR ALL
   USING (public.is_staff_or_admin())
   WITH CHECK (public.is_staff_or_admin());

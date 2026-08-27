@@ -66,7 +66,7 @@ export function ProductCard({
     `₱${Number(price).toLocaleString()}`,
     onSale ? 'on sale' : null,
     isNew ? 'new arrival' : null,
-    product.model_3d_url ? 'available in AR' : null,
+    (product.model_3d_url && product.tags && product.tags.includes('AR Try-On')) ? 'available in AR' : null,
     recommendedSize ? `your size ${recommendedSize}` : null,
     stockLabel,
   ]
@@ -110,7 +110,7 @@ export function ProductCard({
                 </Text>
               </View>
             )}
-            {(product.model_3d_url || (product.tags && product.tags.includes('AR Try-On'))) && (
+            {!!(product.model_3d_url && product.tags && product.tags.includes('AR Try-On')) && (
               <View style={[styles.badge, styles.badgeRow, { backgroundColor: '#6366f1' }]}>
                 <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
                 <Text style={[styles.badgeText, { color: '#ffffff' }]}>AR</Text>

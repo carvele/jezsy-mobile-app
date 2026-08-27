@@ -1,6 +1,6 @@
 -- check_profile_updates() blocked self-modification and blocked staff from
 -- touching role/employment_status/is_blocked, but never restricted WHICH
--- role could be assigned. Verified live: an admin session can UPDATE any
+-- role could be assigned. Verified live: an owner session can UPDATE any
 -- other profile's role to 'owner' via a direct API call, even though the
 -- dashboard UI (StaffManagement.jsx toggleRole) treats owner as permanent
 -- and never assigns it -- "The Owner role cannot be downgraded. It is
@@ -34,7 +34,7 @@ BEGIN
       FROM public.profiles
       WHERE id = auth.uid() AND deleted = false;
 
-      IF performer_role IS NULL OR performer_role NOT IN ('admin', 'owner') THEN
+      IF performer_role IS NULL OR performer_role NOT IN ('owner') THEN
         RAISE EXCEPTION 'Only administrators or owners can modify role, employment status, or block status.';
       END IF;
 
@@ -52,29 +52,29 @@ $function$;
 -- so plain staff could write to them via a direct API call even though the
 -- dashboard's RequireAdmin route guard means staff never reach these pages
 -- through the UI. Tightened to match: staff keep read access where they
--- had it, writes become admin-or-owner only.
+-- had it, writes become owner-or-owner only.
 
-DROP POLICY IF EXISTS "Enable all access for admin/staff" ON public.devices;
+DROP POLICY IF EXISTS "Enable all access for owner/staff" ON public.devices;
 DROP POLICY IF EXISTS "Staff can view devices" ON public.devices;
 CREATE POLICY "Staff can view devices"
 ON public.devices FOR SELECT
 USING (public.is_staff_or_admin());
-DROP POLICY IF EXISTS "Admin or owner can manage devices" ON public.devices;
-CREATE POLICY "Admin or owner can manage devices"
+DROP POLICY IF EXISTS "Owner or owner can manage devices" ON public.devices;
+CREATE POLICY "Owner or owner can manage devices"
 ON public.devices FOR ALL
 USING (public.is_admin_or_owner())
 WITH CHECK (public.is_admin_or_owner());
 
 DROP POLICY IF EXISTS "Staff manage store hours" ON public.store_hours;
-DROP POLICY IF EXISTS "Admin or owner can manage store hours" ON public.store_hours;
-CREATE POLICY "Admin or owner can manage store hours"
+DROP POLICY IF EXISTS "Owner or owner can manage store hours" ON public.store_hours;
+CREATE POLICY "Owner or owner can manage store hours"
 ON public.store_hours FOR ALL
 USING (public.is_admin_or_owner())
 WITH CHECK (public.is_admin_or_owner());
 
 DROP POLICY IF EXISTS "Staff manage store closures" ON public.store_closures;
-DROP POLICY IF EXISTS "Admin or owner can manage store closures" ON public.store_closures;
-CREATE POLICY "Admin or owner can manage store closures"
+DROP POLICY IF EXISTS "Owner or owner can manage store closures" ON public.store_closures;
+CREATE POLICY "Owner or owner can manage store closures"
 ON public.store_closures FOR ALL
 USING (public.is_admin_or_owner())
 WITH CHECK (public.is_admin_or_owner());

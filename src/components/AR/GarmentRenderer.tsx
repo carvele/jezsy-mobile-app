@@ -300,7 +300,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
     }));
 
     return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
         {Platform.OS === 'web' ? (
           // @ts-ignore
           <iframe

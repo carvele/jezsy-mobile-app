@@ -1,10 +1,10 @@
 -- ============================================================================
 -- INVENTORY FEATURE: RLS POLICIES & IMMUTABILITY ENFORCEMENT
 -- ============================================================================
--- Migration: Add RLS policies for admin-only writes and append-only enforcement
+-- Migration: Add RLS policies for owner-only writes and append-only enforcement
 -- 
 -- SECURITY MODEL:
---   - Admin users: role IN ('Admin', 'Owner') in profiles table
+--   - Owner users: role IN ('Owner', 'Owner') in profiles table
 --   - Verified via RLS policy checking profiles.id = auth.uid()
 --   - Append-only: Trigger + RLS + CHECK constraint (3-layer defense)
 --
@@ -54,11 +54,11 @@ CREATE POLICY "Allow public read of stock_movements"
 ON public.stock_movements FOR SELECT
 USING (true);
 
--- POLICY: INSERT — Admin-only
+-- POLICY: INSERT — Owner-only
 --
 -- Check:
 --   1. auth.uid() matches a record in profiles table
---   2. That profile's role is 'Admin' or 'Owner'
+--   2. That profile's role is 'Owner' or 'Owner'
 --   3. That profile is not deleted and not blocked
 
 DROP POLICY IF EXISTS "Allow admins to create stock_movements" 
@@ -70,7 +70,7 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('Admin', 'Owner')
+    AND profiles.role IN ('Owner', 'Owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
@@ -96,7 +96,7 @@ USING (false);
 -- 3. RLS POLICIES FOR PRODUCTS TABLE (EXTENDED COLUMNS)
 -- ─────────────────────────────────────────────────────────────────────────
 --
--- Restrict admin-editable columns (stockBaseline, pattern, color) to admins
+-- Restrict owner-editable columns (stockBaseline, pattern, color) to admins
 -- Existing product data remains readable by all authenticated users
 
 DROP POLICY IF EXISTS "Allow admins to edit inventory columns on products" 
@@ -109,14 +109,14 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('Admin', 'Owner')
+    AND profiles.role IN ('Owner', 'Owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 4. RLS POLICIES FOR COLOR_LIST TABLE (admin-managed)
+-- 4. RLS POLICIES FOR COLOR_LIST TABLE (owner-managed)
 -- ─────────────────────────────────────────────────────────────────────────
 
 -- POLICY: SELECT — Public read
@@ -127,7 +127,7 @@ CREATE POLICY "Allow public read of color_list"
 ON public.color_list FOR SELECT
 USING (true);
 
--- POLICY: INSERT — Admin-only
+-- POLICY: INSERT — Owner-only
 DROP POLICY IF EXISTS "Allow admins to create colors" 
 ON public.color_list;
 
@@ -137,13 +137,13 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('Admin', 'Owner')
+    AND profiles.role IN ('Owner', 'Owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
 );
 
--- POLICY: UPDATE — Admin-only
+-- POLICY: UPDATE — Owner-only
 DROP POLICY IF EXISTS "Allow admins to update colors" 
 ON public.color_list;
 
@@ -154,13 +154,13 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('Admin', 'Owner')
+    AND profiles.role IN ('Owner', 'Owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
 );
 
--- POLICY: DELETE — Admin-only
+-- POLICY: DELETE — Owner-only
 DROP POLICY IF EXISTS "Allow admins to delete colors" 
 ON public.color_list;
 
@@ -170,14 +170,14 @@ USING (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('Admin', 'Owner')
+    AND profiles.role IN ('Owner', 'Owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
 );
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 5. RLS POLICIES FOR PATTERN_LIST TABLE (admin-managed)
+-- 5. RLS POLICIES FOR PATTERN_LIST TABLE (owner-managed)
 -- ─────────────────────────────────────────────────────────────────────────
 
 -- POLICY: SELECT — Public read
@@ -188,7 +188,7 @@ CREATE POLICY "Allow public read of pattern_list"
 ON public.pattern_list FOR SELECT
 USING (true);
 
--- POLICY: INSERT — Admin-only
+-- POLICY: INSERT — Owner-only
 DROP POLICY IF EXISTS "Allow admins to create patterns" 
 ON public.pattern_list;
 
@@ -198,13 +198,13 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('Admin', 'Owner')
+    AND profiles.role IN ('Owner', 'Owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
 );
 
--- POLICY: UPDATE — Admin-only
+-- POLICY: UPDATE — Owner-only
 DROP POLICY IF EXISTS "Allow admins to update patterns" 
 ON public.pattern_list;
 
@@ -215,13 +215,13 @@ WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('Admin', 'Owner')
+    AND profiles.role IN ('Owner', 'Owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )
 );
 
--- POLICY: DELETE — Admin-only
+-- POLICY: DELETE — Owner-only
 DROP POLICY IF EXISTS "Allow admins to delete patterns" 
 ON public.pattern_list;
 
@@ -231,7 +231,7 @@ USING (
   EXISTS (
     SELECT 1 FROM public.profiles
     WHERE profiles.id = auth.uid()
-    AND profiles.role IN ('Admin', 'Owner')
+    AND profiles.role IN ('Owner', 'Owner')
     AND profiles.deleted = false
     AND profiles.is_blocked = false
   )

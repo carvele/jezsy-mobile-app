@@ -19,9 +19,9 @@
 -- 6 of 10 mains). Left NULL everywhere else rather than guessing a new
 -- Unsplash photo — genuinely new categories (Activewear, Footwear,
 -- Knitwear/Layering, Underwear/Intimates, and most of their subs) need real
--- photography, not a placeholder chosen at random. The admin dashboard's
+-- photography, not a placeholder chosen at random. The owner dashboard's
 -- category editor now supports uploading a Cloudinary image for any category
--- (see admin-dashboard AdminInventoryPanel.jsx), so these can be filled in
+-- (see owner-dashboard AdminInventoryPanel.jsx), so these can be filled in
 -- directly instead of via another migration.
 --
 -- IDEMPOTENT: ON CONFLICT (id) DO NOTHING — safe to re-run.

@@ -220,7 +220,7 @@ comment on column public.reservations.payment_due_at is
   'Deadline for the customer to pay, set when staff confirm the reservation (24h, capped an hour before the appointment). NULL while still Pending -- an unaccepted reservation never expires. Unpaid past this point is cancelled by expire_unpaid_reservations().';
 
 -- 4. Let the customer attach a receipt to an already-accepted reservation.
---    Customers have no UPDATE on reservations (admin-only by RLS), so this is
+--    Customers have no UPDATE on reservations (owner-only by RLS), so this is
 --    the only write path -- SECURITY DEFINER with its own ownership guard,
 --    matching how create_reservation is trusted. It records the claim only;
 --    marking it Paid stays a staff decision.

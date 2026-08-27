@@ -103,7 +103,7 @@ export default function InboxScreen() {
     // Omitting 'staff' here meant a staff member -- whom RLS lets see every
     // conversation -- was shown "Shop Owner" instead of the customer's ref.
     const isStaff =
-      profile?.role === 'staff' || profile?.role === 'admin' || profile?.role === 'owner';
+      profile?.role === 'staff' || profile?.role === 'owner';
     const displayName = isStaff ? `Customer (${item.customer_id.substring(0, 6)})` : 'Boutique Support';
     const isOnline = isStaff ? !!onlineUsers[item.customer_id] : isStaffOnline;
     const isUnread = item.unread_count > 0 && !isStaff;

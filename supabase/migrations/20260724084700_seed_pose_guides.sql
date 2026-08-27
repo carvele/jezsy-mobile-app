@@ -1,4 +1,4 @@
--- pose_guides had zero rows: the admin-dashboard's ARAssets.jsx pose-guide
+-- pose_guides had zero rows: the owner-dashboard's ARAssets.jsx pose-guide
 -- CRUD screen was built, but nothing ever populated the table, and nothing
 -- in the mobile app consumed it. This seeds the same 4 example poses that
 -- screen's own fallback UI already treats as its defaults, using matching

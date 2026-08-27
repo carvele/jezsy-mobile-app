@@ -6,7 +6,7 @@
 -- Expand-only on purpose. The legacy parent columns (product_id,
 -- product_name, image_url, size, color, quantity, rental_price) are left in
 -- place and still populated, because the shipped mobile builds and the
--- admin dashboard both read them today. Dropping them is a later contract
+-- owner dashboard both read them today. Dropping them is a later contract
 -- step, once every reader is on reservation_items.
 
 CREATE TABLE IF NOT EXISTS public.reservation_items (
@@ -35,7 +35,7 @@ ALTER TABLE public.reservation_items ENABLE ROW LEVEL SECURITY;
 
 -- Mirrors the parent's policies exactly: a customer reads the lines of a
 -- reservation they own, staff read everything, and direct writes are
--- admin-only so the SECURITY DEFINER RPCs stay the only customer write path.
+-- owner-only so the SECURITY DEFINER RPCs stay the only customer write path.
 DROP POLICY IF EXISTS "Enable select for own reservation items or staff" ON public.reservation_items;
 CREATE POLICY "Enable select for own reservation items or staff"
 ON public.reservation_items
@@ -48,21 +48,21 @@ USING (
   )
 );
 
-DROP POLICY IF EXISTS "Enable insert for admin only" ON public.reservation_items;
-CREATE POLICY "Enable insert for admin only"
+DROP POLICY IF EXISTS "Enable insert for owner only" ON public.reservation_items;
+CREATE POLICY "Enable insert for owner only"
 ON public.reservation_items
 FOR INSERT
 WITH CHECK (public.is_admin_or_owner());
 
-DROP POLICY IF EXISTS "Enable update for admin only" ON public.reservation_items;
-CREATE POLICY "Enable update for admin only"
+DROP POLICY IF EXISTS "Enable update for owner only" ON public.reservation_items;
+CREATE POLICY "Enable update for owner only"
 ON public.reservation_items
 FOR UPDATE
 USING (public.is_admin_or_owner())
 WITH CHECK (public.is_admin_or_owner());
 
-DROP POLICY IF EXISTS "Enable delete for admin and owner" ON public.reservation_items;
-CREATE POLICY "Enable delete for admin and owner"
+DROP POLICY IF EXISTS "Enable delete for owner and owner" ON public.reservation_items;
+CREATE POLICY "Enable delete for owner and owner"
 ON public.reservation_items
 FOR DELETE
 USING (public.is_admin_or_owner());

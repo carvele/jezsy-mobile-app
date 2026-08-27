@@ -2,7 +2,7 @@
 -- ALLOW INVITED STAFF TO CREATE THEIR OWN PROFILE ROW ON SET-PASSWORD
 -- ============================================================================
 -- Context: The invite flow no longer creates a profiles row when the invite
--- is sent (create-staff-account only calls auth.admin.inviteUserByEmail).
+-- is sent (create-staff-account only calls auth.owner.inviteUserByEmail).
 -- The row is created client-side, once, on the SetPassword page — the moment
 -- the invited user finishes verifying their email (via the invite link) and
 -- chooses a password. Until then they have a Supabase Auth session but no
@@ -26,7 +26,7 @@ ON public.profiles FOR INSERT
 TO authenticated
 WITH CHECK (
   auth.uid() = id
-  AND role IN ('staff', 'admin')
+  AND role IN ('staff', 'owner')
   AND role = (auth.jwt() -> 'user_metadata' ->> 'role')
 );
 

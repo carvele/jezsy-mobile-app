@@ -3,7 +3,7 @@
 -- Deliberately a request queue, not a delete. Erasing an account would have to
 -- cascade through reservations, orders and stock movements, which are business
 -- records the shop still needs; standard practice is to file the request and
--- let staff process it. The admin-dashboard repo owns that processing surface.
+-- let staff process it. The owner-dashboard repo owns that processing surface.
 --
 -- No SECURITY DEFINER RPC here: unlike create_order there is no price or
 -- ownership vector to protect, so a direct INSERT policy keyed on auth.uid()

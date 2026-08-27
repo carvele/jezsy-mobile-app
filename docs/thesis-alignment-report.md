@@ -6,7 +6,7 @@ This report analyzes how the current **Expo (React Native) + Supabase (Postgres)
 ---
 
 ## 1. Technical Stack Translation & Evolution
-Your thesis proposal specifies a Java/Kotlin Android Studio native app with Firebase and a PHP web-based admin interface. The current implementation has evolved into a modern, cross-platform architecture:
+Your thesis proposal specifies a Java/Kotlin Android Studio native app with Firebase and a PHP web-based owner interface. The current implementation has evolved into a modern, cross-platform architecture:
 *   **Frontend**: React Native + Expo (TypeScript). This satisfies the **ISO 25010 Portability & Compatibility** requirements by allowing a single codebase to support both iOS and Android platforms seamlessly.
 *   **Backend & Database**: Supabase (PostgreSQL) instead of Firebase NoSQL (Firestore). This transition maintains **data integrity** through relational constraints (Foreign Keys) and facilitates robust analytical aggregation for reports.
 *   **Media & Assets**: Cloudinary integration for product images and Supabase Storage for model/receipt uploads, achieving the cloud-hosted storage requirements.
@@ -19,7 +19,7 @@ Here is how the codebase maps to the **Specific Problems** (Page 4) and **Object
 
 ### A. User Registration & Profile Management
 *   **Specification (Page 5)**: *How can the customers and staff register and create accounts within the system?*
-*   **Implementation**: Powered by **Supabase Auth** with full credential validation, profile setup screens, and email verification. Distinct user roles (`customer` and `admin/staff`) are managed in the `profiles` table.
+*   **Implementation**: Powered by **Supabase Auth** with full credential validation, profile setup screens, and email verification. Distinct user roles (`customer` and `owner/staff`) are managed in the `profiles` table.
 
 ### B. Product Catalog & Sorting
 *   **Specification (Page 5)**: *How can a customer view the products and sort items per category?*
@@ -54,7 +54,7 @@ Here is how the codebase maps to the **Specific Problems** (Page 4) and **Object
     *   Status begins as `Pending` awaiting administrator verification.
 
 ### H. Direct Messaging / Inquiry Module
-*   **Specification (Page 74)**: *A registered user can also access her/his profile to have a direct message to admin for their queries.*
+*   **Specification (Page 74)**: *A registered user can also access her/his profile to have a direct message to owner for their queries.*
 *   **Implementation**: Integrated real-time messaging using Supabase Realtime Channels. A "Message Seller" button on the product details page automatically creates or opens a conversation instance between the customer and shop administrators.
 
 ---

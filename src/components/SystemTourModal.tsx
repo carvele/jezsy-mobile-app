@@ -313,10 +313,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.4,
-    shadowRadius: 32,
+    boxShadow: '0px 16px 32px rgba(0, 0, 0, 0.4)',
     elevation: 24,
   },
   headerBar: {

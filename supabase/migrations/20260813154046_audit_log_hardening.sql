@@ -2,7 +2,7 @@
 -- account deletion), per the migration-reconciliation follow-up.
 --
 -- public.logs already exists and is the general activity log used by
--- admin-dashboard's logAction() -- role changes and account-deletion
+-- owner-dashboard's logAction() -- role changes and account-deletion
 -- processing are already logged, but only client-side, from
 -- StaffManagement.jsx / AccountDeletionRequests.jsx. That means: (1) a
 -- staff member who calls update_staff_role directly (script, API client,
@@ -12,19 +12,19 @@
 -- DB layer, inside the same SECURITY DEFINER functions that already gate
 -- who can call them -- not dependent on the client remembering to log.
 --
--- Also tightens logs' RLS: "Enable all access for admin/staff" granted
--- UPDATE and DELETE to staff/admin, which defeats the point of an audit
+-- Also tightens logs' RLS: "Enable all access for owner/staff" granted
+-- UPDATE and DELETE to staff/owner, which defeats the point of an audit
 -- trail (a log that anyone with access can edit or erase isn't one).
--- Replaced with SELECT-only for staff/admin. The one legitimate
+-- Replaced with SELECT-only for staff/owner. The one legitimate
 -- UPDATE (process_account_deletion scrubbing user_id to NULL on deletion)
 -- still works: that function is owned by `postgres` with BYPASSRLS, so it
 -- was never relying on this client-facing policy in the first place.
 -- INSERT stays as-is -- unrelated benign activity logging (e.g.
 -- "Updated store operating hours") still works from the client.
 
-DROP POLICY IF EXISTS "Enable all access for admin/staff" ON public.logs;
-DROP POLICY IF EXISTS "Staff or admin can view logs" ON public.logs;
-CREATE POLICY "Staff or admin can view logs"
+DROP POLICY IF EXISTS "Enable all access for owner/staff" ON public.logs;
+DROP POLICY IF EXISTS "Staff or owner can view logs" ON public.logs;
+CREATE POLICY "Staff or owner can view logs"
 ON public.logs FOR SELECT
 USING (public.is_staff_or_admin());
 
@@ -43,8 +43,8 @@ BEGIN
     RAISE EXCEPTION 'Only admins or owners can change staff roles';
   END IF;
 
-  IF new_role NOT IN ('staff', 'admin') THEN
-    RAISE EXCEPTION 'Role must be "staff" or "admin"';
+  IF new_role NOT IN ('staff', 'owner') THEN
+    RAISE EXCEPTION 'Role must be "staff" or "owner"';
   END IF;
 
   IF target_user_id = auth.uid() THEN
@@ -59,7 +59,7 @@ BEGIN
     RAISE EXCEPTION 'Target user not found or is deleted';
   END IF;
 
-  IF target_role NOT IN ('staff', 'admin') THEN
+  IF target_role NOT IN ('staff', 'owner') THEN
     RAISE EXCEPTION 'Cannot modify a % role', target_role;
   END IF;
 

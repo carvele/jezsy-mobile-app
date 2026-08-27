@@ -1,7 +1,7 @@
 -- Rollback for 20260815040000_protect_message_sender_role_from_update.sql.
 -- Restores enforce_message_edit_scope() to the 20260722172749 version:
 -- sender_role becomes editable again by the message's own sender or
--- staff/admin (the spoofing gap this migration closed). Only use this to
+-- staff/owner (the spoofing gap this migration closed). Only use this to
 -- revert to that known-vulnerable state, not as a template.
 
 CREATE OR REPLACE FUNCTION public.enforce_message_edit_scope()
@@ -10,7 +10,7 @@ LANGUAGE plpgsql
 SET search_path = 'public', 'pg_temp'
 AS $$
 BEGIN
-  -- Sender and staff/admin may edit any column (unchanged behavior).
+  -- Sender and staff/owner may edit any column (unchanged behavior).
   IF auth.uid() = OLD.sender_id OR is_staff_or_admin() THEN
     RETURN NEW;
   END IF;

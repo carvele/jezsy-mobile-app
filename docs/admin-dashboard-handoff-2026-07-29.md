@@ -1,11 +1,11 @@
-# Shared-DB Handoff → admin-dashboard — 2026-07-29
+# Shared-DB Handoff → owner-dashboard — 2026-07-29
 
-**Audience:** the developer (or agent) working on `carvele/admin-dashboard`.
+**Audience:** the developer (or agent) working on `carvele/owner-dashboard`.
 
 **Why you're reading this:** the mobile app applied six migrations to the
 **shared live Supabase database** on 2026-07-29. There is no staging
 environment, so these are already in effect for your app too. Two of them add
-triggers to tables the admin dashboard writes to. Nothing here requires an
+triggers to tables the owner dashboard writes to. Nothing here requires an
 immediate change on your side, but three items create work or surprises you
 should know about before you debug something confusing.
 
@@ -20,7 +20,7 @@ Read the "Action required" section first; the rest is reference.
 The mobile app can now **read and dismiss** broadcast announcements in its
 Inbox → Notifications tab. Nothing anywhere **writes** them. The feature is
 inert until a compose surface exists, and that was deliberately left to the
-admin dashboard.
+owner dashboard.
 
 To create one, insert directly — no RPC needed:
 
@@ -138,7 +138,7 @@ with `has_function_privilege`, not by reading the grant.
   rarely matches the local filename you wrote. Re-sync filenames to the ledger
   after every apply, or a fresh clone won't reproduce the schema.
 - **Trusted customer write paths must be SECURITY DEFINER**, not INVOKER. An
-  INVOKER RPC whose target table has an admin-only INSERT policy fails closed
+  INVOKER RPC whose target table has an owner-only INSERT policy fails closed
   for customers, silently. `create_reservation` shipped that way and blocked
   every customer reservation until it was fixed on 2026-07-27.
 - A full database-side configuration snapshot (all policies, functions, grants,

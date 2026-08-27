@@ -59,7 +59,7 @@ export function setFromUnitVectors(vFrom: { x: number; y: number; z: number }, v
  * Y up
  * Z towards viewer (+Z is out of screen).
  */
-export function calculateBoneRotations(worldLandmarks: WorldLandmark[]): Record<string, Quaternion> {
+export function calculateBoneRotations(worldLandmarks: WorldLandmark[], restPose: 'T_POSE' | 'A_POSE' = 'T_POSE'): Record<string, Quaternion> {
   const boneRotations: Record<string, Quaternion> = {};
   
   if (!worldLandmarks || worldLandmarks.length < 33) return boneRotations;
@@ -119,8 +119,12 @@ export function calculateBoneRotations(worldLandmarks: WorldLandmark[]): Record<
       y: -(lE.y - lS.y),
       z: -(lE.z - lS.z)
     });
-    // T-Pose rest direction for LeftArm points perfectly along +X axis
-    const restDir = { x: 1, y: 0, z: 0 };
+        // Left Arm Rest Direction
+    let restDir = { x: 1, y: 0, z: 0 };
+    if (restPose === 'A_POSE') {
+      const angle = 35 * Math.PI / 180;
+      restDir = { x: Math.cos(angle), y: -Math.sin(angle), z: 0 };
+    }
     boneRotations['LeftArm'] = setFromUnitVectors(restDir, targetDir);
   }
 
@@ -131,8 +135,12 @@ export function calculateBoneRotations(worldLandmarks: WorldLandmark[]): Record<
       y: -(lW.y - lE.y),
       z: -(lW.z - lE.z)
     });
-    // T-Pose rest direction for LeftForeArm points perfectly along +X axis
-    const restDir = { x: 1, y: 0, z: 0 };
+        // Left Arm Rest Direction
+    let restDir = { x: 1, y: 0, z: 0 };
+    if (restPose === 'A_POSE') {
+      const angle = 35 * Math.PI / 180;
+      restDir = { x: Math.cos(angle), y: -Math.sin(angle), z: 0 };
+    }
     boneRotations['LeftForeArm'] = setFromUnitVectors(restDir, targetDir);
   }
 
@@ -143,8 +151,12 @@ export function calculateBoneRotations(worldLandmarks: WorldLandmark[]): Record<
       y: -(rE.y - rS.y),
       z: -(rE.z - rS.z)
     });
-    // T-Pose rest direction for RightArm points perfectly along -X axis
-    const restDir = { x: -1, y: 0, z: 0 };
+        // Right Arm Rest Direction
+    let restDir = { x: -1, y: 0, z: 0 };
+    if (restPose === 'A_POSE') {
+      const angle = 35 * Math.PI / 180;
+      restDir = { x: -Math.cos(angle), y: -Math.sin(angle), z: 0 };
+    }
     boneRotations['RightArm'] = setFromUnitVectors(restDir, targetDir);
   }
 
@@ -155,8 +167,12 @@ export function calculateBoneRotations(worldLandmarks: WorldLandmark[]): Record<
       y: -(rW.y - rE.y),
       z: -(rW.z - rE.z)
     });
-    // T-Pose rest direction for RightForeArm points perfectly along -X axis
-    const restDir = { x: -1, y: 0, z: 0 };
+        // Right Arm Rest Direction
+    let restDir = { x: -1, y: 0, z: 0 };
+    if (restPose === 'A_POSE') {
+      const angle = 35 * Math.PI / 180;
+      restDir = { x: -Math.cos(angle), y: -Math.sin(angle), z: 0 };
+    }
     boneRotations['RightForeArm'] = setFromUnitVectors(restDir, targetDir);
   }
 

@@ -21,7 +21,7 @@ Research only, no code changes.
   (`@six33/react-native-bg-removal`, a JS lib -- not one of the three load-bearing native
   modules), and a **live color-harmony score** from `src/utils/colorMatcher.ts` (an 8-color rule
   matrix -- rule-based, not AI, but it is a real "Outfit Check" scoring an outfit right now).
-- **Color data**: `color_options` table + `src/utils/colorOptions.ts` -- fixed, admin-managed
+- **Color data**: `color_options` table + `src/utils/colorOptions.ts` -- fixed, owner-managed
   vocabulary users manually tag. No perceptual/seasonal analysis.
 - **Body-scan / fit**: `app/profile/body-scan.tsx` (vision-camera + mediapipe-posedetection)
   captures measurements into `useSizingProfile`; `app/ar-tryon/[id].tsx` overlays *fit* (tight/

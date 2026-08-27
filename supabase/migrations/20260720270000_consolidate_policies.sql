@@ -8,22 +8,22 @@
 -- that remains, by comparing the actual live expressions -- so dropping it
 -- removes no access from anyone. Two of them additionally tighten security as
 -- a side effect: the "Customers can view/update own conversations" pair
--- checked profiles.role WITHOUT `deleted = false`, so a soft-deleted admin
+-- checked profiles.role WITHOUT `deleted = false`, so a soft-deleted owner
 -- satisfied them; the surviving is_staff_or_admin() does check it.
 --
 -- Dropped (redundant subsets):
 --   categories    "Allow public read of categories"          == "Public read categories" (both USING true)
 --   products      "Enable read access for all users"         == "Public read products"   (both USING true)
---   conversations "Customers can insert own conversations"   ⊂ "Enable insert for own conversation or admin"
---   conversations "Customers can view own conversations"     ⊂ "Enable select for own conversation or admin"
---   conversations "Customers can update own conversations"   ⊂ "Enable update for own conversation or admin"
+--   conversations "Customers can insert own conversations"   ⊂ "Enable insert for own conversation or owner"
+--   conversations "Customers can view own conversations"     ⊂ "Enable select for own conversation or owner"
+--   conversations "Customers can update own conversations"   ⊂ "Enable update for own conversation or owner"
 --   messages      "Users can view messages in their conversations" ⊂ "Enable select for messages ..."
 --   orders        "Users can view own orders"                ⊂ "Enable select for own orders or staff"
 --   orders        "Users can view their own orders"          ⊂ "Enable select for own orders or staff"
---   reviews       "Users can manage their own reviews"       ⊂ "Enable all access for own reviews or admin"
+--   reviews       "Users can manage their own reviews"       ⊂ "Enable all access for own reviews or owner"
 --
 -- ── SECURITY FIX (not a consolidation) ──────────────────────────────────────
--- "Enable insert for messages in own conversation or admin" had:
+-- "Enable insert for messages in own conversation or owner" had:
 --     WITH CHECK (sender_id = auth.uid() OR is_staff_or_admin() OR <conv is mine>)
 -- The first disjunct stands alone, so ANY authenticated user could insert a
 -- message into ANY conversation_id -- including a stranger's private
@@ -37,7 +37,7 @@
 -- membership. Verified against both clients:
 --   * mobile sends sender_id = session.user.id into its own conversation
 --     (MessagesContext.tsx:76-77) -> passes the customer branch.
---   * admin sends sender_id = staffUser?.uid ?? null, i.e. possibly NULL,
+--   * owner sends sender_id = staffUser?.uid ?? null, i.e. possibly NULL,
 --     into any customer's conversation (customerService.js:175) -> passes the
 --     staff branch, which is why that branch cannot require a sender match.
 
@@ -56,8 +56,8 @@ DROP POLICY IF EXISTS "Users can view their own orders" ON public.orders;
 
 DROP POLICY IF EXISTS "Users can manage their own reviews" ON public.reviews;
 
-DROP POLICY IF EXISTS "Enable insert for messages in own conversation or admin" ON public.messages;
-CREATE POLICY "Enable insert for messages in own conversation or admin"
+DROP POLICY IF EXISTS "Enable insert for messages in own conversation or owner" ON public.messages;
+CREATE POLICY "Enable insert for messages in own conversation or owner"
   ON public.messages FOR INSERT
   WITH CHECK (
     is_staff_or_admin()

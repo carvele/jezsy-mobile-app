@@ -13,7 +13,7 @@
 --
 -- WHY TRIGGERS AND NOT A CHECK INSIDE THE RPC: stock has to be released as
 -- well as taken, on every path that ends a reservation -- customer cancel,
--- staff decline (admin-dashboard repo), expire_unpaid_reservations() (sets
+-- staff decline (owner-dashboard repo), expire_unpaid_reservations() (sets
 -- 'Cancelled'), verify_pickup() (sets 'Completed'). Patching each call site
 -- is how holds leak permanently, which is worse than not tracking at all.
 -- Both creation paths write public.reservation_items, and every termination
@@ -35,7 +35,7 @@
 -- reservations exist with reserved = 0, inventory needs a manual
 -- reconciliation first; this migration deliberately does not bulk-rewrite
 -- available/reserved, because staff maintain those numbers directly in the
--- admin dashboard and a blind UPDATE here would stomp real counts.
+-- owner dashboard and a blind UPDATE here would stomp real counts.
 --   Re-check with:
 --     SELECT count(*) FROM public.reservations
 --     WHERE public.reservation_holds_stock(status, deleted);

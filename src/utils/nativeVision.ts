@@ -20,14 +20,18 @@ import type {
 // import time since ar-tryon/[id].tsx and body-scan.tsx import them
 // statically. require (not import) lets the failure be caught here once,
 // with every consumer degrading through the existing "no device" UI instead.
+import { Platform } from "react-native";
+
 let VisionCamera: typeof import("react-native-vision-camera") | null = null;
 let PoseDetection: typeof import("react-native-mediapipe-posedetection") | null = null;
 
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- must be synchronous so the try/catch can guard the hooks below
-  VisionCamera = require("react-native-vision-camera");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  PoseDetection = require("react-native-mediapipe-posedetection");
+  if (Platform.OS !== "web") {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- must be synchronous so the try/catch can guard the hooks below
+    VisionCamera = require("react-native-vision-camera");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    PoseDetection = require("react-native-mediapipe-posedetection");
+  }
 } catch (e) {
   console.error("Native camera/pose-detection modules failed to load:", e);
 }

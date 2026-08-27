@@ -1,7 +1,7 @@
 # Migration conventions
 
 This directory is applied against a **live, shared** Supabase Postgres project — a
-second repo (admin-dashboard) reads and writes the same database, and applying a
+second repo (owner-dashboard) reads and writes the same database, and applying a
 migration can silently drift the ledger version away from the filename (see the
 project's shared-DB workflow notes). Because of that drift, any migration can end
 up re-applied against a database where its objects already exist. Every migration

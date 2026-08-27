@@ -2,8 +2,8 @@
 --
 -- SECURITY DEFINER with its own guards, matching create_order rather than
 -- create_reservation: this is a trusted staff write path, and the table's
--- UPDATE policy is admin-only, so an INVOKER function would fail closed for
--- anyone who is not already an admin -- the exact trap create_reservation fell
+-- UPDATE policy is owner-only, so an INVOKER function would fail closed for
+-- anyone who is not already an owner -- the exact trap create_reservation fell
 -- into and which CLAUDE.md records.
 CREATE OR REPLACE FUNCTION public.settle_reservation_balance(
   _reservation_id uuid,
@@ -25,7 +25,7 @@ BEGIN
   END IF;
 
   SELECT role INTO v_role FROM public.profiles WHERE id = v_actor;
-  IF v_role IS NULL OR v_role NOT IN ('admin', 'staff', 'owner') THEN
+  IF v_role IS NULL OR v_role NOT IN ('staff', 'owner') THEN
     RAISE EXCEPTION 'Only staff can record a balance.';
   END IF;
 
