@@ -259,15 +259,16 @@ export default function ARTryOnScreen() {
   // Phase 5B: Real garment metadata from Supabase, with a clearly-labelled fallback
   const buildFallbackMetadata = (p: typeof product): import('@/src/types/garment').GarmentMetadata => {
     const cat = (p?.category || 'shirt').toLowerCase();
-    return {
-      id: p?.id || 'mock',
-      category: cat as any,
-      calibrationVersion: '1.0.0',
-      ingestionStatus: 'AR_READY',
-      anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
-      anchorConfidence: 'inferred',
-      restPoseMetricWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
-      boneMap: {
+      return {
+        id: p?.id || 'mock',
+        category: cat as any,
+        calibrationVersion: '1.0.0',
+        ingestionStatus: 'AR_READY',
+        anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
+        anchorConfidence: 'inferred',
+        anchorType: 'SHOULDER_CENTER',
+        restPoseMetricWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
+        boneMap: {
         'Spine': 'mixamorigSpine',
         'Spine1': 'mixamorigSpine1',
         'Spine2': 'mixamorigSpine2',
