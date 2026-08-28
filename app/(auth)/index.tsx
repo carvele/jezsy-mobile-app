@@ -35,10 +35,6 @@ export default function Onboarding() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
 
-  if (!isLoading && session && !isPasswordRecovery) {
-    return <Redirect href="/(tabs)" />;
-  }
-
   const handleScrollEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = e.nativeEvent.contentOffset.x;
     const nextIdx = Math.round(offsetX / width);
@@ -71,6 +67,10 @@ export default function Onboarding() {
     offset: width * index,
     index,
   }), [width]);
+
+  if (!isLoading && session && !isPasswordRecovery) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   return (
     <View style={styles.container}>
