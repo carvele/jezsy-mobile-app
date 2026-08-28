@@ -80,7 +80,10 @@ export default function WardrobeScreen() {
   const hasLoadedOnce = useRef(false);
 
   const fetchWardrobeData = useCallback(async (isRefresh = false) => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       if (!isRefresh && !hasLoadedOnce.current) setLoading(true);
@@ -447,7 +450,9 @@ export default function WardrobeScreen() {
         </ScrollView>
       </View>
 
-      {loading ? (
+      {activeTab === 'mannequin' ? (
+        <MannequinView wardrobeItems={items} onRefreshWardrobe={fetchWardrobeData} />
+      ) : loading ? (
         // A skeleton grid keeps the layout stable while loading instead of
         // collapsing to a centred spinner and then jumping.
         <ScrollView contentContainerStyle={{ padding: 16 }} scrollEnabled={false}>
@@ -555,9 +560,7 @@ export default function WardrobeScreen() {
             />
           )}
         </ScrollView>
-      ) : (
-        <MannequinView wardrobeItems={items} onRefreshWardrobe={fetchWardrobeData} />
-      )}
+      ) : null}
     </SafeAreaView>
   );
 }
