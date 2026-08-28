@@ -32,8 +32,28 @@ const OUTFIT_CARD_WIDTH = width - 40;
 type Tab = 'items' | 'outfits' | 'capsules' | 'mannequin';
 type WearFilter = 'all' | 'never' | 'neglected';
 
-// Module-level persistence so switching between bottom navigation tabs keeps your active sub-tab (e.g. Mannequin)
-let cachedActiveTab: Tab = 'items';
+const VALID_TABS: Tab[] = ['items', 'outfits', 'capsules', 'mannequin'];
+const STORAGE_KEY = 'jezsy_wardrobe_active_tab';
+
+// Read the persisted tab from localStorage (web) so it survives component unmounts
+// caused by Expo Router's tab navigator unmounting screens on navigation.
+function getPersistedTab(): Tab {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      if (saved && VALID_TABS.includes(saved as Tab)) return saved as Tab;
+    }
+  } catch {}
+  return 'items';
+}
+
+function persistTab(tab: Tab) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(STORAGE_KEY, tab);
+    }
+  } catch {}
+}
 
 const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'];
 const NEGLECT_MS = 60 * 86_400_000;
@@ -48,21 +68,23 @@ export default function WardrobeScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
 
   const initialTab = useMemo<Tab>(() => {
-    if (params.tab && ['items', 'outfits', 'capsules', 'mannequin'].includes(params.tab)) {
+    // Explicit URL param takes priority (e.g. /wardrobe?tab=mannequin)
+    if (params.tab && VALID_TABS.includes(params.tab as Tab)) {
       return params.tab as Tab;
     }
-    return cachedActiveTab;
-  }, [params.tab]);
+    // Otherwise restore from localStorage so the tab persists across navigation
+    return getPersistedTab();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally run once on mount
 
   const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
 
   const setActiveTab = useCallback((tab: Tab) => {
-    cachedActiveTab = tab;
+    persistTab(tab);
     setActiveTabState(tab);
   }, []);
 
   React.useEffect(() => {
-    if (params.tab && ['items', 'outfits', 'capsules', 'mannequin'].includes(params.tab)) {
+    if (params.tab && VALID_TABS.includes(params.tab as Tab)) {
       setActiveTab(params.tab as Tab);
     }
   }, [params.tab, setActiveTab]);
