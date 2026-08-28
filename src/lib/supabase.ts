@@ -108,11 +108,24 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY.');
 }
 
+// Only detect session in URL when there's actually an auth callback in the URL
+// (e.g. after email confirmation or OAuth). Setting this unconditionally to `true`
+// caused Supabase to fire onAuthStateChange on EVERY in-app tab navigation on web
+// (Home → Wardrobe, etc.) because the URL pathname changed, triggering syncProfile
+// and a full auth re-check that would briefly unmount the wardrobe screen.
+const hasAuthCallbackInUrl =
+  Platform.OS === 'web' &&
+  typeof window !== 'undefined' &&
+  (window.location.hash.includes('access_token') ||
+    window.location.hash.includes('error=') ||
+    window.location.search.includes('code=') ||
+    window.location.search.includes('token='));
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: Platform.OS === 'web' ? (typeof window !== 'undefined' ? window.localStorage : undefined) : ExpoSecureStoreAdapter as any,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: Platform.OS === 'web',
+    detectSessionInUrl: hasAuthCallbackInUrl,
   },
 });

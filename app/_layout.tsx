@@ -170,6 +170,14 @@ function InitialLayout() {
     const onProfileSetup = pathSegments[1] === 'profile-setup';
     const onResetPassword = pathSegments[1] === 'reset-password';
 
+    // CRITICAL: Once we have confirmed a fully authenticated session AND the route
+    // has already settled, skip ALL future re-evaluations. Tab navigation changes
+    // `segments` which re-fires this effect — but we must never re-run the overlay
+    // cover logic or redirects while the user is simply switching tabs.
+    if (routeSettled && hasAuthenticated.current && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
+      return;
+    }
+
     // CRITICAL: If we've already confirmed a fully authenticated session at
     // least once this mount, AND the user is inside the app (not in auth), skip ALL
     // redirects. Supabase silent token refreshes and syncProfile() calls
@@ -213,7 +221,7 @@ function InitialLayout() {
 
     // Whichever branch ran, the correct route is now committed.
     setRouteSettled(true);
-  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut]);
+  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut, routeSettled]);
 
   useEffect(() => {
     if (hasBootstrapped) {
