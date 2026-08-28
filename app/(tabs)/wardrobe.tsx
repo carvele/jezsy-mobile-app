@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -32,6 +32,9 @@ const OUTFIT_CARD_WIDTH = width - 40;
 type Tab = 'items' | 'outfits' | 'capsules' | 'mannequin';
 type WearFilter = 'all' | 'never' | 'neglected';
 
+// Module-level persistence so switching between bottom navigation tabs keeps your active sub-tab (e.g. Mannequin)
+let cachedActiveTab: Tab = 'items';
+
 const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'];
 const NEGLECT_MS = 60 * 86_400_000;
 
@@ -42,8 +45,27 @@ export default function WardrobeScreen() {
   const { showToast } = useToast();
   const { session } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
 
-  const [activeTab, setActiveTab] = useState<Tab>('items');
+  const initialTab = useMemo<Tab>(() => {
+    if (params.tab && ['items', 'outfits', 'capsules', 'mannequin'].includes(params.tab)) {
+      return params.tab as Tab;
+    }
+    return cachedActiveTab;
+  }, [params.tab]);
+
+  const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
+
+  const setActiveTab = useCallback((tab: Tab) => {
+    cachedActiveTab = tab;
+    setActiveTabState(tab);
+  }, []);
+
+  React.useEffect(() => {
+    if (params.tab && ['items', 'outfits', 'capsules', 'mannequin'].includes(params.tab)) {
+      setActiveTab(params.tab as Tab);
+    }
+  }, [params.tab, setActiveTab]);
 
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [outfits, setOutfits] = useState<SavedOutfit[]>([]);
