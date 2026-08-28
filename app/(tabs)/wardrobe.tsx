@@ -378,22 +378,48 @@ export default function WardrobeScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: colors.tint }]}>Digital Wardrobe</Text>
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.tint }]}
-          onPress={() =>
-            activeTab === 'capsules'
-              ? router.push('/wardrobe/create-capsule' as any)
-              : activeTab === 'outfits'
-                ? router.push('/outfit-builder')
-                : router.push('/wardrobe/add-item')
-          }
-          accessibilityRole="button"
-          accessibilityLabel={
-            activeTab === 'capsules' ? 'Create capsule' : activeTab === 'outfits' ? 'Create outfit' : 'Add wardrobe item'
-          }
-        >
-          <IconSymbol name="plus" size={20} color={colors.onTint} />
-        </TouchableOpacity>
+        
+        <View style={styles.headerRightActions}>
+          {/* Mannequin Studio Button beside Add (+) Button */}
+          <TouchableOpacity
+            style={[
+              styles.mannequinHeaderButton,
+              activeTab === 'mannequin'
+                ? { backgroundColor: colors.tint }
+                : { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : '#F5EFE6', borderWidth: 1.5, borderColor: colors.tint }
+            ]}
+            onPress={() => {
+              tapLight();
+              setActiveTab(activeTab === 'mannequin' ? 'items' : 'mannequin');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle Mannequin Studio"
+          >
+            <IconSymbol
+              name="hanger"
+              size={20}
+              color={activeTab === 'mannequin' ? colors.onTint : colors.tint}
+            />
+          </TouchableOpacity>
+
+          {/* Add (+) Button */}
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.tint }]}
+            onPress={() =>
+              activeTab === 'capsules'
+                ? router.push('/wardrobe/create-capsule' as any)
+                : activeTab === 'outfits'
+                  ? router.push('/outfit-builder')
+                  : router.push('/wardrobe/add-item')
+            }
+            accessibilityRole="button"
+            accessibilityLabel={
+              activeTab === 'capsules' ? 'Create capsule' : activeTab === 'outfits' ? 'Create outfit' : 'Add wardrobe item'
+            }
+          >
+            <IconSymbol name="plus" size={20} color={colors.onTint} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={[styles.tabRow, { borderColor: colors.border }]}>
@@ -576,6 +602,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  mannequinHeaderButton: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.pill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Elevation.sm,
   },
   addButton: {
     // 44pt keeps the primary add action at the minimum comfortable target.
