@@ -149,20 +149,19 @@ function InitialLayout() {
     if (flagsReady && !hasBootstrapped) setHasBootstrapped(true);
   }, [flagsReady, hasBootstrapped]);
 
+  // Safety fallback: Ensure routeSettled flips to true after at most 300ms on cold start
+  // so the overlay never traps the user on a blank white screen on slow network/web.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setRouteSettled(true);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Flips once the redirect effect has picked a route. Latches true so a later
   // refreshProfile cannot drop the cover back over a screen the user is on.
   const [routeSettled, setRouteSettled] = useState(false);
 
-  // Deliberately useEffect, not useLayoutEffect. Layout effects run before the
-  // Stack below has registered with expo-router, so redirecting from one threw
-  // "Attempted to navigate before mounting the Root Layout component" -- on
-  // cold start and again on sign-out. useRootNavigationState is not a usable
-  // guard for it either: it reports expo-router's own root navigator, which
-  // exists well before this Stack does, so its key is already truthy while
-  // assertIsReady still fails.
-  //
-  // The flash that motivated useLayoutEffect is instead handled by the overlay
-  // below, which stays up until this has settled on a route.
   useEffect(() => {
     const pathSegments = segments as string[];
     const inAuthGroup = pathSegments[0] === '(auth)';
@@ -236,12 +235,8 @@ function InitialLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
       </Stack>
-      {/* Covers the Stack rather than replacing it. Returning a bare View here
-          meant the root layout rendered no navigator on its first pass, so the
-          redirect below threw "Attempted to navigate before mounting the Root
-          Layout component". Overlaying keeps the same guarantee -- the tabs are
-          never visible for a frame -- while the navigator still mounts. */}
-      {!routeSettled && (
+      {/* Covers the Stack rather than replacing it only during cold bootstrap before routeSettled */}
+      {!routeSettled && Platform.OS !== 'web' && (
         <View
           pointerEvents="none"
           style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, zIndex: 999 }]}
