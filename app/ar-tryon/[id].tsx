@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { ConsentModal } from '@/src/components/ConsentModal';
 import { useToast } from '@/src/context/ToastContext';
-import { evaluatePoseMatch, getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
+import { getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
 import { constructBodyPose } from '@/src/utils/poseConstructor';
 import { calculateGarmentFit } from '@/src/utils/garmentFitter';
 import { calculateBoneRotations } from '@/src/utils/skeletalRetargeter';
@@ -31,7 +31,6 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 type Product = Database['public']['Tables']['products']['Row'];
-type PoseGuide = Pick<Database['public']['Tables']['pose_guides']['Row'], 'id' | 'name' | 'category' | 'image_url' | 'occasion' | 'base_pose_type'>;
 
 import { WebPoseTracker } from '@/src/utils/webPoseDetection';
 import { PoseLandmarkFilter } from '@/src/utils/oneEuroFilter';
@@ -220,7 +219,7 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
 
 export default function ARTryOnScreen() {
   const { showToast } = useToast();
-  const { id, stylePoseId } = useLocalSearchParams<{ id: string; stylePoseId?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasConsented, setHasConsented] = useState<boolean | null>(null);
@@ -228,9 +227,6 @@ export default function ARTryOnScreen() {
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
-  const [poseGuides, setPoseGuides] = useState<PoseGuide[]>([]);
-  const [poseIndex, setPoseIndex] = useState(0);
-  const currentPose = poseGuides.length > 0 ? poseGuides[poseIndex % poseGuides.length] : null;
 
   const [matchScore, setMatchScore] = useState(0);
   const [isMatched, setIsMatched] = useState(false);
@@ -395,23 +391,9 @@ export default function ARTryOnScreen() {
         lastStateUpdateRef.current = now;
         setIsTrackerActive(isTracking);
 
-        if (currentPose) {
-          // V1 evaluatePoseMatch still requires raw normalized landmarks for now
-          const match = evaluatePoseMatch(landmarks, currentPose.name, {
-            isMirrored: true,
-            screenWidth: stageWidth,
-            screenHeight: stageHeight,
-          });
-          setMatchScore(match.score);
-          setIsMatched(match.isMatched);
-          setMatchFeedback(match.feedback);
-        } else {
-          setMatchFeedback(isTracking ? (pose.trackingState === 'TURN_TOO_FAR' ? 'Face forward for 2D fitting' : 'Auto-Fit Active') : 'Position yourself in frame');
-          setIsMatched(false);
-        }
       }
     },
-    [currentPose, stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity]
+    [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity]
   );
   
   const nativeFilterRef = React.useRef<PoseLandmarkFilter | null>(null);
@@ -489,33 +471,9 @@ export default function ARTryOnScreen() {
     }
   }, [id, showToast]);
 
-  const fetchPoseGuides = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('pose_guides')
-        .select('id, name, category, image_url, occasion, base_pose_type')
-        .eq('deleted', false)
-        .order('created_at');
-      if (error) throw error;
-      if (data && data.length > 0) {
-        setPoseGuides(data);
-        if (stylePoseId) {
-          const matchedIdx = data.findIndex(p => p.id === stylePoseId);
-          if (matchedIdx !== -1) {
-            setPoseIndex(matchedIdx);
-            setMode('2d');
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching pose guides:', err);
-    }
-  }, [stylePoseId]);
-
   useEffect(() => {
     fetchProduct();
-    fetchPoseGuides();
-  }, [fetchProduct, fetchPoseGuides]);
+  }, [fetchProduct]);
 
   const [showHintModal, setShowHintModal] = useState(false);
 
@@ -528,14 +486,6 @@ export default function ARTryOnScreen() {
   const handleAcknowledgeHint = () => {
     setShowHintModal(false);
     AsyncStorage.setItem('ar_hint_seen', 'true');
-  };
-
-  const handleShufflePose = () => {
-    if (poseGuides.length === 0) return;
-    setPoseIndex((i) => (i + 1) % poseGuides.length);
-    setIsMatched(false);
-    setMatchScore(0);
-    setMatchFeedback('Align with outline');
   };
 
   const { measurements: sizingMeasurements, fitPreference, ready: sizingReady } = useSizingProfile();
@@ -995,49 +945,6 @@ export default function ARTryOnScreen() {
               </View>
             )}
 
-            {/* Reference Pose Picture-in-Picture Box */}
-            {currentPose?.image_url && (
-              <View style={styles.pipContainer}>
-                <Image source={{ uri: currentPose.image_url }} style={styles.pipImage} contentFit="cover" />
-                <View style={styles.pipLabelContainer}>
-                  <Text style={styles.pipLabelText}>Target Look</Text>
-                </View>
-              </View>
-            )}
-
-            <View pointerEvents="none" style={styles.garmentWrapper}>
-              <Animated.View
-                style={[
-                  styles.overlay3DContainer,
-                  animatedGarmentStyle,
-                  isMatched && styles.overlayImageMatched,
-                ]}
-              >
-                <GarmentRenderer
-                  ref={garmentRendererRef}
-                  modelUrl={modelUrl}
-                  metadata={garmentMetadata ?? undefined}
-                />
-              </Animated.View>
-            </View>
-            <View style={[styles.matchBadge, { backgroundColor: isMatched ? 'rgba(52, 199, 89, 0.92)' : 'rgba(0, 0, 0, 0.72)' }]}>
-              <Text style={styles.matchBadgeText}>{matchFeedback}</Text>
-            </View>
-            <View style={styles.overlayGuide} pointerEvents="box-none">
-              <Text style={styles.overlayGuideText}>
-                {currentPose ? `Recreating: ${currentPose.name}` : 'Align your body with the item'}
-              </Text>
-              {currentPose && (
-                <TouchableOpacity
-                  onPress={handleShufflePose}
-                  style={styles.shuffleButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Suggest another pose"
-                >
-                  <IconSymbol name="arrow.clockwise" size={16} color="#FFF" />
-                </TouchableOpacity>
-              )}
-            </View>
           </View>
         </View>
       )}
