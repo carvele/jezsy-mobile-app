@@ -14,24 +14,28 @@ export default {
       });
     }
 
-    // Static assets with file extensions (.js, .css, .png, .jpg, .ico, .json, .ttf, .woff2)
-    if (url.pathname.includes(".") && !url.pathname.endsWith(".html")) {
-      return env.ASSETS.fetch(request);
+    // Try fetching the asset directly from Cloudflare Pages static assets
+    let response = await env.ASSETS.fetch(request);
+
+    // If not found and it's a SPA navigation route (e.g. /wardrobe, /explore), fallback to root index.html
+    if (response.status === 404 && !url.pathname.includes(".")) {
+      response = await env.ASSETS.fetch(new URL("/", request.url));
     }
 
-    // For ALL client-side navigation routes (/, /wardrobe, /explore, etc.), ALWAYS serve the latest index.html with NO CACHE
-    const indexRequest = new Request(new URL("/index.html", request.url), request);
-    const response = await env.ASSETS.fetch(indexRequest);
-    const newHeaders = new Headers(response.headers);
-    newHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate");
-    newHeaders.set("Pragma", "no-cache");
-    newHeaders.set("Expires", "0");
-    newHeaders.set("Content-Type", "text/html; charset=utf-8");
+    // For all HTML responses, enforce no-cache so users always receive the latest JS bundle
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("text/html")) {
+      const newHeaders = new Headers(response.headers);
+      newHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      newHeaders.set("Pragma", "no-cache");
+      newHeaders.set("Expires", "0");
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: newHeaders,
+      });
+    }
 
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: newHeaders,
-    });
+    return response;
   },
 };
