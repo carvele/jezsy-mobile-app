@@ -1,9 +1,26 @@
-require('dotenv').config();
-const { execSync } = require('child_process');
+const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const https = require('https');
 
 const rootDir = path.resolve(__dirname, '..');
+
+// Read .env manually without external packages
+const envPath = path.join(rootDir, '.env');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+  envContent.split('\n').forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const idx = trimmed.indexOf('=');
+      const key = trimmed.slice(0, idx).trim();
+      const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+      if (!process.env[key]) {
+        process.env[key] = val;
+      }
+    }
+  });
+}
 
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
