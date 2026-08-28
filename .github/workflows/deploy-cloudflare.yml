@@ -1,9 +1,19 @@
 name: Deploy to Cloudflare Pages
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
+        default: 'Manual deploy'
+  # Disabled auto-deploy on push: GitHub Actions env builds a different bundle
+  # hash than local builds (missing EXPO_PUBLIC_SENTRY_DSN etc.), which caused
+  # it to overwrite the correct local build with an older cached version.
+  # Re-enable once GitHub Actions secrets are fully configured.
+  # push:
+  #   branches:
+  #     - main
 
 concurrency:
   group: cloudflare-pages-deploy
