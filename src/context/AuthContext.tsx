@@ -219,7 +219,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         // Belt-and-braces alongside the explicit begin/end calls: on platforms
         // where the SDK detects the recovery link itself, this is the only
         // signal we get.
@@ -229,7 +229,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          void syncProfile(session.user);
+          await syncProfile(session.user);
         } else {
           setProfile(null);
           setIsProfileLoading(false);
