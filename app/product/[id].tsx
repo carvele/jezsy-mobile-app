@@ -133,7 +133,10 @@ export default function ProductDetailScreen() {
                   data.measurements as any,
                   profile?.fit_preference || "regular",
                 );
-                setRecommendedSize(rec);
+                if (rec) {
+                  setRecommendedSize(rec);
+                  setSelectedSize((prev) => (!prev || prev === data.sizes?.[0] ? rec : prev));
+                }
               }
             }
           }
@@ -469,6 +472,7 @@ export default function ProductDetailScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
                 {product.sizes.map((s, index) => {
                   const isSelected = selectedSize === s;
+                  const isRecommended = recommendedSize === s;
                   const stock = getStockInfo(s, selectedColor || undefined);
                   const isOutOfStock = stock !== null && stock <= 0;
                   
@@ -477,20 +481,24 @@ export default function ProductDetailScreen() {
                       <TouchableOpacity
                         style={[
                           styles.optionButton,
-                          { borderColor: isSelected ? colors.tint : colors.border },
+                          { borderColor: isSelected ? colors.tint : (isRecommended ? colors.tint + "80" : colors.border) },
                           isSelected && { backgroundColor: colors.card },
+                          isRecommended && !isSelected && { backgroundColor: colors.tint + "10" },
                           isOutOfStock && { opacity: 0.4 }
                         ]}
                         onPress={() => !isOutOfStock && setSelectedSize(s)}
                         disabled={isOutOfStock}
                         accessibilityRole="radio"
-                        accessibilityLabel={`Select size ${s}`}
+                        accessibilityLabel={`Select size ${s}${isRecommended ? ' (Recommended)' : ''}`}
                         accessibilityHint={isOutOfStock ? `Size ${s} is out of stock` : `Selects ${s} as the size option`}
                         accessibilityState={{ selected: isSelected, disabled: isOutOfStock }}
                       >
                         <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{s}</Text>
                       </TouchableOpacity>
-                      {stock !== null && stock > 0 && stock <= 5 && (
+                      {isRecommended && !isOutOfStock && (
+                        <Text style={[Type.caption, { color: colors.tint, marginTop: Spacing.xs, fontWeight: '700' }]}>Best fit ✨</Text>
+                      )}
+                      {stock !== null && stock > 0 && stock <= 5 && !isRecommended && (
                         <Text style={[Type.caption, { color: colors.warning, marginTop: Spacing.xs }]}>Only {stock} left</Text>
                       )}
                       {isOutOfStock && (

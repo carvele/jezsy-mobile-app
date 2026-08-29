@@ -30,6 +30,14 @@ export type ProductMeasurements = {
 export type FitVerdict = 'snug' | 'fitted' | 'roomy';
 export type FitZone = { zone: 'Bust' | 'Waist' | 'Hips'; verdict: FitVerdict; deltaCm: number };
 
+function toNumeric(val: any): number | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') return isNaN(val) ? null : val;
+  if (typeof val === 'object' && val !== null && typeof val.valueCm === 'number') return isNaN(val.valueCm) ? null : val.valueCm;
+  const parsed = parseFloat(val);
+  return isNaN(parsed) ? null : parsed;
+}
+
 /**
  * Compares the user's measurements against one garment size's chart and
  * classifies each zone as snug (garment smaller/equal to body), fitted (a
@@ -40,10 +48,12 @@ export function analyzeFit(
   user: UserMeasurements,
   garment: { bust?: number; waist?: number; hips?: number } | null | undefined
 ): FitZone[] {
-  if (!garment) return [];
+  if (!garment || !user) return [];
   const zones: FitZone[] = [];
-  const classify = (zone: FitZone['zone'], u?: number | null, g?: number) => {
-    if (!u || !g) return;
+  const classify = (zone: FitZone['zone'], uRaw?: any, gRaw?: any) => {
+    const u = toNumeric(uRaw);
+    const g = toNumeric(gRaw);
+    if (u === null || g === null) return;
     const delta = g - u; // positive = garment roomier than body
     const verdict: FitVerdict = delta < 1 ? 'snug' : delta <= 6 ? 'fitted' : 'roomy';
     zones.push({ zone, verdict, deltaCm: Math.round(delta) });
@@ -59,10 +69,16 @@ export function recommendSize(
   productMeasurements: ProductMeasurements | null | undefined,
   fitPreference: string = 'regular'
 ): string | null {
-  if (!productMeasurements) return null;
+  if (!productMeasurements || !userMeasurements) return null;
   
+  const uBust = toNumeric(userMeasurements.bust);
+  const uWaist = toNumeric(userMeasurements.waist);
+  const uHips = toNumeric(userMeasurements.hips);
+  const uInseam = toNumeric(userMeasurements.inseam);
+  const uShoulder = toNumeric(userMeasurements.shoulderWidth);
+
   // We need at least one primary user measurement to make a recommendation
-  if (!userMeasurements.bust && !userMeasurements.waist && !userMeasurements.hips) {
+  if (!uBust && !uWaist && !uHips) {
     return null;
   }
 
@@ -82,39 +98,45 @@ export function recommendSize(
     let matchCount = 0;
     let tooSmall = false;
 
+    const gBust = toNumeric(metrics.bust);
+    const gWaist = toNumeric(metrics.waist);
+    const gHips = toNumeric(metrics.hips);
+    const gInseam = toNumeric(metrics.inseam);
+    const gShoulder = toNumeric((metrics as any).shoulderWidth);
+
     // Compare available metrics
-    if (userMeasurements.bust && metrics.bust) {
-      const targetBust = userMeasurements.bust + allowance;
-      if (metrics.bust < userMeasurements.bust - 1) tooSmall = true; // Garment smaller than body
-      diffSum += Math.abs(metrics.bust - targetBust);
+    if (uBust !== null && gBust !== null) {
+      const targetBust = uBust + allowance;
+      if (gBust < uBust - 1) tooSmall = true; // Garment smaller than body
+      diffSum += Math.abs(gBust - targetBust);
       matchCount++;
     }
 
-    if (userMeasurements.waist && metrics.waist) {
-      const targetWaist = userMeasurements.waist + allowance;
-      if (metrics.waist < userMeasurements.waist - 1) tooSmall = true;
-      diffSum += Math.abs(metrics.waist - targetWaist);
+    if (uWaist !== null && gWaist !== null) {
+      const targetWaist = uWaist + allowance;
+      if (gWaist < uWaist - 1) tooSmall = true;
+      diffSum += Math.abs(gWaist - targetWaist);
       matchCount++;
     }
 
-    if (userMeasurements.hips && metrics.hips) {
-      const targetHips = userMeasurements.hips + allowance;
-      if (metrics.hips < userMeasurements.hips - 1) tooSmall = true;
-      diffSum += Math.abs(metrics.hips - targetHips);
+    if (uHips !== null && gHips !== null) {
+      const targetHips = uHips + allowance;
+      if (gHips < uHips - 1) tooSmall = true;
+      diffSum += Math.abs(gHips - targetHips);
       matchCount++;
     }
 
-    if (userMeasurements.inseam && metrics.inseam) {
-      const targetInseam = userMeasurements.inseam; // Inseam doesn't need horizontal allowance
-      if (metrics.inseam < userMeasurements.inseam - 2) tooSmall = true; // Too short
-      diffSum += Math.abs(metrics.inseam - targetInseam);
+    if (uInseam !== null && gInseam !== null) {
+      const targetInseam = uInseam; // Inseam doesn't need horizontal allowance
+      if (gInseam < uInseam - 2) tooSmall = true; // Too short
+      diffSum += Math.abs(gInseam - targetInseam);
       matchCount++;
     }
 
-    if (userMeasurements.shoulderWidth && (metrics as any).shoulderWidth) {
-      const targetShoulder = userMeasurements.shoulderWidth + (allowance * 0.5);
-      if ((metrics as any).shoulderWidth < userMeasurements.shoulderWidth - 1.5) tooSmall = true;
-      diffSum += Math.abs((metrics as any).shoulderWidth - targetShoulder);
+    if (uShoulder !== null && gShoulder !== null) {
+      const targetShoulder = uShoulder + (allowance * 0.5);
+      if (gShoulder < uShoulder - 1.5) tooSmall = true;
+      diffSum += Math.abs(gShoulder - targetShoulder);
       matchCount++;
     }
 
