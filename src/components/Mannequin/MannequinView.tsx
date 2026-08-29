@@ -31,6 +31,8 @@ import {
   createMannequinItem,
 } from '@/src/utils/mannequinConfig';
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
+import { useSizingProfile } from '@/src/hooks/useSizingProfile';
+import { buildSilhouetteParams } from '@/src/utils/bodySilhouette';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
 
 // Enable layout animation for Android
@@ -75,6 +77,14 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
   const { showToast } = useToast();
 
   const canvasRef = useRef<View>(null);
+
+  // Sizing Profile & Silhouette Proportions
+  const { measurements, heightCm, ready: sizingReady } = useSizingProfile();
+  const [silhouetteMode, setSilhouetteMode] = useState<'default' | 'proportions'>('default');
+
+  const bodyParams = useMemo(() => {
+    return buildSilhouetteParams(measurements, heightCm);
+  }, [measurements, heightCm]);
 
   // Canvas & Drawer States
   const [canvasItems, setCanvasItems] = useState<CanvasItemType[]>([]);
@@ -419,6 +429,61 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
         </ScrollView>
       </View>
 
+      {/* ── Mannequin Silhouette Proportions Toggle ── */}
+      <View style={styles.silhouetteBar}>
+        <View style={styles.backdropTitleWrap}>
+          <IconSymbol name="figure.stand" size={13} color={colors.tint} />
+          <Text style={[styles.backdropLabel, { color: colors.secondaryText }]}>Silhouette:</Text>
+        </View>
+        <View style={styles.silhouetteToggleGroup}>
+          <TouchableOpacity
+            style={[
+              styles.silhouettePill,
+              { backgroundColor: silhouetteMode === 'default' ? colors.tint : colors.card, borderColor: silhouetteMode === 'default' ? colors.tint : colors.border }
+            ]}
+            onPress={() => setSilhouetteMode('default')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.silhouettePillText, { color: silhouetteMode === 'default' ? colors.onTint : colors.text }]}>
+              Classic Form
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.silhouettePill,
+              { backgroundColor: silhouetteMode === 'proportions' ? colors.tint : colors.card, borderColor: silhouetteMode === 'proportions' ? colors.tint : colors.border }
+            ]}
+            onPress={() => {
+              if (sizingReady && bodyParams.isCustomProportioned) {
+                setSilhouetteMode('proportions');
+                showToast('Applied your real body measurements ✨', 'info');
+              } else {
+                Alert.alert(
+                  'Custom Body Measurements',
+                  'You haven\'t set up your body measurements yet. Would you like to enter them now to enable custom mannequin proportions?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Enter Measurements', onPress: () => router.push('/profile/measurements') }
+                  ]
+                );
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <IconSymbol
+              name="sparkles"
+              size={11}
+              color={silhouetteMode === 'proportions' ? colors.onTint : colors.tint}
+              style={{ marginRight: 3 }}
+            />
+            <Text style={[styles.silhouettePillText, { color: silhouetteMode === 'proportions' ? colors.onTint : colors.text }]}>
+              My Body {sizingReady ? '✨' : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* ── Size & Layer Controls (when item selected) ── */}
       {selectedItemId && activeSelectedItem && (
         <View style={[styles.layerToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -501,8 +566,13 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
           ref={canvasRef}
           style={[styles.canvasStage, { width: CANVAS_WIDTH, height: CANVAS_HEIGHT }]}
         >
-          {/* Static dress-form silhouette */}
-          <MannequinSilhouette color={isDark ? '#C9B99A' : '#D4C5B0'} opacity={isDark ? 0.85 : 1} />
+          {/* Dress-form silhouette (Classic or Custom Proportioned) */}
+          <MannequinSilhouette
+            color={isDark ? '#C9B99A' : '#D4C5B0'}
+            opacity={isDark ? 0.85 : 1}
+            mode={silhouetteMode}
+            bodyParams={bodyParams}
+          />
 
           {/* Canvas items */}
           {canvasItems.map((item) => (
@@ -816,6 +886,32 @@ const styles = StyleSheet.create({
   backdropSwatchActive: {
     borderWidth: 2,
     transform: [{ scale: 1.15 }],
+  },
+
+  /* ── Silhouette Form Toggle ── */
+  silhouetteBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    gap: 8,
+  },
+  silhouetteToggleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  silhouettePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  silhouettePillText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 
   /* ── Layer / Size Controls ── */

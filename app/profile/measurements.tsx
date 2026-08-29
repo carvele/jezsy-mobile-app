@@ -8,9 +8,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
-import { sanitizeForStorage } from '@/src/utils/measurementPrivacy';
+import { sanitizeForStorage, validateMeasurementRanges } from '@/src/utils/measurementPrivacy';
 import { useToast } from '@/src/context/ToastContext';
 import { consumeScanSession } from '@/src/utils/scanSession';
+import { MeasurementGuideModal } from '@/src/components/MeasurementGuideModal';
 
 type LengthUnit = 'cm' | 'in';
 const UNIT_STORAGE_KEY = '@jezsy_length_unit';
@@ -65,6 +66,7 @@ export default function MeasurementsScreen() {
   const [legLength, setLegLength] = useState<string>('');
 
   const [source, setSource] = useState<string>('manual');
+  const [guideVisible, setGuideVisible] = useState(false);
 
   // ML Confidence Tracking
   const [scanConfidence, setScanConfidence] = useState<number | null>(null);
@@ -215,6 +217,8 @@ export default function MeasurementsScreen() {
       // Everything on screen is in `unit`; the DB (and body-scan's math) is
       // cm-only, so this is the one place a display value is converted back.
       const rawMeasurements = {
+        height: unitToCm(height, unit),
+        weight: parseFloat(weight) || null,
         bust: unitToCm(bust, unit),
         waist: unitToCm(waist, unit),
         hips: unitToCm(hips, unit),
@@ -224,16 +228,34 @@ export default function MeasurementsScreen() {
         torsoLength: unitToCm(torsoLength, unit),
         legLength: unitToCm(legLength, unit),
         confidence: fieldConfidence,
-        overallConfidence: scanConfidence ?? 0
+        overallConfidence: scanConfidence ?? 0.95
       };
+
+      // Range check sanity warning
+      const warnings = validateMeasurementRanges({
+        height: rawMeasurements.height,
+        weight: rawMeasurements.weight,
+        bust: rawMeasurements.bust,
+        waist: rawMeasurements.waist,
+        hips: rawMeasurements.hips,
+        inseam: rawMeasurements.inseam,
+        shoulderWidth: rawMeasurements.shoulderWidth,
+        armLength: rawMeasurements.armLength,
+        torsoLength: rawMeasurements.torsoLength,
+        legLength: rawMeasurements.legLength,
+      });
+
+      if (warnings.length > 0) {
+        showToast(warnings[0], 'info');
+      }
 
       // Ensure data is sanitized before saving to DB
       const sanitized = sanitizeForStorage(rawMeasurements as any);
 
       const payload = {
         user_id: user.id,
-        height: unitToCm(height, unit),
-        weight: parseFloat(weight) || null,
+        height: rawMeasurements.height,
+        weight: rawMeasurements.weight,
         measurements: {
           bust: sanitized.bust,
           waist: sanitized.waist,
@@ -254,7 +276,7 @@ export default function MeasurementsScreen() {
         .upsert(payload, { onConflict: 'user_id' });
       if (measurementsError) throw measurementsError;
 
-      Alert.alert('Success', 'Your measurements have been updated. Size recommendations will now be tailored to you.', [
+      Alert.alert('Success', 'Your measurements have been updated. Size recommendations and your personalized mannequin will now be tailored to you.', [
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (err: any) {
@@ -350,7 +372,15 @@ export default function MeasurementsScreen() {
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>My Sizing Profile</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          onPress={() => setGuideVisible(true)}
+          style={[styles.guideBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel="Open measurement guide"
+        >
+          <IconSymbol name="ruler.fill" size={13} color={colors.tint} />
+          <Text style={[styles.guideBtnText, { color: colors.text }]}>Guide</Text>
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -510,6 +540,12 @@ export default function MeasurementsScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      <MeasurementGuideModal
+        visible={guideVisible}
+        onClose={() => setGuideVisible(false)}
+        unit={unit}
+      />
     </SafeAreaView>
   );
 }
@@ -526,6 +562,19 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: Spacing.sm },
   headerTitle: { ...Type.subtitle },
+  guideBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  guideBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   content: { padding: Spacing.xl },
   infoCard: {
     flexDirection: 'row',

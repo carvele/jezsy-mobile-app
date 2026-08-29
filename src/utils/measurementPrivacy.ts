@@ -1,5 +1,5 @@
 /**
- * GDPR/BIPA compliant privacy utilities for biometric measurement data.
+ * GDPR/BIPA compliant privacy utilities and validation for biometric measurement data.
  */
 
 import { supabase } from '../lib/supabase';
@@ -9,6 +9,37 @@ export type SanitizedMeasurements = Omit<EstimatedMeasurements, 'overallConfiden
   scan_confidence: number;
   per_field_confidence: Record<string, number>; // Legacy column, fill with dummy or map from uncertainty
 };
+
+export const HUMAN_MEASUREMENT_LIMITS_CM: Record<string, { min: number; max: number; label: string }> = {
+  height: { min: 100, max: 250, label: 'Height' },
+  weight: { min: 25, max: 250, label: 'Weight' },
+  bust: { min: 50, max: 180, label: 'Bust circumference' },
+  waist: { min: 40, max: 160, label: 'Waist circumference' },
+  hips: { min: 50, max: 180, label: 'Hips circumference' },
+  inseam: { min: 40, max: 120, label: 'Inseam length' },
+  shoulderWidth: { min: 25, max: 65, label: 'Shoulder width' },
+  armLength: { min: 35, max: 95, label: 'Arm length' },
+  torsoLength: { min: 25, max: 70, label: 'Torso length' },
+  legLength: { min: 50, max: 130, label: 'Leg length' },
+};
+
+/**
+ * Validates whether entered values in cm are within plausible human ranges.
+ * Returns array of warning strings if any value is out of bounds.
+ */
+export function validateMeasurementRanges(measurementsInCm: Record<string, number | null | undefined>): string[] {
+  const warnings: string[] = [];
+  for (const [key, value] of Object.entries(measurementsInCm)) {
+    if (value === null || value === undefined || isNaN(value)) continue;
+    const rule = HUMAN_MEASUREMENT_LIMITS_CM[key];
+    if (rule) {
+      if (value < rule.min || value > rule.max) {
+        warnings.push(`${rule.label} (${value} cm) is outside the typical range (${rule.min}–${rule.max} cm).`);
+      }
+    }
+  }
+  return warnings;
+}
 
 /**
  * Strips out any internal raw data or metadata that shouldn't persist.

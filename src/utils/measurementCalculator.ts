@@ -113,29 +113,34 @@ export function computeMeasurements(input: MeasurementInput): EstimatedMeasureme
       uncertaintyCm: baseUncertainty
     };
   } else {
-    // Fallback: Single-view only.
-    // Extremely high uncertainty because we are guessing depth from width.
-    const extremeUncertainty = 12.0; 
+    // Fallback: Single-view with anthropometrically calibrated depth ratios
+    const extremeUncertainty = input.gender === 'female' ? 8.5 : 10.0;
     
-    // Fallback assumes roughly a 0.70 depth-to-width ratio for all circumferences (very crude)
-    const fallbackDepthRatio = 0.70;
-    
+    // Anthropometric depth-to-width ratios by gender
+    const depthRatios = input.gender === 'female'
+      ? { bust: 0.68, waist: 0.72, hips: 0.75 }
+      : input.gender === 'male'
+      ? { bust: 0.80, waist: 0.78, hips: 0.72 }
+      : { bust: 0.70, waist: 0.74, hips: 0.73 };
+
     const rawBustWidth = bodyRatios.bustWidthRatio * cmPerUnit;
     bust = {
-      valueCm: Math.round(ellipsePerimeter(rawBustWidth, rawBustWidth * fallbackDepthRatio)),
+      valueCm: Math.round(ellipsePerimeter(rawBustWidth, rawBustWidth * depthRatios.bust) * 10) / 10,
       uncertaintyCm: extremeUncertainty
     };
     
     const rawHipWidth = bodyRatios.hipWidthRatio * cmPerUnit;
     hips = {
-      valueCm: Math.round(ellipsePerimeter(rawHipWidth, rawHipWidth * fallbackDepthRatio)),
+      valueCm: Math.round(ellipsePerimeter(rawHipWidth, rawHipWidth * depthRatios.hips) * 10) / 10,
       uncertaintyCm: extremeUncertainty
     };
     
-    // Waist is roughly 80% of hip width as a blind fallback
-    const rawWaistWidth = rawHipWidth * 0.8;
+    // Waist width derived from anatomical ratio or hip ratio
+    const rawWaistWidth = bodyRatios.rawWaistWidthRatio 
+      ? bodyRatios.rawWaistWidthRatio * cmPerUnit 
+      : (rawHipWidth * (input.gender === 'female' ? 0.76 : 0.82));
     waist = {
-      valueCm: Math.round(ellipsePerimeter(rawWaistWidth, rawWaistWidth * fallbackDepthRatio)),
+      valueCm: Math.round(ellipsePerimeter(rawWaistWidth, rawWaistWidth * depthRatios.waist) * 10) / 10,
       uncertaintyCm: extremeUncertainty
     };
   }

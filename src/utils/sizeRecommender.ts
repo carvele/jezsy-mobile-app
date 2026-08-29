@@ -111,6 +111,13 @@ export function recommendSize(
       matchCount++;
     }
 
+    if (userMeasurements.shoulderWidth && (metrics as any).shoulderWidth) {
+      const targetShoulder = userMeasurements.shoulderWidth + (allowance * 0.5);
+      if ((metrics as any).shoulderWidth < userMeasurements.shoulderWidth - 1.5) tooSmall = true;
+      diffSum += Math.abs((metrics as any).shoulderWidth - targetShoulder);
+      matchCount++;
+    }
+
     // Only consider this size if it didn't strictly fail constraints and we matched at least one metric
     if (!tooSmall && matchCount > 0) {
       const avgDiff = diffSum / matchCount;

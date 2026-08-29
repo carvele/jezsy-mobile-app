@@ -4,6 +4,8 @@ import { Image } from 'expo-image';
 import { MannequinSilhouette } from '@/src/components/MannequinSilhouette';
 import { CATEGORY_PLACEMENT_DEFAULTS, DEFAULT_FALLBACK_PLACEMENT } from '@/src/utils/mannequinConfig';
 
+import type { BodySilhouetteParams } from '@/src/utils/bodySilhouette';
+
 interface OutfitItem {
   image_url?: string;
   garment_type?: string;
@@ -22,6 +24,8 @@ interface Props {
   canvasHeight: number;
   isDark?: boolean;
   backgroundColor?: string;
+  mode?: 'default' | 'proportions';
+  bodyParams?: BodySilhouetteParams | null;
 }
 
 export function MannequinOutfitPreview({
@@ -30,6 +34,8 @@ export function MannequinOutfitPreview({
   canvasHeight,
   isDark = false,
   backgroundColor,
+  mode = 'default',
+  bodyParams,
 }: Props) {
   // Sort items by z_index
   const sortedItems = [...items].sort((a, b) => (a.z_index ?? 0) - (b.z_index ?? 0));
@@ -40,6 +46,8 @@ export function MannequinOutfitPreview({
       <MannequinSilhouette
         color={isDark ? '#C9B99A' : '#D4C5B0'}
         opacity={isDark ? 0.85 : 1}
+        mode={mode}
+        bodyParams={bodyParams}
       />
 
       {/* Layered Styled Garments in exact saved coordinates */}
