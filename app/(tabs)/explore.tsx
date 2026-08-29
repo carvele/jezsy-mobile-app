@@ -117,7 +117,6 @@ export default function ExploreScreen() {
         .from('categories')
         .select('*')
         .order('sort_order', { ascending: true });
-      console.log('Fetch Categories:', { data: data?.length, error });
       if (data && !error) {
         const tops = data.filter(c => !c.parent_id);
         setTopCategories(tops);
@@ -977,7 +976,7 @@ export default function ExploreScreen() {
                 </View>
               )}
 
-              <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories ({topCategories.length})</Text>
+              <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories</Text>
               <View style={styles.categoriesGrid}>
                 {topCategories.map((cat) => (
                   <CategoryCard
