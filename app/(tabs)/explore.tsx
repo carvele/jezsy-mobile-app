@@ -117,7 +117,7 @@ export default function ExploreScreen() {
         .from('categories')
         .select('*')
         .order('sort_order', { ascending: true });
-      console.log(\'Fetch Categories:\', { data: data?.length, error });
+      console.log('Fetch Categories:', { data: data?.length, error });
       if (data && !error) {
         const tops = data.filter(c => !c.parent_id);
         setTopCategories(tops);
