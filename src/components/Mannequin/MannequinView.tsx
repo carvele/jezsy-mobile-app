@@ -37,8 +37,8 @@ import { gradeOutfit, StylistCritique } from '@/src/utils/aiStylistAdvisor';
 import { StylistCritiqueModal } from './StylistCritiqueModal';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
 
-// Enable layout animation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+// Enable layout animation for Android (Old Architecture only)
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 

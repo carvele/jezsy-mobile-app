@@ -4,8 +4,13 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, AppState, Platform, LogBox } from 'react-native';
-LogBox.ignoreLogs(['AuthApiError: Invalid Refresh Token: Refresh Token Not Found', 'Invalid Refresh Token', 'AuthSessionMissingError', 'FunctionsHttpError']);
+LogBox.ignoreLogs([
+  'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
+  'Invalid Refresh Token',
+  'AuthSessionMissingError',
+  'FunctionsHttpError',
+  'setLayoutAnimationEnabledExperimental is currently a no-op',
+]);
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
