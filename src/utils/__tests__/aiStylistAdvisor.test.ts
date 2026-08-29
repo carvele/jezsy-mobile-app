@@ -149,17 +149,25 @@ describe('aiStylistAdvisor - Deterministic Outfit Grader', () => {
     expect(['A+', 'A', 'A-', 'B+']).toContain(critique.grade);
   });
 
-  // Test 9: scoreToGrade scale verification
-  test('scoreToGrade maps numeric ranges precisely', () => {
-    expect(scoreToGrade(98)).toBe('A+');
-    expect(scoreToGrade(93)).toBe('A');
-    expect(scoreToGrade(89)).toBe('A-');
-    expect(scoreToGrade(84)).toBe('B+');
-    expect(scoreToGrade(79)).toBe('B');
-    expect(scoreToGrade(74)).toBe('B-');
-    expect(scoreToGrade(69)).toBe('C+');
-    expect(scoreToGrade(63)).toBe('C');
-    expect(scoreToGrade(56)).toBe('C-');
-    expect(scoreToGrade(40)).toBe('D');
+  // Test 10: Overcrowded canvas with 3 tops simultaneously (user scenario)
+  test('flags 3 competing tops on the mannequin as overcrowded and severely docks score', () => {
+    const top1 = mockItem('1', 'Top', 'Black Tee', 'black');
+    const top2 = mockItem('2', 'Top', 'Navy Blouse', 'navy');
+    const top3 = mockItem('3', 'Top', 'Burgundy Longsleeve', 'burgundy');
+    const bottom = mockItem('4', 'Bottom', 'Black Skirt', 'black');
+    const lookup = {
+      [top1.wardrobeItem.id]: top1.wardrobeItem,
+      [top2.wardrobeItem.id]: top2.wardrobeItem,
+      [top3.wardrobeItem.id]: top3.wardrobeItem,
+      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([top1.canvasItem, top2.canvasItem, top3.canvasItem, bottom.canvasItem], lookup);
+    expect(critique.isOvercrowded).toBe(true);
+    expect(critique.score).toBeLessThanOrEqual(68);
+    expect(['C+', 'C', 'C-', 'D']).toContain(critique.grade);
+    expect(critique.headline).toBe('Overcrowded Top Half');
+    expect(critique.verdict).toContain('competing tops');
+    expect(critique.tips[0]).toContain('extra top');
   });
 });

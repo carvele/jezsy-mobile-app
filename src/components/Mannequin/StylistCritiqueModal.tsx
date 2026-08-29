@@ -214,6 +214,19 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
                 </View>
               </View>
             )}
+
+            {/* Fashion Stylist Disclaimer */}
+            <View style={[styles.disclaimerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.disclaimerHeader}>
+                <IconSymbol name="info.circle.fill" size={12} color={colors.secondaryText} />
+                <Text style={[styles.disclaimerTitle, { color: colors.secondaryText }]}>
+                  Stylist Guidance Disclaimer
+                </Text>
+              </View>
+              <Text style={[styles.disclaimerText, { color: colors.secondaryText }]}>
+                Fashion critiques and grades are algorithmic styling recommendations based on classical color harmony geometry and garment composition rules. Personal style and creative expression are subjective.
+              </Text>
+            </View>
           </ScrollView>
 
           {/* Bottom Actions */}
@@ -518,5 +531,28 @@ const styles = StyleSheet.create({
   doneActionText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  /* Disclaimer */
+  disclaimerCard: {
+    padding: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: 4,
+    marginTop: 4,
+  },
+  disclaimerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  disclaimerTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  disclaimerText: {
+    fontSize: 11,
+    lineHeight: 16,
   },
 });

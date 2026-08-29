@@ -856,7 +856,7 @@ export default function ARTryOnScreen() {
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
               onLayout={poseDetection.cameraViewLayoutChangeHandler}
-              onError={(e) => {
+              onError={(e: any) => {
                 console.warn('Camera Error:', e);
               }}
             />
