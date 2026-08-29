@@ -192,9 +192,12 @@ export function evaluateColors(colors: string[]): ColorMatchResult {
   const harmony = classify(worst!.gap);
   let score = HARMONY_SCORE[harmony];
 
-  // Every additional saturated colour past two adds competition, whatever the
-  // individual pairings do.
-  if (chromatics.length >= 3) score -= (chromatics.length - 2) * 12;
+  // Every additional distinct saturated colour past two adds competition,
+  // unless they are all in the same monochromatic family (gap < 25).
+  const isMonochromeFamily = worst !== null && worst.gap < 25;
+  if (chromatics.length >= 3 && !isMonochromeFamily) {
+    score -= (chromatics.length - 2) * 12;
+  }
   // A neutral gives busy palettes somewhere to breathe.
   if (neutrals.length > 0 && chromatics.length >= 2) score += 5;
 

@@ -33,6 +33,8 @@ import {
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { buildSilhouetteParams } from '@/src/utils/bodySilhouette';
+import { gradeOutfit, StylistCritique } from '@/src/utils/aiStylistAdvisor';
+import { StylistCritiqueModal } from './StylistCritiqueModal';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
 
 // Enable layout animation for Android
@@ -104,6 +106,17 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
   const [loadModalVisible, setLoadModalVisible] = useState(false);
   const [savedLooks, setSavedLooks] = useState<any[]>([]);
   const [loadingLooks, setLoadingLooks] = useState(false);
+
+  // Stylist Critique Modal State
+  const [stylistModalVisible, setStylistModalVisible] = useState(false);
+
+  const wardrobeLookup = useMemo(() => {
+    return Object.fromEntries(wardrobeItems.map((w) => [w.id, w]));
+  }, [wardrobeItems]);
+
+  const activeCritique = useMemo(() => {
+    return gradeOutfit(canvasItems, wardrobeLookup);
+  }, [canvasItems, wardrobeLookup]);
 
   // Filtered wardrobe items for the drawer
   const filteredItems = useMemo(() => {
@@ -378,6 +391,30 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
           >
             <IconSymbol name="square.and.arrow.up" size={14} color={colors.tint} />
             <Text style={[styles.toolBtnText, { color: colors.text }]}>Share</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.stylistBtn,
+              {
+                backgroundColor: colors.tint + '18',
+                borderColor: colors.tint + '60',
+                opacity: canvasItems.length === 0 ? 0.4 : 1,
+              },
+            ]}
+            onPress={() => {
+              if (canvasItems.length === 0) {
+                showToast('Add garments to the mannequin first!', 'info');
+              } else {
+                setStylistModalVisible(true);
+              }
+            }}
+            disabled={canvasItems.length === 0}
+            accessibilityRole="button"
+            accessibilityLabel="AI Stylist critique outfit"
+          >
+            <IconSymbol name="sparkles" size={13} color={colors.tint} />
+            <Text style={[styles.stylistBtnText, { color: colors.tint }]}>Stylist</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -806,6 +843,13 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
         </View>
       </Modal>
       )}
+      {/* ── Stylist Critique Modal ── */}
+      <StylistCritiqueModal
+        visible={stylistModalVisible}
+        critique={activeCritique}
+        onClose={() => setStylistModalVisible(false)}
+        onSaveLook={() => setSaveModalVisible(true)}
+      />
     </ScrollView>
   );
 }
@@ -838,6 +882,19 @@ const styles = StyleSheet.create({
   toolBtnText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  stylistBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  stylistBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   saveBtn: {
     flexDirection: 'row',
