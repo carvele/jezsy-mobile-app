@@ -43,21 +43,30 @@ export function validateMeasurementRanges(measurementsInCm: Record<string, numbe
 
 /**
  * Strips out any internal raw data or metadata that shouldn't persist.
- * Restructures confidence metrics for the DB schema.
+ * Restructures confidence metrics for the DB schema and standardizes values to { valueCm: number }.
  */
-export function sanitizeForStorage(measurements: EstimatedMeasurements): SanitizedMeasurements {
-  const { overallConfidence, ...numericalMeasurements } = measurements;
+export function sanitizeForStorage(measurements: any): any {
+  if (!measurements) return { scan_confidence: 0, per_field_confidence: {} };
+  const { overallConfidence, confidence, ...numericalMeasurements } = measurements;
   
-  // Map uncertainty back to a 0-1 confidence scale for legacy DB column
   const per_field_confidence: Record<string, number> = {};
-  for (const [key, estimate] of Object.entries(numericalMeasurements)) {
-    // 3cm uncertainty -> ~0.9 confidence. 12cm uncertainty -> ~0.3 confidence.
-    per_field_confidence[key] = Math.max(0.1, 1.0 - ((estimate.uncertaintyCm - 2) / 10));
+  const cleaned: Record<string, any> = {};
+
+  for (const [key, val] of Object.entries(numericalMeasurements)) {
+    if (val === null || val === undefined) continue;
+    if (typeof val === 'object' && val !== null && 'valueCm' in val) {
+      cleaned[key] = { valueCm: (val as any).valueCm };
+      const unc = (val as any).uncertaintyCm ?? 2;
+      per_field_confidence[key] = Math.max(0.1, 1.0 - ((unc - 2) / 10));
+    } else if (typeof val === 'number') {
+      cleaned[key] = { valueCm: val };
+      per_field_confidence[key] = 0.95;
+    }
   }
 
   return {
-    ...numericalMeasurements,
-    scan_confidence: overallConfidence,
+    ...cleaned,
+    scan_confidence: typeof overallConfidence === 'number' ? overallConfidence : 0.95,
     per_field_confidence,
   };
 }

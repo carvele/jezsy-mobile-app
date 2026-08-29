@@ -257,14 +257,14 @@ export default function MeasurementsScreen() {
         height: rawMeasurements.height,
         weight: rawMeasurements.weight,
         measurements: {
-          bust: sanitized.bust,
-          waist: sanitized.waist,
-          hips: sanitized.hips,
-          inseam: sanitized.inseam,
-          shoulderWidth: sanitized.shoulderWidth,
-          armLength: sanitized.armLength,
-          torsoLength: sanitized.torsoLength,
-          legLength: sanitized.legLength,
+          bust: sanitized.bust || null,
+          waist: sanitized.waist || null,
+          hips: sanitized.hips || null,
+          inseam: sanitized.inseam || null,
+          shoulderWidth: sanitized.shoulderWidth || null,
+          armLength: sanitized.armLength || null,
+          torsoLength: sanitized.torsoLength || null,
+          legLength: sanitized.legLength || null,
         },
         scan_confidence: sanitized.scan_confidence,
         per_field_confidence: sanitized.per_field_confidence,
@@ -276,9 +276,15 @@ export default function MeasurementsScreen() {
         .upsert(payload, { onConflict: 'user_id' });
       if (measurementsError) throw measurementsError;
 
-      Alert.alert('Success', 'Your measurements have been updated. Size recommendations and your personalized mannequin will now be tailored to you.', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      showToast('Measurements saved successfully ✨', 'success');
+
+      if (Platform.OS === 'web') {
+        router.back();
+      } else {
+        Alert.alert('Success', 'Your measurements have been updated. Size recommendations and your personalized mannequin will now be tailored to you.', [
+          { text: 'OK', onPress: () => router.back() }
+        ]);
+      }
     } catch (err: any) {
       console.error(err);
       showToast(err.message || 'Failed to save measurements.', 'error');
