@@ -59,7 +59,28 @@ export function setFromUnitVectors(vFrom: { x: number; y: number; z: number }, v
  * Y up
  * Z towards viewer (+Z is out of screen).
  */
-export function calculateBoneRotations(worldLandmarks: WorldLandmark[], restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_POSE'): Record<string, Quaternion> {
+
+/**
+ * Inverts a quaternion.
+ */
+function invertQuat(q: Quaternion): Quaternion {
+  return { x: -q.x, y: -q.y, z: -q.z, w: q.w };
+}
+
+/**
+ * Multiplies two quaternions (q1 * q2).
+ */
+function multiplyQuat(q1: Quaternion, q2: Quaternion): Quaternion {
+  return {
+    x: q1.x * q2.w + q1.w * q2.x + q1.y * q2.z - q1.z * q2.y,
+    y: q1.y * q2.w + q1.w * q2.y + q1.z * q2.x - q1.x * q2.z,
+    z: q1.z * q2.w + q1.w * q2.z + q1.x * q2.y - q1.y * q2.x,
+    w: q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z
+  };
+}
+
+export function calculateBoneRotations(
+worldLandmarks: WorldLandmark[], restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_POSE'): Record<string, Quaternion> {
   const boneRotations: Record<string, Quaternion> = {};
   
   if (!worldLandmarks || worldLandmarks.length < 33) return boneRotations;
@@ -83,98 +104,83 @@ export function calculateBoneRotations(worldLandmarks: WorldLandmark[], restPose
   const lH = worldLandmarks[LEFT_HIP];
   const rH = worldLandmarks[RIGHT_HIP];
 
+
   const hasVis = (p: WorldLandmark) => p && p.visibility > 0.3;
+
+  // We will compute WORLD quaternions first, then convert to LOCAL.
+  const worldRotations: Record<string, Quaternion> = {};
+  const identityQuat = { x: 0, y: 0, z: 0, w: 1 };
 
   // 1. SPINE (MidHip to MidShoulder)
   if (hasVis(lS) && hasVis(rS) && hasVis(lH) && hasVis(rH)) {
-    const midHip = {
-      x: (lH.x + rH.x) / 2,
-      y: (lH.y + rH.y) / 2,
-      z: (lH.z + rH.z) / 2
-    };
-    const midShoulder = {
-      x: (lS.x + rS.x) / 2,
-      y: (lS.y + rS.y) / 2,
-      z: (lS.z + rS.z) / 2
-    };
-
-    const targetDir = normalize({
-      x: midShoulder.x - midHip.x,
-      y: -(midShoulder.y - midHip.y), // Convert Y down to Y up
-      z: -(midShoulder.z - midHip.z)  // Convert Z
-    });
-
-    // Assume T-Pose rest direction for Spine points perfectly UP (+Y)
-    const restDir = { x: 0, y: 1, z: 0 };
-    boneRotations['Spine'] = setFromUnitVectors(restDir, targetDir);
-    // Many rigs have multiple spine joints, map the primary one
-    boneRotations['Spine1'] = boneRotations['Spine'];
-    boneRotations['Spine2'] = boneRotations['Spine'];
+    const midHip = { x: (lH.x + rH.x) / 2, y: (lH.y + rH.y) / 2, z: (lH.z + rH.z) / 2 };
+    const midShoulder = { x: (lS.x + rS.x) / 2, y: (lS.y + rS.y) / 2, z: (lS.z + rS.z) / 2 };
+    const targetDir = normalize({ x: midShoulder.x - midHip.x, y: -(midShoulder.y - midHip.y), z: -(midShoulder.z - midHip.z) });
+    worldRotations['Spine'] = setFromUnitVectors({ x: 0, y: 1, z: 0 }, targetDir);
+  } else {
+    worldRotations['Spine'] = identityQuat;
   }
 
-  // 2. LEFT UPPER ARM (LeftShoulder to LeftElbow)
+  // Helper for Rest Directions
+  let lArmRest = { x: 1, y: 0, z: 0 };
+  let rArmRest = { x: -1, y: 0, z: 0 };
+  if (restPose === 'A_POSE') {
+    const angle = 35 * Math.PI / 180;
+    lArmRest = { x: Math.cos(angle), y: -Math.sin(angle), z: 0 };
+    rArmRest = { x: -Math.cos(angle), y: -Math.sin(angle), z: 0 };
+  }
+
+  // 2. LEFT UPPER ARM
   if (hasVis(lS) && hasVis(lE)) {
-    const targetDir = normalize({
-      x: lE.x - lS.x,
-      y: -(lE.y - lS.y),
-      z: -(lE.z - lS.z)
-    });
-        // Left Arm Rest Direction
-    let restDir = { x: 1, y: 0, z: 0 };
-    if (restPose === 'A_POSE') {
-      const angle = 35 * Math.PI / 180;
-      restDir = { x: Math.cos(angle), y: -Math.sin(angle), z: 0 };
-    }
-    boneRotations['LeftArm'] = setFromUnitVectors(restDir, targetDir);
+    const targetDir = normalize({ x: lE.x - lS.x, y: -(lE.y - lS.y), z: -(lE.z - lS.z) });
+    worldRotations['LeftArm'] = setFromUnitVectors(lArmRest, targetDir);
+  } else {
+    worldRotations['LeftArm'] = worldRotations['Spine']; // fallback to spine's rotation if missing
   }
 
-  // 3. LEFT FOREARM (LeftElbow to LeftWrist)
+  // 3. LEFT FOREARM
   if (hasVis(lE) && hasVis(lW)) {
-    const targetDir = normalize({
-      x: lW.x - lE.x,
-      y: -(lW.y - lE.y),
-      z: -(lW.z - lE.z)
-    });
-        // Left Arm Rest Direction
-    let restDir = { x: 1, y: 0, z: 0 };
-    if (restPose === 'A_POSE') {
-      const angle = 35 * Math.PI / 180;
-      restDir = { x: Math.cos(angle), y: -Math.sin(angle), z: 0 };
-    }
-    boneRotations['LeftForeArm'] = setFromUnitVectors(restDir, targetDir);
+    const targetDir = normalize({ x: lW.x - lE.x, y: -(lW.y - lE.y), z: -(lW.z - lE.z) });
+    worldRotations['LeftForeArm'] = setFromUnitVectors(lArmRest, targetDir);
+  } else {
+    worldRotations['LeftForeArm'] = worldRotations['LeftArm'];
   }
 
-  // 4. RIGHT UPPER ARM (RightShoulder to RightElbow)
+  // 4. RIGHT UPPER ARM
   if (hasVis(rS) && hasVis(rE)) {
-    const targetDir = normalize({
-      x: rE.x - rS.x,
-      y: -(rE.y - rS.y),
-      z: -(rE.z - rS.z)
-    });
-        // Right Arm Rest Direction
-    let restDir = { x: -1, y: 0, z: 0 };
-    if (restPose === 'A_POSE') {
-      const angle = 35 * Math.PI / 180;
-      restDir = { x: -Math.cos(angle), y: -Math.sin(angle), z: 0 };
-    }
-    boneRotations['RightArm'] = setFromUnitVectors(restDir, targetDir);
+    const targetDir = normalize({ x: rE.x - rS.x, y: -(rE.y - rS.y), z: -(rE.z - rS.z) });
+    worldRotations['RightArm'] = setFromUnitVectors(rArmRest, targetDir);
+  } else {
+    worldRotations['RightArm'] = worldRotations['Spine'];
   }
 
-  // 5. RIGHT FOREARM (RightElbow to RightWrist)
+  // 5. RIGHT FOREARM
   if (hasVis(rE) && hasVis(rW)) {
-    const targetDir = normalize({
-      x: rW.x - rE.x,
-      y: -(rW.y - rE.y),
-      z: -(rW.z - rE.z)
-    });
-        // Right Arm Rest Direction
-    let restDir = { x: -1, y: 0, z: 0 };
-    if (restPose === 'A_POSE') {
-      const angle = 35 * Math.PI / 180;
-      restDir = { x: -Math.cos(angle), y: -Math.sin(angle), z: 0 };
-    }
-    boneRotations['RightForeArm'] = setFromUnitVectors(restDir, targetDir);
+    const targetDir = normalize({ x: rW.x - rE.x, y: -(rW.y - rE.y), z: -(rW.z - rE.z) });
+    worldRotations['RightForeArm'] = setFromUnitVectors(rArmRest, targetDir);
+  } else {
+    worldRotations['RightForeArm'] = worldRotations['RightArm'];
   }
+
+  // Convert World Rotations to Local Rotations
+  // Hierarchy: Spine -> Spine1 -> Spine2 -> Shoulder -> Arm -> ForeArm
+  // We keep Spine1, Spine2, and Shoulders at Identity to avoid compounding (P1 Fix)
+  boneRotations['Spine'] = worldRotations['Spine'];
+  boneRotations['Spine1'] = identityQuat;
+  boneRotations['Spine2'] = identityQuat;
+  boneRotations['LeftShoulder'] = identityQuat;
+  boneRotations['RightShoulder'] = identityQuat;
+
+  const invSpine = invertQuat(worldRotations['Spine']);
+  boneRotations['LeftArm'] = multiplyQuat(invSpine, worldRotations['LeftArm']);
+  boneRotations['RightArm'] = multiplyQuat(invSpine, worldRotations['RightArm']);
+
+  const invLeftArm = invertQuat(worldRotations['LeftArm']);
+  boneRotations['LeftForeArm'] = multiplyQuat(invLeftArm, worldRotations['LeftForeArm']);
+
+  const invRightArm = invertQuat(worldRotations['RightArm']);
+  boneRotations['RightForeArm'] = multiplyQuat(invRightArm, worldRotations['RightForeArm']);
 
   return boneRotations;
 }
+

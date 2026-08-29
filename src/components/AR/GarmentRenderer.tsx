@@ -50,7 +50,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       <body>
         <div id="canvas-container"></div>
         <script>
-          let scene, camera, renderer, garmentModel;
+          let scene, camera, renderer, garmentModel, garmentGroup;
+          let measuredMeshWidth = 0.4;
           let skeletonBones = {};
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
@@ -178,13 +179,15 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             // Render occlusion BEFORE garment
             occlusionMesh.renderOrder = -1;
             scene.add(occlusionMesh);
-
+            garmentGroup = new THREE.Group();
+            scene.add(garmentGroup);
             const loader = new THREE.GLTFLoader();
             loader.load('${modelUrl}', (gltf) => {
               garmentModel = gltf.scene;
-              scene.add(garmentModel);
+              garmentGroup.add(garmentModel);
+              
               // Phase 5: Anatomical Anchoring
-              const anchorOffset = ${metadata ? JSON.stringify(metadata.anatomicalAnchorOffset) : 'null'};
+              const anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? JSON.stringify(metadata.anatomicalAnchorOffset) : 'null'};
               if (anchorOffset) {
                 // Shift the model inversely by its anatomical anchor
                 garmentModel.position.set(-anchorOffset.x, -anchorOffset.y, -anchorOffset.z);
@@ -192,8 +195,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 // Fallback to Box3 center
                 const box = new THREE.Box3().setFromObject(garmentModel);
                 const center = box.getCenter(new THREE.Vector3());
+                measuredMeshWidth = box.getSize(new THREE.Vector3()).x;
                 garmentModel.position.sub(center);
               }
+
 
               // Extract skeleton bones for Phase 4B Skinning
               garmentModel.traverse((child) => {
@@ -226,16 +231,69 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           window.addEventListener('message', (event) => {
             try {
               const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-              if (data && data.type === 'UPDATE_TRANSFORM' && garmentModel) {
-                const { pos, rot, scl, boneRotations } = data;
+              if (data && data.type === 'UPDATE_TRANSFORM' && garmentGroup) {
+                const { pos, rot, scl, boneRotations, normalizedLandmarks } = data;
                 
-                // 1. Rigid body anchor
-                garmentModel.position.set(pos.x, pos.y, pos.z);
-                garmentModel.quaternion.set(rot.x, rot.y, rot.z, rot.w);
-                garmentModel.scale.set(scl, scl, scl);
+                // Pure Metric Camera Projection (Fixing P0/P1 Alignment)
+                if (normalizedLandmarks && normalizedLandmarks[11] && normalizedLandmarks[12] && camera.projectionMatrix) {
+                  try {
+                    const l11 = normalizedLandmarks[11];
+                    const l12 = normalizedLandmarks[12];
+                    
+                    // Helper: Unproject 2D normalized landmark to 3D world at Z=0
+                    const unprojectToZ0 = (nx, ny) => {
+                      if (isNaN(nx) || isNaN(ny)) return null;
+                      const ndcX = (nx * 2) - 1;
+                      const ndcY = -(ny * 2) + 1;
+                      const vec = new THREE.Vector3(ndcX, ndcY, 0.5);
+                      vec.unproject(camera);
+                      vec.sub(camera.position).normalize();
+                      
+                      // Protect against zero division (e.g., if matrix is NaN)
+                      if (vec.z === 0 || isNaN(vec.z)) return null;
+                      
+                      const dist = (0 - camera.position.z) / vec.z;
+                      return new THREE.Vector3().copy(camera.position).add(vec.multiplyScalar(dist));
+                    };
+
+                    // 1. Position at midpoint of shoulders
+                    const midX = (l11.x + l12.x) / 2;
+                    const midY = (l11.y + l12.y) / 2;
+                    const targetPos = unprojectToZ0(midX, midY);
+                    
+                    // 2. Exact scale based on Three.js world distance
+                    const targetL = unprojectToZ0(l11.x, l11.y);
+                    const targetR = unprojectToZ0(l12.x, l12.y);
+                    
+                    if (targetPos && targetL && targetR) {
+                      const targetWorldWidth = targetL.distanceTo(targetR);
+                      
+                      let garmentMetricWidth = ${metadata && metadata.restPoseMetricWidth ? metadata.restPoseMetricWidth : 0.4};
+                      // Fail-safe for un-ingested massive meshes (e.g., modeled in millimeters)
+                      if (measuredMeshWidth > 0 && Math.abs(garmentMetricWidth - measuredMeshWidth) > measuredMeshWidth * 0.5) {
+                         garmentMetricWidth = measuredMeshWidth * 0.7; // Estimate shoulder width from bounding box
+                      }
+                      
+                      const exactScale = targetWorldWidth / garmentMetricWidth;
+                      
+                      // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
+                      if (!isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x)) {
+                        garmentGroup.position.copy(targetPos);
+                        garmentGroup.scale.set(exactScale, exactScale, exactScale);
+                        garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                      }
+                    }
+                  } catch(e) { console.error('Projection Math Error', e); }
+                } else {
+                  // Fallback
+                  garmentGroup.position.set(pos.x, pos.y, pos.z);
+                  garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                  garmentGroup.scale.set(scl, scl, scl);
+                }
 
                 // 2. Mesh Skinning / Rig Retargeting
-                if (boneRotations && Object.keys(skeletonBones).length > 0) {
+
+                if (false) { // TEMP DISABLED FOR P0-A (Rigid Transform Only)
                   const boneMap = ${metadata ? JSON.stringify(metadata.boneMap) : 'null'};
                   for (const [boneName, quat] of Object.entries(boneRotations)) {
                     // Try to map using ingestion metadata first, fallback to heuristics

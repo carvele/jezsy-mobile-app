@@ -47,8 +47,8 @@ export function calculateGarmentFit(
      // example override if rig provides specific attachment offsets
   }
   
-  // 2. Metric Anthropometric Scaling (Phase 3)
-  // Derive the user's true physical shoulder width from worldLandmarks
+
+  // 2. Metric Anthropometric Scaling (Phase 3 -> Phase 6 3D)
   const wl = pose.worldLandmarks;
   let userShoulderWidthMeters = 0.4; // fallback for average human
   if (wl && wl[11] && wl[12]) {
@@ -58,24 +58,15 @@ export function calculateGarmentFit(
     userShoulderWidthMeters = Math.sqrt(dx*dx + dy*dy + dz*dz);
   }
 
-  // Calculate scaling mapping physical -> screen.
-  // We know the apparent 2D shoulder width in pixels and the true physical shoulder width in meters.
-  const pixelsPerMeter = correctedShoulderWidthPx / userShoulderWidthMeters;
-
-  // The garment's designed physical shoulder width (e.g. 0.4 meters)
   const garmentShoulderWidthMeters = metadata?.restPoseMetricWidth || profile.dimensions.shoulderWidth || 0.4;
   
-  // The scale factor required to fit the garment to this specific user's body in true metric space
-  const physicalScale = userShoulderWidthMeters / garmentShoulderWidthMeters;
-  
-  // The target screen width for the garment in pixels
-  const targetGarmentWidthPx = garmentShoulderWidthMeters * physicalScale * pixelsPerMeter;
-  
-  // Because the 2D overlay relies on a fixed internal reference (e.g., assuming 0.35 * screen width was "scale 1"),
-  // we map the calculated pixel width back into the legacy scale multiplier so the React Native UI doesn't break
-  const legacyBaseGarmentWidthPx = screenWidth * 0.35;
-  const rawScale = targetGarmentWidthPx / legacyBaseGarmentWidthPx;
-  const targetScale = Math.max(0.5, Math.min(3.0, rawScale));
+  // Phase 6 True 3D Scale:
+  // The Three.js renderer uses `pos.x / 100` to map pixels to 3D units.
+  // Therefore, the target 3D width of the garment must be `correctedShoulderWidthPx / 100` units.
+  // Since the base 3D width is `garmentShoulderWidthMeters`, the required scale is:
+  const targetScale3D = (correctedShoulderWidthPx / 100) / garmentShoulderWidthMeters;
+  const targetScale = targetScale3D; // Replace legacy
+
 
   // 3. Rotation (Roll only for 2D overlay compatibility right now)
   const rollRad = pose.orientation.rollRad;

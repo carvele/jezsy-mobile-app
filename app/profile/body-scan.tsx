@@ -513,6 +513,7 @@ export default function BodyScanScreen() {
         pixelFormat="rgb"
         frameProcessor={poseDetection.frameProcessor}
         onLayout={poseDetection.cameraViewLayoutChangeHandler}
+        onError={(e) => console.warn('Camera Error:', e)}
       />
       <PoseLandmarkOverlay landmarks={overlayLandmarks} />
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>

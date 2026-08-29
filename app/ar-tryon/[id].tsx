@@ -644,73 +644,6 @@ export default function ARTryOnScreen() {
             --poster-color: transparent;
             background-color: transparent;
           }
-          /* Elegant gold AR button */
-          #ar-button {
-            position: absolute;
-            bottom: 32px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: linear-gradient(135deg, #C9A96E 0%, #8A6D3B 100%);
-            color: #0D0D0D;
-            padding: 14px 36px;
-            border-radius: 100px;
-            font-size: 15px;
-            font-weight: 800;
-            border: none;
-            letter-spacing: 0.5px;
-            box-shadow: 0 4px 24px rgba(201,169,110,0.45), 0 1px 4px rgba(0,0,0,0.4);
-            cursor: pointer;
-            transition: opacity 0.15s;
-          }
-          #ar-button:active { opacity: 0.8; }
-          /* Contextual controls hint */
-          #hint {
-            position: absolute;
-            bottom: 92px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: rgba(255,255,255,0.45);
-            font-size: 12px;
-            white-space: nowrap;
-            pointer-events: none;
-          }
-          /* Offline / error state */
-          #error-state {
-            display: none;
-            position: absolute;
-            inset: 0;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: rgba(255,255,255,0.6);
-            font-size: 14px;
-            gap: 12px;
-          }
-          #error-state.visible { display: flex; }
-          #error-state span { font-size: 36px; }
-          #controls-bar {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 8px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 6px 12px;
-            border-radius: 20px;
-            backdrop-filter: blur(8px);
-            z-index: 10;
-          }
-          #controls-bar button {
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            color: #fff;
-            padding: 6px 12px;
-            border-radius: 14px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-          }
         </style>
         <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
       </head>
@@ -719,8 +652,6 @@ export default function ARTryOnScreen() {
           id="mv"
           src="${modelUrl}"
           ios-src="${iosModelUrl}"
-          ar
-          ar-modes="webxr quick-look scene-viewer"
           camera-controls
           auto-rotate
           rotation-per-second="18deg"
@@ -733,9 +664,6 @@ export default function ARTryOnScreen() {
           max-camera-orbit="auto auto 200%"
           interpolation-decay="200"
           alt="A 3D model of ${safeName}">
-          <button slot="ar-button" id="ar-button">
-            View in your space (AR)
-          </button>
         </model-viewer>
         <div id="controls-bar">
           <button onclick="adjustExposure(0.2)">☀️ Light +</button>
@@ -928,12 +856,25 @@ export default function ARTryOnScreen() {
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
               onLayout={poseDetection.cameraViewLayoutChangeHandler}
+              onError={(e) => {
+                console.warn('Camera Error:', e);
+              }}
             />
           ) : (
             <View style={[styles.camera, { backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
               <Text style={{ color: '#fff' }}>Camera not available</Text>
             </View>
           )}
+
+          {/* Layer 2: 3D Garment WebGL Overlay */}
+          {garmentMetadata && (
+            <GarmentRenderer
+              ref={garmentRendererRef}
+              modelUrl={modelUrl}
+              metadata={garmentMetadata}
+            />
+          )}
+
           <View style={styles.overlayContainer} pointerEvents="box-none">
             {/* AI Tracking Status Pill */}
             {isTrackerActive && (
