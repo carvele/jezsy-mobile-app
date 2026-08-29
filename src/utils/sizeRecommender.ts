@@ -16,21 +16,22 @@ export type ProductMeasurements = {
     hips?: number;
     inseam?: number;
     length?: number;
+    shoulderWidth?: number;
   }
 };
 
-/**
- * Recommends a size based on user measurements and product size chart.
- * 
- * @param userMeasurements The user's detailed measurements (bust, waist, hips, inseam, etc.)
- * @param productMeasurements A dictionary mapping sizes (e.g. 'S', 'M', 'L') to garment measurements
- * @param fitPreference 'tight', 'regular', or 'loose'
- * @returns The recommended size string or null if not enough data
- */
-export type FitVerdict = 'snug' | 'fitted' | 'roomy';
-export type FitZone = { zone: 'Bust' | 'Waist' | 'Hips'; verdict: FitVerdict; deltaCm: number };
+export type FitVerdict = 'too_tight' | 'snug' | 'fitted' | 'relaxed' | 'roomy';
 
-function toNumeric(val: any): number | null {
+export type FitZone = {
+  zone: 'Bust' | 'Waist' | 'Hips' | 'Shoulders' | 'Inseam';
+  verdict: FitVerdict;
+  deltaCm: number;
+  description: string;
+  userCm: number;
+  garmentCm: number;
+};
+
+export function toNumeric(val: any): number | null {
   if (val === null || val === undefined) return null;
   if (typeof val === 'number') return isNaN(val) ? null : val;
   if (typeof val === 'object' && val !== null && typeof val.valueCm === 'number') return isNaN(val.valueCm) ? null : val.valueCm;
@@ -39,38 +40,76 @@ function toNumeric(val: any): number | null {
 }
 
 /**
- * Compares the user's measurements against one garment size's chart and
- * classifies each zone as snug (garment smaller/equal to body), fitted (a
- * normal 1-6 cm of ease), or roomy (more than 6 cm of ease). Guidance only --
- * not a physical simulation. Returns [] when data is missing.
+ * Compares the user's measurements against a garment size chart and
+ * produces transparent zone-by-zone fit verdicts.
  */
 export function analyzeFit(
-  user: UserMeasurements,
-  garment: { bust?: number; waist?: number; hips?: number } | null | undefined
+  user: UserMeasurements | null | undefined,
+  garment: { bust?: number; waist?: number; hips?: number; inseam?: number; shoulderWidth?: number } | null | undefined
 ): FitZone[] {
   if (!garment || !user) return [];
   const zones: FitZone[] = [];
-  const classify = (zone: FitZone['zone'], uRaw?: any, gRaw?: any) => {
+
+  const classify = (
+    zone: FitZone['zone'],
+    uRaw?: any,
+    gRaw?: any,
+    customEaseThresholds = { snug: 1, fitted: 6, relaxed: 10 }
+  ) => {
     const u = toNumeric(uRaw);
     const g = toNumeric(gRaw);
     if (u === null || g === null) return;
     const delta = g - u; // positive = garment roomier than body
-    const verdict: FitVerdict = delta < 1 ? 'snug' : delta <= 6 ? 'fitted' : 'roomy';
-    zones.push({ zone, verdict, deltaCm: Math.round(delta) });
+
+    let verdict: FitVerdict = 'fitted';
+    let description = 'Ideal comfort fit';
+
+    if (delta < 0) {
+      verdict = 'too_tight';
+      description = `${Math.abs(Math.round(delta))} cm smaller than body (tight)`;
+    } else if (delta < customEaseThresholds.snug) {
+      verdict = 'snug';
+      description = `Form-fitting (+${Math.round(delta)} cm ease)`;
+    } else if (delta <= customEaseThresholds.fitted) {
+      verdict = 'fitted';
+      description = `Tailored fit (+${Math.round(delta)} cm ease)`;
+    } else if (delta <= customEaseThresholds.relaxed) {
+      verdict = 'relaxed';
+      description = `Comfortable ease (+${Math.round(delta)} cm ease)`;
+    } else {
+      verdict = 'roomy';
+      description = `Oversized / Roomy (+${Math.round(delta)} cm ease)`;
+    }
+
+    zones.push({
+      zone,
+      verdict,
+      deltaCm: Math.round(delta * 10) / 10,
+      description,
+      userCm: Math.round(u * 10) / 10,
+      garmentCm: Math.round(g * 10) / 10,
+    });
   };
-  classify('Bust', user.bust, garment.bust);
-  classify('Waist', user.waist, garment.waist);
-  classify('Hips', user.hips, garment.hips);
+
+  classify('Bust', user.bust, garment.bust, { snug: 2, fitted: 6, relaxed: 10 });
+  classify('Waist', user.waist, garment.waist, { snug: 2, fitted: 6, relaxed: 12 });
+  classify('Hips', user.hips, garment.hips, { snug: 2, fitted: 7, relaxed: 14 });
+  classify('Shoulders', user.shoulderWidth, garment.shoulderWidth, { snug: 1, fitted: 4, relaxed: 8 });
+
   return zones;
 }
 
+/**
+ * Recommends the optimal garment size based on user measurements, garment category, and fit preference.
+ */
 export function recommendSize(
   userMeasurements: UserMeasurements,
   productMeasurements: ProductMeasurements | null | undefined,
-  fitPreference: string = 'regular'
+  fitPreference: string = 'regular',
+  category?: string | null
 ): string | null {
   if (!productMeasurements || !userMeasurements) return null;
-  
+
   const uBust = toNumeric(userMeasurements.bust);
   const uWaist = toNumeric(userMeasurements.waist);
   const uHips = toNumeric(userMeasurements.hips);
@@ -82,21 +121,28 @@ export function recommendSize(
     return null;
   }
 
-  let bestSize = null;
-  let minDifference = Infinity;
+  const cat = (category || '').toLowerCase();
+  const isTopOrOuterwear = cat.includes('top') || cat.includes('blazer') || cat.includes('jacket') || cat.includes('shirt') || cat.includes('outerwear') || cat.includes('bra') || cat.includes('activewear');
+  const isBottom = cat.includes('bottom') || cat.includes('pant') || cat.includes('jean') || cat.includes('skirt') || cat.includes('short') || cat.includes('trouser');
+  const isDress = cat.includes('dress') || cat.includes('jumpsuit') || cat.includes('romper') || cat.includes('gown');
 
-  // Fit allowance (cm) based on preference
-  // Tight: exact or slightly smaller
-  // Regular: 2-4 cm allowance
-  // Loose: 5-8 cm allowance
+  // Baseline allowances (cm) by preference
   let allowance = 2; // Default for regular
   if (fitPreference === 'tight') allowance = 0;
-  if (fitPreference === 'loose') allowance = 6;
+  if (fitPreference === 'loose') allowance = 5;
+
+  // Outerwear (blazers/jackets) naturally requires extra ease (3–5 cm) for comfortable layering
+  if (isTopOrOuterwear && (cat.includes('blazer') || cat.includes('jacket') || cat.includes('outerwear'))) {
+    allowance += 2;
+  }
+
+  let bestSize = null;
+  let minWeightedScore = Infinity;
 
   for (const [size, metrics] of Object.entries(productMeasurements)) {
-    let diffSum = 0;
-    let matchCount = 0;
-    let tooSmall = false;
+    let weightedDiffSum = 0;
+    let totalWeight = 0;
+    let strictlyTooSmall = false;
 
     const gBust = toNumeric(metrics.bust);
     const gWaist = toNumeric(metrics.waist);
@@ -104,47 +150,63 @@ export function recommendSize(
     const gInseam = toNumeric(metrics.inseam);
     const gShoulder = toNumeric((metrics as any).shoulderWidth);
 
-    // Compare available metrics
+    // 1. Bust matching
     if (uBust !== null && gBust !== null) {
-      const targetBust = uBust + allowance;
-      if (gBust < uBust - 1) tooSmall = true; // Garment smaller than body
-      diffSum += Math.abs(gBust - targetBust);
-      matchCount++;
+      const weight = isBottom ? 0 : (isTopOrOuterwear ? 1.0 : (isDress ? 1.0 : 0.8));
+      if (weight > 0) {
+        const targetBust = uBust + allowance;
+        if (gBust < uBust - 1) strictlyTooSmall = true; // Garment cannot be smaller than body
+        weightedDiffSum += Math.abs(gBust - targetBust) * weight;
+        totalWeight += weight;
+      }
     }
 
+    // 2. Waist matching
     if (uWaist !== null && gWaist !== null) {
-      const targetWaist = uWaist + allowance;
-      if (gWaist < uWaist - 1) tooSmall = true;
-      diffSum += Math.abs(gWaist - targetWaist);
-      matchCount++;
+      const weight = isBottom ? 1.0 : (isDress ? 0.9 : (isTopOrOuterwear ? 0.35 : 0.6));
+      if (weight > 0) {
+        const targetWaist = uWaist + allowance;
+        if (gWaist < uWaist - 1 && isBottom) strictlyTooSmall = true; // Pants must close at waist
+        weightedDiffSum += Math.abs(gWaist - targetWaist) * weight;
+        totalWeight += weight;
+      }
     }
 
+    // 3. Hips matching
     if (uHips !== null && gHips !== null) {
-      const targetHips = uHips + allowance;
-      if (gHips < uHips - 1) tooSmall = true;
-      diffSum += Math.abs(gHips - targetHips);
-      matchCount++;
+      // For tops/blazers, hips are only relevant if user's hips exceed garment hips; otherwise hips shouldn't distort jacket sizing
+      const weight = isBottom ? 1.0 : (isDress ? 0.9 : (isTopOrOuterwear ? 0.1 : 0.5));
+      if (weight > 0) {
+        const targetHips = uHips + allowance;
+        if (gHips < uHips - 1 && (isBottom || isDress)) strictlyTooSmall = true;
+        weightedDiffSum += Math.abs(gHips - targetHips) * weight;
+        totalWeight += weight;
+      }
     }
 
-    if (uInseam !== null && gInseam !== null) {
-      const targetInseam = uInseam; // Inseam doesn't need horizontal allowance
-      if (gInseam < uInseam - 2) tooSmall = true; // Too short
-      diffSum += Math.abs(gInseam - targetInseam);
-      matchCount++;
+    // 4. Inseam matching (for bottoms)
+    if (uInseam !== null && gInseam !== null && isBottom) {
+      const weight = 0.5;
+      const targetInseam = uInseam;
+      if (gInseam < uInseam - 3) strictlyTooSmall = true;
+      weightedDiffSum += Math.abs(gInseam - targetInseam) * weight;
+      totalWeight += weight;
     }
 
-    if (uShoulder !== null && gShoulder !== null) {
+    // 5. Shoulder width matching (for tops/jackets)
+    if (uShoulder !== null && gShoulder !== null && isTopOrOuterwear) {
+      const weight = 0.75;
       const targetShoulder = uShoulder + (allowance * 0.5);
-      if (gShoulder < uShoulder - 1.5) tooSmall = true;
-      diffSum += Math.abs(gShoulder - targetShoulder);
-      matchCount++;
+      if (gShoulder < uShoulder - 1.5) strictlyTooSmall = true;
+      weightedDiffSum += Math.abs(gShoulder - targetShoulder) * weight;
+      totalWeight += weight;
     }
 
-    // Only consider this size if it didn't strictly fail constraints and we matched at least one metric
-    if (!tooSmall && matchCount > 0) {
-      const avgDiff = diffSum / matchCount;
-      if (avgDiff < minDifference) {
-        minDifference = avgDiff;
+    // Score evaluation
+    if (!strictlyTooSmall && totalWeight > 0) {
+      const avgScore = weightedDiffSum / totalWeight;
+      if (avgScore < minWeightedScore) {
+        minWeightedScore = avgScore;
         bestSize = size;
       }
     }

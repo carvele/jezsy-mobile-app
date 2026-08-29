@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useMemo } from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -35,7 +35,7 @@ import { useMessages } from "@/src/context/MessagesContext";
 import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
 import { CATEGORY_SELECT, getMainCategoryId, getMainCategoryName, WithCategoryEmbed } from "@/src/utils/categoryDisplay";
-import { recommendSize, ProductMeasurements } from "@/src/utils/sizeRecommender";
+import { recommendSize, analyzeFit, ProductMeasurements, UserMeasurements, FitZone } from "@/src/utils/sizeRecommender";
 import { SizeChartModal } from "@/src/components/SizeChartModal";
 import { ImageViewerModal } from "@/src/components/ImageViewerModal";
 import { useToast } from '@/src/context/ToastContext';
@@ -62,6 +62,8 @@ export default function ProductDetailScreen() {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const { user } = useAuth();
   const [recommendedSize, setRecommendedSize] = useState<string | null>(null);
+  const [userMeasurements, setUserMeasurements] = useState<UserMeasurements | null>(null);
+  const [fitPreference, setFitPreference] = useState<string>('regular');
   const [addedToBag, setAddedToBag] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -81,6 +83,12 @@ export default function ProductDetailScreen() {
 
   const goBack = useSafeBack('/');
   const handleBack = goBack;
+
+  const activeFitZones = useMemo(() => {
+    const sizeToAnalyze = selectedSize || recommendedSize;
+    if (!product?.measurements || !sizeToAnalyze || !userMeasurements) return [];
+    return analyzeFit(userMeasurements, (product.measurements as any)[sizeToAnalyze]);
+  }, [product?.measurements, selectedSize, recommendedSize, userMeasurements]);
 
   useFocusEffect(
     useCallback(() => {
@@ -116,22 +124,22 @@ export default function ProductDetailScreen() {
 
             // Compute size recommendation if user is logged in
             if (user?.id && data.measurements) {
-              const { data: profile } = await supabase
-                .from("profiles")
-                .select("fit_preference")
-                .eq("id", user.id)
-                .single();
-              const { data: metrics } = await supabase
-                .from("user_measurements")
-                .select("measurements")
-                .eq("user_id", user.id)
-                .maybeSingle();
+              const [{ data: profile }, { data: metrics }] = await Promise.all([
+                supabase.from("profiles").select("fit_preference").eq("id", user.id).single(),
+                supabase.from("user_measurements").select("measurements").eq("user_id", user.id).maybeSingle(),
+              ]);
+
+              const pref = profile?.fit_preference || "regular";
+              setFitPreference(pref);
 
               if (metrics && metrics.measurements) {
+                setUserMeasurements(metrics.measurements as any);
+                const categoryName = (data.category as any)?.name || (data as any).category_id || data.name || "";
                 const rec = recommendSize(
                   metrics.measurements as any,
                   data.measurements as any,
-                  profile?.fit_preference || "regular",
+                  pref,
+                  categoryName
                 );
                 if (rec) {
                   setRecommendedSize(rec);
@@ -450,27 +458,85 @@ export default function ProductDetailScreen() {
           {product.sizes && product.sizes.length > 0 && (
             <View style={styles.section} accessibilityRole="radiogroup" accessibilityLabel="Size options">
               <View style={styles.sizeHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Size</Text>
-                <View style={styles.sizeHeaderActions}>
+                <View style={styles.sizeTitleRow}>
+                  <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Size</Text>
                   {recommendedSize && (
-                    <View style={[styles.recBadge, { backgroundColor: colors.tint + "20" }]}>
-                      <IconSymbol name="ruler.fill" size={12} color={colors.tint} />
+                    <View style={[styles.recBadge, { backgroundColor: colors.tint + "18", borderColor: colors.tint + "45" }]}>
+                      <IconSymbol name="sparkles" size={11} color={colors.tint} />
                       <Text style={[styles.recText, { color: colors.tint }]}>Recommended: {recommendedSize}</Text>
                     </View>
                   )}
-                  {hasSizeChart && (
-                    <TouchableOpacity
-                      onPress={() => setSizeChartVisible(true)}
-                      accessibilityRole="button"
-                      accessibilityLabel="View the size chart"
-                    >
-                      <Text style={[styles.sizeChartLink, { color: colors.tint }]}>Size Chart</Text>
-                    </TouchableOpacity>
+                </View>
+
+                {hasSizeChart && (
+                  <TouchableOpacity
+                    onPress={() => setSizeChartVisible(true)}
+                    style={styles.sizeChartLinkWrap}
+                    accessibilityRole="button"
+                    accessibilityLabel="View the size chart"
+                  >
+                    <IconSymbol name="ruler.fill" size={12} color={colors.tint} style={{ marginRight: 4 }} />
+                    <Text style={[styles.sizeChartLink, { color: colors.tint }]}>Size Chart</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Fit Advisor Breakdown Card */}
+              {userMeasurements && recommendedSize && (
+                <View style={[styles.fitAdvisorCard, { backgroundColor: colors.tint + '0C', borderColor: colors.tint + '30' }]}>
+                  <View style={styles.fitAdvisorHeader}>
+                    <View style={styles.fitAdvisorTitleRow}>
+                      <IconSymbol name="sparkles" size={12} color={colors.tint} />
+                      <Text style={[styles.fitAdvisorTitle, { color: colors.text }]}>
+                        {selectedSize === recommendedSize
+                          ? `Size ${selectedSize} is your recommended fit`
+                          : `Selected Size ${selectedSize} (Recommended: ${recommendedSize})`}
+                      </Text>
+                    </View>
+                    <Text style={[styles.fitAdvisorSub, { color: colors.secondaryText }]}>
+                      {fitPreference.charAt(0).toUpperCase() + fitPreference.slice(1)} preference
+                    </Text>
+                  </View>
+
+                  {activeFitZones.length > 0 && (
+                    <View style={styles.fitZonesRow}>
+                      {activeFitZones.map((z: FitZone) => (
+                        <View
+                          key={z.zone}
+                          style={[
+                            styles.fitZonePill,
+                            { backgroundColor: colors.card, borderColor: colors.border },
+                            z.verdict === 'too_tight' && { borderColor: '#EF4444' },
+                            (z.verdict === 'fitted' || z.verdict === 'snug') && { borderColor: colors.tint + '50' }
+                          ]}
+                        >
+                          <Text style={[styles.fitZoneName, { color: colors.secondaryText }]}>{z.zone}:</Text>
+                          <Text
+                            style={[
+                              styles.fitZoneValue,
+                              z.verdict === 'too_tight' && { color: '#EF4444' },
+                              (z.verdict === 'fitted' || z.verdict === 'snug') && { color: colors.tint },
+                              (z.verdict === 'relaxed' || z.verdict === 'roomy') && { color: '#B4782A' },
+                            ]}
+                          >
+                            {z.verdict === 'too_tight'
+                              ? 'Tight'
+                              : z.verdict === 'snug'
+                              ? 'Form-fit'
+                              : z.verdict === 'fitted'
+                              ? 'Ideal fit'
+                              : 'Relaxed ease'}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
                   )}
                 </View>
-              </View>
+              )}
+
+              {/* Size Buttons */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
-                {product.sizes.map((s, index) => {
+                {Array.from(new Set(product.sizes)).map((s, index) => {
                   const isSelected = selectedSize === s;
                   const isRecommended = recommendedSize === s;
                   const stock = getStockInfo(s, selectedColor || undefined);
@@ -809,11 +875,61 @@ const styles = StyleSheet.create({
   // Uppercase eyebrow: exactly what Type.label's tracking exists for.
   category: { ...Type.label, marginBottom: 6 },
   section: { marginTop: Spacing.xxl },
-  sizeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.lg },
-  recBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: Radius.md, gap: Spacing.xs },
-  recText: { fontSize: 12, fontWeight: "700" },
-  sizeHeaderActions: { flexDirection: "row", alignItems: "center", gap: Spacing.md },
-  sizeChartLink: { fontSize: 13, fontWeight: "700", textDecorationLine: "underline" },
+  sizeHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.sm },
+  sizeTitleRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, flexWrap: "wrap" },
+  recBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill, borderWidth: 1, gap: 4 },
+  recText: { fontSize: 11, fontWeight: "700" },
+  sizeChartLinkWrap: { flexDirection: "row", alignItems: "center", paddingVertical: 4 },
+  sizeChartLink: { fontSize: 12, fontWeight: "700", textDecorationLine: "underline" },
+
+  /* ── Fit Advisor Breakdown Card ── */
+  fitAdvisorCard: {
+    padding: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    gap: 8,
+  },
+  fitAdvisorHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  fitAdvisorTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  fitAdvisorTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  fitAdvisorSub: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  fitZonesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  fitZonePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    gap: 4,
+  },
+  fitZoneName: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  fitZoneValue: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
   sectionTitle: { ...Type.bodyLargeStrong, marginBottom: Spacing.md },
   description: { fontSize: 15, lineHeight: 24 },
   optionsList: { gap: Spacing.md, paddingRight: Spacing.xl },
