@@ -287,18 +287,20 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 // Pure Metric Camera Projection (Fixing P0/P1 Alignment)
                 if (normalizedLandmarks && normalizedLandmarks[11] && normalizedLandmarks[12] && camera.projectionMatrix) {
                   try {
-                    // The camera <video> is displayed mirrored (scaleX(-1), so it behaves like
-                    // a real mirror), but this WebGL canvas is composited on top UNmirrored and
-                    // MediaPipe's landmark x-coordinates are raw (unmirrored) image space. Left
-                    // un-flipped here, the whole garment renders on the opposite screen side from
-                    // the video's own view of the body -- confirmed live: raising the real right
-                    // arm visually moved the garment on the left side of the screen instead of
-                    // the right. Mirroring x here brings this position calc in line with the
-                    // video's own mirrored display; bone ROTATION math is unaffected -- it uses
-                    // MediaPipe's anatomically-labeled world landmarks, not screen-space x, and
-                    // was already correct (the right sleeve was already the one deforming).
-                    const l11 = { x: 1 - normalizedLandmarks[11].x, y: normalizedLandmarks[11].y };
-                    const l12 = { x: 1 - normalizedLandmarks[12].x, y: normalizedLandmarks[12].y };
+                    // Superseded by mirroring the whole rendered View with CSS scaleX(-1)
+                    // (see the wrapping <View> style below) -- the SAME mechanism the <video>
+                    // itself already uses. That mirrors position AND the mesh's own left/right
+                    // geometry together, consistently, as a single flat 2D flip after Three.js
+                    // has already rendered normally -- no 3D winding/lighting risk. Flipping
+                    // only these two landmark points (the previous fix here) mirrored position
+                    // alone and left the mesh's internal left/right arrangement unmirrored,
+                    // which is why the wrong-side sleeve still visibly responded even after
+                    // that fix -- confirmed live via bone-level logs showing the ROTATION math
+                    // was already correct throughout (RightArm's own quaternion clearly changed
+                    // when the real right arm was raised); only which screen side it rendered
+                    // on was ever wrong.
+                    const l11 = normalizedLandmarks[11];
+                    const l12 = normalizedLandmarks[12];
 
                     // Helper: Unproject 2D normalized landmark to 3D world at Z=0
                     const unprojectToZ0 = (nx, ny) => {
@@ -373,8 +375,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
                           + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
                           + ' exactScale=' + exactScale.toFixed(4)
-                          + ' l11(rawMirrored)=' + JSON.stringify(l11)
-                          + ' l12(rawMirrored)=' + JSON.stringify(l12)
+                          + ' l11(raw)=' + JSON.stringify(l11)
+                          + ' l12(raw)=' + JSON.stringify(l12)
                           + ' boneRotations=' + JSON.stringify(boneRotations));
                       }
                     } else if (shouldLog) {
@@ -497,7 +499,16 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
         // on top regardless -- this was making the whole garment overlay invisible
         // (confirmed via a solid-color WebGL clear-color test that flashed once, then
         // got covered by the video the moment it started actively decoding frames).
-        transform: [{ perspective: 1000 }, { translateZ: 1 }],
+        // scaleX(-1) mirrors this ENTIRE rendered layer the same simple way the <video>
+        // itself is already mirrored (see WebCameraFeed's own scaleX(-1)) -- confirmed
+        // live via bone-level logs that the retargeting math was already correct
+        // (RightArm's quaternion genuinely changed when the real right arm moved); the
+        // 3D scene itself was just never mirrored to match the video, so a character's
+        // own right side rendered on the viewer's left, same as anyone's right hand
+        // appears on the left in an ordinary unmirrored photo of them. A flat 2D flip
+        // after Three.js has already rendered normally avoids any 3D winding-order/
+        // lighting risk a negative Three.js scene scale would carry.
+        transform: [{ perspective: 1000 }, { translateZ: 1 }, { scaleX: -1 }],
       }]}>
         {Platform.OS === 'web' ? (
           // @ts-ignore
