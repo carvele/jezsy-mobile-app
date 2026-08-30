@@ -164,12 +164,15 @@ worldLandmarks: WorldLandmark[], restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_P
 
   // Convert World Rotations to Local Rotations
   // Hierarchy: Spine -> Spine1 -> Spine2 -> Shoulder -> Arm -> ForeArm
-  // We keep Spine1, Spine2, and Shoulders at Identity to avoid compounding (P1 Fix)
+  // Spine1/Spine2/Shoulder are intentionally left OUT of boneRotations rather than forced
+  // to identity: their bind-pose local rotation is not identity in general (measured on a
+  // real Mixamo-rigged GLB: Spine1/Spine2 ~0deg off identity, but LeftShoulder/RightShoulder
+  // ~130deg off identity). Forcing them to identity overwrites that real bind rotation and
+  // snaps the shoulder joint to a completely different orientation than the mesh was skinned
+  // for, independent of any pose input -- confirmed as the cause of severe mesh distortion at
+  // the shoulder/sleeve attachment. GarmentRenderer only writes bones present in this map, so
+  // omitting a bone here leaves it at whatever quaternion the GLTFLoader set from the file.
   boneRotations['Spine'] = worldRotations['Spine'];
-  boneRotations['Spine1'] = identityQuat;
-  boneRotations['Spine2'] = identityQuat;
-  boneRotations['LeftShoulder'] = identityQuat;
-  boneRotations['RightShoulder'] = identityQuat;
 
   const invSpine = invertQuat(worldRotations['Spine']);
   boneRotations['LeftArm'] = multiplyQuat(invSpine, worldRotations['LeftArm']);
