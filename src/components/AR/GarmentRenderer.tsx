@@ -55,7 +55,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let skeletonBones = {};
           let boneCorrection = {};
           let debugFrameCount = 0;
-          let smoothedPos = null, smoothedScale = null;
+          let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
 
@@ -240,30 +240,69 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // literal identity delta (confirmed live, Cotton T-Shirt test), it returned a
               // ~150deg rotation instead of the bone's own unchanged bind pose. This version
               // is verified to return exactly the bind pose when the delta is identity.
+              // The prefix is walked up the REAL parent chain rather than assumed to start
+              // at the Shoulder. The old hardcoded Shoulder->Arm->ForeArm version silently
+              // assumed every bind rotation above the shoulder was identity -- true only
+              // while skeletalRetargeter was overwriting the Spine bone every frame. It no
+              // longer does (the torso orientation moved to the garment group, P0-D), so
+              // Spine/Spine1/Spine2 now sit at their own bind rotations.
+              //
+              // CRITICAL: the walk must NOT stop at the first non-Bone ancestor. Measured
+              // on this rig, the Mixamo skeleton hangs under an "Armature" node holding
+              // +90deg about X, and its child "Hips" bone holds -90deg about X -- they
+              // cancel exactly. Armature is an Object3D, not a Bone. A bones-only walk
+              // therefore picks up the Hips -90deg without the +90deg that cancels it and
+              // rotates every sleeve 90deg about X: "arm down" gets drawn pointing straight
+              // backward, while "arm out sideways" (along the rotation axis) looks fine --
+              // confirmed against the GLB, and confirmed live as the blazer sleeve going
+              // backward. Walk up to (excluding) garmentGroup, whose own quaternion is the
+              // live torso orientation and must never enter a bind prefix.
               const boneMapForBind = ${metadata ? JSON.stringify(metadata.boneMap) : 'null'};
+              const bindQuats = {};
+              garmentModel.traverse((child) => { // traverse includes garmentModel itself
+                bindQuats[child.uuid] = child.quaternion.clone();
+              });
               const resolveBindBoneName = (canonical) => {
                 if (skeletonBones[canonical]) return canonical;
                 if (boneMapForBind && boneMapForBind[canonical]) return boneMapForBind[canonical];
                 return 'mixamorig' + canonical;
               };
-              const captureBind = (canonical) => {
-                const b = skeletonBones[resolveBindBoneName(canonical)];
-                return b ? b.quaternion.clone() : new THREE.Quaternion();
+              // Product of every bind rotation from garmentGroup down to and including this
+              // node -- i.e. the node bind orientation in the same space the retargeter
+              // deltas are expressed in. Includes non-Bone ancestors (see above).
+              const bindPrefix = (node) => {
+                const chain = [];
+                for (let n = node; n && n !== garmentGroup; n = n.parent) chain.unshift(n);
+                const q = new THREE.Quaternion();
+                for (const n of chain) q.multiply(bindQuats[n.uuid] || n.quaternion);
+                return q;
               };
-              const lShoulderBind = captureBind('LeftShoulder');
-              const lArmBind = captureBind('LeftArm');
-              const lForeArmBind = captureBind('LeftForeArm');
-              const rShoulderBind = captureBind('RightShoulder');
-              const rArmBind = captureBind('RightArm');
-              const rForeArmBind = captureBind('RightForeArm');
-              const lArmPrefix = lShoulderBind.clone().multiply(lArmBind);
-              const lForeArmPrefix = lArmPrefix.clone().multiply(lForeArmBind);
-              const rArmPrefix = rShoulderBind.clone().multiply(rArmBind);
-              const rForeArmPrefix = rArmPrefix.clone().multiply(rForeArmBind);
-              boneCorrection['LeftArm'] = { parentPrefix: lShoulderBind, ownPrefix: lArmPrefix };
-              boneCorrection['LeftForeArm'] = { parentPrefix: lArmPrefix, ownPrefix: lForeArmPrefix };
-              boneCorrection['RightArm'] = { parentPrefix: rShoulderBind, ownPrefix: rArmPrefix };
-              boneCorrection['RightForeArm'] = { parentPrefix: rArmPrefix, ownPrefix: rForeArmPrefix };
+              const registerCorrection = (canonical) => {
+                const bone = skeletonBones[resolveBindBoneName(canonical)];
+                if (!bone) return;
+                boneCorrection[canonical] = {
+                  parentPrefix: bindPrefix(bone.parent),
+                  ownPrefix: bindPrefix(bone),
+                };
+              };
+              ['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm'].forEach(registerCorrection);
+
+              // One-shot: log the ancestor chain the prefix actually walked, and where the
+              // LeftArm points at bind once that prefix is applied. That direction must come
+              // out close to +X for a T-pose rig (measured 6.4deg off on the blazer, its own
+              // rest droop). If it comes out near -Z or +Z, the prefix is missing a
+              // canceling ancestor rotation again -- exactly the Armature/Hips bug above.
+              const armForBind = skeletonBones[resolveBindBoneName('LeftArm')];
+              if (armForBind) {
+                const chainNames = [];
+                for (let n = armForBind; n && n !== garmentGroup; n = n.parent) chainNames.unshift(n.name || n.type);
+                const foreForBind = skeletonBones[resolveBindBoneName('LeftForeArm')];
+                const limbAxis = foreForBind ? foreForBind.position.clone().normalize() : new THREE.Vector3(0, 1, 0);
+                const bindDir = limbAxis.applyQuaternion(bindPrefix(armForBind));
+                console.log('[AR-DEBUG-BIND] prefix chain: ' + chainNames.join(' -> ')
+                  + ' | LeftArm bind direction: ' + JSON.stringify({ x: +bindDir.x.toFixed(3), y: +bindDir.y.toFixed(3), z: +bindDir.z.toFixed(3) })
+                  + ' | expected close to +X');
+              }
 
               console.log('[AR-DEBUG] actual GLB bone names: ' + JSON.stringify(Object.keys(skeletonBones))
                 + ' | boneMap in use: ' + JSON.stringify(${metadata && metadata.boneMap ? JSON.stringify(metadata.boneMap) : 'null'}));
@@ -372,16 +411,24 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         // frame -- reads as "appears then disappears" even though tracking
                         // itself never actually dropped out.
                         const smoothing = 0.25; // higher = follows new frames faster
+                        const targetQuat = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
                         if (!smoothedPos) {
                           smoothedPos = targetPos.clone();
                           smoothedScale = exactScale;
+                          smoothedQuat = targetQuat.clone();
                         } else {
                           smoothedPos.lerp(targetPos, smoothing);
                           smoothedScale = smoothedScale + (exactScale - smoothedScale) * smoothing;
+                          // rot now carries the FULL torso orientation (pitch and yaw as
+                          // well as roll -- see poseNormalizer), so it needs the same
+                          // temporal filtering position and scale already get. Pitch in
+                          // particular comes from MediaPipe depth, its noisiest channel;
+                          // slerping keeps that noise off the garment.
+                          smoothedQuat.slerp(targetQuat, smoothing);
                         }
                         garmentGroup.position.copy(smoothedPos);
                         garmentGroup.scale.set(smoothedScale, smoothedScale, smoothedScale);
-                        garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                        garmentGroup.quaternion.copy(smoothedQuat);
                       }
 
                       // TEMP DEBUG: throttled diagnostic dump -- remove once the wrong-arm /

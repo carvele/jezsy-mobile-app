@@ -21,7 +21,8 @@ import { useToast } from '@/src/context/ToastContext';
 import { getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
 import { constructBodyPose } from '@/src/utils/poseConstructor';
 import { calculateGarmentFit } from '@/src/utils/garmentFitter';
-import { calculateBoneRotations } from '@/src/utils/skeletalRetargeter';
+import { calculateBoneRotationsFromCanonical } from '@/src/utils/skeletalRetargeter';
+import { normalizePose, torsoEulerDegrees } from '@/src/utils/poseNormalizer';
 import type { GarmentFitProfile } from '@/src/types/garment';
 import Animated, {
   useSharedValue,
@@ -241,6 +242,7 @@ export default function ARTryOnScreen() {
   const opacity = useSharedValue(0.9);
   const lostFramesRef = React.useRef(0);
   const lastStateUpdateRef = React.useRef(0);
+  const torsoLogCounter = React.useRef(0);
   const garmentRendererRef = React.useRef<any>(null);
 
   const animatedGarmentStyle = useAnimatedStyle(() => ({
@@ -370,7 +372,12 @@ export default function ARTryOnScreen() {
       // Null-guard: garmentMetadata is async state — skip this frame if not yet loaded
       if (!garmentMetadata) return;
 
-      const fitState = calculateGarmentFit(pose, garmentProfile, stageWidth, stageHeight, garmentMetadata);
+      // Normalize once per frame: the fitter (garment orientation) and the retargeter
+      // (bone deltas) must agree on the same torso frame, or they fight each other --
+      // see poseNormalizer for the full write-up.
+      const canonical = normalizePose(pose.worldLandmarks);
+
+      const fitState = calculateGarmentFit(pose, garmentProfile, stageWidth, stageHeight, garmentMetadata, canonical);
       
       const isTracking = pose.trackingState === 'GOOD_FIT' || pose.trackingState === 'TURN_TOO_FAR';
 
@@ -391,11 +398,23 @@ export default function ARTryOnScreen() {
 
         // Phase 4A/4B: Push 3D transform and skinning data directly to the WebGL prototype
         if (garmentRendererRef.current && garmentMetadata) {
-          const boneRotations = calculateBoneRotations(pose.worldLandmarks, garmentMetadata.restPose);
+          const boneRotations = calculateBoneRotationsFromCanonical(canonical, garmentMetadata.restPose);
+
+          // TEMP DEBUG: throttled torso readout for the live torso-bend test. pitch goes
+          // negative when bending forward, roll tracks a sideways lean, yaw a twist; all
+          // three should read ~0 standing upright and square to the camera.
+          torsoLogCounter.current += 1;
+          if (torsoLogCounter.current % 20 === 0) {
+            const e = torsoEulerDegrees(canonical.torso);
+            console.log('[AR-DEBUG-TORSO] valid=' + canonical.torso.valid
+              + ' pitch=' + e.pitch.toFixed(1)
+              + ' yaw=' + e.yaw.toFixed(1)
+              + ' roll=' + e.roll.toFixed(1));
+          }
 
           garmentRendererRef.current.updateTransform(
             { x: fitState.anchor.x, y: fitState.anchor.y, z: fitState.anchor.z },
-            fitState.rotation,
+            fitState.orientation3D,
             fitState.scale.x,
             boneRotations,
             segmentation,

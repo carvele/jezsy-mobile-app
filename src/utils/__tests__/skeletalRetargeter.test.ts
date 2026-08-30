@@ -62,3 +62,67 @@ describe('Phase 4A: Skeletal Retargeting Math', () => {
   });
 
 });
+
+describe('Torso-local retargeting (P0-D torso-bend fix)', () => {
+
+  /**
+   * Rotates a point about the X axis in MEDIAPIPE space (Y down, Z away) -- which is
+   * exactly what bending forward at the hips does to everything above the hips.
+   */
+  function bendForward(p: WorldLandmark, deg: number): WorldLandmark {
+    const a = deg * Math.PI / 180;
+    return {
+      x: p.x,
+      y: p.y * Math.cos(a) - p.z * Math.sin(a),
+      z: p.y * Math.sin(a) + p.z * Math.cos(a),
+      visibility: p.visibility,
+    };
+  }
+
+  function uprightWithArmOut(): WorldLandmark[] {
+    const w = makeWorldLandmarks();
+    w[11] = { x: 0.2, y: -0.4, z: 0, visibility: 1 };   // left shoulder
+    w[12] = { x: -0.2, y: -0.4, z: 0, visibility: 1 };  // right shoulder
+    w[23] = { x: 0.1, y: 0.4, z: 0, visibility: 1 };    // left hip
+    w[24] = { x: -0.1, y: 0.4, z: 0, visibility: 1 };   // right hip
+    // Left elbow raised 45 deg above the shoulder line, in the body own frontal plane.
+    w[13] = { x: 0.2 + 0.21, y: -0.4 - 0.21, z: 0, visibility: 1 };
+    return w;
+  }
+
+  it('gives the SAME arm delta for the same body-relative arm angle, upright or bent forward', () => {
+    const upright = uprightWithArmOut();
+
+    // Bend the whole upper body forward about the hips: shoulders and elbow rotate
+    // together, so the arm has not moved RELATIVE TO THE BODY at all. Before this fix
+    // the arm delta was computed in world space, so it changed anyway.
+    const hipY = 0.4;
+    const bent = upright.map((p, i) => {
+      if (i !== 11 && i !== 12 && i !== 13) return p;
+      const rotated = bendForward({ ...p, y: p.y - hipY }, 40);
+      return { ...rotated, y: rotated.y + hipY };
+    }) as WorldLandmark[];
+
+    const a = calculateBoneRotations(upright)['LeftArm'];
+    const b = calculateBoneRotations(bent)['LeftArm'];
+
+    // Quaternion double cover: q and -q are the same rotation, so compare |dot|.
+    const dot = Math.abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w);
+    expect(dot).toBeCloseTo(1, 3);
+  });
+
+  it('no longer emits a Spine rotation -- the torso orientation now lives on the garment group', () => {
+    const rotations = calculateBoneRotations(uprightWithArmOut());
+    expect(rotations['Spine']).toBeUndefined();
+    expect(rotations['LeftArm']).toBeDefined();
+  });
+
+  it('returns an identity delta (leave the bone at its bind pose) when a joint is not visible', () => {
+    const w = uprightWithArmOut();
+    w[14] = { x: 0, y: 0, z: 0, visibility: 0.0 }; // right elbow not visible
+    const rotations = calculateBoneRotations(w);
+
+    expect(rotations['RightArm']).toEqual({ x: 0, y: 0, z: 0, w: 1 });
+  });
+
+});

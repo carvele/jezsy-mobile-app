@@ -96,8 +96,18 @@ export interface GarmentFitState {
   anchor: Vec3;
   /** Scale factors to apply to the garment mesh or image */
   scale: Vec3;
-  /** Rotation to apply to the garment */
+  /**
+   * Roll-only rotation, for the legacy 2D image overlay which can only spin about
+   * the screen normal. Do NOT use this for the 3D renderer -- see orientation3D.
+   */
   rotation: Quaternion;
+  /**
+   * Full 3-DOF torso orientation (roll + pitch + yaw) in canonical space, straight
+   * from poseNormalizer. This is the single owner of the 3D garment rotation: the
+   * renderer applies it to the whole garment group and no bone adds rotation on top.
+   * Identity when the torso could not be resolved.
+   */
+  orientation3D: Quaternion;
   /** Physical or pixel dimensions of the scaled garment */
   dimensions: GarmentDimensions;
   /** Fit confidence score [0, 1] */
