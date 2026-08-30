@@ -54,6 +54,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let measuredMeshWidth = 0.4;
           let skeletonBones = {};
           let shoulderBindQuats = {};
+          let debugFrameCount = 0;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
 
@@ -271,6 +272,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
               if (data && data.type === 'UPDATE_TRANSFORM' && garmentGroup) {
                 const { pos, rot, scl, boneRotations, normalizedLandmarks } = data;
+                debugFrameCount++;
+                const shouldLog = (debugFrameCount % 20 === 0);
 
                 // Pure Metric Camera Projection (Fixing P0/P1 Alignment)
                 if (normalizedLandmarks && normalizedLandmarks[11] && normalizedLandmarks[12] && camera.projectionMatrix) {
@@ -332,15 +335,31 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       const exactScale = targetWorldWidth / garmentMetricWidth;
 
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
-                      if (!isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x)) {
+                      const transformValid = !isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x);
+                      if (transformValid) {
                         garmentGroup.position.copy(targetPos);
                         garmentGroup.scale.set(exactScale, exactScale, exactScale);
                         garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
                       }
+
+                      // TEMP DEBUG: throttled diagnostic dump -- remove once the wrong-arm /
+                      // disappearing-garment issues are root-caused. Logs every ~20 frames.
+                      if (shouldLog) {
+                        console.log('[AR-DEBUG-FRAME] transformValid=' + transformValid
+                          + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
+                          + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
+                          + ' exactScale=' + exactScale.toFixed(4)
+                          + ' l11(rawMirrored)=' + JSON.stringify(l11)
+                          + ' l12(rawMirrored)=' + JSON.stringify(l12)
+                          + ' boneRotations=' + JSON.stringify(boneRotations));
+                      }
+                    } else if (shouldLog) {
+                      console.log('[AR-DEBUG-FRAME] SKIPPED: targetPos/targetL/targetR unprojection failed (likely NaN camera/vector math)');
                     }
                   } catch(e) { console.error('Projection Math Error', e); }
                 } else {
                   // Fallback
+                  console.log('[AR-DEBUG-FRAME] FALLBACK PATH: normalizedLandmarks[11]/[12] missing or camera not ready');
                   garmentGroup.position.set(pos.x, pos.y, pos.z);
                   garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
                   garmentGroup.scale.set(scl, scl, scl);
@@ -378,8 +397,18 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       } else {
                         bone.quaternion.set(quat.x, quat.y, quat.z, quat.w);
                       }
+                      if (shouldLog && (boneName === 'LeftArm' || boneName === 'RightArm')) {
+                        console.log('[AR-DEBUG-BONE] ' + boneName + ' -> ' + targetBoneName
+                          + ' inputQuat=' + JSON.stringify(quat)
+                          + ' finalLocalQuat=' + JSON.stringify({ x: bone.quaternion.x, y: bone.quaternion.y, z: bone.quaternion.z, w: bone.quaternion.w })
+                          + ' hadShoulderBindCorrection=' + !!shoulderBind);
+                      }
+                    } else if (shouldLog && (boneName === 'LeftArm' || boneName === 'RightArm')) {
+                      console.log('[AR-DEBUG-BONE] ' + boneName + ' -> ' + targetBoneName + ' SKIPPED: bone=' + !!bone + ' quat=' + JSON.stringify(quat));
                     }
                   }
+                } else if (shouldLog) {
+                  console.log('[AR-DEBUG-BONE] retargeting block skipped entirely: hasCalibratedRig=' + hasCalibratedRig + ' hasLoadedSkeleton=' + hasLoadedSkeleton + ' hasBoneRotations=' + !!boneRotations);
                 }
 
                 // 3. Occlusion Compositor Uniforms
