@@ -53,7 +53,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let scene, camera, renderer, garmentModel, garmentGroup;
           let measuredMeshWidth = 0.4;
           let skeletonBones = {};
-          let shoulderBindQuats = {};
+          let boneCorrection = {};
           let debugFrameCount = 0;
           let smoothedPos = null, smoothedScale = null;
           let occlusionMesh, occlusionMaterial;
@@ -229,25 +229,41 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 }
               });
 
-              // Capture each Shoulder bone's REAL bind-pose local quaternion before any frame
-              // ever writes to it. skeletalRetargeter.ts computes LeftArm/RightArm rotations
-              // assuming their entire parent chain back to Spine (Spine1, Spine2, Shoulder)
-              // contributes nothing (identity) to the world rotation -- true only while those
-              // bones are forced to identity. They're deliberately no longer forced (forcing
-              // Shoulder to identity destroyed its rest-pose geometry -- its real bind rotation
-              // measured ~130deg off identity on this rig), which means that same ~130deg now
-              // sits unaccounted for in the Arm bones' math unless corrected here, where the
-              // real bind quaternion is actually available.
+              // Capture each Shoulder/Arm/ForeArm bone's REAL bind-pose local quaternion
+              // before any frame ever writes to them. skeletalRetargeter.ts computes each
+              // bone's rotation as a DELTA relative to that bone's own bind orientation, in
+              // world space -- applying that delta correctly as a LOCAL quaternion requires
+              // "sandwiching" it between the bind rotations of everything from Shoulder down
+              // to (and including) the bone itself: corrected = invert(parentBindPrefix) *
+              // delta * ownBindPrefix. A first attempt here (invert(shoulderBind) * delta
+              // alone, no ownBindPrefix) passed a mental check but failed a real one: fed a
+              // literal identity delta (confirmed live, Cotton T-Shirt test), it returned a
+              // ~150deg rotation instead of the bone's own unchanged bind pose. This version
+              // is verified to return exactly the bind pose when the delta is identity.
               const boneMapForBind = ${metadata ? JSON.stringify(metadata.boneMap) : 'null'};
               const resolveBindBoneName = (canonical) => {
                 if (skeletonBones[canonical]) return canonical;
                 if (boneMapForBind && boneMapForBind[canonical]) return boneMapForBind[canonical];
                 return 'mixamorig' + canonical;
               };
-              const lShoulderBone = skeletonBones[resolveBindBoneName('LeftShoulder')];
-              const rShoulderBone = skeletonBones[resolveBindBoneName('RightShoulder')];
-              if (lShoulderBone) shoulderBindQuats['LeftArm'] = lShoulderBone.quaternion.clone();
-              if (rShoulderBone) shoulderBindQuats['RightArm'] = rShoulderBone.quaternion.clone();
+              const captureBind = (canonical) => {
+                const b = skeletonBones[resolveBindBoneName(canonical)];
+                return b ? b.quaternion.clone() : new THREE.Quaternion();
+              };
+              const lShoulderBind = captureBind('LeftShoulder');
+              const lArmBind = captureBind('LeftArm');
+              const lForeArmBind = captureBind('LeftForeArm');
+              const rShoulderBind = captureBind('RightShoulder');
+              const rArmBind = captureBind('RightArm');
+              const rForeArmBind = captureBind('RightForeArm');
+              const lArmPrefix = lShoulderBind.clone().multiply(lArmBind);
+              const lForeArmPrefix = lArmPrefix.clone().multiply(lForeArmBind);
+              const rArmPrefix = rShoulderBind.clone().multiply(rArmBind);
+              const rForeArmPrefix = rArmPrefix.clone().multiply(rForeArmBind);
+              boneCorrection['LeftArm'] = { parentPrefix: lShoulderBind, ownPrefix: lArmPrefix };
+              boneCorrection['LeftForeArm'] = { parentPrefix: lArmPrefix, ownPrefix: lForeArmPrefix };
+              boneCorrection['RightArm'] = { parentPrefix: rShoulderBind, ownPrefix: rArmPrefix };
+              boneCorrection['RightForeArm'] = { parentPrefix: rArmPrefix, ownPrefix: rForeArmPrefix };
 
               console.log('[AR-DEBUG] actual GLB bone names: ' + JSON.stringify(Object.keys(skeletonBones))
                 + ' | boneMap in use: ' + JSON.stringify(${metadata && metadata.boneMap ? JSON.stringify(metadata.boneMap) : 'null'}));
@@ -411,14 +427,15 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     const targetBoneName = skeletonBones[boneName] ? boneName : (boneMap[boneName] || ('mixamorig' + boneName));
                     const bone = skeletonBones[targetBoneName];
                     if (bone && quat && !isNaN(quat.x) && !isNaN(quat.y) && !isNaN(quat.z) && !isNaN(quat.w)) {
-                      const shoulderBind = shoulderBindQuats[boneName]; // set only for 'LeftArm'/'RightArm'
-                      if (shoulderBind) {
-                        // Correct for the Shoulder bind rotation skeletalRetargeter.ts's math
-                        // doesn't know about (see the capture comment above) -- confirmed live
-                        // as the cause of wrong-side response and up/down motion reading as
-                        // forward/back once Shoulder stopped being forced to identity.
-                        const corrected = shoulderBind.clone().invert()
-                          .multiply(new THREE.Quaternion(quat.x, quat.y, quat.z, quat.w));
+                      const bc = boneCorrection[boneName]; // set for LeftArm/RightArm/LeftForeArm/RightForeArm
+                      if (bc) {
+                        // corrected = invert(parentBindPrefix) * delta * ownBindPrefix -- see
+                        // the capture comment above for the full derivation. Verified: an
+                        // identity delta correctly returns this bone to its own bind pose,
+                        // unlike the earlier one-sided version.
+                        const corrected = bc.parentPrefix.clone().invert()
+                          .multiply(new THREE.Quaternion(quat.x, quat.y, quat.z, quat.w))
+                          .multiply(bc.ownPrefix);
                         bone.quaternion.copy(corrected);
                       } else {
                         bone.quaternion.set(quat.x, quat.y, quat.z, quat.w);
@@ -427,7 +444,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         console.log('[AR-DEBUG-BONE] ' + boneName + ' -> ' + targetBoneName
                           + ' inputQuat=' + JSON.stringify(quat)
                           + ' finalLocalQuat=' + JSON.stringify({ x: bone.quaternion.x, y: bone.quaternion.y, z: bone.quaternion.z, w: bone.quaternion.w })
-                          + ' hadShoulderBindCorrection=' + !!shoulderBind);
+                          + ' hadBindCorrection=' + !!bc);
                       }
                     } else if (shouldLog && (boneName === 'LeftArm' || boneName === 'RightArm')) {
                       console.log('[AR-DEBUG-BONE] ' + boneName + ' -> ' + targetBoneName + ' SKIPPED: bone=' + !!bone + ' quat=' + JSON.stringify(quat));
