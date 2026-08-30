@@ -66,6 +66,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setClearColor(0x000000, 0); // fully transparent so the camera feed shows through
             container.appendChild(renderer.domElement);
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -97,7 +98,6 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 }
               \`,
               fragmentShader: \`
-                #extension GL_EXT_frag_depth : enable
                 uniform sampler2D uMask;
                 uniform mat4 uViewProj;
                 uniform vec2 uJoints2D[33];
@@ -178,7 +178,12 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             occlusionMesh.frustumCulled = false;
             // Render occlusion BEFORE garment
             occlusionMesh.renderOrder = -1;
-            scene.add(occlusionMesh);
+            // Disabled: the depth pre-pass writes depth using raw MediaPipe body-space
+            // joint coordinates run through the scene's view-projection matrix, with no
+            // reconciliation between the two coordinate spaces -- accuracy unverified.
+            // Re-enable once that coordinate mismatch is actually fixed (see AR plan doc,
+            // P0-B / Section 05 data-flow contracts).
+            // scene.add(occlusionMesh);
             garmentGroup = new THREE.Group();
             scene.add(garmentGroup);
             const loader = new THREE.GLTFLoader();
@@ -192,11 +197,17 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 // Shift the model inversely by its anatomical anchor
                 garmentModel.position.set(-anchorOffset.x, -anchorOffset.y, -anchorOffset.z);
               } else {
-                // Fallback to Box3 center
+                // Fallback: no calibrated anchor for this garment, so approximate one from
+                // geometry. Anchoring at the box's horizontal center but its TOP edge (not
+                // its vertical center) puts the collar/shoulder line near the origin instead
+                // of the mid-torso -- since the group's position is later set to the wearer's
+                // shoulder midpoint every frame, anchoring at center made the garment hang
+                // roughly half its own height too high, and the visible remainder sit too low.
                 const box = new THREE.Box3().setFromObject(garmentModel);
                 const center = box.getCenter(new THREE.Vector3());
+                const topCenter = new THREE.Vector3(center.x, box.max.y, center.z);
                 measuredMeshWidth = box.getSize(new THREE.Vector3()).x;
-                garmentModel.position.sub(center);
+                garmentModel.position.sub(topCenter);
               }
 
 
@@ -206,6 +217,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   skeletonBones[child.name] = child;
                 }
               });
+
+            }, undefined, (error) => {
+              console.error('[AR] GLB load failed', error);
             });
 
             window.addEventListener('resize', onWindowResize);
@@ -233,7 +247,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
               if (data && data.type === 'UPDATE_TRANSFORM' && garmentGroup) {
                 const { pos, rot, scl, boneRotations, normalizedLandmarks } = data;
-                
+
                 // Pure Metric Camera Projection (Fixing P0/P1 Alignment)
                 if (normalizedLandmarks && normalizedLandmarks[11] && normalizedLandmarks[12] && camera.projectionMatrix) {
                   try {
@@ -268,14 +282,21 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     if (targetPos && targetL && targetR) {
                       const targetWorldWidth = targetL.distanceTo(targetR);
                       
-                      let garmentMetricWidth = ${metadata && metadata.restPoseMetricWidth ? metadata.restPoseMetricWidth : 0.4};
-                      // Fail-safe for un-ingested massive meshes (e.g., modeled in millimeters)
+                      // Prefer the admin-calibrated width; fall back to this mesh's own
+                      // measured bounding-box width (already known from load, in the same
+                      // scene-unit space as targetWorldWidth) rather than a generic guess --
+                      // a fixed constant here was unrelated to this specific garment's actual
+                      // size and produced a visibly oversized result.
+                      let garmentMetricWidth = ${metadata && metadata.restPoseMetricWidth ? metadata.restPoseMetricWidth : 'measuredMeshWidth'};
+                      // Fail-safe for un-ingested massive meshes (e.g., modeled in millimeters) --
+                      // only relevant when using a calibrated value, since measuredMeshWidth
+                      // trivially matches itself.
                       if (measuredMeshWidth > 0 && Math.abs(garmentMetricWidth - measuredMeshWidth) > measuredMeshWidth * 0.5) {
                          garmentMetricWidth = measuredMeshWidth * 0.7; // Estimate shoulder width from bounding box
                       }
                       
                       const exactScale = targetWorldWidth / garmentMetricWidth;
-                      
+
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
                       if (!isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x)) {
                         garmentGroup.position.copy(targetPos);
@@ -292,14 +313,19 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 }
 
                 // 2. Mesh Skinning / Rig Retargeting
-
-                if (false) { // TEMP DISABLED FOR P0-A (Rigid Transform Only)
-                  const boneMap = ${metadata ? JSON.stringify(metadata.boneMap) : 'null'};
+                // P0-A: re-enabled. Gated on the garment actually having a calibrated
+                // boneMap AND the loaded GLTF actually exposing bones -- a garment with
+                // neither stays on the rigid-only path above rather than silently no-op'ing
+                // per-bone (which is what happened while this block was hardcoded off).
+                const boneMap = ${metadata ? JSON.stringify(metadata.boneMap) : 'null'};
+                const hasCalibratedRig = boneMap && Object.keys(boneMap).length > 0;
+                const hasLoadedSkeleton = Object.keys(skeletonBones).length > 0;
+                if (hasCalibratedRig && hasLoadedSkeleton && boneRotations) {
                   for (const [boneName, quat] of Object.entries(boneRotations)) {
                     // Try to map using ingestion metadata first, fallback to heuristics
-                    const targetBoneName = boneMap ? boneMap[boneName] : (skeletonBones[boneName] ? boneName : 'mixamorig' + boneName);
+                    const targetBoneName = boneMap[boneName] || (skeletonBones[boneName] ? boneName : 'mixamorig' + boneName);
                     const bone = skeletonBones[targetBoneName];
-                    if (bone) {
+                    if (bone && quat && !isNaN(quat.x) && !isNaN(quat.y) && !isNaN(quat.z) && !isNaN(quat.w)) {
                       bone.quaternion.set(quat.x, quat.y, quat.z, quat.w);
                     }
                   }
@@ -358,7 +384,17 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
     }));
 
     return (
-      <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
+      <View style={[StyleSheet.absoluteFill, {
+        pointerEvents: 'none',
+        zIndex: 10,
+        // Force this layer into its own GPU compositing layer. Without this, Chromium
+        // sometimes promotes the sibling <video> camera feed to a hardware-decode
+        // compositing layer that ignores normal DOM/z-index stacking order and renders
+        // on top regardless -- this was making the whole garment overlay invisible
+        // (confirmed via a solid-color WebGL clear-color test that flashed once, then
+        // got covered by the video the moment it started actively decoding frames).
+        transform: [{ perspective: 1000 }, { translateZ: 1 }],
+      }]}>
         {Platform.OS === 'web' ? (
           // @ts-ignore
           <iframe

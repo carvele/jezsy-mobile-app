@@ -36,7 +36,14 @@ export function constructBodyPose(
   const pitchRad = Math.atan2(-coordinateFrame.forward.y, Math.sqrt(coordinateFrame.forward.x ** 2 + coordinateFrame.forward.z ** 2));
   
   // Roll is rotation around the Z (forward) axis.
-  const rollRad = Math.atan2(coordinateFrame.right.y, coordinateFrame.right.x);
+  // MediaPipe's raw (unmirrored) world landmarks put the subject's own right shoulder
+  // (landmark 12) at a SMALLER x than the left shoulder (landmark 11) when facing the
+  // camera upright -- so coordinateFrame.right.x is negative at true zero roll, which
+  // made atan2(right.y, right.x) read ~180 deg for a person standing normally (confirmed:
+  // rollDeg consistently ~+-180 while yawDeg correctly stayed ~0). Negating both
+  // components shifts the baseline to 0 without touching right/up/forward themselves,
+  // so yaw/pitch (which were already correct) are unaffected.
+  const rollRad = Math.atan2(-coordinateFrame.right.y, -coordinateFrame.right.x);
 
   const isFacingForward = Math.abs(yawRad) < 25 * (Math.PI / 180) && coordinateFrame.forward.z > 0;
   const isBackFacing = Math.abs(yawRad) > 110 * (Math.PI / 180) || coordinateFrame.forward.z < 0;

@@ -362,7 +362,7 @@ export default function ARTryOnScreen() {
         // Phase 4A/4B: Push 3D transform and skinning data directly to the WebGL prototype
         if (garmentRendererRef.current && garmentMetadata) {
           const boneRotations = calculateBoneRotations(pose.worldLandmarks, garmentMetadata.restPose);
-          
+
           garmentRendererRef.current.updateTransform(
             { x: fitState.anchor.x, y: fitState.anchor.y, z: fitState.anchor.z },
             fitState.rotation,
@@ -393,7 +393,7 @@ export default function ARTryOnScreen() {
 
       }
     },
-    [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity]
+    [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity, garmentMetadata, product]
   );
   
   const nativeFilterRef = React.useRef<PoseLandmarkFilter | null>(null);
