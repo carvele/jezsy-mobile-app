@@ -147,19 +147,30 @@ export function quaternionFromBasis(xAxis: Vec3, yAxis: Vec3, zAxis: Vec3): Quat
   const m31 = xAxis.z, m32 = yAxis.z, m33 = zAxis.z;
   const trace = m11 + m22 + m33;
 
+  // Each branch's sqrt argument is algebraically >= 0 for a perfectly orthonormal basis,
+  // but xAxis/yAxis/zAxis are Gram-Schmidt'd from noisy landmark cross products (see
+  // normalizePose) -- never bit-exact orthonormal. At a large rotation angle (a torso
+  // bend), floating-point error can push an argument fractionally negative right at a
+  // branch boundary, producing NaN. A NaN quaternion silently poisons GarmentRenderer's
+  // slerp-based smoothing PERMANENTLY (confirmed live: garment vanishes on a bend and
+  // never recovers without a reload, because slerp always mixes in its own current
+  // value -- there is no self-healing on the next good frame). Clamp with a small
+  // epsilon rather than 0 so `s` is never exactly zero either (that would produce
+  // Infinity instead of NaN from the divisions below -- equally fatal).
+  const EPS = 1e-12;
   if (trace > 0) {
-    const s = 0.5 / Math.sqrt(trace + 1.0);
+    const s = 0.5 / Math.sqrt(Math.max(EPS, trace + 1.0));
     return { w: 0.25 / s, x: (m32 - m23) * s, y: (m13 - m31) * s, z: (m21 - m12) * s };
   }
   if (m11 > m22 && m11 > m33) {
-    const s = 2.0 * Math.sqrt(1.0 + m11 - m22 - m33);
+    const s = 2.0 * Math.sqrt(Math.max(EPS, 1.0 + m11 - m22 - m33));
     return { w: (m32 - m23) / s, x: 0.25 * s, y: (m12 + m21) / s, z: (m13 + m31) / s };
   }
   if (m22 > m33) {
-    const s = 2.0 * Math.sqrt(1.0 + m22 - m11 - m33);
+    const s = 2.0 * Math.sqrt(Math.max(EPS, 1.0 + m22 - m11 - m33));
     return { w: (m13 - m31) / s, x: (m12 + m21) / s, y: 0.25 * s, z: (m23 + m32) / s };
   }
-  const s = 2.0 * Math.sqrt(1.0 + m33 - m11 - m22);
+  const s = 2.0 * Math.sqrt(Math.max(EPS, 1.0 + m33 - m11 - m22));
   return { w: (m21 - m12) / s, x: (m13 + m31) / s, y: (m23 + m32) / s, z: 0.25 * s };
 }
 

@@ -56,6 +56,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let boneCorrection = {};
           let debugFrameCount = 0;
           let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
+          let consecutiveRejectedFrames = 0;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
 
@@ -400,7 +401,75 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
                       const transformValid = !isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x);
-                      if (transformValid) {
+                      // rot NaN protection, added separately from transformValid on purpose: a
+                      // NaN quaternion (from poseNormalizer's quaternionFromBasis under a large
+                      // bend -- see its own hardening comment) must never reach smoothedQuat.slerp
+                      // below. slerp always mixes in its OWN current value, so one bad frame
+                      // poisons every future frame permanently -- confirmed live as "vanishes on
+                      // a bend and never comes back without a reload". Skip only the rotation
+                      // update for a bad frame; position/scale still update normally, and the
+                      // garment holds its last good orientation instead of going NaN forever.
+                      const rotValid = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w);
+                      if (!rotValid && shouldLog) {
+                        console.warn('[AR-DEBUG-BONE] non-finite orientation3D this frame, holding last good rotation: ' + JSON.stringify(rot));
+                      }
+
+                      // Plausibility guard against a CONFIDENTLY WRONG frame -- distinct from the
+                      // NaN guard above. Confirmed live (both a laptop webcam and a phone browser):
+                      // MediaPipe occasionally reports shoulder landmarks at a wildly wrong 2D
+                      // position (e.g. y around 0.75 instead of the normal ~0.1, z around -0.7
+                      // instead of ~-0.1) with visibility still ~0.99 -- a confident misdetection,
+                      // not a low-confidence one, so nothing upstream (trackingState/confidence
+                      // gating in [id].tsx) catches it. Landing here as a finite-but-implausible
+                      // exactScale (observed: normal frames run ~2-3x, bad ones jump to ~5.5-5.9x
+                      // and STAY there for many consecutive frames), which reads as the garment
+                      // flashing to roughly double size and effectively vanishing.
+                      //
+                      // A blanket "reject any big single-frame jump" was considered and rejected:
+                      // legitimate frame-to-frame swings on this pipeline are already large during
+                      // ordinary fast movement or a turn (observed up to ~7x between throttled log
+                      // samples), so a tight threshold would fight real motion. Instead, compare the
+                      // new raw value against the CURRENT SMOOTHED value (which already lags single
+                      // -frame noise) with a generous ratio band, and cap how long a rejection can
+                      // persist so a genuine large real change is never stuck rejected forever.
+                      // Sized against the one real bad episode captured live: it ran roughly 18
+                      // consecutive throttled log samples (shouldLog fires every 20 frames -- see
+                      // above), i.e. ~360 real frames of sustained implausible detection before the
+                      // captured log ended -- verified by replaying that exact sequence through this
+                      // logic (300 undershot it, letting the tail of the episode back in). 500 covers
+                      // the captured episode with real margin. Still a bound chosen from one observed
+                      // case, not a guarantee -- a longer bad stretch could still eventually be
+                      // accepted. The alternative (no cap at all) risks freezing the garment forever
+                      // if a real, large, sustained change is ever misread as implausible, which is
+                      // worse than an occasional long glitch getting through.
+                      const MAX_CONSECUTIVE_REJECTS = 500; // roughly 25s at this pipeline's ~20fps inference rate
+                      // Bounds calibrated against the real captured session, not guessed: the
+                      // largest legitimate frame-to-frame ratio seen in ordinary good tracking was
+                      // ~1.65x; the captured bad jump was ~2.19x. An earlier version of this guard
+                      // used 2.5x as the upper bound, reasoned from a coarser read of the same log
+                      // -- verified by replaying the exact captured sequence through this logic
+                      // before shipping, and 2.5x let the bad jump through untouched on its very
+                      // first frame (2.19 < 2.5), after which every later bad frame compared against
+                      // the now-corrupted baseline and looked "plausible" too. 1.9x sits with margin
+                      // above the largest legitimate swing and below the captured bad jump.
+                      let scalePlausible = true;
+                      if (smoothedScale !== null && smoothedScale > 0) {
+                        const ratio = exactScale / smoothedScale;
+                        scalePlausible = ratio > 0.4 && ratio < 1.9;
+                      }
+                      if (!scalePlausible && consecutiveRejectedFrames < MAX_CONSECUTIVE_REJECTS) {
+                        consecutiveRejectedFrames++;
+                        if (shouldLog) {
+                          console.warn('[AR-DEBUG-FRAME] implausible scale jump rejected (holding last good transform): exactScale=' + exactScale.toFixed(4) + ' smoothedScale=' + smoothedScale.toFixed(4) + ' consecutiveRejectedFrames=' + consecutiveRejectedFrames);
+                        }
+                      } else {
+                        // Either plausible, or we've held long enough that this is more likely a
+                        // real (if sudden) change than a glitch -- accept it and reset the counter.
+                        consecutiveRejectedFrames = 0;
+                      }
+                      const frameAccepted = transformValid && scalePlausible;
+
+                      if (frameAccepted) {
                         // Smooth position/scale across frames (simple exponential moving
                         // average) instead of snapping straight to this frame's raw value.
                         // Confirmed live: exactScale swung wildly frame to frame (observed
@@ -411,11 +480,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         // frame -- reads as "appears then disappears" even though tracking
                         // itself never actually dropped out.
                         const smoothing = 0.25; // higher = follows new frames faster
-                        const targetQuat = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
+                        const targetQuat = rotValid ? new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w) : null;
                         if (!smoothedPos) {
                           smoothedPos = targetPos.clone();
                           smoothedScale = exactScale;
-                          smoothedQuat = targetQuat.clone();
+                          if (targetQuat) smoothedQuat = targetQuat.clone();
                         } else {
                           smoothedPos.lerp(targetPos, smoothing);
                           smoothedScale = smoothedScale + (exactScale - smoothedScale) * smoothing;
@@ -423,18 +492,21 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           // well as roll -- see poseNormalizer), so it needs the same
                           // temporal filtering position and scale already get. Pitch in
                           // particular comes from MediaPipe depth, its noisiest channel;
-                          // slerping keeps that noise off the garment.
-                          smoothedQuat.slerp(targetQuat, smoothing);
+                          // slerping keeps that noise off the garment. targetQuat is null
+                          // on a bad frame (rotValid=false) -- skip only this frame's
+                          // rotation update rather than feeding NaN into slerp.
+                          if (targetQuat) smoothedQuat.slerp(targetQuat, smoothing);
                         }
                         garmentGroup.position.copy(smoothedPos);
                         garmentGroup.scale.set(smoothedScale, smoothedScale, smoothedScale);
-                        garmentGroup.quaternion.copy(smoothedQuat);
+                        if (smoothedQuat) garmentGroup.quaternion.copy(smoothedQuat);
                       }
 
                       // TEMP DEBUG: throttled diagnostic dump -- remove once the wrong-arm /
                       // disappearing-garment issues are root-caused. Logs every ~20 frames.
                       if (shouldLog) {
                         console.log('[AR-DEBUG-FRAME] transformValid=' + transformValid
+                          + ' scalePlausible=' + scalePlausible + ' frameAccepted=' + frameAccepted
                           + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
                           + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
                           + ' exactScale=' + exactScale.toFixed(4)
@@ -450,7 +522,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   // Fallback
                   console.log('[AR-DEBUG-FRAME] FALLBACK PATH: normalizedLandmarks[11]/[12] missing or camera not ready');
                   garmentGroup.position.set(pos.x, pos.y, pos.z);
-                  garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                  // Same NaN guard as the main path above -- see its comment.
+                  if (Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w)) {
+                    garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+                  }
                   garmentGroup.scale.set(scl, scl, scl);
                 }
 
