@@ -193,6 +193,16 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               garmentModel = gltf.scene;
               garmentGroup.add(garmentModel);
               
+              // Always measure the mesh's own real bounding-box width, regardless of which
+              // anchor branch runs below. The "fail-safe" scale check further down compares
+              // the calibrated rest_pose_metric_width against this value -- confirmed live
+              // that leaving it at its hardcoded 0.4 default (only ever updated in the
+              // no-calibrated-anchor branch) made the fail-safe silently reject a correct,
+              // much smaller calibrated width (0.119) as "too different from 0.4" and
+              // override it to 0.4*0.7=0.28 on every single frame.
+              const box = new THREE.Box3().setFromObject(garmentModel);
+              measuredMeshWidth = box.getSize(new THREE.Vector3()).x;
+
               // Phase 5: Anatomical Anchoring
               const anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? JSON.stringify(metadata.anatomicalAnchorOffset) : 'null'};
               if (anchorOffset) {
@@ -205,10 +215,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 // of the mid-torso -- since the group's position is later set to the wearer's
                 // shoulder midpoint every frame, anchoring at center made the garment hang
                 // roughly half its own height too high, and the visible remainder sit too low.
-                const box = new THREE.Box3().setFromObject(garmentModel);
                 const center = box.getCenter(new THREE.Vector3());
                 const topCenter = new THREE.Vector3(center.x, box.max.y, center.z);
-                measuredMeshWidth = box.getSize(new THREE.Vector3()).x;
                 garmentModel.position.sub(topCenter);
               }
 

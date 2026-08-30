@@ -1,6 +1,9 @@
 import type { WorldLandmark } from './poseDetector';
 import type { Quaternion } from '../types/pose';
 
+// TEMP DEBUG: see the throttled log call inside calculateBoneRotations below.
+let debugVisCounter = 0;
+
 /**
  * Normalizes a 3D vector.
  */
@@ -106,6 +109,18 @@ worldLandmarks: WorldLandmark[], restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_P
 
 
   const hasVis = (p: WorldLandmark) => p && p.visibility > 0.3;
+
+  // TEMP DEBUG: throttled visibility dump -- remove once wrong-arm-response /
+  // "only appears when both arms move" is root-caused. Tests whether hasVis()
+  // is intermittently failing (causing arms to fall back to Spine's rotation
+  // instead of their own) rather than the retargeting math itself being wrong.
+  debugVisCounter++;
+  if (debugVisCounter % 20 === 0) {
+    console.log('[AR-DEBUG-VIS] lS=' + lS?.visibility?.toFixed(2) + ' lE=' + lE?.visibility?.toFixed(2)
+      + ' lW=' + lW?.visibility?.toFixed(2) + ' rS=' + rS?.visibility?.toFixed(2)
+      + ' rE=' + rE?.visibility?.toFixed(2) + ' rW=' + rW?.visibility?.toFixed(2)
+      + ' | leftArmVisible=' + (hasVis(lS) && hasVis(lE)) + ' rightArmVisible=' + (hasVis(rS) && hasVis(rE)));
+  }
 
   // We will compute WORLD quaternions first, then convert to LOCAL.
   const worldRotations: Record<string, Quaternion> = {};
