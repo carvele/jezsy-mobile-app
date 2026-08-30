@@ -55,6 +55,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let skeletonBones = {};
           let shoulderBindQuats = {};
           let debugFrameCount = 0;
+          let smoothedPos = null, smoothedScale = null;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
 
@@ -343,8 +344,25 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
                       const transformValid = !isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x);
                       if (transformValid) {
-                        garmentGroup.position.copy(targetPos);
-                        garmentGroup.scale.set(exactScale, exactScale, exactScale);
+                        // Smooth position/scale across frames (simple exponential moving
+                        // average) instead of snapping straight to this frame's raw value.
+                        // Confirmed live: exactScale swung wildly frame to frame (observed
+                        // 1.7x to 8.9x within a handful of logged samples, from ordinary
+                        // MediaPipe landmark jitter -- there was no temporal filtering on
+                        // this code path at all), causing the garment to flash visible for
+                        // an instant then jump off-frame/to an absurd size the very next
+                        // frame -- reads as "appears then disappears" even though tracking
+                        // itself never actually dropped out.
+                        const smoothing = 0.25; // higher = follows new frames faster
+                        if (!smoothedPos) {
+                          smoothedPos = targetPos.clone();
+                          smoothedScale = exactScale;
+                        } else {
+                          smoothedPos.lerp(targetPos, smoothing);
+                          smoothedScale = smoothedScale + (exactScale - smoothedScale) * smoothing;
+                        }
+                        garmentGroup.position.copy(smoothedPos);
+                        garmentGroup.scale.set(smoothedScale, smoothedScale, smoothedScale);
                         garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
                       }
 
