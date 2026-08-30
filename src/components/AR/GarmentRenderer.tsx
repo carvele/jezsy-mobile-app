@@ -218,6 +218,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 }
               });
 
+              console.log('[AR-DEBUG] actual GLB bone names: ' + JSON.stringify(Object.keys(skeletonBones))
+                + ' | boneMap in use: ' + JSON.stringify(${metadata && metadata.boneMap ? JSON.stringify(metadata.boneMap) : 'null'}));
+
             }, undefined, (error) => {
               console.error('[AR] GLB load failed', error);
             });
@@ -322,8 +325,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 const hasLoadedSkeleton = Object.keys(skeletonBones).length > 0;
                 if (hasCalibratedRig && hasLoadedSkeleton && boneRotations) {
                   for (const [boneName, quat] of Object.entries(boneRotations)) {
-                    // Try to map using ingestion metadata first, fallback to heuristics
-                    const targetBoneName = boneMap[boneName] || (skeletonBones[boneName] ? boneName : 'mixamorig' + boneName);
+                    // Try the canonical name directly against the loaded skeleton first --
+                    // confirmed live that this specific GLB's bones are already named
+                    // exactly the canonical names (LeftArm, RightForeArm, ...), while the
+                    // stored boneMap's values (e.g. "_left_arm") don't match any bone in
+                    // the file at all. Only fall back to boneMap / the mixamorig heuristic
+                    // when the direct name isn't found, so a wrong-but-truthy boneMap entry
+                    // can't override a name that already resolves correctly.
+                    const targetBoneName = skeletonBones[boneName] ? boneName : (boneMap[boneName] || ('mixamorig' + boneName));
                     const bone = skeletonBones[targetBoneName];
                     if (bone && quat && !isNaN(quat.x) && !isNaN(quat.y) && !isNaN(quat.z) && !isNaN(quat.w)) {
                       bone.quaternion.set(quat.x, quat.y, quat.z, quat.w);

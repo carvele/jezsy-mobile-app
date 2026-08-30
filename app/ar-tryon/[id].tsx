@@ -286,7 +286,37 @@ export default function ARTryOnScreen() {
     if (!product) return;
     if (product.garment_metadata) {
       console.log('[AR] Using real garment_metadata from Supabase');
-      setGarmentMetadata(product.garment_metadata as unknown as import('@/src/types/garment').GarmentMetadata);
+      // The DB column stores snake_case keys (bone_map, rest_pose_metric_width, ...);
+      // GarmentMetadata and everything downstream (garmentFitter, GarmentRenderer,
+      // skeletalRetargeter) reads camelCase. The previous straight type-cast here did
+      // NOT convert the actual runtime object, so every calibrated field silently read
+      // as undefined -- confirmed live: restPose logged undefined and garmentMetricWidth
+      // fell back to a hardcoded 0.4 even for a product with a real bone_map and a real
+      // rest_pose_metric_width of 0.22 already set in the database.
+      const raw = product.garment_metadata as any;
+      // bone_map as stored is keyed by the GLB's actual bone name with the canonical
+      // name as the value (e.g. "_left_arm": "LeftArm") -- the runtime looks it up the
+      // other way (boneMap[canonicalName] -> actual GLB bone name), so every lookup
+      // would fail even after the case fix above. Invert it once here.
+      const invertedBoneMap: Record<string, string> = {};
+      if (raw.bone_map && typeof raw.bone_map === 'object') {
+        for (const [glbBoneName, canonicalName] of Object.entries(raw.bone_map)) {
+          if (typeof canonicalName === 'string') invertedBoneMap[canonicalName] = glbBoneName;
+        }
+      }
+      const mapped: import('@/src/types/garment').GarmentMetadata = {
+        id: raw.id,
+        category: raw.category,
+        calibrationVersion: raw.calibration_version,
+        ingestionStatus: raw.ingestion_status,
+        anatomicalAnchorOffset: raw.anatomical_anchor_offset,
+        anchorConfidence: raw.anchor_confidence,
+        anchorType: raw.anchor_type,
+        restPoseMetricWidth: raw.rest_pose_metric_width,
+        boneMap: invertedBoneMap,
+        restPose: raw.rest_pose,
+      };
+      setGarmentMetadata(mapped);
       setIsDemoRig(false);
     } else {
       console.log('[AR] No garment_metadata — using fallback (demo rig)');
