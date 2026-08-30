@@ -254,9 +254,19 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 // Pure Metric Camera Projection (Fixing P0/P1 Alignment)
                 if (normalizedLandmarks && normalizedLandmarks[11] && normalizedLandmarks[12] && camera.projectionMatrix) {
                   try {
-                    const l11 = normalizedLandmarks[11];
-                    const l12 = normalizedLandmarks[12];
-                    
+                    // The camera <video> is displayed mirrored (scaleX(-1), so it behaves like
+                    // a real mirror), but this WebGL canvas is composited on top UNmirrored and
+                    // MediaPipe's landmark x-coordinates are raw (unmirrored) image space. Left
+                    // un-flipped here, the whole garment renders on the opposite screen side from
+                    // the video's own view of the body -- confirmed live: raising the real right
+                    // arm visually moved the garment on the left side of the screen instead of
+                    // the right. Mirroring x here brings this position calc in line with the
+                    // video's own mirrored display; bone ROTATION math is unaffected -- it uses
+                    // MediaPipe's anatomically-labeled world landmarks, not screen-space x, and
+                    // was already correct (the right sleeve was already the one deforming).
+                    const l11 = { x: 1 - normalizedLandmarks[11].x, y: normalizedLandmarks[11].y };
+                    const l12 = { x: 1 - normalizedLandmarks[12].x, y: normalizedLandmarks[12].y };
+
                     // Helper: Unproject 2D normalized landmark to 3D world at Z=0
                     const unprojectToZ0 = (nx, ny) => {
                       if (isNaN(nx) || isNaN(ny)) return null;
