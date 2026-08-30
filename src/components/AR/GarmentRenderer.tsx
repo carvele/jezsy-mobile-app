@@ -327,19 +327,17 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     if (targetPos && targetL && targetR) {
                       const targetWorldWidth = targetL.distanceTo(targetR);
                       
-                      // Prefer the admin-calibrated width; fall back to this mesh's own
-                      // measured bounding-box width (already known from load, in the same
-                      // scene-unit space as targetWorldWidth) rather than a generic guess --
-                      // a fixed constant here was unrelated to this specific garment's actual
-                      // size and produced a visibly oversized result.
-                      let garmentMetricWidth = ${metadata && metadata.restPoseMetricWidth ? metadata.restPoseMetricWidth : 'measuredMeshWidth'};
-                      // Fail-safe for un-ingested massive meshes (e.g., modeled in millimeters) --
-                      // only relevant when using a calibrated value, since measuredMeshWidth
-                      // trivially matches itself.
-                      if (measuredMeshWidth > 0 && Math.abs(garmentMetricWidth - measuredMeshWidth) > measuredMeshWidth * 0.5) {
-                         garmentMetricWidth = measuredMeshWidth * 0.7; // Estimate shoulder width from bounding box
-                      }
-                      
+                      // Trust an admin-calibrated width outright; fall back to this mesh's own
+                      // measured bounding-box width only when no calibration exists at all.
+                      // A "fail-safe" here used to cross-check a calibrated value against
+                      // measuredMeshWidth and override it if too different -- removed after
+                      // confirming live that THREE.Box3.setFromObject() does not account for
+                      // a SkinnedMesh's actual skeleton-driven scale in this Three.js version
+                      // (r128), so measuredMeshWidth can be wildly wrong (measured 0.0068 on
+                      // this rig, vs. a correct calibrated 0.119) -- the fail-safe was using a
+                      // broken measurement to override a correct one, producing an ~88x
+                      // oversized, effectively invisible/off-frustum render.
+                      const garmentMetricWidth = ${metadata && metadata.restPoseMetricWidth ? metadata.restPoseMetricWidth : 'measuredMeshWidth'};
                       const exactScale = targetWorldWidth / garmentMetricWidth;
 
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
