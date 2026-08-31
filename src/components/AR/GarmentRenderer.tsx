@@ -29,11 +29,34 @@ export interface GarmentRendererProps {
    * unavailable.
    */
   fitModifier?: number;
+  /**
+   * Phase 3: real camera calibration, computed once in ar-tryon/[id].tsx from
+   * vision-camera's format.fieldOfView (native only -- see the AR Implementation
+   * Plan) and the wearer's own saved shoulder measurement. When present, the
+   * scene's virtual camera uses the real vertical FOV and its distance from the
+   * subject is re-derived from real triangulation every frame, instead of the
+   * previous fixed 45deg/z=5 setup that only ever measured a self-consistent,
+   * not real-world-accurate, width. Undefined (native without a saved
+   * measurement, or web) preserves that exact prior behavior unchanged.
+   */
+  cameraCalibration?: {
+    focalLengthPx: number;
+    verticalFovDeg: number;
+    videoWidthPx: number;
+    wearerShoulderWidthM: number;
+  };
 }
 
 export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererProps>(
-  ({ modelUrl, metadata, fitModifier = 1 }, ref) => {
+  ({ modelUrl, metadata, fitModifier = 1, cameraCalibration }, ref) => {
     const safeFitModifier = Number.isFinite(fitModifier) && fitModifier > 0 ? fitModifier : 1;
+    const safeCameraCalibration = cameraCalibration
+      && Number.isFinite(cameraCalibration.focalLengthPx) && cameraCalibration.focalLengthPx > 0
+      && Number.isFinite(cameraCalibration.verticalFovDeg) && cameraCalibration.verticalFovDeg > 0
+      && Number.isFinite(cameraCalibration.videoWidthPx) && cameraCalibration.videoWidthPx > 0
+      && Number.isFinite(cameraCalibration.wearerShoulderWidthM) && cameraCalibration.wearerShoulderWidthM > 0
+      ? cameraCalibration
+      : undefined;
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const webviewRef = useRef<WebView | null>(null);
 
@@ -81,15 +104,25 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let debugFrameCount = 0;
           let loggedPosedBBox = false;
           let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
+          let smoothedCameraDistance = null;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
+
+          // Phase 3: real camera calibration, present only on native with a saved
+          // wearer measurement (see GarmentRendererProps.cameraCalibration).
+          // Undefined preserves the original fixed 45deg/z=5 uncalibrated camera.
+          const CAMERA_CALIBRATION = ${safeCameraCalibration ? JSON.stringify(safeCameraCalibration) : 'null'};
 
           function init() {
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
-            
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 5;
+
+            camera = new THREE.PerspectiveCamera(
+              CAMERA_CALIBRATION ? CAMERA_CALIBRATION.verticalFovDeg : 45,
+              window.innerWidth / window.innerHeight,
+              0.1, 1000
+            );
+            camera.position.z = 5; // real distance is computed and set every frame once CAMERA_CALIBRATION is present
 
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -392,6 +425,28 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     const l11 = normalizedLandmarks[11];
                     const l12 = normalizedLandmarks[12];
 
+                    // Phase 3: real distance triangulation. Real focal length (px) and the
+                    // wearer's own real shoulder width give real distance from this frame's
+                    // measured pixel separation -- the standard similar-triangles formula,
+                    // meaningful now that CAMERA_CALIBRATION.verticalFovDeg (set at init) is
+                    // the real physical FOV rather than the arbitrary 45deg default. Smoothed
+                    // the same way position/scale/rotation already are elsewhere in this
+                    // handler, since single-frame landmark jitter would otherwise make the
+                    // camera (and therefore the whole scene) visibly judder in depth.
+                    if (CAMERA_CALIBRATION) {
+                      const measuredPixelWidth = Math.abs(l12.x - l11.x) * CAMERA_CALIBRATION.videoWidthPx;
+                      if (measuredPixelWidth > 1) {
+                        const rawDistance = (CAMERA_CALIBRATION.wearerShoulderWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth;
+                        if (Number.isFinite(rawDistance) && rawDistance > 0.05 && rawDistance < 20) {
+                          smoothedCameraDistance = smoothedCameraDistance == null
+                            ? rawDistance
+                            : smoothedCameraDistance + (rawDistance - smoothedCameraDistance) * 0.25;
+                          camera.position.z = smoothedCameraDistance;
+                          camera.updateMatrixWorld(true);
+                        }
+                      }
+                    }
+
                     // Helper: Unproject 2D normalized landmark to 3D world at Z=0
                     const unprojectToZ0 = (nx, ny) => {
                       if (isNaN(nx) || isNaN(ny)) return null;
@@ -427,10 +482,16 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // to convert real metres into correct on-screen pixels; it only ever
                       // worked *self-consistently* with a 2D screen-projected width, since both
                       // measuring and rendering went through the same uncalibrated camera.
-                      // Swapping only the measurement side broke that self-consistency. Real
-                      // camera intrinsics (actual P0-C) would fix this properly; until then,
-                      // this reverts to the working self-consistent measurement. Phase B2's fit
-                      // modifier is unaffected -- it never depended on this.
+                      // Swapping only the measurement side broke that self-consistency.
+                      //
+                      // Phase 3: real camera intrinsics (the actual fix this comment used to
+                      // call out as still-needed) now exist above whenever CAMERA_CALIBRATION is
+                      // present -- both the FOV and camera.position.z (distance) are real, so
+                      // this unprojection is measuring real metres correctly rather than only
+                      // self-consistently. Without calibration data (web, or no saved wearer
+                      // measurement), FOV=45/z=5 and this remains exactly the prior
+                      // self-consistent-but-arbitrary behavior. Phase B2's fit modifier is
+                      // unaffected either way -- it never depended on this.
                       const targetWorldWidth = targetL.distanceTo(targetR);
 
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
@@ -515,6 +576,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
                           + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
                           + ' exactScale=' + exactScale.toFixed(4)
+                          + ' calibrated=' + !!CAMERA_CALIBRATION
+                          + ' cameraDistanceM=' + (smoothedCameraDistance != null ? smoothedCameraDistance.toFixed(3) : 'n/a')
+                          + ' verticalFovDeg=' + camera.fov.toFixed(1)
                           + ' l11(raw)=' + JSON.stringify(l11)
                           + ' l12(raw)=' + JSON.stringify(l12)
                           + ' boneRotations=' + JSON.stringify(boneRotations));

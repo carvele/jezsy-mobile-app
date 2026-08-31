@@ -2,8 +2,10 @@ import { useCallback, useMemo } from "react";
 import type { ComponentType } from "react";
 import type {
   CameraDevice,
+  CameraDeviceFormat,
   CameraPosition,
   DeviceFilter,
+  FormatFilter,
 } from "react-native-vision-camera";
 import type {
   DetectionCallbacks,
@@ -72,6 +74,14 @@ function useCameraPermissionStub(): { hasPermission: boolean; requestPermission:
   return useMemo(() => ({ hasPermission: false, requestPermission: async () => false }), []);
 }
 export const useCameraPermission = NATIVE_VISION_AVAILABLE ? useCameraPermissionReal : useCameraPermissionStub;
+
+function useCameraFormatReal(device: CameraDevice | undefined, filters: FormatFilter[]): CameraDeviceFormat | undefined {
+  return (VisionCamera as any).useCameraFormat(device, filters);
+}
+function useCameraFormatStub(): CameraDeviceFormat | undefined {
+  return undefined;
+}
+export const useCameraFormat = NATIVE_VISION_AVAILABLE ? useCameraFormatReal : useCameraFormatStub;
 
 function usePoseDetectionReal(
   callbacks: DetectionCallbacks<PoseDetectionResultBundle>,

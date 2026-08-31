@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Lin
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { Camera, useCameraDevice, useCameraPermission, usePoseDetection, RunningMode, Delegate, NATIVE_VISION_AVAILABLE } from '@/src/utils/nativeVision';
+import { Camera, useCameraDevice, useCameraFormat, useCameraPermission, usePoseDetection, RunningMode, Delegate, NATIVE_VISION_AVAILABLE } from '@/src/utils/nativeVision';
 import { Image } from 'expo-image';
 import * as Speech from 'expo-speech';
 import { supabase } from '@/src/lib/supabase';
@@ -228,6 +228,12 @@ export default function ARTryOnScreen() {
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
+  // Phase 3: an explicit format so fieldOfView/videoWidth/videoHeight below are
+  // guaranteed to describe what's actually active, not vision-camera's own
+  // (unknown to us) default pick. 1280x720 balances pose-detection frame rate
+  // against resolution; unrelated to the calibration math, which works at any
+  // resolution as long as format and the values read from it agree.
+  const format = useCameraFormat(device, [{ videoResolution: { width: 1280, height: 720 } }]);
 
   const [matchScore, setMatchScore] = useState(0);
   const [isMatched, setIsMatched] = useState(false);
@@ -373,6 +379,44 @@ export default function ARTryOnScreen() {
     if (!wearerCm || !garmentCm || wearerCm <= 0) return 1;
     return Math.min(1.4, Math.max(0.7, garmentCm / wearerCm));
   }, [sizingMeasurements, recommendedSize, product?.measurements]);
+
+  // Phase 3: real camera calibration (native only -- see GarmentRenderer.tsx and
+  // the AR Implementation Plan). vision-camera's format.fieldOfView is the
+  // *diagonal* FOV in both its Android (sensor-diagonal-derived) and iOS
+  // (AVCaptureDevice.videoFieldOfView, Apple-documented as diagonal)
+  // implementations, confirmed by reading both native source files rather than
+  // assumed -- horizontal/vertical FOV are NOT the same value and using the
+  // wrong one would silently miscalibrate every downstream measurement.
+  // focalLengthPx is derived once from the diagonal relationship and serves
+  // both the render camera's vertical FOV and the real-distance triangulation
+  // GarmentRenderer performs every frame; without a real wearer measurement to
+  // triangulate against, calibration data is withheld entirely and
+  // GarmentRenderer falls back to its existing uncalibrated behavior.
+  const cameraCalibration = useMemo(() => {
+    if (Platform.OS === 'web' || !format || !format.fieldOfView) return undefined;
+    const wearerShoulderWidthM = sizingMeasurements?.shoulderWidth
+      ? sizingMeasurements.shoulderWidth / 100
+      : undefined;
+    if (!wearerShoulderWidthM || wearerShoulderWidthM <= 0) return undefined;
+
+    const { videoWidth, videoHeight, fieldOfView } = format;
+    if (!videoWidth || !videoHeight) return undefined;
+
+    const diagonalPx = Math.sqrt(videoWidth * videoWidth + videoHeight * videoHeight);
+    const diagonalFovRad = (fieldOfView * Math.PI) / 180;
+    const focalLengthPx = (diagonalPx / 2) / Math.tan(diagonalFovRad / 2);
+    const verticalFovRad = 2 * Math.atan(videoHeight / (2 * focalLengthPx));
+    const verticalFovDeg = (verticalFovRad * 180) / Math.PI;
+
+    if (!Number.isFinite(focalLengthPx) || !Number.isFinite(verticalFovDeg) || verticalFovDeg <= 0) return undefined;
+
+    return {
+      focalLengthPx,
+      verticalFovDeg,
+      videoWidthPx: videoWidth,
+      wearerShoulderWidthM,
+    };
+  }, [format, sizingMeasurements]);
 
   const handlePoseResults = useCallback(
     (poseFrame: PoseFrame) => {
@@ -929,6 +973,7 @@ export default function ARTryOnScreen() {
             <Camera
               style={styles.camera}
               device={device}
+              format={format}
               isActive={mode === '2d' && isFocused}
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
@@ -950,6 +995,7 @@ export default function ARTryOnScreen() {
               modelUrl={modelUrl}
               metadata={garmentMetadata}
               fitModifier={fitModifier}
+              cameraCalibration={cameraCalibration}
             />
           )}
 
