@@ -45,6 +45,7 @@ export default function MeasurementsScreen() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Form State
@@ -203,14 +204,27 @@ export default function MeasurementsScreen() {
   }, [user, unitReady]);
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user) {
+      setSaveError('Not signed in -- reload and log in again.');
+      return;
+    }
     setSaving(true);
+    setSaveError(null);
+    // TEMP DEBUG: no reliable devtools access on the test device that reported this
+    // hanging -- a hard client-side timeout plus an always-visible inline error (not
+    // just a toast, which is easy to miss/dismiss) so a stuck save is never silent.
+    // Remove once the save-hang report is root-caused.
+    const timeoutMs = 15000;
+    let timedOut = false;
+    const timeout = new Promise<never>((_, reject) => {
+      setTimeout(() => { timedOut = true; reject(new Error('Save timed out after 15s -- request never completed.')); }, timeoutMs);
+    });
     try {
       // 1. Update Profile Fit Preference
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ fit_preference: fitPreference })
-        .eq('id', user.id);
+      const { error: profileError } = await Promise.race([
+        supabase.from('profiles').update({ fit_preference: fitPreference }).eq('id', user.id),
+        timeout
+      ]) as any;
       if (profileError) throw profileError;
 
       // 2. Upsert Measurements
@@ -271,9 +285,10 @@ export default function MeasurementsScreen() {
         measurement_source: source
       };
 
-      const { error: measurementsError } = await supabase
-        .from('user_measurements')
-        .upsert(payload, { onConflict: 'user_id' });
+      const { error: measurementsError } = await Promise.race([
+        supabase.from('user_measurements').upsert(payload, { onConflict: 'user_id' }),
+        timeout
+      ]) as any;
       if (measurementsError) throw measurementsError;
 
       showToast('Measurements saved successfully ✨', 'success');
@@ -287,7 +302,11 @@ export default function MeasurementsScreen() {
       }
     } catch (err: any) {
       console.error(err);
-      showToast(err.message || 'Failed to save measurements.', 'error');
+      const message = timedOut
+        ? err.message
+        : (err?.message || err?.error_description || JSON.stringify(err) || 'Failed to save measurements.');
+      setSaveError(message);
+      showToast(message, 'error');
     } finally {
       setSaving(false);
     }
@@ -530,6 +549,11 @@ export default function MeasurementsScreen() {
       </KeyboardAvoidingView>
 
       <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+        {saveError && (
+          <Text style={{ color: '#c0392b', fontSize: 12, marginBottom: Spacing.sm, textAlign: 'center' }}>
+            {saveError}
+          </Text>
+        )}
         <TouchableOpacity
           style={[styles.saveBtn, { backgroundColor: colors.tint, opacity: saving ? 0.7 : 1 }]}
           onPress={handleSave}
