@@ -79,6 +79,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let skeletonBones = {};
           let boneCorrection = {};
           let debugFrameCount = 0;
+          let loggedPosedBBox = false;
           let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
@@ -229,6 +230,13 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // override it to 0.4*0.7=0.28 on every single frame.
               const box = new THREE.Box3().setFromObject(garmentModel);
               measuredMeshWidth = box.getSize(new THREE.Vector3()).x;
+              // TEMP DEBUG: ground truth for calibrating rest_pose_metric_width -- this is
+              // known unreliable for a SkinnedMesh in this Three.js version (r128) per the
+              // master plan's own history, but seeing the actual number beats guessing blind.
+              const boxSize = box.getSize(new THREE.Vector3());
+              console.log('[AR-DEBUG-BBOX] Box3.setFromObject (rest pose, load time): size=' + JSON.stringify({x:+boxSize.x.toFixed(4), y:+boxSize.y.toFixed(4), z:+boxSize.z.toFixed(4)})
+                + ' min=' + JSON.stringify({x:+box.min.x.toFixed(4), y:+box.min.y.toFixed(4), z:+box.min.z.toFixed(4)})
+                + ' max=' + JSON.stringify({x:+box.max.x.toFixed(4), y:+box.max.y.toFixed(4), z:+box.max.z.toFixed(4)}));
 
               // Phase 5: Anatomical Anchoring
               const anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? JSON.stringify(metadata.anatomicalAnchorOffset) : 'null'};
@@ -585,6 +593,24 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   }
                 } else if (shouldLog) {
                   console.log('[AR-DEBUG-BONE] retargeting block skipped entirely: hasCalibratedRig=' + hasCalibratedRig + ' hasLoadedSkeleton=' + hasLoadedSkeleton + ' hasBoneRotations=' + !!boneRotations);
+                }
+
+                // TEMP DEBUG: one-shot ground truth, taken AFTER real skinning has been
+                // applied at least once -- compare against the load-time [AR-DEBUG-BBOX] log.
+                // scale.set(1,1,1) temporarily so this reads the mesh's own local size, not
+                // the current frame's already-applied garmentGroup scale.
+                if (!loggedPosedBBox && hasCalibratedRig && hasLoadedSkeleton) {
+                  loggedPosedBBox = true;
+                  const savedScale = garmentGroup.scale.clone();
+                  garmentGroup.scale.set(1, 1, 1);
+                  garmentGroup.updateMatrixWorld(true);
+                  const posedBox = new THREE.Box3().setFromObject(garmentModel);
+                  const posedSize = posedBox.getSize(new THREE.Vector3());
+                  console.log('[AR-DEBUG-BBOX] Box3.setFromObject (POSED, skinning applied): size=' + JSON.stringify({x:+posedSize.x.toFixed(4), y:+posedSize.y.toFixed(4), z:+posedSize.z.toFixed(4)})
+                    + ' min=' + JSON.stringify({x:+posedBox.min.x.toFixed(4), y:+posedBox.min.y.toFixed(4), z:+posedBox.min.z.toFixed(4)})
+                    + ' max=' + JSON.stringify({x:+posedBox.max.x.toFixed(4), y:+posedBox.max.y.toFixed(4), z:+posedBox.max.z.toFixed(4)}));
+                  garmentGroup.scale.copy(savedScale);
+                  garmentGroup.updateMatrixWorld(true);
                 }
 
                 // 3. Occlusion Compositor Uniforms
