@@ -410,8 +410,27 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     const targetR = unprojectToZ0(l12.x, l12.y);
                     
                     if (targetPos && targetL && targetR) {
-                      const targetWorldWidth = targetL.distanceTo(targetR);
-                      
+                      // Phase B: a real camera-FOV API isn't reliably available in a browser,
+                      // so this uses MediaPipe's own worldLandmarks instead of the original
+                      // P0-C plan's literal intrinsics derivation -- same target ("Done when:
+                      // garment size stays visually constant as the wearer turns"), a route
+                      // that's actually buildable. worldLandmarks are MediaPipe's own real,
+                      // roughly-metric estimate of body proportions, specifically designed to
+                      // stay stable regardless of distance/yaw -- unlike targetL/targetR above,
+                      // which are 2D screen positions unprojected through this scene's
+                      // arbitrary, uncalibrated virtual camera (45deg FOV, fixed z=5 -- see
+                      // Phase 8's root lesson) and therefore change apparent width exactly as
+                      // the wearer turns, which is the bug this phase exists to remove.
+                      // Falls back to the old 2D-projected width on a frame without
+                      // worldLandmarks, never worse than before Phase B.
+                      let targetWorldWidth = targetL.distanceTo(targetR);
+                      const wl = data.worldLandmarks;
+                      if (wl && wl[11] && wl[12]) {
+                        const dx = wl[12].x - wl[11].x, dy = wl[12].y - wl[11].y, dz = (wl[12].z || 0) - (wl[11].z || 0);
+                        const realWidth = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                        if (isFinite(realWidth) && realWidth > 0) targetWorldWidth = realWidth;
+                      }
+
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
                       // measured bounding-box width only when no calibration exists at all.
                       // A "fail-safe" here used to cross-check a calibrated value against
