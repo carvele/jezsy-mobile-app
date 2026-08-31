@@ -100,7 +100,7 @@ export class WebPoseTracker {
           const rawLandmarks = results.landmarks[0];
           const rawWorldLandmarks = results.worldLandmarks?.[0] || [];
           const mask = results.segmentationMasks?.[0];
-          
+
           let segmentation: import('../types/pose').SegmentationFrame | undefined = undefined;
           if (mask) {
             segmentation = {
@@ -110,6 +110,14 @@ export class WebPoseTracker {
               source: 'web-gpu-texture', // Treating MPMask as web-gpu-texture equivalent for now
               data: mask
             };
+            // MPMask holds native (WASM/GPU-backed) memory that isn't reclaimed by JS
+            // GC -- it must be closed explicitly. Nothing downstream reads mask pixel
+            // data yet (GarmentRenderer only checks segmentation.data for truthiness,
+            // per the source audit's "mask transport isn't built" finding), so it's
+            // safe to close immediately rather than leak one per video frame. When
+            // real occlusion (Phase 4) starts reading pixels, this needs to move to
+            // wherever that consumption finishes instead.
+            mask.close();
           }
           
           return {
