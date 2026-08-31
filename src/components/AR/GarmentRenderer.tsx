@@ -57,10 +57,13 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
         <div id="debug-overlay"></div>
         <script>
           // TEMP DEBUG: on-screen error display, no devtools needed. Remove once blazer load issue is diagnosed.
+          var debugLog = [];
           function showDebug(msg) {
             var el = document.getElementById('debug-overlay');
             el.style.display = 'block';
-            el.textContent += msg + '\\n';
+            debugLog.push(msg);
+            if (debugLog.length > 6) debugLog.shift();
+            el.textContent = debugLog.join('\\n');
           }
           window.addEventListener('error', function(e) {
             showDebug('window.onerror: ' + e.message);
@@ -488,14 +491,22 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           + ' l11(raw)=' + JSON.stringify(l11)
                           + ' l12(raw)=' + JSON.stringify(l12)
                           + ' boneRotations=' + JSON.stringify(boneRotations));
+                        // TEMP DEBUG: remove once blazer visibility is root-caused.
+                        showDebug('valid=' + transformValid + ' width=' + targetWorldWidth.toFixed(3)
+                          + ' metricW=' + garmentMetricWidth.toFixed(3) + ' scale=' + exactScale.toFixed(3)
+                          + ' groupScale=' + garmentGroup.scale.x.toFixed(3)
+                          + ' groupPos=(' + garmentGroup.position.x.toFixed(2) + ',' + garmentGroup.position.y.toFixed(2) + ',' + garmentGroup.position.z.toFixed(2) + ')'
+                          + ' bones=' + Object.keys(skeletonBones).length);
                       }
                     } else if (shouldLog) {
                       console.log('[AR-DEBUG-FRAME] SKIPPED: targetPos/targetL/targetR unprojection failed (likely NaN camera/vector math)');
+                      showDebug('unprojection FAILED (likely NaN camera/vector math)');
                     }
-                  } catch(e) { console.error('Projection Math Error', e); }
+                  } catch(e) { console.error('Projection Math Error', e); showDebug('Projection Math Error: ' + e.message); }
                 } else {
                   // Fallback
                   console.log('[AR-DEBUG-FRAME] FALLBACK PATH: normalizedLandmarks[11]/[12] missing or camera not ready');
+                  if (shouldLog) showDebug('FALLBACK PATH: no shoulder landmarks / camera not ready, pos=' + JSON.stringify(pos) + ' scl=' + scl);
                   garmentGroup.position.set(pos.x, pos.y, pos.z);
                   // Same NaN guard as the main path above -- see its comment.
                   if (Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w)) {
