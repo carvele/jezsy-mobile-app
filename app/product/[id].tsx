@@ -572,21 +572,21 @@ export default function ProductDetailScreen() {
           )}
 
           {/* Product Details (Material & Care) */}
-          {(product.material || product.care_instructions || product.fit_and_sizing) && (
+          {!!(product.material || product.care_instructions || product.fit_and_sizing) && (
             <View style={[styles.section, styles.detailsSection, { borderColor: colors.border }]}>
-              {product.material && (
+              {!!product.material && (
                 <View style={[styles.detailRow, { borderBottomColor: colors.border }]}>
                   <Text style={[styles.detailLabel, { color: colors.text }]}>Material</Text>
                   <Text style={[styles.detailValue, { color: colors.secondaryText }]}>{product.material}</Text>
                 </View>
               )}
-              {product.fit_and_sizing && (
+              {!!product.fit_and_sizing && (
                 <View style={[styles.detailRow, { borderBottomColor: colors.border }]}>
                   <Text style={[styles.detailLabel, { color: colors.text }]}>Fit</Text>
                   <Text style={[styles.detailValue, { color: colors.secondaryText }]}>{product.fit_and_sizing}</Text>
                 </View>
               )}
-              {product.care_instructions && (
+              {!!product.care_instructions && (
                 <View style={[styles.detailRow, { borderBottomColor: colors.border, borderBottomWidth: 0, paddingBottom: 0 }]}>
                   <Text style={[styles.detailLabel, { color: colors.text }]}>Care</Text>
                   <Text style={[styles.detailValue, { color: colors.secondaryText }]}>{product.care_instructions}</Text>

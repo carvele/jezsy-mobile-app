@@ -116,8 +116,16 @@ export class WebPoseTracker {
             // per the source audit's "mask transport isn't built" finding), so it's
             // safe to close immediately rather than leak one per video frame. When
             // real occlusion (Phase 4) starts reading pixels, this needs to move to
-            // wherever that consumption finishes instead.
-            mask.close();
+            // wherever that consumption finishes instead. Isolated in its own try/catch:
+            // this is cleanup, not part of pose detection, and must never be able to
+            // fail the frame's landmark return (it lives inside the same outer try as
+            // detectForVideo, and an uncaught throw here would silently drop landmarks
+            // for this frame, i.e. break garment tracking, not just leak the mask).
+            try {
+              mask.close();
+            } catch (closeErr) {
+              console.warn('Failed to close segmentation MPMask:', closeErr);
+            }
           }
           
           return {
