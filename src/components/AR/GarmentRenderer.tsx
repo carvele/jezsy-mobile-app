@@ -42,6 +42,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           #canvas-container {
             width: 100%; height: 100%;
           }
+          #debug-overlay {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+            background: rgba(200,0,0,0.85); color: #fff; font: 12px monospace;
+            padding: 8px; white-space: pre-wrap; display: none;
+          }
         </style>
         <!-- Three.js + GLTFLoader via CDN -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -49,7 +54,21 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       </head>
       <body>
         <div id="canvas-container"></div>
+        <div id="debug-overlay"></div>
         <script>
+          // TEMP DEBUG: on-screen error display, no devtools needed. Remove once blazer load issue is diagnosed.
+          function showDebug(msg) {
+            var el = document.getElementById('debug-overlay');
+            el.style.display = 'block';
+            el.textContent += msg + '\\n';
+          }
+          window.addEventListener('error', function(e) {
+            showDebug('window.onerror: ' + e.message);
+          });
+          window.addEventListener('unhandledrejection', function(e) {
+            showDebug('unhandledrejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+          });
+
           let scene, camera, renderer, garmentModel, garmentGroup;
           let measuredMeshWidth = 0.4;
           let skeletonBones = {};
@@ -190,7 +209,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             garmentGroup = new THREE.Group();
             scene.add(garmentGroup);
             const loader = new THREE.GLTFLoader();
+            showDebug('Loading GLB: ${modelUrl}');
             loader.load('${modelUrl}', (gltf) => {
+              showDebug('GLB loaded OK');
               garmentModel = gltf.scene;
               garmentGroup.add(garmentModel);
               
@@ -309,6 +330,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
             }, undefined, (error) => {
               console.error('[AR] GLB load failed', error);
+              showDebug('GLB load FAILED: ' + (error && error.message ? error.message : JSON.stringify(error)));
             });
 
             window.addEventListener('resize', onWindowResize);
