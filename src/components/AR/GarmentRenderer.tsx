@@ -678,7 +678,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
         // appears on the left in an ordinary unmirrored photo of them. A flat 2D flip
         // after Three.js has already rendered normally avoids any 3D winding-order/
         // lighting risk a negative Three.js scene scale would carry.
-        transform: [{ perspective: 1000 }, { translateZ: 1 }, { scaleX: -1 }],
+        // perspective+translateZ is the Chromium compositing-layer forcing hack described
+        // above -- web-only, both by intent (native has no such stacking bug) and by
+        // necessity: React Native's own processTransform.js has no `translateZ` case at
+        // all and throws "Invalid transform translateZ" on native, confirmed live on a
+        // real device this session. scaleX(-1) alone still does the actual mirror there.
+        transform: Platform.OS === 'web'
+          ? [{ perspective: 1000 }, { translateZ: 1 }, { scaleX: -1 }]
+          : [{ scaleX: -1 }],
       }]}>
         {Platform.OS === 'web' ? (
           // @ts-ignore
