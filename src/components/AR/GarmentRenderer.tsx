@@ -53,11 +53,6 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           #canvas-container {
             width: 100%; height: 100%;
           }
-          #debug-overlay {
-            position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
-            background: rgba(200,0,0,0.85); color: #fff; font: 12px monospace;
-            padding: 8px; white-space: pre-wrap; display: none;
-          }
         </style>
         <!-- Three.js + GLTFLoader via CDN -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -65,16 +60,12 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       </head>
       <body>
         <div id="canvas-container"></div>
-        <div id="debug-overlay"></div>
         <script>
-          // TEMP DEBUG: on-screen error display, no devtools needed. Remove once blazer load issue is diagnosed.
-          var debugLog = [];
+          // Load status and per-frame transform, console-only -- the visible on-screen
+          // banner this used to render did its job (confirmed load status, got real scale
+          // telemetry off-device) and is removed now that it's just blocking the view.
           function showDebug(msg) {
-            var el = document.getElementById('debug-overlay');
-            el.style.display = 'block';
-            debugLog.push(msg);
-            if (debugLog.length > 6) debugLog.shift();
-            el.textContent = debugLog.join('\\n');
+            console.log('[AR-STATUS] ' + msg);
           }
           window.addEventListener('error', function(e) {
             showDebug('window.onerror: ' + e.message);
