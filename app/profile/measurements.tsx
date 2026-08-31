@@ -259,8 +259,26 @@ export default function MeasurementsScreen() {
         legLength: rawMeasurements.legLength,
       });
 
+      // Was a silent, dismissible info toast showing only the first warning --
+      // confirmed live this let physically-impossible values (e.g. a 33cm bust)
+      // save without any real friction. Now blocks with an explicit choice, and
+      // lists every out-of-range field, not just one.
       if (warnings.length > 0) {
-        showToast(warnings[0], 'info');
+        const message = warnings.join('\n');
+        const proceed = await new Promise<boolean>((resolve) => {
+          if (Platform.OS === 'web') {
+            resolve(typeof window !== 'undefined' ? window.confirm(`Some measurements look unusual:\n\n${message}\n\nSave anyway?`) : true);
+          } else {
+            Alert.alert('Unusual measurements', message, [
+              { text: 'Go back and fix', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Save anyway', onPress: () => resolve(true) },
+            ]);
+          }
+        });
+        if (!proceed) {
+          setSaving(false);
+          return;
+        }
       }
 
       // Ensure data is sanitized before saving to DB
