@@ -19,10 +19,21 @@ export interface GarmentRendererRef {
 export interface GarmentRendererProps {
   modelUrl: string;
   metadata?: import('@/src/types/garment').GarmentMetadata;
+  /**
+   * Phase B2: real-measurement fit modifier, computed once from the wearer's saved
+   * body measurements and the selected/recommended size's real chart width (see
+   * ar-tryon/[id].tsx). Multiplies the live silhouette-matched base scale so
+   * different sizes actually render at different tightness instead of all shrink-
+   * wrapping identically to the wearer -- position/orientation tracking is untouched.
+   * Defaults to 1 (today's silhouette-match-only behavior) when measurement data is
+   * unavailable.
+   */
+  fitModifier?: number;
 }
 
 export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererProps>(
-  ({ modelUrl, metadata }, ref) => {
+  ({ modelUrl, metadata, fitModifier = 1 }, ref) => {
+    const safeFitModifier = Number.isFinite(fitModifier) && fitModifier > 0 ? fitModifier : 1;
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const webviewRef = useRef<WebView | null>(null);
 
@@ -421,7 +432,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // broken measurement to override a correct one, producing an ~88x
                       // oversized, effectively invisible/off-frustum render.
                       const garmentMetricWidth = ${metadata && metadata.restPoseMetricWidth ? metadata.restPoseMetricWidth : 'measuredMeshWidth'};
-                      const exactScale = targetWorldWidth / garmentMetricWidth;
+                      // Phase B2: real-measurement fit modifier, baked in once at mount from
+                      // the wearer's saved measurements vs. the selected size's real chart
+                      // width. 1 = today's pure silhouette-match behavior (default/fallback).
+                      const fitModifier = ${safeFitModifier};
+                      const exactScale = (targetWorldWidth / garmentMetricWidth) * fitModifier;
 
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
                       const transformValid = !isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x);

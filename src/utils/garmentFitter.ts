@@ -1,6 +1,7 @@
 import type { BodyPose, GarmentFitState, Vec3 } from '../types/pose';
 import type { GarmentFitProfile } from '../types/garment';
 import { normalizePose, IDENTITY_QUAT, type CanonicalPose } from './poseNormalizer';
+import type { UserMeasurements } from './sizeRecommender';
 
 /**
  * Calculates the garment's target transformation and scale state (GarmentFitState) 
@@ -19,7 +20,16 @@ export function calculateGarmentFit(
    * Canonical pose for this same frame. Pass the one the caller already built rather
    * than normalizing the same landmarks twice; derived here only as a convenience.
    */
-  canonical?: CanonicalPose
+  canonical?: CanonicalPose,
+  /**
+   * Phase B2: the wearer's saved body measurements and the selected/recommended
+   * size's real chart entry, both optional. When both are present their shoulder-
+   * width ratio multiplies the live silhouette-matched scale below (kept this path
+   * consistent with GarmentRenderer.tsx's own fitModifier for the 3D overlay).
+   * Missing either one degrades to today's pure silhouette-match behavior.
+   */
+  userMeasurements?: UserMeasurements,
+  garmentSizeMeasurements?: { shoulderWidth?: number }
 ): GarmentFitState {
 
   if (pose.confidence < 0.3 || pose.trackingState === 'TRACKING_LOST' || pose.trackingState === 'FULL_BODY_REQUIRED') {
@@ -74,7 +84,16 @@ export function calculateGarmentFit(
   // Therefore, the target 3D width of the garment must be `correctedShoulderWidthPx / 100` units.
   // Since the base 3D width is `garmentShoulderWidthMeters`, the required scale is:
   const targetScale3D = (correctedShoulderWidthPx / 100) / garmentShoulderWidthMeters;
-  const targetScale = targetScale3D; // Replace legacy
+
+  // Phase B2: real-measurement fit modifier, same formula as GarmentRenderer.tsx's
+  // own fitModifier so the legacy 2D overlay and the 3D WebGL overlay never disagree.
+  const wearerWidthCm = userMeasurements?.shoulderWidth ?? (userShoulderWidthMeters > 0 ? userShoulderWidthMeters * 100 : null);
+  const garmentWidthCm = garmentSizeMeasurements?.shoulderWidth ?? null;
+  const fitModifier = wearerWidthCm && garmentWidthCm && wearerWidthCm > 0
+    ? Math.min(1.4, Math.max(0.7, garmentWidthCm / wearerWidthCm))
+    : 1;
+
+  const targetScale = targetScale3D * fitModifier;
 
 
   // 3. Rotation.

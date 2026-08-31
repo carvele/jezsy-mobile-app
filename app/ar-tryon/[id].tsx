@@ -341,6 +341,39 @@ export default function ARTryOnScreen() {
     };
   }, []);
 
+  // Moved above handlePoseResults (Section 00 Phase 2's stale-closure lesson applies
+  // here too): handlePoseResults's dependency array needs these identifiers declared
+  // before it, not just referenced inside its body.
+  const { measurements: sizingMeasurements, fitPreference, ready: sizingReady } = useSizingProfile();
+  const recommendedSize = useMemo(
+    () => (sizingReady && sizingMeasurements && product?.measurements
+      ? recommendSize(sizingMeasurements, product.measurements as any, fitPreference)
+      : null),
+    [sizingReady, sizingMeasurements, fitPreference, product?.measurements]
+  );
+  const fitZones = useMemo(
+    () => (recommendedSize && product?.measurements && sizingMeasurements
+      ? analyzeFit(sizingMeasurements, (product.measurements as any)[recommendedSize])
+      : []),
+    [recommendedSize, sizingMeasurements, product?.measurements]
+  );
+
+  // Phase B2: real-measurement fit modifier for the AR overlay's scale (see
+  // src/components/AR/GarmentRenderer.tsx). Ratio of the selected/recommended
+  // size's real chart width to the wearer's own saved shoulder width -- multiplies
+  // the live silhouette-matched base scale so different sizes actually look
+  // different on the same tracked body. Clamped to a modest range so missing or
+  // noisy measurement data can't send the garment wildly off scale; defaults to 1
+  // (today's silhouette-match-only behavior) whenever either side is unavailable.
+  const fitModifier = useMemo(() => {
+    const wearerCm = sizingMeasurements?.shoulderWidth;
+    const garmentCm = recommendedSize && product?.measurements
+      ? (product.measurements as any)[recommendedSize]?.shoulderWidth
+      : null;
+    if (!wearerCm || !garmentCm || wearerCm <= 0) return 1;
+    return Math.min(1.4, Math.max(0.7, garmentCm / wearerCm));
+  }, [sizingMeasurements, recommendedSize, product?.measurements]);
+
   const handlePoseResults = useCallback(
     (poseFrame: PoseFrame) => {
       const { normalizedLandmarks: landmarks, worldLandmarks, segmentation } = poseFrame;
@@ -377,7 +410,15 @@ export default function ARTryOnScreen() {
       // see poseNormalizer for the full write-up.
       const canonical = normalizePose(pose.worldLandmarks);
 
-      const fitState = calculateGarmentFit(pose, garmentProfile, stageWidth, stageHeight, garmentMetadata, canonical);
+      // Phase B2: pass the wearer's saved measurements and the selected/recommended
+      // size's real chart entry so the legacy 2D overlay's scale stays consistent with
+      // the 3D WebGL overlay's own fitModifier -- undefined on either side degrades to
+      // today's pure silhouette-match behavior, never worse than before.
+      const fitState = calculateGarmentFit(
+        pose, garmentProfile, stageWidth, stageHeight, garmentMetadata, canonical,
+        sizingMeasurements ?? undefined,
+        recommendedSize && product?.measurements ? (product.measurements as any)[recommendedSize] : undefined
+      );
       
       const isTracking = pose.trackingState === 'GOOD_FIT' || pose.trackingState === 'TURN_TOO_FAR';
 
@@ -442,7 +483,7 @@ export default function ARTryOnScreen() {
 
       }
     },
-    [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity, garmentMetadata, product]
+    [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity, garmentMetadata, product, sizingMeasurements, recommendedSize]
   );
   
   const nativeFilterRef = React.useRef<PoseLandmarkFilter | null>(null);
@@ -537,20 +578,7 @@ export default function ARTryOnScreen() {
     AsyncStorage.setItem('ar_hint_seen', 'true');
   };
 
-  const { measurements: sizingMeasurements, fitPreference, ready: sizingReady } = useSizingProfile();
   const [showFit, setShowFit] = useState(true);
-  const recommendedSize = useMemo(
-    () => (sizingReady && sizingMeasurements && product?.measurements
-      ? recommendSize(sizingMeasurements, product.measurements as any, fitPreference)
-      : null),
-    [sizingReady, sizingMeasurements, fitPreference, product?.measurements]
-  );
-  const fitZones = useMemo(
-    () => (recommendedSize && product?.measurements && sizingMeasurements
-      ? analyzeFit(sizingMeasurements, (product.measurements as any)[recommendedSize])
-      : []),
-    [recommendedSize, sizingMeasurements, product?.measurements]
-  );
 
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -921,6 +949,7 @@ export default function ARTryOnScreen() {
               ref={garmentRendererRef}
               modelUrl={modelUrl}
               metadata={garmentMetadata}
+              fitModifier={fitModifier}
             />
           )}
 
