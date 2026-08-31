@@ -418,26 +418,20 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     const targetR = unprojectToZ0(l12.x, l12.y);
                     
                     if (targetPos && targetL && targetR) {
-                      // Phase B: a real camera-FOV API isn't reliably available in a browser,
-                      // so this uses MediaPipe's own worldLandmarks instead of the original
-                      // P0-C plan's literal intrinsics derivation -- same target ("Done when:
-                      // garment size stays visually constant as the wearer turns"), a route
-                      // that's actually buildable. worldLandmarks are MediaPipe's own real,
-                      // roughly-metric estimate of body proportions, specifically designed to
-                      // stay stable regardless of distance/yaw -- unlike targetL/targetR above,
-                      // which are 2D screen positions unprojected through this scene's
-                      // arbitrary, uncalibrated virtual camera (45deg FOV, fixed z=5 -- see
-                      // Phase 8's root lesson) and therefore change apparent width exactly as
-                      // the wearer turns, which is the bug this phase exists to remove.
-                      // Falls back to the old 2D-projected width on a frame without
-                      // worldLandmarks, never worse than before Phase B.
-                      let targetWorldWidth = targetL.distanceTo(targetR);
-                      const wl = data.worldLandmarks;
-                      if (wl && wl[11] && wl[12]) {
-                        const dx = wl[12].x - wl[11].x, dy = wl[12].y - wl[11].y, dz = (wl[12].z || 0) - (wl[11].z || 0);
-                        const realWidth = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                        if (isFinite(realWidth) && realWidth > 0) targetWorldWidth = realWidth;
-                      }
+                      // Phase B, reverted: tried using MediaPipe's worldLandmarks (real
+                      // metres) here to make width distance/yaw-invariant. Confirmed live via
+                      // model-viewer's independently-computed real dimensions (mesh height
+                      // genuinely ~0.60m, not a broken/tiny mesh) that the resulting math was
+                      // internally consistent yet still rendered too small on screen -- because
+                      // this scene's virtual camera (45deg FOV, fixed z=5) was never calibrated
+                      // to convert real metres into correct on-screen pixels; it only ever
+                      // worked *self-consistently* with a 2D screen-projected width, since both
+                      // measuring and rendering went through the same uncalibrated camera.
+                      // Swapping only the measurement side broke that self-consistency. Real
+                      // camera intrinsics (actual P0-C) would fix this properly; until then,
+                      // this reverts to the working self-consistent measurement. Phase B2's fit
+                      // modifier is unaffected -- it never depended on this.
+                      const targetWorldWidth = targetL.distanceTo(targetR);
 
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
                       // measured bounding-box width only when no calibration exists at all.
