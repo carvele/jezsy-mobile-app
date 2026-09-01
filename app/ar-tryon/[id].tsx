@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform, useWindowDimensions, AppState } from 'react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -239,6 +239,7 @@ export default function ARTryOnScreen() {
   const [isMatched, setIsMatched] = useState(false);
   const [matchFeedback, setMatchFeedback] = useState('Align with outline');
   const [isTrackerActive, setIsTrackerActive] = useState(false);
+  const [arLoadError, setArLoadError] = useState<string | null>(null);
 
   // Reanimated SharedValues for 60FPS UI-thread smooth garment positioning
   const translateX = useSharedValue(0);
@@ -293,7 +294,14 @@ export default function ARTryOnScreen() {
 
   useEffect(() => {
     if (!product) return;
-    if (product.garment_metadata) {
+    // Only 'AR_READY' means boneMap/anchorOffset/restPoseMetricWidth are actually
+    // usable for a real render -- 'NEEDS_CALIBRATION'/'NEEDS_MERCHANT_MAPPING'/
+    // 'NOT_AR_COMPATIBLE' mean ingestion is incomplete for this garment (the admin
+    // dashboard's own ingestion pipeline flags this). Previously this screen branched
+    // only on garment_metadata truthiness, so an incompletely-ingested garment was
+    // still fed through as if it were fully calibrated.
+    const rawStatus = (product.garment_metadata as any)?.ingestion_status;
+    if (product.garment_metadata && rawStatus === 'AR_READY') {
       console.log('[AR] Using real garment_metadata from Supabase');
       // The DB column stores snake_case keys (bone_map, rest_pose_metric_width, ...);
       // GarmentMetadata and everything downstream (garmentFitter, GarmentRenderer,
@@ -328,7 +336,9 @@ export default function ARTryOnScreen() {
       setGarmentMetadata(mapped);
       setIsDemoRig(false);
     } else {
-      console.log('[AR] No garment_metadata — using fallback (demo rig)');
+      console.log(product.garment_metadata
+        ? '[AR] garment_metadata not AR_READY (' + rawStatus + ') — using fallback (demo rig)'
+        : '[AR] No garment_metadata — using fallback (demo rig)');
       setGarmentMetadata(buildFallbackMetadata(product));
       setIsDemoRig(true);
     }
@@ -354,9 +364,9 @@ export default function ARTryOnScreen() {
   const { measurements: sizingMeasurements, fitPreference, ready: sizingReady } = useSizingProfile();
   const recommendedSize = useMemo(
     () => (sizingReady && sizingMeasurements && product?.measurements
-      ? recommendSize(sizingMeasurements, product.measurements as any, fitPreference)
+      ? recommendSize(sizingMeasurements, product.measurements as any, fitPreference, product?.category)
       : null),
-    [sizingReady, sizingMeasurements, fitPreference, product?.measurements]
+    [sizingReady, sizingMeasurements, fitPreference, product?.measurements, product?.category]
   );
   const fitZones = useMemo(
     () => (recommendedSize && product?.measurements && sizingMeasurements
@@ -508,7 +518,7 @@ export default function ARTryOnScreen() {
 
         // Phase 4A/4B: Push 3D transform and skinning data directly to the WebGL prototype
         if (garmentRendererRef.current && garmentMetadata) {
-          const boneRotations = calculateBoneRotationsFromCanonical(canonical, garmentMetadata.restPose);
+          const boneRotations = calculateBoneRotationsFromCanonical(canonical, garmentMetadata.restPose, pose.orientation.rollRad);
 
           // TEMP DEBUG: throttled torso readout for the live torso-bend test. pitch goes
           // negative when bending forward, roll tracks a sideways lean, yaw a twist; all
@@ -560,14 +570,32 @@ export default function ARTryOnScreen() {
     nativeFilterRef.current = new PoseLandmarkFilter(1.2, 0.015, 1.0);
   }
 
-  // Pose Detection Hook (Native)
-  const poseDetection = usePoseDetection({
-    onResults: (result) => {
+  // onResults/onError used to be inline literals recreated every render; the library
+  // chains them through several layers of useMemo/useCallback that all transitively
+  // depend on that fresh identity, so poseDetection (and therefore the
+  // [device, poseDetection] effect dependency below) never stabilized. Memoized at
+  // the root instead of patching each downstream symptom separately.
+  const onNativePoseResults = useCallback(
+    (result: any) => {
       const landmarks = result.results?.[0]?.landmarks?.[0];
       const worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
 
       if (!landmarks || landmarks.length === 0) {
+        // Zero landmarks (person left frame, camera covered, poor lighting) used to
+        // early-return here without ever calling handlePoseResults, so isTrackerActive
+        // and the garment's SharedValues froze at their last value indefinitely instead
+        // of reflecting that tracking actually stopped. Apply the same debounced-loss
+        // decay handlePoseResults' else-branch runs, without touching pose math.
         nativeFilterRef.current?.reset();
+        lostFramesRef.current += 1;
+        if (lostFramesRef.current > 6) {
+          translateX.value = withTiming(0, { duration: 250 });
+          translateY.value = withTiming(0, { duration: 250 });
+          scale.value = withTiming(1, { duration: 250 });
+          rotateDeg.value = withTiming(0, { duration: 250 });
+          opacity.value = withTiming(0.85, { duration: 200 });
+          setIsTrackerActive(false);
+        }
         return;
       }
 
@@ -587,18 +615,18 @@ export default function ARTryOnScreen() {
       }
 
       // Evaluate pose
-      const normalizedLandmarks = landmarks.map(p => ({
+      const normalizedLandmarks = landmarks.map((p: any) => ({
         x: p.x,
         y: p.y,
         z: p.z || 0,
         visibility: p.visibility ?? p.presence ?? 0,
       }));
       const smoothedLandmarks = nativeFilterRef.current?.filterLandmarks(normalizedLandmarks as any) ?? normalizedLandmarks;
-      
-      const smoothedWorldLandmarks = worldLandmarks && worldLandmarks.length > 0 
-        ? nativeFilterRef.current?.filterWorldLandmarks(worldLandmarks as any) 
+
+      const smoothedWorldLandmarks = worldLandmarks && worldLandmarks.length > 0
+        ? nativeFilterRef.current?.filterWorldLandmarks(worldLandmarks as any)
         : worldLandmarks;
-        
+
       const rawMask = result.results?.[0]?.segmentationMasks?.[0];
       let segmentation: import('@/src/types/pose').SegmentationFrame | undefined = undefined;
       const timestamp = Date.now();
@@ -620,8 +648,18 @@ export default function ARTryOnScreen() {
         timestamp
       });
     },
-    onError: (e) => console.error(e)
-  }, RunningMode.LIVE_STREAM, 'pose_landmarker_lite.task', {
+    [handlePoseResults, translateX, translateY, scale, rotateDeg, opacity]
+  );
+
+  const onNativePoseError = useCallback((e: any) => console.error(e), []);
+
+  const poseDetectionCallbacks = useMemo(
+    () => ({ onResults: onNativePoseResults, onError: onNativePoseError }),
+    [onNativePoseResults, onNativePoseError]
+  );
+
+  // Pose Detection Hook (Native)
+  const poseDetection = usePoseDetection(poseDetectionCallbacks, RunningMode.LIVE_STREAM, 'pose_landmarker_lite.task', {
     numPoses: 1,
     minPoseDetectionConfidence: 0.35,
     minPosePresenceConfidence: 0.35,
@@ -703,6 +741,19 @@ export default function ARTryOnScreen() {
       return () => setIsFocused(false);
     }, [])
   );
+
+  // isActive only gated on nav focus (above) never stopped the camera/GPU pose
+  // inference when the app itself backgrounds while this screen stays focused --
+  // vision-camera drives its capture session purely off the isActive prop, not
+  // the host Activity lifecycle. Privacy- and battery-relevant since this reads
+  // live camera frames.
+  const [isAppActive, setIsAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      setIsAppActive(state === 'active');
+    });
+    return () => sub.remove();
+  }, []);
   const lastSpokenSpeechRef = React.useRef<string>('');
   const isSpeechThrottledRef = React.useRef<boolean>(false);
   const speechTimeoutRef = React.useRef<any>(null);
@@ -831,6 +882,25 @@ export default function ARTryOnScreen() {
             --poster-color: transparent;
             background-color: transparent;
           }
+          #controls-bar {
+            position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; z-index: 2;
+          }
+          #controls-bar button {
+            background: rgba(0,0,0,0.55); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px; padding: 8px 14px; font-size: 13px;
+          }
+          #hint {
+            position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+            color: rgba(255,255,255,0.7); font-size: 12px; z-index: 2;
+          }
+          #error-state {
+            display: none; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); width: 80%; text-align: center;
+            color: #fff; font-size: 15px; line-height: 1.5; z-index: 3;
+          }
+          #error-state span { font-size: 32px; display: block; margin-bottom: 8px; }
+          #error-state.visible { display: block; }
         </style>
         <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
       </head>
@@ -1040,7 +1110,7 @@ export default function ARTryOnScreen() {
               style={styles.camera}
               device={device}
               format={format}
-              isActive={mode === '2d' && isFocused}
+              isActive={mode === '2d' && isFocused && isAppActive}
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
               onLayout={poseDetection.cameraViewLayoutChangeHandler}
@@ -1059,11 +1129,18 @@ export default function ARTryOnScreen() {
           {garmentMetadata && (
             <GarmentRenderer
               ref={garmentRendererRef}
-              modelUrl={modelUrl}
+              modelUrl={validatedUrl}
               metadata={garmentMetadata}
               fitModifier={fitModifier}
               cameraCalibration={cameraCalibration}
+              onLoadError={setArLoadError}
             />
+          )}
+
+          {arLoadError && (
+            <View style={styles.arLoadErrorBanner} pointerEvents="none">
+              <Text style={styles.arLoadErrorText}>Garment failed to load. Try again shortly.</Text>
+            </View>
           )}
 
           <View style={styles.overlayContainer} pointerEvents="box-none">
@@ -1122,6 +1199,22 @@ export default function ARTryOnScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  arLoadErrorBanner: {
+    position: 'absolute',
+    top: 100,
+    left: 16,
+    right: 16,
+    zIndex: 40,
+    backgroundColor: 'rgba(153,27,27,0.92)',
+    borderRadius: 10,
+    padding: Spacing.sm,
+    alignItems: 'center',
+  },
+  arLoadErrorText: {
+    color: '#fff',
+    fontSize: 13,
+    textAlign: 'center',
   },
   fitPanel: {
     position: 'absolute',
