@@ -57,10 +57,18 @@ export interface GarmentRendererProps {
     videoHeightPx: number;
     wearerShoulderWidthM: number;
   };
+  /**
+   * Fired when the scene fails to load or render -- a GLB fetch/parse failure,
+   * or an uncaught error/rejection inside the WebView/iframe's own JS. Previously
+   * these only reached the WebView's own console (relayed to Metro via the
+   * temporary debug channel), leaving the user on a bare camera feed with zero
+   * indication anything went wrong.
+   */
+  onLoadError?: (message: string) => void;
 }
 
 export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererProps>(
-  ({ modelUrl, metadata, fitModifier = 1, cameraCalibration }, ref) => {
+  ({ modelUrl, metadata, fitModifier = 1, cameraCalibration, onLoadError }, ref) => {
     const safeFitModifier = Number.isFinite(fitModifier) && fitModifier > 0 ? fitModifier : 1;
     // metadata.restPoseMetricWidth used to be spliced into the injected script as a bare
     // JS expression with no validation at all -- a malformed DB value (string, object,
@@ -130,11 +138,24 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           function showDebug(msg) {
             console.log('[AR-STATUS] ' + msg);
           }
+          // Surfaces a scene failure to the outer React screen instead of leaving it
+          // console-only -- see GarmentRendererProps.onLoadError.
+          function notifyLoadError(message) {
+            var payload = { type: 'AR_LOAD_ERROR', message: message };
+            if (window.ReactNativeWebView) {
+              try { window.ReactNativeWebView.postMessage(JSON.stringify(payload)); } catch (e) {}
+            } else if (window.parent && window.parent !== window) {
+              try { window.parent.postMessage(payload, '*'); } catch (e) {}
+            }
+          }
           window.addEventListener('error', function(e) {
             showDebug('window.onerror: ' + e.message);
+            notifyLoadError(e.message);
           });
           window.addEventListener('unhandledrejection', function(e) {
-            showDebug('unhandledrejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+            var msg = e.reason && e.reason.message ? e.reason.message : e.reason;
+            showDebug('unhandledrejection: ' + msg);
+            notifyLoadError(String(msg));
           });
 
           let scene, camera, renderer, garmentModel, garmentGroup;
@@ -170,13 +191,48 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // together). 1 matches this file's own default silhouette-match behavior.
           let FIT_MODIFIER = 1;
 
+          // Fix for open item #1 in the AR audit plan: landmarks are normalized to the
+          // camera FRAME, but the preview renders that frame with 'cover' cropping (web
+          // <video> objectFit:'cover', native vision-camera's default resizeMode:'cover')
+          // -- center-cropping whichever axis doesn't match the container's aspect ratio.
+          // unprojectToZ0 used to map landmark [0,1] coords straight to viewport NDC (a
+          // "stretch to fill" mapping) against a preview that actually does "crop to
+          // fill", so on-screen garment position drifted from the tracked body whenever
+          // container and video aspect ratios differed. Also sets camera.aspect from the
+          // real video aspect (not window.innerWidth/innerHeight) so the calibrated
+          // horizontal FOV derived from verticalFovDeg is actually correct.
+          // NOT verified on a physical device -- see docs/ar-tryon-audit-implementation-plan.md.
+          function getCameraAspect() {
+            if (CAMERA_CALIBRATION && CAMERA_CALIBRATION.videoWidthPx && CAMERA_CALIBRATION.videoHeightPx) {
+              return CAMERA_CALIBRATION.videoWidthPx / CAMERA_CALIBRATION.videoHeightPx;
+            }
+            return window.innerWidth / window.innerHeight;
+          }
+
+          // Remaps a landmark normalized against the FULL video frame into normalized
+          // coordinates within the visible 'cover'-cropped region, so it lines up with
+          // what 'stretch to fill' NDC mapping (unprojectToZ0) assumes.
+          function mapCoverCrop(nx, ny) {
+            if (!CAMERA_CALIBRATION || !CAMERA_CALIBRATION.videoWidthPx || !CAMERA_CALIBRATION.videoHeightPx) {
+              return { nx: nx, ny: ny };
+            }
+            const videoAspect = CAMERA_CALIBRATION.videoWidthPx / CAMERA_CALIBRATION.videoHeightPx;
+            const containerAspect = window.innerWidth / window.innerHeight;
+            const visW = Math.min(1, containerAspect / videoAspect);
+            const visH = Math.min(1, videoAspect / containerAspect);
+            return {
+              nx: (nx - (1 - visW) / 2) / visW,
+              ny: (ny - (1 - visH) / 2) / visH,
+            };
+          }
+
           function init() {
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
 
             camera = new THREE.PerspectiveCamera(
               CAMERA_CALIBRATION ? CAMERA_CALIBRATION.verticalFovDeg : 45,
-              window.innerWidth / window.innerHeight,
+              getCameraAspect(),
               0.1, 1000
             );
             camera.position.z = 5; // real distance is computed and set every frame once CAMERA_CALIBRATION is present
@@ -310,8 +366,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             garmentGroup = new THREE.Group();
             scene.add(garmentGroup);
             const loader = new THREE.GLTFLoader();
-            showDebug('Loading GLB: ${modelUrl}');
-            loader.load('${modelUrl}', (gltf) => {
+            showDebug('Loading GLB: ' + ${safeStringify(modelUrl)});
+            loader.load(${safeStringify(modelUrl)}, (gltf) => {
               showDebug('GLB loaded OK');
               garmentModel = gltf.scene;
 
@@ -452,8 +508,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 + ' | boneMap in use: ' + JSON.stringify(${metadata && metadata.boneMap ? safeStringify(metadata.boneMap) : 'null'}));
 
             }, undefined, (error) => {
+              var msg = error && error.message ? error.message : JSON.stringify(error);
               console.error('[AR] GLB load failed', error);
-              showDebug('GLB load FAILED: ' + (error && error.message ? error.message : JSON.stringify(error)));
+              showDebug('GLB load FAILED: ' + msg);
+              notifyLoadError('GLB load failed: ' + msg);
             });
 
             window.addEventListener('resize', onWindowResize);
@@ -461,18 +519,15 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           }
 
           function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.aspect = getCameraAspect();
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
           }
 
           function animate() {
             requestAnimationFrame(animate);
-            if (occlusionMaterial && camera) {
-              const proj = camera.projectionMatrix.clone();
-              const view = camera.matrixWorldInverse.clone();
-              occlusionMaterial.uniforms.uViewProj.value.multiplyMatrices(proj, view);
-            }
+            // occlusionMesh is not added to the scene (see scene.add(occlusionMesh) above,
+            // commented out pending Phase 4) -- uViewProj has no consumer, don't compute it.
             renderer.render(scene, camera);
           }
 
@@ -483,6 +538,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 CAMERA_CALIBRATION = data.calibration || null;
                 if (camera && CAMERA_CALIBRATION) {
                   camera.fov = CAMERA_CALIBRATION.verticalFovDeg;
+                  camera.aspect = getCameraAspect();
                   // camera.position.z stays at its init-time bootstrap value (5, the old
                   // uncalibrated scene-unit convention) until a triangulation frame passes
                   // the frontality/plausible-range guards in the UPDATE_TRANSFORM handler
@@ -596,11 +652,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     // 1. Position at midpoint of shoulders
                     const midX = (l11.x + l12.x) / 2;
                     const midY = (l11.y + l12.y) / 2;
-                    const targetPos = unprojectToZ0(midX, midY);
-                    
+                    const midCrop = mapCoverCrop(midX, midY);
+                    const targetPos = unprojectToZ0(midCrop.nx, midCrop.ny);
+
                     // 2. Exact scale based on Three.js world distance
-                    const targetL = unprojectToZ0(l11.x, l11.y);
-                    const targetR = unprojectToZ0(l12.x, l12.y);
+                    const lCrop = mapCoverCrop(l11.x, l11.y);
+                    const rCrop = mapCoverCrop(l12.x, l12.y);
+                    const targetL = unprojectToZ0(lCrop.nx, lCrop.ny);
+                    const targetR = unprojectToZ0(rCrop.nx, rCrop.ny);
                     
                     if (targetPos && targetL && targetR) {
                       // Phase B, reverted: tried using MediaPipe's worldLandmarks (real
@@ -622,7 +681,26 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // measurement), FOV=45/z=5 and this remains exactly the prior
                       // self-consistent-but-arbitrary behavior. Phase B2's fit modifier is
                       // unaffected either way -- it never depended on this.
-                      const targetWorldWidth = targetL.distanceTo(targetR);
+                      // Fix for open item #2 in the AR audit plan: targetWorldWidth (the
+                      // on-screen shoulder separation unprojected onto z=0) already shrinks
+                      // by cos(yaw) as the wearer turns. exactScale was then applied to
+                      // garmentGroup, whose quaternion (rot, the full torso orientation)
+                      // foreshortens the garment's own shoulder line by cos(yaw) a SECOND
+                      // time -- the garment rendered progressively too narrow while turning,
+                      // worse than either correction alone. Normalize the measured width back
+                      // out by the same cos(yaw) so the foreshortening is applied exactly
+                      // once, via the 3D rotation itself. Same 0.65 floor convention as
+                      // garmentFitter's 2D-path correctedShoulderWidthPx, for consistency.
+                      // NOT verified on a physical device -- see the AR audit plan doc.
+                      let yawCosCorrection = 1;
+                      const rotValidForYaw = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w);
+                      if (rotValidForYaw) {
+                        const yawEuler = new THREE.Euler().setFromQuaternion(
+                          new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w), 'YXZ'
+                        );
+                        yawCosCorrection = Math.max(0.65, Math.abs(Math.cos(yawEuler.y)));
+                      }
+                      const targetWorldWidth = targetL.distanceTo(targetR) / yawCosCorrection;
 
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
                       // measured bounding-box width only when no calibration exists at all.
@@ -871,6 +949,19 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       sendFitModifier();
     }, [sendCameraCalibration, sendFitModifier]);
 
+    // Web has no ReactNativeWebView bridge -- the iframe posts AR_LOAD_ERROR to
+    // window.parent directly (see notifyLoadError in the injected script).
+    useEffect(() => {
+      if (Platform.OS !== 'web' || !onLoadError) return;
+      const handler = (event: MessageEvent) => {
+        if (event.source !== iframeRef.current?.contentWindow) return;
+        const data = event.data;
+        if (data && data.type === 'AR_LOAD_ERROR') onLoadError(String(data.message));
+      };
+      window.addEventListener('message', handler);
+      return () => window.removeEventListener('message', handler);
+    }, [onLoadError]);
+
     useImperativeHandle(ref, () => ({
       updateTransform: (position, rotation, scale, boneRotations, segmentation, normalizedLandmarks, worldLandmarks) => {
         const payload = {
@@ -955,7 +1046,17 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             // reliable channel while Phase 3 calibration is being verified live.
             // Remove once that verification is done.
             onMessage={(event) => {
-              console.log('[WEBVIEW-RELAY] ' + event.nativeEvent.data);
+              const raw = event.nativeEvent.data;
+              try {
+                const data = JSON.parse(raw);
+                if (data && data.type === 'AR_LOAD_ERROR') {
+                  onLoadError?.(String(data.message));
+                  return;
+                }
+              } catch {
+                // Not JSON -- a plain [LOG]/[WARN] console relay line, fall through.
+              }
+              console.log('[WEBVIEW-RELAY] ' + raw);
             }}
           />
         )}
