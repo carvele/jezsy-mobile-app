@@ -18,19 +18,21 @@ raw finding. 39 raw findings → 27 confirmed, 4 refuted as not real or not reac
 | | Count |
 |---|---|
 | Confirmed findings | 27 |
-| Fixed and merged to `main` today | 6 |
-| Still open | 21 |
-| Critical (open) | 1 |
-| High (open) | 10 |
-| Medium (open) | 8 |
-| Low (open) | 2 |
+| Fixed and merged to `main` (2026-09-01, PR #179 batch) | 6 |
+| Fixed, local commits on `main`, not yet pushed (2026-09-01, session 2) | 17 |
+| Still open | 4 |
+| Critical (open) | 0 |
+| High (open) | 2 |
+| Medium (open) | 1 |
+| Low (open) | 1 |
 
-None of today's fixes have been verified on a physical device yet — the branch
-they shipped on (`feat/phase3-real-camera-calibration`) was merged specifically so
-a co-dev's device could pick it up from `main` and verify, since the device this
-session had access to dropped its USB connection. **Do not treat anything below as
-"working" — only as "reasoned through and merged."** Device verification is the
-next real gate, independent of this plan.
+**None of the fixes below have been verified on a physical device yet.** The
+device this session had access to dropped its USB connection; session 2's
+fixes are 5 local commits on `main`, not yet pushed. **Do not treat anything
+in this document as "working" — only as "reasoned through and merged."**
+Device verification is the next real gate, independent of this plan. See
+`docs/CURRENT_AR_STATE.md` for the current authoritative state (commit list,
+DB contract, latest test results) — this file is the historical audit record.
 
 ---
 
@@ -108,85 +110,143 @@ found and fixed the same session).
 
 ---
 
-## Open — Critical
+## Fixed (session 2, 2026-09-01 — local commits on `main`, not yet pushed)
 
-### 1. `unprojectToZ0` assumes viewport-normalized landmarks; camera preview uses `cover` cropping
-**`src/components/AR/GarmentRenderer.tsx:498`**
+Findings #1–#4, #6–#13, #15, #18, #19–#21 below were fixed following this
+plan's own "Recommended approach" per finding. **Not verified on a physical
+device** — see the status table above. Commit references are on local `main`.
 
-Landmarks are normalized to the *camera frame*, but the preview renders that frame
-with `cover` cropping (web `<video>` `objectFit: 'cover'`, native vision-camera's
-default `resizeMode: 'cover'`) — center-cropping whichever axis doesn't match the
-container's aspect ratio. `unprojectToZ0` maps landmark `[0,1]` coordinates
-straight to viewport NDC, i.e. a "stretch to fill" mapping, against a preview that
-actually does "crop to fill." Whenever the container aspect ratio differs from the
-video's own aspect ratio, on-screen garment position is offset from where the
-tracked body actually is. When calibrated, this is also internally inconsistent:
-`camera.fov` is the frame's real vertical FOV, but the *horizontal* FOV comes from
-the WebView's own aspect ratio rather than `videoWidthPx`/`videoHeightPx`.
+### 1 (was Critical). `unprojectToZ0` cover-crop mismatch
+**`src/components/AR/GarmentRenderer.tsx`** — commit `f73034f`
 
-**Why not fixed today:** this is foundational camera-projection math, not a
-localized bug. A rushed fix without device feedback risks trading one systematic
-misalignment for another — exactly the mistake this session already spent real
-time recovering from once (the diagonal-vs-horizontal FOV assumption). Needs a
-live device to verify any fix actually converges.
+Fixed via `getCameraAspect()`/`mapCoverCrop()`: derives the visible crop region
+from `videoWidthPx`/`videoHeightPx` vs. window aspect, remaps landmarks into it
+before `unprojectToZ0`, and sets `camera.aspect` from the real video aspect.
+Exactly the approach this plan recommended. **Needs a physical reference
+object at a known distance to confirm convergence** — this was the plan's
+highest-risk deferred item; treat as unverified until tested.
 
-**Recommended approach:** derive the effective visible crop region from
-`videoWidthPx`/`videoHeightPx` vs. the WebView's own aspect ratio, remap landmark
-`nx, ny` into that visible region's own normalized space before feeding
-`unprojectToZ0`, and set `camera.aspect` from the *video's* aspect ratio (not
-`window.innerWidth/innerHeight`) so the calibrated horizontal FOV is actually
-correct. Verify with a physical reference object at a known distance before/after.
+### 2 (was High). `exactScale` double-corrects for torso yaw
+**`src/components/AR/GarmentRenderer.tsx`** — commit `f73034f`
+
+Fixed by normalizing `targetWorldWidth` back out by `cos(yaw)` (derived from
+the `rot` quaternion passed into `UPDATE_TRANSFORM`, same 0.65 floor
+convention as `garmentFitter`'s 2D path) before computing `exactScale`, so
+foreshortening applies once (via the 3D rotation) instead of twice. Unverified
+on device — recommended to test together with #1 since they compound.
+
+### 3 (was High). `rollRad` Y-down/Y-up sign mismatch
+**`src/utils/garmentFitter.ts`** — commit `5f58cb3`
+
+Fixed by negating `rollRad` at the Y-down → Y-up handoff, named explicitly as
+`CANONICAL_Y_UP_ROLL_SIGN`, applied only to the 3D fallback quaternion
+(`rollQuat3D`) — the 2D legacy overlay's `rollQuat` is untouched since it wants
+the original Y-down convention. Unverified against a real turned-torso pose.
+
+### 4 (was High). Missing `presence` fallback in `normalizePose`
+**`src/utils/poseNormalizer.ts`** — commit `5f58cb3`
+
+Fixed: `p.visibility ?? (p as any).presence ?? 0`, matching the fallback the
+other two call sites already used.
+
+### 6 (was High). Roll double-counted on arm bones, invalid torso
+**`src/utils/skeletalRetargeter.ts`** — commit `5f58cb3`
+
+Fixed by giving `calculateBoneRotationsFromCanonical` an optional
+`fallbackRollRad` parameter: when torso is invalid, it builds the same
+roll-only fallback quaternion `garmentFitter` applies at the group level and
+uses it (via `toTorsoLocal`) to cancel that roll out of arm-direction vectors,
+so group and bones agree on a single owner instead of each assuming the other
+isn't applying it. Call site (`[id].tsx`) passes `pose.orientation.rollRad`.
+Unverified — same invalid-torso trigger as #3, recommended to test together.
+
+### 7 (was High). AR size recommendation ran category-blind
+**`app/ar-tryon/[id].tsx`** — commit `fe36506`
+
+Fixed: `recommendSize(...)` now passes `product?.category` as the 4th arg,
+matching the sibling `app/product/[id].tsx` call site.
+
+### 8 (was High). GLB load failure had no user-visible signal
+**`src/components/AR/GarmentRenderer.tsx`** — commit `f73034f`
+
+Fixed together with #11 via a shared `notifyLoadError()` → `postMessage`
+bridge (native `ReactNativeWebView.postMessage`, web `window.parent.postMessage`)
+and a new `onLoadError` prop, wired to a visible banner in `[id].tsx` (commit
+`fe36506`).
+
+### 9 (was High). 3D Studio error banner unstyled
+**`app/ar-tryon/[id].tsx`** — commit `fe36506`
+
+Fixed: added the missing `#error-state`/`.visible`/`#controls-bar`/`#hint` CSS
+rules to the 3D Studio WebView's `<style>` block.
+
+### 10 (was High). `modelUrl` double-escaping mismatch
+**`src/components/AR/GarmentRenderer.tsx`** / **`app/ar-tryon/[id].tsx`** — commits `f73034f`, `fe36506`
+
+Fixed: `GarmentRenderer` now receives the raw (unescaped) URL from `[id].tsx`
+and applies its own JS-string-literal-safe escaping via the existing
+`safeStringify()` helper, instead of reusing the HTML-attribute-escaped string
+built for the separate 3D Studio `model-viewer` `src="..."` use.
+
+### 11 (was Medium). Scene failures never reached React
+**`src/components/AR/GarmentRenderer.tsx`** — commit `f73034f`
+
+Fixed together with #8 — see above. `window.onerror`/`unhandledrejection`
+handlers now also call `notifyLoadError()`.
+
+### 12 (was Medium). Total pose-tracking loss never cleared state
+**`app/ar-tryon/[id].tsx`** — commit `fe36506`
+
+Fixed: the native zero-landmark early-return now runs the same debounced-loss
+hysteresis `handlePoseResults`' own else-branch already applies (decay
+position/scale/rotation, clear `isTrackerActive`), instead of freezing state
+indefinitely.
+
+### 13 (was Medium, privacy/battery-priority). Camera/GPU not stopped on background
+**`app/ar-tryon/[id].tsx`** — commit `fe36506`
+
+Fixed: `<Camera isActive>` now also gates on `AppState` (`isAppActive`), not
+just navigation focus. Not audited for whether the MediaPipe detector session
+itself also needs an explicit stop/release call — flagged in
+`docs/CURRENT_AR_STATE.md`.
+
+### 15 (was Medium). `usePoseDetection` return identity churned every render
+**`app/ar-tryon/[id].tsx`** — commit `fe36506`
+
+Fixed: `onResults`/`onError` extracted to `useCallback`s
+(`onNativePoseResults`/`onNativePoseError`), combined via a `useMemo`'d
+`poseDetectionCallbacks` object, exactly the "memoize the callbacks object"
+approach this plan recommended.
+
+### 18 (was Medium). `ingestionStatus` never checked before rendering
+**`app/ar-tryon/[id].tsx`** — commit `fe36506`
+
+Fixed: the screen now gates real rendering on
+`ingestion_status === 'AR_READY'`, falling back to demo-rig metadata for
+anything else. Also added the missing `'NEEDS_CALIBRATION'` value to this
+repo's `IngestionStatus` type (`src/types/garment.ts`, commit `5f58cb3`),
+which admin-dashboard's ingestor already wrote but this repo's type lacked.
+
+### 19 (was Low). `useSizingProfile` cancellation flag never read
+**`src/hooks/useSizingProfile.ts`** — commit `e184025`
+
+Fixed: cancellation tracked via a ref (`cancelledRef`) instead of a closed-over
+local, checked before every state-setting point in `load()`.
+
+### 20 (was Low). Dead per-frame `Matrix4` allocation
+**`src/components/AR/GarmentRenderer.tsx`** — commit `f73034f`
+
+Fixed: removed — `occlusionMesh` is never added to the scene, so the
+`uViewProj` computation had no consumer.
+
+### 21 (was Low). Missing migration rollback file
+**`supabase/migrations/20260827081008_add_garment_metadata_to_products.rollback.sql`** — commit `b754147`
+
+Fixed: added, drops the `garment_metadata` column.
 
 ---
 
 ## Open — High
-
-### 2. `exactScale` double-corrects for torso yaw
-**`src/components/AR/GarmentRenderer.tsx:559`**
-
-`targetWorldWidth` is the on-screen shoulder separation unprojected onto the
-`z=0` plane — it already shrinks by `cos(yaw)` when the wearer turns.
-`exactScale = targetWorldWidth / garmentMetricWidth` is then applied to
-`garmentGroup`, whose quaternion is the *full* torso orientation, which
-foreshortens the garment's own shoulder line by `cos(yaw)` a second time. Net
-effect: the garment renders progressively too narrow as the wearer turns away
-from the camera, worse than either correction alone would produce.
-
-**Recommended approach:** either normalize `targetWorldWidth` by `cos(yaw)`
-before computing `exactScale` (so scale reflects the true, un-foreshortened
-width), or drop the yaw component from what's applied to `garmentGroup`'s
-rotation and let the projected width alone carry the foreshortening. Requires
-the same live-verification caution as #1 — deferred for the same reason.
-
-### 3. `rollRad` computed in MediaPipe Y-down space, consumed as canonical Y-up
-**`src/utils/poseConstructor.ts:46`**
-
-`poseConstructor` derives `rollRad` directly from the raw MediaPipe frame
-(Y-down image coordinates), but `garmentFitter` turns that same angle into a
-rotation about canonical +Z (Y-up) and feeds it to `GarmentRenderer` as
-`orientation3D`. The two conventions differ by an exact sign flip — the garment
-rolls the wrong direction specifically whenever the torso basis is invalid and
-this fallback path is exercised (see also #10 below, same invalid-torso trigger).
-
-**Recommended approach:** negate `rollRad` at the point it crosses from
-MediaPipe's Y-down frame into canonical Y-up space, or make the sign convention
-explicit with a named constant so the next person touching this code doesn't
-reintroduce the same mixup. Should be a small, well-contained fix — a good
-candidate for the next work session, verified against a real turned-torso pose.
-
-### 4. Native world landmarks silently dropped by `normalizePose`'s visibility gate
-**`src/utils/poseNormalizer.ts:231`**
-
-`normalizePose` gates each joint on `p.visibility ?? 0` against
-`MIN_JOINT_VISIBILITY`. The AR screen hands it native world landmarks whose
-`visibility` key the native bridge omits whenever MediaPipe's internal Optional
-is empty — exactly the case the *other* two call sites already defend against
-with `?? presence ?? 0`. This one doesn't, so a joint MediaPipe is actually
-tracking (via `presence`) can be silently treated as invisible and discarded.
-
-**Recommended approach:** apply the same `?? presence ?? 0` fallback already
-used elsewhere in this file. Small, mechanical, low-risk — good candidate to
-batch with #3.
 
 ### 5. Body-ratio measurements inflated ~14% by a scale-convention mismatch
 **`src/utils/poseDetector.ts:282`**
@@ -204,104 +264,9 @@ in the reference data used to build the ratios, or apply a correction factor
 for the head+foot delta. Needs real anthropometric reasoning, not a guess —
 flag for whoever owns the body-scan measurement math.
 
-### 6. Roll rotation double-counted on arm bones when torso basis is invalid
-**`src/utils/skeletalRetargeter.ts:109`**
-
-When `canonicalPose.torso.valid` is false (hips out of frame or low visibility —
-common at try-on framing distance), `garmentFitter` rotates the whole garment
-group by the shoulder-derived roll quaternion, but `skeletalRetargeter`'s
-`localDir()`/`toTorsoLocal()` silently stops removing that same rotation from
-arm-direction vectors. The roll ends up baked into both the parent group and the
-child bone — compounding, not just duplicating.
-
-**Recommended approach:** the invalid-torso fallback path needs a single,
-explicit decision about who owns roll correction (group or bones), not two
-independent code paths that each assume the other isn't also applying it. Same
-root trigger as #3 (invalid torso basis) — worth investigating together.
-
-### 7. AR try-on size recommendation runs category-blind
-**`app/ar-tryon/[id].tsx:357`**
-
-`recommendSize(sizingMeasurements, product.measurements as any, fitPreference)`
-omits the 4th `category` argument that the sibling call site in
-`app/product/[id].tsx` passes. Every AR try-on size recommendation silently runs
-with `category=''`, disabling whatever shoulder/inseam matching logic branches
-on garment category.
-
-**Recommended approach:** pass `product.category` (or whatever field the
-`product/[id].tsx` call site uses) through. Small, mechanical, should be one of
-the first things fixed next session — real user-facing correctness bug with an
-obvious, low-risk fix.
-
-### 8. GLB load failure has no user-visible signal
-**`src/components/AR/GarmentRenderer.tsx:410`**
-
-`GLTFLoader`'s error callback only logs to the WebView's own console (relayed to
-Metro via the temporary debug channel) — no prop, message type, or any other
-channel back to React Native. A garment that fails to load leaves the user
-staring at a bare camera feed with zero indication anything went wrong.
-
-**Recommended approach:** add a `SET_LOAD_ERROR`-style message (mirroring the
-`SET_CAMERA_CALIBRATION`/`SET_FIT_MODIFIER` pattern already in place) and surface
-a real error state in the React screen — a toast or inline banner, not silence.
-
-### 9. 3D Studio mode's error banner is unstyled and effectively invisible
-**`app/ar-tryon/[id].tsx:846`**
-
-The 3D Studio WebView's `<style>` block defines no rules for `#error-state`,
-`.visible`, `#controls-bar`, or `#hint`. When `model-viewer`'s error handler
-fires and adds the `visible` class, nothing makes the fallback message legible —
-default-black text with no background/positioning against a near-black page.
-
-**Recommended approach:** add the missing CSS rules. Cosmetic but real — a user
-hitting this path currently sees nothing at all.
-
-### 10. `modelUrl` escaped for an HTML attribute, consumed inside a JS string literal
-**`src/components/AR/GarmentRenderer.tsx:285`**
-
-`[id].tsx` applies `escapeAttr` to `modelUrl` for its own `model-viewer`
-`src="..."` attribute use, and passes that *same escaped string* to
-`GarmentRenderer`, which drops it into a single-quoted JS string inside
-`<script>` — a context where HTML character references (`&amp;`, `&#39;`, etc.)
-are not decoded. If `modelUrl` contains a character `escapeAttr` encodes, the
-literal encoded text (not the real character) ends up in the GLB fetch URL.
-
-**Recommended approach:** `GarmentRenderer` should receive the raw URL and apply
-its own JS-string-literal-safe escaping (or `safeStringify()`, already added
-today for the `boneMap`/`anchorOffset` fix), independent of whatever escaping the
-caller applied for its own, different context.
-
 ---
 
 ## Open — Medium
-
-### 11. Scene failures never reach React
-**`src/components/AR/GarmentRenderer.tsx:865`**
-
-The WebView→React channel exists but currently only `console.log`s. GLB load
-failure, CDN failure, and uncaught `init()` errors all leave the user on a live
-camera feed with no garment and no error UI — the "AI Body Tracking Active" pill
-still shows green. Same underlying gap as #8/#9 above; worth fixing together as
-one pass on error surfacing.
-
-### 12. Total pose-tracking loss never clears tracking state
-**`app/ar-tryon/[id].tsx:554`**
-
-When the pose detector returns zero landmarks (person leaves frame, camera
-covered, poor lighting), `handlePoseResults` is never invoked on either
-platform, so `isTrackerActive` and the garment's position/scale/rotation
-`SharedValue`s freeze at their last value indefinitely instead of reflecting
-that tracking has actually stopped.
-
-### 13. Camera/GPU inference not stopped when the app backgrounds
-**`app/ar-tryon/[id].tsx:1028`**
-
-`isActive` is gated only on navigation focus (`useFocusEffect`), never on app
-foreground state. `react-native-vision-camera` drives its capture session purely
-from the `isActive` prop, not the host Activity lifecycle — backgrounding the
-app while this screen is focused likely keeps the camera and GPU pose inference
-running. Battery and (given this reads camera frames) privacy-relevant; worth
-prioritizing above other medium items for that reason.
 
 ### 14. Pose-match state (`isMatched`, `matchScore`, `matchFeedback`) never written
 **`app/ar-tryon/[id].tsx:239`**
@@ -312,19 +277,6 @@ called anywhere in the file. `isMatched` is permanently `false`,
 effect gated on them is dead code. Either this is a real, unfinished feature
 (finish it) or genuinely dead (remove the state and whatever renders off it).
 Needs a decision, not just a fix.
-
-### 15. `usePoseDetection`'s return identity churns every render
-**`app/ar-tryon/[id].tsx:641`**
-
-`onResults`/`onError` are inline literals recreated every render; the library
-chains them through several layers of `useMemo`/`useCallback` that all
-transitively depend on that fresh identity, so `poseDetection` (and therefore
-the `[device, poseDetection]` effect dependency) never stabilizes. Same class of
-issue an earlier, narrower review already flagged as a low-severity nit for the
-`cameraDeviceChangeHandler` effect specifically — this is the same root cause,
-described at the source. Bounded impact (extra calls to idempotent setters), but
-worth fixing at the root (memoize the callbacks object) rather than patching
-each downstream symptom separately.
 
 ### 16. Web pose path never smooths `worldLandmarks`; native does
 **`app/ar-tryon/[id].tsx:132`**
@@ -347,74 +299,27 @@ exceeds `arccos(0.65)` (~49°), the corrected width keeps shrinking with further
 yaw instead of holding steady at the clamped value. Nothing degrades the overlay
 to hide this from the user.
 
-### 18. `ingestionStatus` captured but never checked before treating a garment as ready
-**`app/ar-tryon/[id].tsx:296`**
-
-The AR screen branches only on `if (product.garment_metadata)` truthiness and
-never inspects the mapped `ingestionStatus` field before using
-`boneMap`/`anchorOffset`/`restPoseMetricWidth` for a real render — including
-whatever `'NEEDS_CALIBRATION'` status this session's earlier admin-dashboard work
-added specifically to flag incomplete ingestion.
-
 ---
 
-## Open — Low
+## Remaining sequencing
 
-### 19. `useSizingProfile`'s cancellation flag is set but never read
-**`src/hooks/useSizingProfile.ts:76`**
+Everything device-independent or mechanical is done (Phases A–D from the
+original plan). What's left all needs a product/measurement/numerical
+decision, not just a code fix:
 
-The effect's cleanup sets `cancelled = true`, but `load()` never checks it
-before calling its setters — an in-flight Supabase load always commits its
-result, including after unmount or after a newer load has already superseded it.
+- **#5** (body-ratio scale convention) — needs real anthropometric reasoning;
+  flag for whoever owns the body-scan measurement math.
+- **#14** (finish or remove pose-match feature) — needs a product decision.
+- **#17** (`cosYaw` saturation) — the literal "hold steady" fix needs either
+  cross-frame state or a different numerical model; not attempted.
+- **#16** (web smoothing parity) — deliberately deferred, native-only scope
+  decision stands.
 
-### 20. Wasted per-frame `Matrix4` allocation for an occlusion uniform that's never rendered
-**`src/components/AR/GarmentRenderer.tsx:428`**
-
-The render loop clones two `THREE.Matrix4` objects every frame to feed
-`occlusionMaterial.uniforms.uViewProj`, but `occlusionMesh` (the only consumer)
-is never added to the scene (`scene.add(occlusionMesh)` is commented out) — this
-allocation and matrix multiply runs for the component's entire lifetime with no
-rendering effect. Trivial to delete once occlusion (Phase 4) is either
-implemented for real or the dead scaffolding is removed.
-
-### 21. `garment_metadata` migration has no matching rollback file
-**`supabase/migrations/20260827081008_add_garment_metadata_to_products.sql`**
-
-Every sibling migration in the same window ships a matching `.rollback.sql`;
-this one doesn't — a direct gap against this repo's own documented migration
-convention. Cheapest fix in this entire list; should be done first regardless of
-anything else in this plan.
-
----
-
-## Recommended sequencing
-
-This is a lot of surface area for one pass. Suggested phasing for whoever picks
-this up next:
-
-**Phase A — cheap, safe, mechanical (no device needed, do anytime):**
-#21 (missing rollback file), #7 (missing category arg), #4 (visibility fallback),
-#9 (unstyled error banner), #19 (unused cancellation flag), #20 (dead occlusion
-allocation).
-
-**Phase B — device-verification-gated correctness (the actual next session):**
-#1 and #2 first (the two deepest geometry bugs — they compound with each other
-and with everything already shipped today, so verifying them together against a
-real device is more efficient than one at a time), then #3 and #6 (the two
-roll/yaw sign-and-double-count bugs, same invalid-torso trigger, worth
-investigating as one pair).
-
-**Phase C — error surfacing (one coherent pass, not device-dependent to build,
-device-dependent to verify):**
-#8, #10 (this plan's #10), #11 — all "failure happens silently" gaps in the same
-WebView→React channel; naturally one PR.
-
-**Phase D — lifecycle/resource hygiene:**
-#12, #13 (privacy/battery — do this one specifically before any wider rollout),
-#15.
-
-**Phase E — needs a product/measurement-science decision, not just code:**
-#5 (body-ratio scale convention), #14 (finish or remove pose-match feature).
+Independent of all of the above: **get physical device access and verify**
+everything in the "Fixed (session 2)" section above, starting with #1/#2
+together (they compound), then #3/#6 together (same invalid-torso trigger).
+This is the real next gate — see `docs/CURRENT_AR_STATE.md` for the full
+current-state summary and exact next steps.
 
 **Deferred, not in this plan:** removing the temporary debug instrumentation
 (`[CAL-DEBUG]`, `[WEBVIEW-RELAY]` console relay, `showDebug()` calls) — still
