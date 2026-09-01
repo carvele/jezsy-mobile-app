@@ -21,9 +21,9 @@ raw finding. 39 raw findings → 27 confirmed, 4 refuted as not real or not reac
 | Fixed and merged to `main` (2026-09-01, PR #179 batch) | 6 |
 | Fixed, local commits on `main`, not yet pushed (2026-09-01, session 2) | 17 |
 | Still open from original audit | 4 |
-| New findings from device verification (2026-09-01, session 3) | 4 |
+| New findings from device verification (2026-09-01, session 3) | 5 (#22-#26) |
 | Fixed via JS-side compensation, confirmed live (2026-09-02, session 4) | 2 |
-| Still open | 2 |
+| Still open | 3 |
 | Medium (open) | 2 |
 | High (open) | 2 |
 | Low (open) | 1 |
@@ -39,9 +39,19 @@ downgraded to Medium) — `poseNormalizer.ts` remains fully correct and
 untouched. **Do not treat this as "the AR feature now works" broadly** — it
 is confirmed working on exactly one physical device (Infinix X6880); the
 compensation's guard is designed to no-op on a device that doesn't have this
-bug, but that has not itself been verified on a second device. See
-`docs/CURRENT_AR_STATE.md` for the current authoritative state — this file
-is the historical audit record.
+bug, but that has not itself been verified on a second device.
+
+**Follow-up A/B confirmation, same night:** re-tested with the Black tee
+(sane calibration data) immediately after the Cotton T-Shirt (broken
+calibration, #25's sibling finding #26) — `exactScale` dropped from ~2.1-2.3
+to ~1.19-1.22 with identical code, confirming the remaining oversizing was
+entirely a data problem, not a residual math bug. Also fixed a related root
+cause in the **separate `admin-dashboard` repo** (commit `a3eef9c`, not
+pushed): its ingestion modal was silently marking anchor calibration as
+merchant-confirmed on edits to fields unrelated to the anchor.
+
+See `docs/CURRENT_AR_STATE.md` for the current authoritative state — this
+file is the historical audit record.
 
 **Methodology note:** tonight's device test used the pre-existing installed
 dev-client APK (last built 2026-08-31 20:02) via Metro/JS-only reload, not a
@@ -418,6 +428,55 @@ evidence of a pipeline-wide bug.
 bug. Needs re-calibration in admin-dashboard for this specific product, not
 a code fix — do not guess a replacement number.
 
+### 26. Cotton T-Shirt: broken `rest_pose_metric_width`, confirmed by A/B test against a sibling product sharing the identical GLB
+
+**`garment_metadata.rest_pose_metric_width`, product id `b0000009-0000-4000-8000-000000000002`** — same class of bug as #25, different field, different product
+
+The Cotton T-Shirt (`exactScale` observed 1.35-3.0x oversized in session 3)
+and Black tee use the **exact same GLB file**
+(`1787936209625_Untitled.glb`), confirmed via `model_3d_url`. That mesh's
+own rest-pose bounding box measures `x: 0.5917` (a normal, real-world
+garment width) — but the two products' `rest_pose_metric_width` values
+disagree by nearly 2x for the identical mesh:
+
+| Product | Same GLB? | `rest_pose_metric_width` | ratio to mesh's real width (0.59) |
+|---|---|---|---|
+| Black tee | yes | 0.40 | 0.68 (plausible) |
+| **Cotton T-Shirt** | yes (same file) | **0.22** | 0.37 (implausible) |
+
+Both are marked `anchor_confidence: "merchant_confirmed"` in the DB.
+
+**Confirmed live, A/B, same device same session:** re-tested AR try-on on
+the Black tee (sane calibration) immediately after the Cotton T-Shirt
+(broken calibration), same wearer, same distance, same code:
+- Cotton T-Shirt: `exactScale` ~2.1-2.3
+- Black tee: `exactScale` ~1.19-1.22
+
+This conclusively confirms the remaining oversizing after fixing #22/#23
+was **entirely due to this one product's calibration data**, not a residual
+bug in `exactScale`, cover-crop remapping, or anything else touched this
+session. `garmentFitter.ts`/`GarmentRenderer.tsx`'s scale math is correct.
+
+**New observation, not yet investigated:** with sane calibration, the Black
+tee rendered notably elongated vertically (like a dress reaching well past
+the frame) despite width now being plausible. Likely this shared GLB's own
+real proportions (0.702m tall vs 0.59m wide rest-pose bbox — an unusually
+elongated ratio for a T-shirt), not a scale/anchor bug, but not confirmed.
+
+**Root cause of the merchant-confirmed data being wrong, found in
+admin-dashboard**: `GarmentIngestionModal.jsx`'s Rest Pose and Anchor Type
+dropdowns both stamped `anchorConfidence: 'merchant_confirmed'` on change,
+despite this modal having no editable field for `anatomicalAnchorOffset` at
+all (display-only). So a merchant picking a rest pose or anchor type
+silently marked calibration data as human-reviewed that nobody had actually
+looked at. Fixed in `admin-dashboard` commit `a3eef9c` (only the Shoulder
+Width field's own edit now sets the flag) — separate repo, not pushed.
+
+**Recommended approach:** same as #25 — this is a content/calibration data
+bug, not a code bug. Flag for re-calibration in admin-dashboard. Use the
+Black tee for further AR scale/positioning testing in the meantime, since
+its calibration is at least approximately sane.
+
 ---
 
 ## Open — High
@@ -488,14 +547,19 @@ What's left, in priority order:
    #22/#23's compensation gives them correctly-oriented input with working
    distance triangulation — session 3 found them impossible to evaluate
    meaningfully while the upstream data was wrong; that blocker is gone.
-2. Investigate the remaining ~2.1-2.3x oversizing seen after #23's fix — a
-   distinct scale-calibration question (real wearer shoulder width vs.
-   `rest_pose_metric_width`), not the rotation bug. Test with a known
-   physical reference width per the original device-verification checklist.
-3. **#25** (Tailored Blazer calibration data) — separate track, not code:
-   flag to whoever owns admin-dashboard product calibration for
-   re-ingestion. Confirmed isolated to this one product. Use the Cotton
-   T-Shirt or Black tee for further testing in the meantime.
+2. ~~Investigate the remaining ~2.1-2.3x oversizing~~ — **done, confirmed
+   data-only (#26)**: A/B tested Black tee (sane calibration) against Cotton
+   T-Shirt (broken calibration) same session, `exactScale` dropped to
+   ~1.19-1.22. No code investigation needed here; use the Black tee as the
+   sane baseline for further testing.
+3. **#25/#26** (Tailored Blazer + Cotton T-Shirt calibration data) —
+   separate track, not code: flag to whoever owns admin-dashboard product
+   calibration for re-ingestion. Both confirmed isolated to these two
+   products. **Use the Black tee for further AR testing** — its calibration
+   is the only one of the three confirmed approximately sane.
+4. New, not yet investigated: the Black tee rendered notably elongated
+   vertically even with correct width (see #26) — likely this shared
+   placeholder GLB's own real proportions, not a scale bug, but unconfirmed.
 
 **Phase H — the real native-library fix (lower urgency, #23 is worked around):**
 4. **#24** (disagreeing sensor-orientation values) — the actual root cause
