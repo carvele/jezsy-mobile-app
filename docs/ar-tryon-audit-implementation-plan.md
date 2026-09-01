@@ -325,13 +325,32 @@ enum value live is not the fix, though the true fix is almost certainly
 still in this same layer (see #24). The experiment was reverted (net no-op
 in the working tree).
 
-**Recommended approach:** don't touch `poseNormalizer.ts` — it's correct.
-Instrument the raw world landmarks at the point they leave the native
-pose-detection callback (`onNativePoseResults` in `[id].tsx`, before any
-processing) to confirm directly whether the ~90° rotation is present at
-that boundary already, which would conclusively place the bug inside the
-native frame-processor plugin / MediaPipe orientation handling rather than
-anywhere in this repo's own TS code.
+**CONFIRMED empirically, not just algebraically.** Instrumented the raw
+landmarks at the exact point they leave the native pose-detection callback
+(`onNativePoseResults` in `[id].tsx`), before any processing in this repo
+touches them. Result, captured live on-device:
+
+```
+world  l11={x:0.34-0.41, y:0.16-0.18}  l12={x:0.35-0.44, y:-0.14 to -0.16}
+       dx ~ 0.005-0.032 (tiny)          dy ~ -0.32 (large, consistent)
+normalized2D  l11={x:0.38, y:0.84}  l12={x:0.39, y:0.21}
+              dx ~ 0.01-0.02 (tiny)  dy ~ -0.62 (large)
+```
+
+Both the 3D world landmarks and the 2D normalized landmarks are already
+"stacked vertically" (near-zero dx, large dy) at the raw native-callback
+boundary — before `poseNormalizer.ts`, before any TS in this repo runs.
+**This conclusively places the bug inside MediaPipe / the native
+frame-processor plugin, not in this repo's code.** `poseNormalizer.ts` is
+fully exonerated by direct evidence, not just derivation. The temporary
+instrumentation has been removed from `[id].tsx` after confirming this.
+
+**Recommended approach:** the fix needs to happen in the native
+frame-processor plugin or MediaPipe's own orientation handling for this
+device/camera-stack combination (see #24) — not anywhere in this repo's
+TypeScript. Whoever picks this up next should not re-investigate
+`poseNormalizer.ts`, `garmentFitter.ts`, or `skeletalRetargeter.ts` for this
+specific bug; start directly in the native layer.
 
 ### 24. Two disagreeing sensor-orientation values from the pose-detection library
 **`react-native-mediapipe-posedetection`'s internals (third-party), surfaced via `[id].tsx`'s `usePoseDetection` config**
