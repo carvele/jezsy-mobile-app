@@ -228,7 +228,7 @@ export function normalizePose(
   for (let i = 0; i < 33; i++) {
     const p = worldLandmarks[i];
     if (!p) continue;
-    const vis = p.visibility ?? 0;
+    const vis = p.visibility ?? (p as any).presence ?? 0;
     if (vis < minVisibility) continue;
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z ?? 0)) continue;
     joints[i] = toCanonical(p);

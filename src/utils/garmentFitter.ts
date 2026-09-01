@@ -109,14 +109,27 @@ export function calculateGarmentFit(
   const targetX = anchorX - (screenWidth / 2);
   const targetY = anchorY - (screenHeight / 2) + (screenHeight * 0.15); // Adjust for the old topOffset
 
-  // Roll-only quaternion, reused as the 3D fallback below.
+  // Roll-only quaternion for the legacy 2D image overlay (screen-space rotation).
   const rollQuat = { x: 0, y: 0, z: Math.sin(rollRad / 2), w: Math.cos(rollRad / 2) };
+
+  // Fix for open item #3 in the AR audit plan: rollRad is derived in poseConstructor
+  // from the raw MediaPipe frame (Y-down image coordinates), but the 3D path consumes
+  // orientation3D as a rotation about canonical +Z in Y-up space -- the two conventions
+  // differ by an exact sign flip. Feeding rollQuat (built from the Y-down rollRad)
+  // straight into orientation3D rolled the garment the wrong direction specifically
+  // whenever the torso basis is invalid and this fallback path is exercised. Negate at
+  // this Y-down -> Y-up handoff, not at rollRad's own declaration, so the 2D overlay
+  // above (which wants the Y-down convention) is unaffected.
+  // NOT verified on a physical device -- see docs/ar-tryon-audit-implementation-plan.md.
+  const CANONICAL_Y_UP_ROLL_SIGN = -1;
+  const rollRad3D = CANONICAL_Y_UP_ROLL_SIGN * rollRad;
+  const rollQuat3D = { x: 0, y: 0, z: Math.sin(rollRad3D / 2), w: Math.cos(rollRad3D / 2) };
 
   // If the torso could not be resolved -- most often because the hips are out of frame
   // or low-visibility, which is common at try-on framing distance -- degrade to the
   // roll-only orientation the 3D path used before rather than to identity. Never worse
   // than the previous behaviour, just no pitch/yaw until the hips come back.
-  const orientation3D = canonicalPose.torso.valid ? canonicalPose.torso.quaternion : rollQuat;
+  const orientation3D = canonicalPose.torso.valid ? canonicalPose.torso.quaternion : rollQuat3D;
 
   return {
     anchor: {

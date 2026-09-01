@@ -83,10 +83,37 @@ export function setFromUnitVectors(vFrom: Vec3, vTo: Vec3): Quaternion {
  */
 export function calculateBoneRotationsFromCanonical(
   pose: CanonicalPose,
-  restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_POSE'
+  restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_POSE',
+  // Fix for open item #6 in the AR audit plan. When pose.torso is invalid (hips out
+  // of frame / low visibility, common at try-on framing distance), garmentFitter
+  // rotates the whole garment group by a roll-only fallback quaternion (see its
+  // CANONICAL_Y_UP_ROLL_SIGN * rollRad), but toTorsoLocal used to pass arm-direction
+  // vectors through UNCHANGED for an invalid torso -- so that same roll ended up
+  // baked into both the parent group and these child bone deltas, compounding rather
+  // than just duplicating. Passing the caller's rollRad (Y-down, poseConstructor's
+  // convention -- same value garmentFitter negates into its fallback) lets this
+  // function build the identical fallback quaternion and remove it from arm
+  // directions the same way a valid torso basis already does, so the two owners
+  // (group, bones) agree on who applies roll instead of each assuming the other
+  // isn't. Omit to preserve the exact prior (double-counting) behavior.
+  // NOT verified on a physical device -- see docs/ar-tryon-audit-implementation-plan.md.
+  fallbackRollRad?: number
 ): Record<string, Quaternion> {
   const boneRotations: Record<string, Quaternion> = {};
   const j = pose.joints;
+
+  const CANONICAL_Y_UP_ROLL_SIGN = -1;
+  const torsoForRetarget: CanonicalPose['torso'] =
+    !pose.torso.valid && fallbackRollRad !== undefined
+      ? {
+          ...pose.torso,
+          valid: true,
+          quaternion: (() => {
+            const r = CANONICAL_Y_UP_ROLL_SIGN * fallbackRollRad;
+            return { x: 0, y: 0, z: Math.sin(r / 2), w: Math.cos(r / 2) };
+          })(),
+        }
+      : pose.torso;
 
   const lS = j[LM.leftShoulder];
   const lE = j[LM.leftElbow];
@@ -110,7 +137,7 @@ export function calculateBoneRotationsFromCanonical(
     if (!a || !b) return null;
     const d = normalizeVec(subVec(b, a));
     if (d.x === 0 && d.y === 0 && d.z === 0) return null;
-    return normalizeVec(toTorsoLocal(pose.torso, d));
+    return normalizeVec(toTorsoLocal(torsoForRetarget, d));
   };
 
   // Upper arms: shoulder -> elbow. Missing joint means "no delta", i.e. leave the bone at
