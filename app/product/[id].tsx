@@ -390,7 +390,7 @@ export default function ProductDetailScreen() {
           )}
         </View>
 
-        <View style={styles.contentContainer}>
+        <View style={[styles.contentContainer, { backgroundColor: colors.background }]}>
           {/* Category eyebrow, then name, then the figures that qualify it.
               The name is the heading; price used to be set at nearly the same
               size and weight, so the two competed for first read. */}
