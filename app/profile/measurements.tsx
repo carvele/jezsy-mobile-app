@@ -161,11 +161,6 @@ export default function MeasurementsScreen() {
         if (profile?.fit_preference) setFitPreference(profile.fit_preference);
         if (profile?.gender) setGender(profile.gender);
 
-        // On return from a body scan, the scan results (applied by the other
-        // effect) must win. This fetch resolves after that synchronous effect,
-        // so applying the saved row here would clobber the fresh scan.
-        if (fromScan) return;
-
         // Fetch measurements
         const { data: metrics } = await supabase
           .from('user_measurements')
@@ -174,23 +169,45 @@ export default function MeasurementsScreen() {
           .maybeSingle();
 
         if (metrics) {
+          // On return from a body scan, the scan results (applied by the other,
+          // earlier-running effect) must win for whatever fields the scan actually
+          // provided -- but a scan can supply a strict subset (e.g. shoulderWidth
+          // only, if bust/waist/hips weren't confidently readable from that angle).
+          // Skipping this DB read entirely whenever fromScan was true used to mean
+          // any field the scan didn't touch stayed at its blank initial state, and
+          // handleSave's unconditional 8-field upsert then wrote null over that
+          // field's real, previously-saved DB value -- confirmed live, reproducibly,
+          // this session. The functional-update form below only fills a field when
+          // it is still unset, so a value the scan effect already applied is never
+          // overwritten, while every field the scan omitted still falls back to
+          // whatever was already saved instead of being wiped.
+          const fillFromDb = (setter: React.Dispatch<React.SetStateAction<string>>, cmValue: unknown) => {
+            if (cmValue === null || cmValue === undefined) return;
+            setter((prev) => (prev ? prev : cmToUnit(cmValue.toString(), unit)));
+          };
+
           // DB values are always cm/kg; convert for display against whatever
           // unit the persisted preference resolved to.
-          if (metrics.height) setHeight(cmToUnit(metrics.height.toString(), unit));
-          if (metrics.weight) setWeight(metrics.weight.toString());
+          fillFromDb(setHeight, metrics.height);
+          if (metrics.weight !== null && metrics.weight !== undefined) {
+            const weightStr = metrics.weight.toString();
+            setWeight((prev) => (prev ? prev : weightStr));
+          }
           if (metrics.measurements) {
             const m = metrics.measurements as any;
-            if (m.bust) setBust(cmToUnit(m.bust.toString(), unit));
-            if (m.waist) setWaist(cmToUnit(m.waist.toString(), unit));
-            if (m.hips) setHips(cmToUnit(m.hips.toString(), unit));
-            if (m.inseam) setInseam(cmToUnit(m.inseam.toString(), unit));
-            if (m.shoulderWidth) setShoulderWidth(cmToUnit(m.shoulderWidth.toString(), unit));
-            if (m.armLength) setArmLength(cmToUnit(m.armLength.toString(), unit));
-            if (m.torsoLength) setTorsoLength(cmToUnit(m.torsoLength.toString(), unit));
-            if (m.legLength) setLegLength(cmToUnit(m.legLength.toString(), unit));
+            fillFromDb(setBust, m.bust);
+            fillFromDb(setWaist, m.waist);
+            fillFromDb(setHips, m.hips);
+            fillFromDb(setInseam, m.inseam);
+            fillFromDb(setShoulderWidth, m.shoulderWidth);
+            fillFromDb(setArmLength, m.armLength);
+            fillFromDb(setTorsoLength, m.torsoLength);
+            fillFromDb(setLegLength, m.legLength);
           }
-          if (metrics.scan_confidence) setScanConfidence(metrics.scan_confidence);
-          if (metrics.per_field_confidence) setFieldConfidence(metrics.per_field_confidence);
+          if (!fromScan) {
+            if (metrics.scan_confidence) setScanConfidence(metrics.scan_confidence);
+            if (metrics.per_field_confidence) setFieldConfidence(metrics.per_field_confidence);
+          }
         }
       } catch (err) {
         console.error('Error fetching measurements', err);

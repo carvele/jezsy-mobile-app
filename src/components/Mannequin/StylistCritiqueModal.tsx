@@ -126,10 +126,10 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
             <View style={[styles.verdictCard, { backgroundColor: colors.tint + '0C', borderColor: colors.tint + '30' }]}>
               <View style={styles.verdictHeader}>
                 <IconSymbol name="bubble.left.and.bubble.right" size={13} color={colors.tint} />
-                <Text style={[styles.verdictTitle, { color: colors.tint }]}>Stylist's Verdict</Text>
+                <Text style={[styles.verdictTitle, { color: colors.tint }]}>Stylist&apos;s Verdict</Text>
               </View>
               <Text style={[styles.verdictText, { color: colors.text }]}>
-                "{critique.verdict}"
+                &quot;{critique.verdict}&quot;
               </Text>
             </View>
 
@@ -198,7 +198,7 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
             {/* Stylist Pro-Tips */}
             {critique.tips.length > 0 && (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Stylist's Pro-Tips</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Stylist&apos;s Pro-Tips</Text>
                 <View style={styles.tipsList}>
                   {critique.tips.map((tip, idx) => (
                     <View
