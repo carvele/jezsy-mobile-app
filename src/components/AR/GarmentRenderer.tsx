@@ -1,8 +1,19 @@
-import React, { useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useRef, useImperativeHandle, forwardRef, useCallback, useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import type { SegmentationFrame } from '../../types/pose';
+
+// Safe to interpolate a JSON.stringify() result directly into an inline <script> tag
+// except for one case: a string value containing "</script" closes the tag early and
+// whatever follows in the DB-controlled JSONB (garment_metadata.boneMap etc.) is then
+// parsed as page markup, not script -- a real </script>-breakout XSS surface, not just
+// a theoretical one, since this data lives in a shared DB the admin dashboard writes
+// to. < is JSON-legal and decodes back to '<' when parsed, so this only affects
+// the raw source text the browser scans for a closing tag, never the resulting value.
+function safeStringify(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
 
 export interface GarmentRendererRef {
   updateTransform: (
@@ -29,11 +40,45 @@ export interface GarmentRendererProps {
    * unavailable.
    */
   fitModifier?: number;
+  /**
+   * Phase 3: real camera calibration, computed once in ar-tryon/[id].tsx from
+   * vision-camera's format.fieldOfView (native only -- see the AR Implementation
+   * Plan) and the wearer's own saved shoulder measurement. When present, the
+   * scene's virtual camera uses the real vertical FOV and its distance from the
+   * subject is re-derived from real triangulation every frame, instead of the
+   * previous fixed 45deg/z=5 setup that only ever measured a self-consistent,
+   * not real-world-accurate, width. Undefined (native without a saved
+   * measurement, or web) preserves that exact prior behavior unchanged.
+   */
+  cameraCalibration?: {
+    focalLengthPx: number;
+    verticalFovDeg: number;
+    videoWidthPx: number;
+    videoHeightPx: number;
+    wearerShoulderWidthM: number;
+  };
 }
 
 export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererProps>(
-  ({ modelUrl, metadata, fitModifier = 1 }, ref) => {
+  ({ modelUrl, metadata, fitModifier = 1, cameraCalibration }, ref) => {
     const safeFitModifier = Number.isFinite(fitModifier) && fitModifier > 0 ? fitModifier : 1;
+    // metadata.restPoseMetricWidth used to be spliced into the injected script as a bare
+    // JS expression with no validation at all -- a malformed DB value (string, object,
+    // NaN) wouldn't just compute a wrong scale, it would produce invalid JS in that
+    // <script> tag (e.g. an unquoted string becomes a bare, undefined identifier) and
+    // crash the WHOLE renderer, not just mis-scale one product. Validated the same way
+    // safeFitModifier already is, so an interpolated numeric literal is always safe.
+    const safeRestPoseMetricWidth = metadata && Number.isFinite(metadata.restPoseMetricWidth) && metadata.restPoseMetricWidth > 0
+      ? metadata.restPoseMetricWidth
+      : undefined;
+    const safeCameraCalibration = cameraCalibration
+      && Number.isFinite(cameraCalibration.focalLengthPx) && cameraCalibration.focalLengthPx > 0
+      && Number.isFinite(cameraCalibration.verticalFovDeg) && cameraCalibration.verticalFovDeg > 0
+      && Number.isFinite(cameraCalibration.videoWidthPx) && cameraCalibration.videoWidthPx > 0
+      && Number.isFinite(cameraCalibration.videoHeightPx) && cameraCalibration.videoHeightPx > 0
+      && Number.isFinite(cameraCalibration.wearerShoulderWidthM) && cameraCalibration.wearerShoulderWidthM > 0
+      ? cameraCalibration
+      : undefined;
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const webviewRef = useRef<WebView | null>(null);
 
@@ -61,6 +106,24 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       <body>
         <div id="canvas-container"></div>
         <script>
+          // TEMP DEBUG: relay this WebView's own console into the outer RN console
+          // (visible in Metro) via postMessage -- native only, since window.ReactNativeWebView
+          // doesn't exist in the web iframe. Direct remote-debugging of the WebView hit a
+          // real DevTools protocol version mismatch on this device, so this is the reliable
+          // channel while Phase 3 calibration is being verified live. Remove once done.
+          if (window.ReactNativeWebView) {
+            var __origConsoleLog = console.log;
+            var __origConsoleWarn = console.warn;
+            console.log = function() {
+              __origConsoleLog.apply(console, arguments);
+              try { window.ReactNativeWebView.postMessage('[LOG] ' + Array.prototype.slice.call(arguments).join(' ')); } catch (e) {}
+            };
+            console.warn = function() {
+              __origConsoleWarn.apply(console, arguments);
+              try { window.ReactNativeWebView.postMessage('[WARN] ' + Array.prototype.slice.call(arguments).join(' ')); } catch (e) {}
+            };
+          }
+
           // Load status and per-frame transform, console-only -- the visible on-screen
           // banner this used to render did its job (confirmed load status, got real scale
           // telemetry off-device) and is removed now that it's just blocking the view.
@@ -81,15 +144,47 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let debugFrameCount = 0;
           let loggedPosedBBox = false;
           let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
+          let smoothedCameraDistance = null;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
+
+          // Phase 3: real camera calibration, present only on native with a saved
+          // wearer measurement (see GarmentRendererProps.cameraCalibration).
+          // Null preserves the original fixed 45deg/z=5 uncalibrated camera.
+          //
+          // Delivered by message rather than interpolated into this HTML string on
+          // purpose: the string IS the WebView's source, so baking a value in makes
+          // every change to it a full page reload -- GLB refetch, bind poses
+          // re-captured, all smoothing state reset. Calibration depends on two async
+          // inputs (camera format and the Supabase-backed sizing profile) that land
+          // after this component has already mounted, so interpolating it guaranteed
+          // exactly one such reload mid-session, right as calibration became available.
+          let CAMERA_CALIBRATION = null;
+
+          // Same reasoning and same fix as CAMERA_CALIBRATION above, for the same root
+          // cause: fitModifier is ALSO computed from the async Supabase sizing profile
+          // (see the fitModifier useMemo in ar-tryon/[id].tsx), so baking it into this
+          // HTML string caused the exact same mid-session reload the calibration fix
+          // above was written to eliminate -- it just hadn't been noticed yet, since
+          // the calibration reload masked it (both async values tend to resolve close
+          // together). 1 matches this file's own default silhouette-match behavior.
+          let FIT_MODIFIER = 1;
 
           function init() {
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
-            
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 5;
+
+            camera = new THREE.PerspectiveCamera(
+              CAMERA_CALIBRATION ? CAMERA_CALIBRATION.verticalFovDeg : 45,
+              window.innerWidth / window.innerHeight,
+              0.1, 1000
+            );
+            camera.position.z = 5; // real distance is computed and set every frame once CAMERA_CALIBRATION is present
+
+            // TEMP DEBUG: init-time confirmation of the default FOV setup -- remove once
+            // Phase 3 is verified live. Real calibration arrives later by message (see
+            // SET_CAMERA_CALIBRATION), which logs its own confirmation on arrival.
+            showDebug('camera init: fov=' + camera.fov.toFixed(2) + ' (awaiting calibration)');
 
             renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -219,8 +314,19 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             loader.load('${modelUrl}', (gltf) => {
               showDebug('GLB loaded OK');
               garmentModel = gltf.scene;
-              garmentGroup.add(garmentModel);
-              
+
+              // Measured BEFORE garmentModel is parented under garmentGroup, and this
+              // matters: Box3.setFromObject() walks the object's own matrixWorld, which
+              // for a freshly-parented child is parent.matrixWorld * localMatrix. Pose
+              // frames start arriving (and animate()/render() keeps garmentGroup's
+              // matrixWorld current) well before this async GLB load resolves, so
+              // measuring AFTER garmentGroup.add(garmentModel) picked up whatever live
+              // tracked position/rotation/scale garmentGroup already had -- confirmed by
+              // reading r128's Box3/Object3D source, this silently measured in world
+              // space and used the result as if it were the model's own rest-pose size.
+              // garmentModel has no parent yet here, so its matrixWorld is its own
+              // identity-relative local matrix: a true model-local measurement.
+              //
               // Always measure the mesh's own real bounding-box width, regardless of which
               // anchor branch runs below. The "fail-safe" scale check further down compares
               // the calibrated rest_pose_metric_width against this value -- confirmed live
@@ -239,7 +345,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 + ' max=' + JSON.stringify({x:+box.max.x.toFixed(4), y:+box.max.y.toFixed(4), z:+box.max.z.toFixed(4)}));
 
               // Phase 5: Anatomical Anchoring
-              const anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? JSON.stringify(metadata.anatomicalAnchorOffset) : 'null'};
+              const anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? safeStringify(metadata.anatomicalAnchorOffset) : 'null'};
               if (anchorOffset) {
                 // Shift the model inversely by its anatomical anchor
                 garmentModel.position.set(-anchorOffset.x, -anchorOffset.y, -anchorOffset.z);
@@ -255,6 +361,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 garmentModel.position.sub(topCenter);
               }
 
+              // Parented only now, after the model-local Box3 measurement and anchor
+              // positioning above are both done -- see the comment at garmentModel =
+              // gltf.scene for why parenting earlier corrupted that measurement.
+              garmentGroup.add(garmentModel);
 
               // Extract skeleton bones for Phase 4B Skinning
               garmentModel.traverse((child) => {
@@ -291,7 +401,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // confirmed against the GLB, and confirmed live as the blazer sleeve going
               // backward. Walk up to (excluding) garmentGroup, whose own quaternion is the
               // live torso orientation and must never enter a bind prefix.
-              const boneMapForBind = ${metadata ? JSON.stringify(metadata.boneMap) : 'null'};
+              const boneMapForBind = ${metadata ? safeStringify(metadata.boneMap) : 'null'};
               const bindQuats = {};
               garmentModel.traverse((child) => { // traverse includes garmentModel itself
                 bindQuats[child.uuid] = child.quaternion.clone();
@@ -339,7 +449,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               }
 
               console.log('[AR-DEBUG] actual GLB bone names: ' + JSON.stringify(Object.keys(skeletonBones))
-                + ' | boneMap in use: ' + JSON.stringify(${metadata && metadata.boneMap ? JSON.stringify(metadata.boneMap) : 'null'}));
+                + ' | boneMap in use: ' + JSON.stringify(${metadata && metadata.boneMap ? safeStringify(metadata.boneMap) : 'null'}));
 
             }, undefined, (error) => {
               console.error('[AR] GLB load failed', error);
@@ -369,6 +479,37 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           window.addEventListener('message', (event) => {
             try {
               const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+              if (data && data.type === 'SET_CAMERA_CALIBRATION') {
+                CAMERA_CALIBRATION = data.calibration || null;
+                if (camera && CAMERA_CALIBRATION) {
+                  camera.fov = CAMERA_CALIBRATION.verticalFovDeg;
+                  // camera.position.z stays at its init-time bootstrap value (5, the old
+                  // uncalibrated scene-unit convention) until a triangulation frame passes
+                  // the frontality/plausible-range guards in the UPDATE_TRANSFORM handler
+                  // below -- with no fallback, a wearer who never satisfies those guards
+                  // (e.g. only ever seen at an angle) renders with a real, calibrated FOV
+                  // paired with a fictitious 5-metre distance for the entire session. Not a
+                  // full fix -- real triangulation is still the only accurate source -- but
+                  // this seeds a plausible handheld-selfie distance as soon as calibration
+                  // itself arrives, so the worst case is "roughly right" instead of "5m off".
+                  if (smoothedCameraDistance == null) {
+                    smoothedCameraDistance = 0.6;
+                    camera.position.z = smoothedCameraDistance;
+                  }
+                  camera.updateProjectionMatrix();
+                }
+                showDebug('camera calibration applied: calibrated=' + !!CAMERA_CALIBRATION
+                  + (CAMERA_CALIBRATION ? ' fov=' + CAMERA_CALIBRATION.verticalFovDeg.toFixed(2)
+                    + ' focalLengthPx=' + CAMERA_CALIBRATION.focalLengthPx.toFixed(2)
+                    + ' wearerShoulderWidthM=' + CAMERA_CALIBRATION.wearerShoulderWidthM : ''));
+                return;
+              }
+              if (data && data.type === 'SET_FIT_MODIFIER') {
+                FIT_MODIFIER = (typeof data.fitModifier === 'number' && isFinite(data.fitModifier) && data.fitModifier > 0)
+                  ? data.fitModifier : 1;
+                showDebug('fit modifier applied: ' + FIT_MODIFIER.toFixed(3));
+                return;
+              }
               if (data && data.type === 'UPDATE_TRANSFORM' && garmentGroup) {
                 const { pos, rot, scl, boneRotations, normalizedLandmarks } = data;
                 debugFrameCount++;
@@ -391,6 +532,50 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     // on was ever wrong.
                     const l11 = normalizedLandmarks[11];
                     const l12 = normalizedLandmarks[12];
+
+                    // Phase 3: real distance triangulation. Real focal length (px) and the
+                    // wearer's own real shoulder width give real distance from this frame's
+                    // measured pixel separation -- the standard similar-triangles formula,
+                    // meaningful now that CAMERA_CALIBRATION.verticalFovDeg (set at init) is
+                    // the real physical FOV rather than the arbitrary 45deg default. Smoothed
+                    // the same way position/scale/rotation already are elsewhere in this
+                    // handler, since single-frame landmark jitter would otherwise make the
+                    // camera (and therefore the whole scene) visibly judder in depth.
+                    if (CAMERA_CALIBRATION) {
+                      // True 2D pixel separation (not just the X component). Using only
+                      // Math.abs(l12.x - l11.x) collapsed toward zero whenever the wearer
+                      // was turned or had an arm raised near the shoulder line -- confirmed
+                      // live: a frame with l11.y=0.672/l12.y=0.114 (near-vertical shoulder
+                      // line) produced a near-zero horizontal width and a bogus ~7m distance.
+                      const dxPx = (l12.x - l11.x) * CAMERA_CALIBRATION.videoWidthPx;
+                      const dyPx = (l12.y - l11.y) * CAMERA_CALIBRATION.videoHeightPx;
+                      const measuredPixelWidth = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
+                      // Reject frames where the shoulder line is more vertical than
+                      // horizontal -- not a genuine frontal shoulder-width read (occlusion,
+                      // profile turn, raised arm), so triangulating from it is meaningless.
+                      const isRoughlyFrontal = Math.abs(dxPx) > Math.abs(dyPx);
+                      if (measuredPixelWidth > 1 && isRoughlyFrontal) {
+                        const rawDistance = (CAMERA_CALIBRATION.wearerShoulderWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth;
+                        // Realistic handheld-phone try-on range, not the theoretical camera
+                        // range -- the old [0.05, 20]m bound let a bad bootstrap frame (e.g.
+                        // 19m) seed smoothedCameraDistance, and the per-frame clamp below then
+                        // trapped it near that bad anchor since it can only move +/-40%/frame.
+                        if (Number.isFinite(rawDistance) && rawDistance > 0.2 && rawDistance < 2.5) {
+                          // Clamp how far a single frame can pull the smoothed distance so one
+                          // noisy/occluded frame that still passed the checks above can't yank
+                          // the camera around; a genuine distance change still converges over
+                          // a handful of frames.
+                          const clampedRawDistance = smoothedCameraDistance == null
+                            ? rawDistance
+                            : Math.max(smoothedCameraDistance * 0.6, Math.min(smoothedCameraDistance * 1.4, rawDistance));
+                          smoothedCameraDistance = smoothedCameraDistance == null
+                            ? clampedRawDistance
+                            : smoothedCameraDistance + (clampedRawDistance - smoothedCameraDistance) * 0.15;
+                          camera.position.z = smoothedCameraDistance;
+                          camera.updateMatrixWorld(true);
+                        }
+                      }
+                    }
 
                     // Helper: Unproject 2D normalized landmark to 3D world at Z=0
                     const unprojectToZ0 = (nx, ny) => {
@@ -427,10 +612,16 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // to convert real metres into correct on-screen pixels; it only ever
                       // worked *self-consistently* with a 2D screen-projected width, since both
                       // measuring and rendering went through the same uncalibrated camera.
-                      // Swapping only the measurement side broke that self-consistency. Real
-                      // camera intrinsics (actual P0-C) would fix this properly; until then,
-                      // this reverts to the working self-consistent measurement. Phase B2's fit
-                      // modifier is unaffected -- it never depended on this.
+                      // Swapping only the measurement side broke that self-consistency.
+                      //
+                      // Phase 3: real camera intrinsics (the actual fix this comment used to
+                      // call out as still-needed) now exist above whenever CAMERA_CALIBRATION is
+                      // present -- both the FOV and camera.position.z (distance) are real, so
+                      // this unprojection is measuring real metres correctly rather than only
+                      // self-consistently. Without calibration data (web, or no saved wearer
+                      // measurement), FOV=45/z=5 and this remains exactly the prior
+                      // self-consistent-but-arbitrary behavior. Phase B2's fit modifier is
+                      // unaffected either way -- it never depended on this.
                       const targetWorldWidth = targetL.distanceTo(targetR);
 
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
@@ -443,11 +634,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // this rig, vs. a correct calibrated 0.119) -- the fail-safe was using a
                       // broken measurement to override a correct one, producing an ~88x
                       // oversized, effectively invisible/off-frustum render.
-                      const garmentMetricWidth = ${metadata && metadata.restPoseMetricWidth ? metadata.restPoseMetricWidth : 'measuredMeshWidth'};
-                      // Phase B2: real-measurement fit modifier, baked in once at mount from
-                      // the wearer's saved measurements vs. the selected size's real chart
-                      // width. 1 = today's pure silhouette-match behavior (default/fallback).
-                      const fitModifier = ${safeFitModifier};
+                      const garmentMetricWidth = ${safeRestPoseMetricWidth !== undefined ? safeRestPoseMetricWidth : 'measuredMeshWidth'};
+                      // Phase B2: real-measurement fit modifier, delivered by message (see
+                      // FIT_MODIFIER above) since it depends on the same async sizing profile
+                      // as CAMERA_CALIBRATION. 1 = today's pure silhouette-match behavior
+                      // (default/fallback, and this const's own name is now local shadowing
+                      // for clarity -- FIT_MODIFIER itself is reassigned by the message
+                      // handler, this just snapshots its current value for this frame).
+                      const fitModifier = FIT_MODIFIER;
                       const exactScale = (targetWorldWidth / garmentMetricWidth) * fitModifier;
 
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
@@ -515,6 +709,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
                           + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
                           + ' exactScale=' + exactScale.toFixed(4)
+                          + ' calibrated=' + !!CAMERA_CALIBRATION
+                          + ' cameraDistanceM=' + (smoothedCameraDistance != null ? smoothedCameraDistance.toFixed(3) : 'n/a')
+                          + ' verticalFovDeg=' + camera.fov.toFixed(1)
                           + ' l11(raw)=' + JSON.stringify(l11)
                           + ' l12(raw)=' + JSON.stringify(l12)
                           + ' boneRotations=' + JSON.stringify(boneRotations));
@@ -547,7 +744,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 // boneMap AND the loaded GLTF actually exposing bones -- a garment with
                 // neither stays on the rigid-only path above rather than silently no-op'ing
                 // per-bone (which is what happened while this block was hardcoded off).
-                const boneMap = ${metadata ? JSON.stringify(metadata.boneMap) : 'null'};
+                const boneMap = ${metadata ? safeStringify(metadata.boneMap) : 'null'};
                 const hasCalibratedRig = boneMap && Object.keys(boneMap).length > 0;
                 const hasLoadedSkeleton = Object.keys(skeletonBones).length > 0;
                 if (hasCalibratedRig && hasLoadedSkeleton && boneRotations) {
@@ -631,6 +828,49 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       </html>
     `;
 
+    // Pushes calibration into the scene without rebuilding it (see CAMERA_CALIBRATION
+    // above). Sent both when the value changes and when the WebView/iframe finishes
+    // loading, since whichever happens second is the one that actually delivers it --
+    // a message posted before the document is ready has no listener and is dropped.
+    const sendCameraCalibration = useCallback(() => {
+      if (!safeCameraCalibration) return;
+      const payload = { type: 'SET_CAMERA_CALIBRATION', calibration: safeCameraCalibration };
+      if (Platform.OS === 'web') {
+        iframeRef.current?.contentWindow?.postMessage(payload, '*');
+      } else if (webviewRef.current) {
+        webviewRef.current.injectJavaScript(
+          "window.postMessage(" + JSON.stringify(payload) + ", '*'); true;"
+        );
+      }
+    }, [safeCameraCalibration]);
+
+    useEffect(() => {
+      sendCameraCalibration();
+    }, [sendCameraCalibration]);
+
+    // Same fix, same reason, for FIT_MODIFIER (see its declaration above) -- fitModifier
+    // depends on the same async sizing profile as cameraCalibration, so it needs the
+    // same message-based delivery to avoid rebuilding the WebView mid-session.
+    const sendFitModifier = useCallback(() => {
+      const payload = { type: 'SET_FIT_MODIFIER', fitModifier: safeFitModifier };
+      if (Platform.OS === 'web') {
+        iframeRef.current?.contentWindow?.postMessage(payload, '*');
+      } else if (webviewRef.current) {
+        webviewRef.current.injectJavaScript(
+          "window.postMessage(" + JSON.stringify(payload) + ", '*'); true;"
+        );
+      }
+    }, [safeFitModifier]);
+
+    useEffect(() => {
+      sendFitModifier();
+    }, [sendFitModifier]);
+
+    const sendRuntimeConfig = useCallback(() => {
+      sendCameraCalibration();
+      sendFitModifier();
+    }, [sendCameraCalibration, sendFitModifier]);
+
     useImperativeHandle(ref, () => ({
       updateTransform: (position, rotation, scale, boneRotations, segmentation, normalizedLandmarks, worldLandmarks) => {
         const payload = {
@@ -683,15 +923,19 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
         // necessity: React Native's own processTransform.js has no `translateZ` case at
         // all and throws "Invalid transform translateZ" on native, confirmed live on a
         // real device this session. scaleX(-1) alone still does the actual mirror there.
-        transform: Platform.OS === 'web'
+        // Cast to any: RN's ViewStyle transform type has no perspective/translateZ
+        // members at all -- it doesn't model RN-Web's extended CSS transform support,
+        // not a real type mismatch in what actually runs on either platform.
+        transform: (Platform.OS === 'web'
           ? [{ perspective: 1000 }, { translateZ: 1 }, { scaleX: -1 }]
-          : [{ scaleX: -1 }],
+          : [{ scaleX: -1 }]) as any,
       }]}>
         {Platform.OS === 'web' ? (
           // @ts-ignore
           <iframe
             ref={iframeRef}
             srcDoc={htmlContent}
+            onLoad={sendRuntimeConfig}
             style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }}
           />
         ) : (
@@ -699,10 +943,20 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             ref={webviewRef}
             originWhitelist={['*']}
             source={{ html: htmlContent }}
+            onLoadEnd={sendRuntimeConfig}
             style={{ backgroundColor: 'transparent' }}
             scrollEnabled={false}
             showsHorizontalScrollIndicator={false}
             showsVerticalScrollIndicator={false}
+            // TEMP DEBUG: relays the WebView's [AR-DEBUG-*] logs into the outer RN
+            // console (visible in Metro) -- remote-debugging the WebView's own
+            // console directly hit a real DevTools protocol version mismatch
+            // ("Remote browser is newer than client browser"), so this is the
+            // reliable channel while Phase 3 calibration is being verified live.
+            // Remove once that verification is done.
+            onMessage={(event) => {
+              console.log('[WEBVIEW-RELAY] ' + event.nativeEvent.data);
+            }}
           />
         )}
       </View>

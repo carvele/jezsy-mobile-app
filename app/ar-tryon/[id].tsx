@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Lin
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { Camera, useCameraDevice, useCameraPermission, usePoseDetection, RunningMode, Delegate, NATIVE_VISION_AVAILABLE } from '@/src/utils/nativeVision';
+import { Camera, useCameraDevice, useCameraFormat, useCameraPermission, usePoseDetection, RunningMode, Delegate, NATIVE_VISION_AVAILABLE } from '@/src/utils/nativeVision';
 import { Image } from 'expo-image';
 import * as Speech from 'expo-speech';
 import { supabase } from '@/src/lib/supabase';
@@ -228,6 +228,12 @@ export default function ARTryOnScreen() {
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
+  // Phase 3: an explicit format so fieldOfView/videoWidth/videoHeight below are
+  // guaranteed to describe what's actually active, not vision-camera's own
+  // (unknown to us) default pick. 1280x720 balances pose-detection frame rate
+  // against resolution; unrelated to the calibration math, which works at any
+  // resolution as long as format and the values read from it agree.
+  const format = useCameraFormat(device, [{ videoResolution: { width: 1280, height: 720 } }]);
 
   const [matchScore, setMatchScore] = useState(0);
   const [isMatched, setIsMatched] = useState(false);
@@ -241,6 +247,7 @@ export default function ARTryOnScreen() {
   const rotateDeg = useSharedValue(0);
   const opacity = useSharedValue(0.9);
   const lostFramesRef = React.useRef(0);
+  const hasTrackedRef = React.useRef(false);
   const lastStateUpdateRef = React.useRef(0);
   const torsoLogCounter = React.useRef(0);
   const garmentRendererRef = React.useRef<any>(null);
@@ -374,6 +381,68 @@ export default function ARTryOnScreen() {
     return Math.min(1.4, Math.max(0.7, garmentCm / wearerCm));
   }, [sizingMeasurements, recommendedSize, product?.measurements]);
 
+  // Phase 3: real camera calibration (native only -- see GarmentRenderer.tsx and
+  // the AR Implementation Plan). vision-camera's format.fieldOfView is the
+  // *diagonal* FOV in both its Android (sensor-diagonal-derived) and iOS
+  // (AVCaptureDevice.videoFieldOfView, Apple-documented as diagonal)
+  // implementations, confirmed by reading both native source files rather than
+  // assumed -- horizontal/vertical FOV are NOT the same value and using the
+  // wrong one would silently miscalibrate every downstream measurement.
+  // focalLengthPx is derived once from the diagonal relationship and serves
+  // both the render camera's vertical FOV and the real-distance triangulation
+  // GarmentRenderer performs every frame; without a real wearer measurement to
+  // triangulate against, calibration data is withheld entirely and
+  // GarmentRenderer falls back to its existing uncalibrated behavior.
+  const cameraCalibration = useMemo(() => {
+    // TEMP DEBUG: remove once Phase 3 calibration-not-activating is root-caused.
+    console.log('[CAL-DEBUG] platform=' + Platform.OS
+      + ' hasFormat=' + !!format
+      + ' fieldOfView=' + (format ? format.fieldOfView : 'n/a')
+      + ' videoWidth=' + (format ? format.videoWidth : 'n/a')
+      + ' videoHeight=' + (format ? format.videoHeight : 'n/a')
+      + ' sizingMeasurements=' + JSON.stringify(sizingMeasurements)
+      + ' shoulderWidth=' + (sizingMeasurements ? sizingMeasurements.shoulderWidth : 'n/a'));
+    if (Platform.OS === 'web' || !format || !format.fieldOfView) return undefined;
+    const wearerShoulderWidthM = sizingMeasurements?.shoulderWidth
+      ? sizingMeasurements.shoulderWidth / 100
+      : undefined;
+    if (!wearerShoulderWidthM || wearerShoulderWidthM <= 0) return undefined;
+
+    const { videoWidth, videoHeight, fieldOfView } = format;
+    if (!videoWidth || !videoHeight) return undefined;
+
+    // format.videoWidth/videoHeight describe the raw SENSOR buffer (e.g. 1280x720,
+    // landscape), but forceOutputOrientation: device.sensorOrientation (see
+    // usePoseDetection below) tells MediaPipe to rotate that buffer to upright before
+    // running pose detection -- confirmed live via the sensor-orientation fix earlier
+    // this session. On a landscape-mounted sensor (the common case), that rotation is
+    // 90deg, so the landmarks GarmentRenderer receives are normalized against the
+    // ROTATED (e.g. 720x1280, portrait) frame, not the raw sensor dimensions. Using
+    // the unswapped sensor dimensions here would transpose the pixel-space triangulation
+    // (dx measured against the wrong axis's pixel count) and also compute verticalFovDeg
+    // from the wrong "height". Only a 90/270deg mount needs the swap; portrait and
+    // upside-down sensors already match the rotated frame's own dimensions.
+    const isRotated90 = device?.sensorOrientation === 'landscape-left' || device?.sensorOrientation === 'landscape-right';
+    const rotatedWidth = isRotated90 ? videoHeight : videoWidth;
+    const rotatedHeight = isRotated90 ? videoWidth : videoHeight;
+
+    const diagonalPx = Math.sqrt(videoWidth * videoWidth + videoHeight * videoHeight);
+    const diagonalFovRad = (fieldOfView * Math.PI) / 180;
+    const focalLengthPx = (diagonalPx / 2) / Math.tan(diagonalFovRad / 2);
+    const verticalFovRad = 2 * Math.atan(rotatedHeight / (2 * focalLengthPx));
+    const verticalFovDeg = (verticalFovRad * 180) / Math.PI;
+
+    if (!Number.isFinite(focalLengthPx) || !Number.isFinite(verticalFovDeg) || verticalFovDeg <= 0) return undefined;
+
+    return {
+      focalLengthPx,
+      verticalFovDeg,
+      videoWidthPx: rotatedWidth,
+      videoHeightPx: rotatedHeight,
+      wearerShoulderWidthM,
+    };
+  }, [format, sizingMeasurements, device]);
+
   const handlePoseResults = useCallback(
     (poseFrame: PoseFrame) => {
       const { normalizedLandmarks: landmarks, worldLandmarks, segmentation } = poseFrame;
@@ -496,12 +565,27 @@ export default function ARTryOnScreen() {
     onResults: (result) => {
       const landmarks = result.results?.[0]?.landmarks?.[0];
       const worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
-      
+
       if (!landmarks || landmarks.length === 0) {
         nativeFilterRef.current?.reset();
         return;
       }
-      
+
+      // The web path sets this via WebCameraFeed's onTrackerReady prop; the native
+      // <Camera> branch had no equivalent at all, so the "AI Body Tracking Active"
+      // pill could never show on native regardless of whether tracking was actually
+      // working -- confirmed live this session. First successful frame with real
+      // landmarks is the same signal web already uses to mean "ready".
+      //
+      // Latched to fire exactly once, matching onTrackerReady's one-shot semantics.
+      // Setting it every frame instead would run at ~30-60Hz against the throttled
+      // ~5Hz setter below that writes real pose fitness, so the pill would win/lose
+      // by whichever wrote last and visibly strobe whenever tracking was degraded.
+      if (!hasTrackedRef.current) {
+        hasTrackedRef.current = true;
+        setIsTrackerActive(true);
+      }
+
       // Evaluate pose
       const normalizedLandmarks = landmarks.map(p => ({
         x: p.x,
@@ -544,7 +628,33 @@ export default function ARTryOnScreen() {
     minTrackingConfidence: 0.35,
     delegate: Delegate.GPU,
     shouldOutputSegmentationMasks: true,
+    // Root-caused live via the library's own Kotlin source
+    // (PoseDetectionFrameProcessorPlugin.kt): the frame processor worklet tracks the
+    // camera's real per-frame orientation internally but never forwards it to native --
+    // only forceOutputOrientation/outputOrientation (default 'portrait') reaches
+    // detector.detectLiveStream(mpImage, orientation), which is the rotation MediaPipe
+    // applies to the raw buffer before detection. This device's front camera reports
+    // sensorOrientation='landscape-right', so with the unset default ('portrait' = no
+    // rotation) MediaPipe never rotates the frame and landmarks come back in the raw
+    // sensor frame -- confirmed live via AR-DEBUG-TORSO logging roll=-83.9deg while
+    // standing upright, and shoulder landmarks 11/12 swapping which axis carries their
+    // real separation. forceOutputOrientation and device.sensorOrientation share the
+    // same Orientation type, so the device's real value can be passed straight through.
+    forceOutputOrientation: device?.sensorOrientation,
   });
+
+  // react-native-mediapipe-posedetection's own <MediapipeCamera> wrapper wires
+  // cameraDeviceChangeHandler and onOutputOrientationChanged=cameraOrientationChangedHandler
+  // automatically (see its mediapipeCamera.tsx); this app renders vision-camera's
+  // <Camera> directly instead (needed for other native-only behavior below) and had
+  // wired only frameProcessor/onLayout, silently skipping both. Root-caused live: with
+  // no orientation handler, the library never learns the true output rotation, so
+  // landmarks come back in the sensor's native frame -- confirmed via AR-DEBUG-TORSO
+  // logging roll=-83.9deg while the wearer stood upright and squared to the camera,
+  // a ~90deg rotation error consistent with an uncorrected landscape-sensor frame.
+  useEffect(() => {
+    if (device) poseDetection.cameraDeviceChangeHandler(device);
+  }, [device, poseDetection]);
 
   const fetchProduct = useCallback(async () => {
     if (!id) return;
@@ -929,10 +1039,12 @@ export default function ARTryOnScreen() {
             <Camera
               style={styles.camera}
               device={device}
+              format={format}
               isActive={mode === '2d' && isFocused}
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
               onLayout={poseDetection.cameraViewLayoutChangeHandler}
+              onOutputOrientationChanged={poseDetection.cameraOrientationChangedHandler}
               onError={(e: any) => {
                 console.warn('Camera Error:', e);
               }}
@@ -950,6 +1062,7 @@ export default function ARTryOnScreen() {
               modelUrl={modelUrl}
               metadata={garmentMetadata}
               fitModifier={fitModifier}
+              cameraCalibration={cameraCalibration}
             />
           )}
 
