@@ -17,22 +17,30 @@ raw finding. 39 raw findings → 27 confirmed, 4 refuted as not real or not reac
 
 | | Count |
 |---|---|
-| Confirmed findings | 27 |
+| Confirmed findings (original audit) | 27 |
 | Fixed and merged to `main` (2026-09-01, PR #179 batch) | 6 |
 | Fixed, local commits on `main`, not yet pushed (2026-09-01, session 2) | 17 |
-| Still open | 4 |
-| Critical (open) | 0 |
+| Still open from original audit | 4 |
+| New findings from device verification (2026-09-01, session 3) | 4 |
+| Critical (open, all from device verification) | 3 |
 | High (open) | 2 |
 | Medium (open) | 1 |
 | Low (open) | 1 |
 
-**None of the fixes below have been verified on a physical device yet.** The
-device this session had access to dropped its USB connection; session 2's
-fixes are 5 local commits on `main`, not yet pushed. **Do not treat anything
-in this document as "working" — only as "reasoned through and merged."**
-Device verification is the next real gate, independent of this plan. See
-`docs/CURRENT_AR_STATE.md` for the current authoritative state (commit list,
-DB contract, latest test results) — this file is the historical audit record.
+**Session 3 update: physical device verification happened tonight** (Infinix
+X6880, Android) and found real, reproducible bugs — see "Open — Critical
+(found via device verification)" below. The pipeline runs end-to-end without
+crashing (metadata fetch, GLB load, boneMap resolution, retargeting all
+confirmed working live), but the garment does not render correctly on this
+device: distance triangulation never activates, torso roll reads ~-90°
+regardless of actual body tilt, and one product's calibration data is
+independently broken. None of session 2's four geometry fixes (#1/#2/#3/#6
+below) caused these — they were surfaced by finally having device data at
+all. **Do not treat anything in this document as "working" — only as
+"reasoned through" (session 2) or "confirmed broken with root-cause leads"
+(session 3).** See `docs/CURRENT_AR_STATE.md` for the current authoritative
+state (commit list, DB contract, latest test results) — this file is the
+historical audit record.
 
 ---
 
@@ -246,6 +254,100 @@ Fixed: added, drops the `garment_metadata` column.
 
 ---
 
+## Open — Critical (found via device verification, session 3, 2026-09-01)
+
+Discovered testing the session-2 fixes on a physical Infinix X6880 (Android,
+MediaTek) via wireless ADB + the Metro dev-client, on two products (Tailored
+Blazer, Cotton T-Shirt). Raw debug logs (`[AR-DEBUG-TORSO]`, `[AR-DEBUG-FRAME]`,
+`[CAL-DEBUG]`) were captured for both. Not caused by any session-2 fix — this
+is the first physical-device data this feature has had.
+
+### 22. Camera distance triangulation never activates on this device
+**`src/components/AR/GarmentRenderer.tsx`** (the `SET_CAMERA_CALIBRATION`/`UPDATE_TRANSFORM` handler's triangulation block)
+
+`cameraDistanceM` was logged as exactly `0.600` (the hardcoded bootstrap seed)
+across all 352+ frames captured this session, on both products, despite the
+wearer moving, turning, and changing distance from the camera. Real
+triangulation's frontality guard (`Math.abs(dxPx) > Math.abs(dyPx)` between
+the two shoulder landmarks) appears to never pass on this device. Direct,
+confirmed consequence: the Cotton T-Shirt (whose `garment_metadata` is
+otherwise sane — see finding #25's table) rendered 1.7-3.0x oversized
+(`exactScale` observed ranging 1.35-3.0 across logged frames), tracking
+`targetWorldWidth` computed against the wrong assumed distance.
+
+**Likely shares a root cause with #23** — see #24.
+
+### 23. Torso `roll` reads approximately -90° regardless of actual body tilt
+**`src/utils/poseNormalizer.ts`** (`quaternionFromBasis`, `torsoEulerDegrees`)
+
+Reproducible across dozens of frames, both products, multiple app restarts:
+`[AR-DEBUG-TORSO]` logged `roll` in the -76° to -93° range continuously,
+including while the wearer stood upright and square to the camera with
+`pitch` and `yaw` both reading plausible, expected values. This is the exact
+symptom the original `forceOutputOrientation` fix (PR #179) was written to
+solve, reappearing on a different device.
+
+**Confirmed NOT caused by which orientation string reaches the pose
+detector**: live-swapping `forceOutputOrientation` from
+`device?.sensorOrientation` (`"landscape-right"` on this device) to a
+hardcoded `'portrait'` changed the *visual* rendering dramatically (garment
+went from oversized-but-upright to nearly edge-on) but left the logged
+`roll` number statistically unchanged (-86.6° vs the original -85° to -93°
+range). The experiment was reverted (net no-op in the working tree). This
+points at the defect being inside `poseNormalizer.ts`'s torso-basis
+construction itself, not the 2D image-rotation setting.
+
+**Recommended approach:** diagnose `quaternionFromBasis`/`torsoEulerDegrees`
+analytically against the raw world-landmark values captured this session,
+rather than continue live-editing orientation strings on-device — that
+approach is now confirmed not to isolate the bug.
+
+### 24. Two disagreeing sensor-orientation values from the pose-detection library
+**`react-native-mediapipe-posedetection`'s internals (third-party), surfaced via `[id].tsx`'s `usePoseDetection` config**
+
+On this device, `device.sensorOrientation` (from vision-camera, what
+`forceOutputOrientation` is set to) reports `"landscape-right"` consistently.
+But the library's own internal `BaseViewCoordinator` independently computes
+its `sensorOrientation` field as `"portrait"` or `"landscape-left"` for the
+*same physical sensor* — logged at runtime, never once agreeing with
+`"landscape-right"`. Candidate root cause for both #22 and #23: if the
+landmark coordinate frame the app receives doesn't match what the code
+assumes, both the frontality check (needs a horizontal shoulder line) and
+the roll computation (needs a correctly-oriented up/right/forward basis)
+would fail exactly as observed. **Not confirmed as the actual root cause**
+(the #23 experiment shows changing the app's own orientation input doesn't
+fix `roll`) — may be a symptom of the same deeper issue rather than its
+cause. Needs investigation inside the library's own orientation-resolution
+logic, or a from-scratch derivation of this device's correct value.
+
+### 25. Tailored Blazer: broken calibration data, isolated to this one product
+**`garment_metadata.anatomical_anchor_offset`, product id `b0000008-0000-4000-8000-000000000002`**
+
+Confirmed via direct DB query. Comparison across all AR-ready products:
+
+| Product | `rest_pose_metric_width` | `anchor_offset.y` |
+|---|---|---|
+| Black tee | 0.40 | 0.105 |
+| Cotton T-Shirt | 0.22 | 0.225 |
+| **Tailored Blazer** | 0.357 | **1.304** |
+
+The Blazer's `anchor_offset.y` is 6-12x larger than either other product's,
+while `x`/`z` are near-zero noise across all three (confirms the anchor is
+meant to be a pure Y-offset, and this one value is simply wrong). Applied
+directly as `garmentModel.position.set(-anchorOffset.x, -anchorOffset.y, -anchorOffset.z)`,
+this shifts the mesh 1.3 meters off its intended position. Compounding: the
+Blazer's own GLB rest-pose bounding box measures only ~0.01 units across (a
+further ~30-60x scale defect in the asset's own geometry, independent of the
+anchor bug). `auto_rigged: false` for this product — it was manually
+calibrated, not run through the Testing1 auto-rig pipeline, so this is not
+evidence of a pipeline-wide bug.
+
+**Recommended approach:** this is a content/calibration data bug, not a code
+bug. Needs re-calibration in admin-dashboard for this specific product, not
+a code fix — do not guess a replacement number.
+
+---
+
 ## Open — High
 
 ### 5. Body-ratio measurements inflated ~14% by a scale-convention mismatch
@@ -303,10 +405,32 @@ to hide this from the user.
 
 ## Remaining sequencing
 
-Everything device-independent or mechanical is done (Phases A–D from the
-original plan). What's left all needs a product/measurement/numerical
-decision, not just a code fix:
+Physical device verification happened (session 3) and found the pipeline
+runs end-to-end without crashing, but does not render correctly. Priority
+now is the three critical findings from that session, in this order:
 
+**Phase F — device-verification findings (the actual next session):**
+1. **#23** (`roll` ≈ -90° regardless of body tilt) — diagnose
+   `poseNormalizer.ts`'s `quaternionFromBasis`/`torsoEulerDegrees` against
+   the raw world-landmark values captured this session. Confirmed NOT fixed
+   by changing `forceOutputOrientation` — don't repeat that experiment.
+2. **#22** (distance triangulation never activates) — likely shares a root
+   cause with #23 (both plausibly explained by #24's coordinate-frame
+   mismatch); investigate together, but instrument the frontality guard
+   directly to confirm rather than assume.
+3. **#24** (disagreeing sensor-orientation values) — investigate as a
+   candidate root cause for #22/#23, but treat as unconfirmed; the #23
+   experiment shows the app's own orientation input isn't the whole story.
+4. **#25** (Tailored Blazer calibration data) — separate track, not code:
+   flag to whoever owns admin-dashboard product calibration for
+   re-ingestion. Confirmed isolated to this one product.
+
+**Only after Phase F lands and is re-verified on device:** re-test the four
+session-2 geometry fixes (#1 `unprojectToZ0`, #2 `exactScale`, #3 `rollRad`,
+#6 `skeletalRetargeter` fallback) — they cannot be meaningfully verified
+while the upstream orientation/distance data feeding them is wrong.
+
+**Then, needs a product/measurement/numerical decision, not just code:**
 - **#5** (body-ratio scale convention) — needs real anthropometric reasoning;
   flag for whoever owns the body-scan measurement math.
 - **#14** (finish or remove pose-match feature) — needs a product decision.
@@ -315,12 +439,10 @@ decision, not just a code fix:
 - **#16** (web smoothing parity) — deliberately deferred, native-only scope
   decision stands.
 
-Independent of all of the above: **get physical device access and verify**
-everything in the "Fixed (session 2)" section above, starting with #1/#2
-together (they compound), then #3/#6 together (same invalid-torso trigger).
-This is the real next gate — see `docs/CURRENT_AR_STATE.md` for the full
-current-state summary and exact next steps.
+See `docs/CURRENT_AR_STATE.md` for the full current-state summary and exact
+next steps.
 
 **Deferred, not in this plan:** removing the temporary debug instrumentation
 (`[CAL-DEBUG]`, `[WEBVIEW-RELAY]` console relay, `showDebug()` calls) — still
-needed until Phase B is actually verified on a device. Remove only after that.
+needed until Phase F is actually fixed and re-verified on a device. Remove
+only after that.
