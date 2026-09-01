@@ -21,11 +21,11 @@ raw finding. 39 raw findings → 27 confirmed, 4 refuted as not real or not reac
 | Fixed and merged to `main` (2026-09-01, PR #179 batch) | 6 |
 | Fixed, local commits on `main`, not yet pushed (2026-09-01, session 2) | 17 |
 | Still open from original audit | 4 |
-| New findings from device verification (2026-09-01, session 3) | 5 (#22-#26) |
+| New findings from device verification (2026-09-01/02, sessions 3-4) | 6 (#22-#27) |
 | Fixed via JS-side compensation, confirmed live (2026-09-02, session 4) | 2 |
-| Still open | 3 |
+| Still open | 4 |
 | Medium (open) | 2 |
-| High (open) | 2 |
+| High (open) | 3 |
 | Low (open) | 1 |
 
 **Session 4 update: the two critical device-verification findings are fixed
@@ -477,6 +477,44 @@ bug, not a code bug. Flag for re-calibration in admin-dashboard. Use the
 Black tee for further AR scale/positioning testing in the meantime, since
 its calibration is at least approximately sane.
 
+### 27. Camera distance triangulation has no yaw correction — scale inflates as the wearer turns
+**`src/components/AR/GarmentRenderer.tsx`** (the `UPDATE_TRANSFORM` handler's triangulation block) — found verifying #2's yaw fix, on the Black tee (sane calibration)
+
+Attempting to verify #2's `exactScale` yaw double-correction fix by turning
+30-45° surfaced a new, distinct, reproducible bug: `cameraDistanceM` grows
+substantially with yaw even though the wearer's true distance from the
+camera did not change enough to explain it. Two independent live trials,
+same session:
+
+| Trial | `yaw` (torso) | `cameraDistanceM` | baseline (frontal) |
+|---|---|---|---|
+| 1 | -49° | 1.09-1.22m | ~0.9m |
+| 2 | -50° to -68° | 1.67-1.72m | ~0.9m |
+
+Distance grows monotonically with yaw magnitude across both trials — not
+noise. Consequence: `exactScale` (which depends on distance via
+`targetWorldWidth`'s unprojection) grew to 1.8-1.9 at large yaw, up from the
+~1.2 frontal baseline confirmed correct in finding #26 — the garment
+visibly grows larger as the wearer turns, an artifact independent of #2's
+fix (which corrects a *different* stage: the projected width's own
+foreshortening, not the distance estimate feeding that projection).
+
+**Likely mechanism:** the triangulation's frontality guard
+(`Math.abs(dxPx) > Math.abs(dyPx)`) only rejects frames past ~45°; frames
+that pass but are still meaningfully turned have a foreshortened
+shoulder-to-shoulder pixel width, which the similar-triangles distance
+formula (`distance = (wearerShoulderWidthM * focalLengthPx) / measuredPixelWidth`)
+interprets as "farther away" rather than "turned" — there is no yaw term in
+that formula at all. This is upstream of, and independent from, #2's own
+yaw correction on the projected width.
+
+**Not fixed** — needs either a stricter/yaw-aware frontality guard, or a
+cos(yaw) term in the distance formula itself (yaw would need to be known
+before distance is computed, which it currently isn't at that point in the
+per-frame sequence — the ordering may need to change). Flagging as a new
+finding rather than attempting a live fix tonight; same "no arbitrary
+constants, verify on device" caution as #1/#2 applies.
+
 ---
 
 ## Open — High
@@ -547,6 +585,11 @@ What's left, in priority order:
    #22/#23's compensation gives them correctly-oriented input with working
    distance triangulation — session 3 found them impossible to evaluate
    meaningfully while the upstream data was wrong; that blocker is gone.
+   **Partially done**: attempting to verify #2 (turning 30-45°) surfaced a
+   NEW bug (#27, distance triangulation has no yaw correction) that
+   confounds this specific test — distance itself drifts with yaw, so
+   `exactScale` growing during a turn can't yet be cleanly attributed to #2
+   specifically vs. #27. Fix #27 first, then re-attempt #2's verification.
 2. ~~Investigate the remaining ~2.1-2.3x oversizing~~ — **done, confirmed
    data-only (#26)**: A/B tested Black tee (sane calibration) against Cotton
    T-Shirt (broken calibration) same session, `exactScale` dropped to
