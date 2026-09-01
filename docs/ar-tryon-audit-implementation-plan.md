@@ -397,10 +397,41 @@ own code, i.e. inside MediaPipe/the native plugin) and for #22. The #23
 experiment shows a single swapped enum value isn't sufficient to fix it on
 its own — the fix likely needs to address whichever of these two
 orientation sources the native plugin actually consults, not just change
-what value this repo passes in. Needs investigation inside the library's
-own orientation-resolution logic (`BaseViewCoordinator`'s source, or the
-Kotlin frame-processor plugin), not further changes to this repo's config
-value alone.
+what value this repo passes in.
+
+**Precise root cause found by reading the library's own source**
+(`node_modules/react-native-mediapipe-posedetection/src/index.tsx` and
+`src/shared/convert.ts`), not just inferred from logs. `BaseViewCoordinator`
+is instantiated (`index.tsx:235-241`) with its `sensorOrientation`
+constructor argument set to `forceCameraOrientation.value ?? frameOrientation.value`
+— **not** `forceOutputOrientation`, which only ever reaches the *separate*
+`outputOrientation` constructor argument (4th param). This app's
+`usePoseDetection` call only ever sets `forceOutputOrientation`; it never
+sets `forceCameraOrientation`. So `BaseViewCoordinator` falls back to
+`frameOrientation` — a live, worklet-updated shared value defaulting to
+`'portrait'` that this app never controls — for the exact orientation math
+`convert.ts`'s `rotateNormalizedPoint()` uses. That function's `rotation:
+90` branch (`{x: point.y, y: 1 - point.x}`) is the **identical formula**
+`shouldCorrectNativeLandmarkRotation`/`correctNormalized2DLandmarkRotation`
+independently derived and hand-verified in finding #23. The library already
+has the correct rotation-correction logic built in; it's being fed the
+wrong orientation value because of a missing option.
+
+**Fix candidate, NOT verified — do not treat as done:** also set
+`forceCameraOrientation: device?.sensorOrientation` (same value already
+passed to `forceOutputOrientation`) in `[id].tsx`'s `usePoseDetection`
+options. Attempted live tonight; the app hit an unrelated-looking crash
+(`[runtime not ready]: TypeError: Cannot read property 'EventEmitter' of
+undefined`) on the test device before a clean before/after comparison could
+be captured, at 9% battery — inconclusive whether the crash was caused by
+this change or by battery/power-saving throttling. **Reverted immediately
+without keeping the change**, net no diff in the working tree. Needs a
+clean re-attempt on a charged device: apply the change, confirm the app
+still launches normally, then check whether `BaseViewCoordinator`'s logged
+`sensorOrientation` now reads `"landscape-right"` consistently and whether
+`shouldCorrectNativeLandmarkRotation`'s guard stops triggering (i.e. this
+session's JS-side compensation becomes a no-op because the library's own
+rotation logic is now doing the job correctly).
 
 ### 25. Tailored Blazer: broken calibration data, isolated to this one product
 **`garment_metadata.anatomical_anchor_offset`, product id `b0000008-0000-4000-8000-000000000002`**
@@ -618,14 +649,20 @@ What's left, in priority order:
    placeholder GLB's own real proportions, not a scale bug, but unconfirmed.
 
 **Phase H — the real native-library fix (lower urgency, #23 is worked around):**
-4. **#24** (disagreeing sensor-orientation values) — the actual root cause
-   of #22/#23, still open. Needs investigation inside
-   `react-native-mediapipe-posedetection`'s own orientation-resolution logic
-   (`BaseViewCoordinator`'s source, or the Kotlin frame-processor plugin),
-   not further changes to this repo's `forceOutputOrientation` value. Once
-   fixed there, `shouldCorrectNativeLandmarkRotation`'s guard should stop
-   triggering on this device — verify that, then consider removing the
-   compensation entirely rather than leaving two fixes stacked.
+4. **#24** (disagreeing sensor-orientation values) — exact root cause now
+   identified by reading the library's own source (not just inferred from
+   logs): `BaseViewCoordinator`'s `sensorOrientation` constructor arg is
+   `forceCameraOrientation.value ?? frameOrientation.value`, and this app
+   never sets `forceCameraOrientation`. **Fix candidate ready to test**: add
+   `forceCameraOrientation: device?.sensorOrientation` alongside the
+   existing `forceOutputOrientation` in `[id].tsx`. Attempted tonight at 9%
+   battery, hit an unrelated-looking crash before a clean test could run —
+   reverted, net no diff. **Start here next session**, on a charged device:
+   apply the one-line change, confirm the app launches, check
+   `BaseViewCoordinator`'s logged `sensorOrientation` matches
+   `"landscape-right"`, and check whether `shouldCorrectNativeLandmarkRotation`
+   stops triggering. If confirmed, this session's JS-side compensation
+   becomes redundant and should be removed rather than left stacked.
 5. **Verify the session-4 compensation's guard on a second device** — it's
    confirmed correct and necessary on the Infinix X6880, but its
    never-misfires-on-a-working-device behavior is unverified elsewhere.
