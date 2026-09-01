@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import type { UserMeasurements } from '@/src/utils/sizeRecommender';
@@ -13,8 +13,10 @@ export function useSizingProfile() {
   const [gender, setGender] = useState<string>('female');
   const [ready, setReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
+    cancelledRef.current = false;
     if (!user?.id) {
       setMeasurements(null);
       setFitPreference('regular');
@@ -28,6 +30,8 @@ export function useSizingProfile() {
         supabase.from('profiles').select('fit_preference, gender').eq('id', user.id).single(),
         supabase.from('user_measurements').select('measurements, height').eq('user_id', user.id).maybeSingle(),
       ]);
+
+      if (cancelledRef.current) return;
 
       setFitPreference(profile?.fit_preference || 'regular');
       if (profile?.gender) setGender(profile.gender);
@@ -62,19 +66,20 @@ export function useSizingProfile() {
       setReady(hasPrimary);
     } catch (err) {
       console.error('Error loading sizing profile:', err);
+      if (cancelledRef.current) return;
       setMeasurements(null);
       setReady(false);
     } finally {
-      setLoaded(true);
+      if (!cancelledRef.current) setLoaded(true);
     }
   }, [user?.id]);
 
   useEffect(() => {
-    let cancelled = false;
+    cancelledRef.current = false;
     setLoaded(false);
     load();
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
   }, [load]);
 
