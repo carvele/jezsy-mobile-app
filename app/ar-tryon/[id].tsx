@@ -218,6 +218,54 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
   );
 }
 
+// Device-specific compensation for a native/MediaPipe orientation bug, CONFIRMED
+// FIXED live on an Infinix X6880 (2026-09-02): raw landmarks arrive from the
+// native pose-detection callback already rotated ~90deg -- the two shoulder
+// landmarks show near-zero separation on X and the full shoulder-width
+// separation on Y, confirmed at the exact native-callback boundary before
+// poseNormalizer.ts or any other TS in this repo runs (see
+// docs/ar-tryon-audit-implementation-plan.md #23/#24). Applying a proper 90deg
+// rotation (x,y) -> (y,-x) for metric world landmarks -- derived algebraically
+// from ~30 captured live samples, verified against every one -- and re-testing
+// live confirmed the fix on all three fronts simultaneously: roll dropped from
+// a pinned ~-90deg to ~0-9deg, camera distance triangulation started actually
+// varying with real distance instead of being stuck at its 0.6m bootstrap seed,
+// and the garment rendered upright and centered on the wearer's shoulders
+// instead of edge-on/off-screen. For normalized [0,1] image-space landmarks the
+// same rotation is applied about the image center (0.5, 0.5): (x,y) -> (y, 1-x).
+//
+// Only wired into the NATIVE pose-detection path (onNativePoseResults below) --
+// the web path (WebCameraFeed/handlePoseResults) is untouched and unaffected.
+// NOT KNOWN to be needed or safe on other Android devices -- this compensates
+// for whatever this device's camera/MediaPipe orientation handling gets wrong
+// (forceOutputOrientation set correctly to device.sensorOrientation=
+// 'landscape-right' here, yet the bug persists identically). Gated behind a
+// plausibility check so a device that DOESN'T have this bug (dx already larger
+// than dy) is left untouched -- see shouldCorrectNativeLandmarkRotation. Should
+// be revisited once the real fix lands in the native library or its
+// orientation-resolution logic, at which point this compensation should either
+// no-op (guard never triggers) or can be removed outright.
+function shouldCorrectNativeLandmarkRotation(landmarks: any[]): boolean {
+  const l11 = landmarks[11];
+  const l12 = landmarks[12];
+  if (!l11 || !l12) return false;
+  const dx = Math.abs(l12.x - l11.x);
+  const dy = Math.abs(l12.y - l11.y);
+  // Only correct when the vertical separation clearly dominates -- a real
+  // frontal shoulder line should be wider than it is tall. Requiring dy to be
+  // meaningfully larger (not just marginally) avoids flipping a frame that's
+  // just noisy or a person genuinely turned near-profile.
+  return dy > 0.15 && dy > dx * 2;
+}
+
+function correctWorldLandmarkRotation(p: any) {
+  return { ...p, x: p.y, y: -p.x };
+}
+
+function correctNormalized2DLandmarkRotation(p: any) {
+  return { ...p, x: p.y, y: 1 - p.x };
+}
+
 export default function ARTryOnScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -577,8 +625,13 @@ export default function ARTryOnScreen() {
   // the root instead of patching each downstream symptom separately.
   const onNativePoseResults = useCallback(
     (result: any) => {
-      const landmarks = result.results?.[0]?.landmarks?.[0];
-      const worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
+      let landmarks = result.results?.[0]?.landmarks?.[0];
+      let worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
+
+      if (landmarks && landmarks.length > 0 && shouldCorrectNativeLandmarkRotation(landmarks)) {
+        landmarks = landmarks.map(correctNormalized2DLandmarkRotation);
+        if (worldLandmarks) worldLandmarks = worldLandmarks.map(correctWorldLandmarkRotation);
+      }
 
       if (!landmarks || landmarks.length === 0) {
         // Zero landmarks (person left frame, camera covered, poor lighting) used to
