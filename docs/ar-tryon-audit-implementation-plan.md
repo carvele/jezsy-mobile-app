@@ -36,11 +36,22 @@ device: distance triangulation never activates, torso roll reads ~-90°
 regardless of actual body tilt, and one product's calibration data is
 independently broken. None of session 2's four geometry fixes (#1/#2/#3/#6
 below) caused these — they were surfaced by finally having device data at
-all. **Do not treat anything in this document as "working" — only as
-"reasoned through" (session 2) or "confirmed broken with root-cause leads"
-(session 3).** See `docs/CURRENT_AR_STATE.md` for the current authoritative
-state (commit list, DB contract, latest test results) — this file is the
-historical audit record.
+all. **`poseNormalizer.ts` has since been algebraically verified correct and
+ruled out** (see #23) — the `roll` defect is confirmed upstream, in
+MediaPipe/the native frame-processor plugin, before landmarks ever reach
+this repo's TS code. **Do not treat anything in this document as "working" —
+only as "reasoned through" (session 2) or "confirmed broken with root-cause
+leads" (session 3).** See `docs/CURRENT_AR_STATE.md` for the current
+authoritative state (commit list, DB contract, latest test results) — this
+file is the historical audit record.
+
+**Methodology note:** tonight's device test used the pre-existing installed
+dev-client APK (last built 2026-08-31 20:02) via Metro/JS-only reload, not a
+fresh `expo run:android` native rebuild. Checked and ruled out as a
+confound: `git log` shows no changes to `package.json` or `android/` between
+that build and now, so the native binary is unaffected by dependency drift
+— tonight's findings reflect genuine behavior of the current codebase, not
+a stale-native-binary artifact.
 
 ---
 
@@ -278,7 +289,7 @@ otherwise sane — see finding #25's table) rendered 1.7-3.0x oversized
 **Likely shares a root cause with #23** — see #24.
 
 ### 23. Torso `roll` reads approximately -90° regardless of actual body tilt
-**`src/utils/poseNormalizer.ts`** (`quaternionFromBasis`, `torsoEulerDegrees`)
+**Root cause is upstream of `src/utils/poseNormalizer.ts`, in the camera/MediaPipe orientation pipeline — `poseNormalizer.ts` itself is ruled out, see below.**
 
 Reproducible across dozens of frames, both products, multiple app restarts:
 `[AR-DEBUG-TORSO]` logged `roll` in the -76° to -93° range continuously,
@@ -287,20 +298,40 @@ including while the wearer stood upright and square to the camera with
 symptom the original `forceOutputOrientation` fix (PR #179) was written to
 solve, reappearing on a different device.
 
-**Confirmed NOT caused by which orientation string reaches the pose
-detector**: live-swapping `forceOutputOrientation` from
-`device?.sensorOrientation` (`"landscape-right"` on this device) to a
-hardcoded `'portrait'` changed the *visual* rendering dramatically (garment
-went from oversized-but-upright to nearly edge-on) but left the logged
-`roll` number statistically unchanged (-86.6° vs the original -85° to -93°
-range). The experiment was reverted (net no-op in the working tree). This
-points at the defect being inside `poseNormalizer.ts`'s torso-basis
-construction itself, not the 2D image-rotation setting.
+**`poseNormalizer.ts`'s math verified correct by hand, ruled out as the bug
+location.** Traced `quaternionFromBasis`/`torsoEulerDegrees` algebraically
+for an ideal upright, camera-facing subject: `xAxis = normalize(lS - rS)`
+should be `(1,0,0)`, `upRaw` should point `(0,+1,0)`, giving
+`zAxis = cross(xAxis, upHint) = (0,0,1)`, `yAxis = (0,1,0)` — an identity
+basis, correctly yielding `roll = atan2(xAxis.y, xAxis.x) = atan2(0,1) = 0°`.
+The formula is right. Working backward from the *observed* `roll ≈ -90°`:
+that requires `xAxis.x ≈ 0` and `xAxis.y` large, meaning the left/right
+shoulder landmarks handed to `normalizePose` have **nearly identical X but
+very different Y** — stacked vertically, not side-by-side horizontally. This
+matches the raw 2D `l11`/`l12` values logged in `GarmentRenderer.tsx`'s
+`[AR-DEBUG-FRAME]` line during the same frames (`Δx ≈ 0.04`, `Δy ≈ 0.5`) —
+both the 2D and 3D-world shoulder landmarks show the same ~90°-rotated
+pattern. The bug is therefore upstream: MediaPipe is handing the app
+landmarks that are already rotated ~90° from what every downstream module
+(correctly) assumes.
 
-**Recommended approach:** diagnose `quaternionFromBasis`/`torsoEulerDegrees`
-analytically against the raw world-landmark values captured this session,
-rather than continue live-editing orientation strings on-device — that
-approach is now confirmed not to isolate the bug.
+**Confirmed NOT simply the `forceOutputOrientation` string value**:
+live-swapping it from `device?.sensorOrientation` (`"landscape-right"` on
+this device) to a hardcoded `'portrait'` changed the *visual* rendering
+dramatically (garment went from oversized-but-upright to nearly edge-on) but
+left the logged `roll` number statistically unchanged (-86.6° vs the
+original -85° to -93° range) — so simply trying a different orientation
+enum value live is not the fix, though the true fix is almost certainly
+still in this same layer (see #24). The experiment was reverted (net no-op
+in the working tree).
+
+**Recommended approach:** don't touch `poseNormalizer.ts` — it's correct.
+Instrument the raw world landmarks at the point they leave the native
+pose-detection callback (`onNativePoseResults` in `[id].tsx`, before any
+processing) to confirm directly whether the ~90° rotation is present at
+that boundary already, which would conclusively place the bug inside the
+native frame-processor plugin / MediaPipe orientation handling rather than
+anywhere in this repo's own TS code.
 
 ### 24. Two disagreeing sensor-orientation values from the pose-detection library
 **`react-native-mediapipe-posedetection`'s internals (third-party), surfaced via `[id].tsx`'s `usePoseDetection` config**
@@ -310,15 +341,16 @@ On this device, `device.sensorOrientation` (from vision-camera, what
 But the library's own internal `BaseViewCoordinator` independently computes
 its `sensorOrientation` field as `"portrait"` or `"landscape-left"` for the
 *same physical sensor* — logged at runtime, never once agreeing with
-`"landscape-right"`. Candidate root cause for both #22 and #23: if the
-landmark coordinate frame the app receives doesn't match what the code
-assumes, both the frontality check (needs a horizontal shoulder line) and
-the roll computation (needs a correctly-oriented up/right/forward basis)
-would fail exactly as observed. **Not confirmed as the actual root cause**
-(the #23 experiment shows changing the app's own orientation input doesn't
-fix `roll`) — may be a symptom of the same deeper issue rather than its
-cause. Needs investigation inside the library's own orientation-resolution
-logic, or a from-scratch derivation of this device's correct value.
+`"landscape-right"`. Leading root-cause candidate for #23 (see that finding
+for the proof that the rotation happens before landmarks reach this repo's
+own code, i.e. inside MediaPipe/the native plugin) and for #22. The #23
+experiment shows a single swapped enum value isn't sufficient to fix it on
+its own — the fix likely needs to address whichever of these two
+orientation sources the native plugin actually consults, not just change
+what value this repo passes in. Needs investigation inside the library's
+own orientation-resolution logic (`BaseViewCoordinator`'s source, or the
+Kotlin frame-processor plugin), not further changes to this repo's config
+value alone.
 
 ### 25. Tailored Blazer: broken calibration data, isolated to this one product
 **`garment_metadata.anatomical_anchor_offset`, product id `b0000008-0000-4000-8000-000000000002`**
@@ -410,12 +442,16 @@ runs end-to-end without crashing, but does not render correctly. Priority
 now is the three critical findings from that session, in this order:
 
 **Phase F — device-verification findings (the actual next session):**
-1. **#23** (`roll` ≈ -90° regardless of body tilt) — diagnose
-   `poseNormalizer.ts`'s `quaternionFromBasis`/`torsoEulerDegrees` against
-   the raw world-landmark values captured this session. Confirmed NOT fixed
-   by changing `forceOutputOrientation` — don't repeat that experiment.
-2. **#22** (distance triangulation never activates) — likely shares a root
-   cause with #23 (both plausibly explained by #24's coordinate-frame
+1. **#23** (`roll` ≈ -90° regardless of body tilt) — `poseNormalizer.ts` is
+   ruled out (verified correct by hand, see #23's writeup). Next step:
+   instrument `onNativePoseResults` in `[id].tsx` to log the raw world
+   landmarks the native callback hands over, BEFORE any processing, to
+   confirm the ~90° rotation is already present at that boundary. That
+   places the bug conclusively inside the native plugin/MediaPipe, not this
+   repo's TS. Don't re-attempt swapping `forceOutputOrientation` values live
+   — already tried, didn't isolate it.
+2. **#22** (distance triangulation never activates) — likely shares the same
+   root cause as #23 (both plausibly explained by #24's coordinate-frame
    mismatch); investigate together, but instrument the frontality guard
    directly to confirm rather than assume.
 3. **#24** (disagreeing sensor-orientation values) — investigate as a
