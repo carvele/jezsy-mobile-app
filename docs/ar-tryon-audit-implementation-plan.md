@@ -22,28 +22,26 @@ raw finding. 39 raw findings → 27 confirmed, 4 refuted as not real or not reac
 | Fixed, local commits on `main`, not yet pushed (2026-09-01, session 2) | 17 |
 | Still open from original audit | 4 |
 | New findings from device verification (2026-09-01, session 3) | 4 |
-| Critical (open, all from device verification) | 3 |
+| Fixed via JS-side compensation, confirmed live (2026-09-02, session 4) | 2 |
+| Still open | 2 |
+| Medium (open) | 2 |
 | High (open) | 2 |
-| Medium (open) | 1 |
 | Low (open) | 1 |
 
-**Session 3 update: physical device verification happened tonight** (Infinix
-X6880, Android) and found real, reproducible bugs — see "Open — Critical
-(found via device verification)" below. The pipeline runs end-to-end without
-crashing (metadata fetch, GLB load, boneMap resolution, retargeting all
-confirmed working live), but the garment does not render correctly on this
-device: distance triangulation never activates, torso roll reads ~-90°
-regardless of actual body tilt, and one product's calibration data is
-independently broken. None of session 2's four geometry fixes (#1/#2/#3/#6
-below) caused these — they were surfaced by finally having device data at
-all. **`poseNormalizer.ts` has since been algebraically verified correct and
-ruled out** (see #23) — the `roll` defect is confirmed upstream, in
-MediaPipe/the native frame-processor plugin, before landmarks ever reach
-this repo's TS code. **Do not treat anything in this document as "working" —
-only as "reasoned through" (session 2) or "confirmed broken with root-cause
-leads" (session 3).** See `docs/CURRENT_AR_STATE.md` for the current
-authoritative state (commit list, DB contract, latest test results) — this
-file is the historical audit record.
+**Session 4 update: the two critical device-verification findings are fixed
+and confirmed live** on the Infinix X6880 test device — see "Fixed (session
+4...)" below. `roll` dropped from a pinned ~-90° to ~0-9°, camera distance
+triangulation now varies realistically instead of being stuck at its
+bootstrap seed, and the garment renders upright and centered instead of
+edge-on/off-screen. This is a JS-side compensating rotation in
+`app/ar-tryon/[id].tsx`, not a fix to the actual native library bug (#24,
+downgraded to Medium) — `poseNormalizer.ts` remains fully correct and
+untouched. **Do not treat this as "the AR feature now works" broadly** — it
+is confirmed working on exactly one physical device (Infinix X6880); the
+compensation's guard is designed to no-op on a device that doesn't have this
+bug, but that has not itself been verified on a second device. See
+`docs/CURRENT_AR_STATE.md` for the current authoritative state — this file
+is the historical audit record.
 
 **Methodology note:** tonight's device test used the pre-existing installed
 dev-client APK (last built 2026-08-31 20:02) via Metro/JS-only reload, not a
@@ -265,31 +263,36 @@ Fixed: added, drops the `garment_metadata` column.
 
 ---
 
-## Open — Critical (found via device verification, session 3, 2026-09-01)
+## Fixed (session 4, 2026-09-02 — JS-side compensation, root cause still open in the native library)
 
 Discovered testing the session-2 fixes on a physical Infinix X6880 (Android,
 MediaTek) via wireless ADB + the Metro dev-client, on two products (Tailored
 Blazer, Cotton T-Shirt). Raw debug logs (`[AR-DEBUG-TORSO]`, `[AR-DEBUG-FRAME]`,
 `[CAL-DEBUG]`) were captured for both. Not caused by any session-2 fix — this
-is the first physical-device data this feature has had.
+was the first physical-device data this feature has had.
 
-### 22. Camera distance triangulation never activates on this device
-**`src/components/AR/GarmentRenderer.tsx`** (the `SET_CAMERA_CALIBRATION`/`UPDATE_TRANSFORM` handler's triangulation block)
+### 22 (was Critical). Camera distance triangulation never activated on this device
+**`src/components/AR/GarmentRenderer.tsx`** (the `SET_CAMERA_CALIBRATION`/`UPDATE_TRANSFORM` handler's triangulation block) — fixed as a side effect of #23's compensation
 
 `cameraDistanceM` was logged as exactly `0.600` (the hardcoded bootstrap seed)
-across all 352+ frames captured this session, on both products, despite the
+across all 352+ frames captured in session 3, on both products, despite the
 wearer moving, turning, and changing distance from the camera. Real
 triangulation's frontality guard (`Math.abs(dxPx) > Math.abs(dyPx)` between
-the two shoulder landmarks) appears to never pass on this device. Direct,
-confirmed consequence: the Cotton T-Shirt (whose `garment_metadata` is
-otherwise sane — see finding #25's table) rendered 1.7-3.0x oversized
-(`exactScale` observed ranging 1.35-3.0 across logged frames), tracking
-`targetWorldWidth` computed against the wrong assumed distance.
+the two shoulder landmarks) never passed on this device, because the
+landmarks it read were rotated (see #23). Direct, confirmed consequence at
+the time: the Cotton T-Shirt (whose `garment_metadata` is otherwise sane —
+see finding #25's table) rendered 1.7-3.0x oversized (`exactScale` observed
+ranging 1.35-3.0 across logged frames).
 
-**Likely shares a root cause with #23** — see #24.
+**Fixed, confirmed live**: after #23's landmark-rotation compensation was
+applied, `cameraDistanceM` immediately began varying realistically with
+actual distance (`0.867` to `1.015` across a live sequence, tracking real
+movement) instead of being stuck at the bootstrap seed. No changes needed to
+this file directly — the guard was correct all along, it was being fed bad
+input.
 
-### 23. Torso `roll` reads approximately -90° regardless of actual body tilt
-**Root cause is upstream of `src/utils/poseNormalizer.ts`, in the camera/MediaPipe orientation pipeline — `poseNormalizer.ts` itself is ruled out, see below.**
+### 23 (was Critical). Torso `roll` read approximately -90° regardless of actual body tilt
+**Fixed with a JS-side compensating rotation in `app/ar-tryon/[id].tsx`, gated to only apply when needed — root cause remains in the native library, unfixed.**
 
 Reproducible across dozens of frames, both products, multiple app restarts:
 `[AR-DEBUG-TORSO]` logged `roll` in the -76° to -93° range continuously,
@@ -298,37 +301,13 @@ including while the wearer stood upright and square to the camera with
 symptom the original `forceOutputOrientation` fix (PR #179) was written to
 solve, reappearing on a different device.
 
-**`poseNormalizer.ts`'s math verified correct by hand, ruled out as the bug
-location.** Traced `quaternionFromBasis`/`torsoEulerDegrees` algebraically
-for an ideal upright, camera-facing subject: `xAxis = normalize(lS - rS)`
-should be `(1,0,0)`, `upRaw` should point `(0,+1,0)`, giving
-`zAxis = cross(xAxis, upHint) = (0,0,1)`, `yAxis = (0,1,0)` — an identity
-basis, correctly yielding `roll = atan2(xAxis.y, xAxis.x) = atan2(0,1) = 0°`.
-The formula is right. Working backward from the *observed* `roll ≈ -90°`:
-that requires `xAxis.x ≈ 0` and `xAxis.y` large, meaning the left/right
-shoulder landmarks handed to `normalizePose` have **nearly identical X but
-very different Y** — stacked vertically, not side-by-side horizontally. This
-matches the raw 2D `l11`/`l12` values logged in `GarmentRenderer.tsx`'s
-`[AR-DEBUG-FRAME]` line during the same frames (`Δx ≈ 0.04`, `Δy ≈ 0.5`) —
-both the 2D and 3D-world shoulder landmarks show the same ~90°-rotated
-pattern. The bug is therefore upstream: MediaPipe is handing the app
-landmarks that are already rotated ~90° from what every downstream module
-(correctly) assumes.
-
-**Confirmed NOT simply the `forceOutputOrientation` string value**:
-live-swapping it from `device?.sensorOrientation` (`"landscape-right"` on
-this device) to a hardcoded `'portrait'` changed the *visual* rendering
-dramatically (garment went from oversized-but-upright to nearly edge-on) but
-left the logged `roll` number statistically unchanged (-86.6° vs the
-original -85° to -93° range) — so simply trying a different orientation
-enum value live is not the fix, though the true fix is almost certainly
-still in this same layer (see #24). The experiment was reverted (net no-op
-in the working tree).
-
-**CONFIRMED empirically, not just algebraically.** Instrumented the raw
-landmarks at the exact point they leave the native pose-detection callback
-(`onNativePoseResults` in `[id].tsx`), before any processing in this repo
-touches them. Result, captured live on-device:
+**`poseNormalizer.ts`'s math verified correct by hand, then confirmed innocent
+empirically.** Traced `quaternionFromBasis`/`torsoEulerDegrees` algebraically
+for an ideal upright, camera-facing subject and confirmed the formula
+correctly yields `roll=0°` for correctly-oriented input. Then instrumented
+the raw landmarks at the exact point they leave the native pose-detection
+callback (`onNativePoseResults`), before any processing in this repo touches
+them:
 
 ```
 world  l11={x:0.34-0.41, y:0.16-0.18}  l12={x:0.35-0.44, y:-0.14 to -0.16}
@@ -337,23 +316,65 @@ normalized2D  l11={x:0.38, y:0.84}  l12={x:0.39, y:0.21}
               dx ~ 0.01-0.02 (tiny)  dy ~ -0.62 (large)
 ```
 
-Both the 3D world landmarks and the 2D normalized landmarks are already
+Both the 3D world landmarks and the 2D normalized landmarks were already
 "stacked vertically" (near-zero dx, large dy) at the raw native-callback
-boundary — before `poseNormalizer.ts`, before any TS in this repo runs.
-**This conclusively places the bug inside MediaPipe / the native
-frame-processor plugin, not in this repo's code.** `poseNormalizer.ts` is
-fully exonerated by direct evidence, not just derivation. The temporary
-instrumentation has been removed from `[id].tsx` after confirming this.
+boundary — before `poseNormalizer.ts`, before any TS in this repo ran. This
+conclusively placed the bug inside MediaPipe / the native frame-processor
+plugin, not in this repo's code.
 
-**Recommended approach:** the fix needs to happen in the native
-frame-processor plugin or MediaPipe's own orientation handling for this
-device/camera-stack combination (see #24) — not anywhere in this repo's
-TypeScript. Whoever picks this up next should not re-investigate
-`poseNormalizer.ts`, `garmentFitter.ts`, or `skeletalRetargeter.ts` for this
-specific bug; start directly in the native layer.
+**Confirmed NOT simply the `forceOutputOrientation` string value**:
+live-swapping it from `device?.sensorOrientation` (`"landscape-right"` on
+this device) to a hardcoded `'portrait'` changed the *visual* rendering
+dramatically (garment went from oversized-but-upright to nearly edge-on) but
+left the logged `roll` number statistically unchanged (-86.6° vs the
+original -85° to -93° range) — so a single swapped enum value from this
+repo's JS isn't the fix; the real defect is inside the native
+plugin/MediaPipe's own orientation-resolution logic (see #24).
+
+**Fix applied — a JS-side rotation compensation, not a native patch.**
+Derived a proper 90° rotation `(x,y) -> (y,-x)` for world landmarks (and
+`(x,y) -> (y, 1-x)`, i.e. the same rotation about the image center, for
+normalized 2D landmarks) algebraically from ~30 captured live samples,
+verified it reproduces the expected "left shoulder has larger X,
+near-level Y" pattern against every one, then applied it directly in
+`onNativePoseResults` (`app/ar-tryon/[id].tsx`), gated behind
+`shouldCorrectNativeLandmarkRotation` — a runtime check that only applies
+the correction when the shoulder landmarks show the "stacked vertically"
+signature (`dy > 0.15 && dy > dx*2`), so a device that doesn't have this bug
+is left untouched.
+
+**Confirmed live, all three symptoms fixed simultaneously**, re-tested
+on-device immediately after applying:
+- `roll` dropped from a pinned ~-90° to ~0-9° (upright subject)
+- `cameraDistanceM` started varying realistically (see #22)
+- The garment rendered upright and centered on the wearer's shoulders
+  instead of edge-on or off-screen (screenshot-verified, front-facing and
+  turned-away poses both tested)
+
+**What's still open:** this is a compensating workaround, not the real fix.
+The actual defect is still inside `react-native-mediapipe-posedetection`'s
+native code (see #24) and is unconfirmed on any device other than this one
+Infinix X6880 — the runtime guard is deliberately conservative to avoid
+misfiring on a device that doesn't have this bug, but that guard's
+correctness on *other* devices is itself unverified. Whoever picks this up
+next should not re-investigate `poseNormalizer.ts`, `garmentFitter.ts`, or
+`skeletalRetargeter.ts` for this specific symptom — both are confirmed
+correct. The remaining ~2.1-2.3x oversizing seen after this fix is a
+separate, secondary scale-calibration question (real wearer shoulder width
+vs. this garment's `rest_pose_metric_width`), not part of this finding.
+
+---
+
+## Open — Medium (native library root cause + product data)
 
 ### 24. Two disagreeing sensor-orientation values from the pose-detection library
-**`react-native-mediapipe-posedetection`'s internals (third-party), surfaced via `[id].tsx`'s `usePoseDetection` config**
+**`react-native-mediapipe-posedetection`'s internals (third-party), surfaced via `[id].tsx`'s `usePoseDetection` config** — lower urgency now that #23's symptom is worked around, but the real fix belongs here
+
+**Downgraded from the original session-3 priority**: #22/#23's symptoms are
+now compensated for in `app/ar-tryon/[id].tsx` (see #23), so this is no
+longer blocking AR try-on from working on the test device. Still worth
+fixing properly, since the compensation is a workaround with an unverified
+guard on other devices, not a real fix.
 
 On this device, `device.sensorOrientation` (from vision-camera, what
 `forceOutputOrientation` is set to) reports `"landscape-right"` consistently.
@@ -419,7 +440,7 @@ flag for whoever owns the body-scan measurement math.
 
 ---
 
-## Open — Medium
+## Open — Medium (unfinished features)
 
 ### 14. Pose-match state (`isMatched`, `matchScore`, `matchFeedback`) never written
 **`app/ar-tryon/[id].tsx:239`**
@@ -457,33 +478,37 @@ to hide this from the user.
 ## Remaining sequencing
 
 Physical device verification happened (session 3) and found the pipeline
-runs end-to-end without crashing, but does not render correctly. Priority
-now is the three critical findings from that session, in this order:
+runs end-to-end without crashing, but didn't render correctly. Session 4
+fixed the two critical findings via a JS-side compensation, confirmed live.
+What's left, in priority order:
 
-**Phase F — device-verification findings (the actual next session):**
-1. **#23** (`roll` ≈ -90° regardless of body tilt) — `poseNormalizer.ts` is
-   ruled out (verified correct by hand, see #23's writeup). Next step:
-   instrument `onNativePoseResults` in `[id].tsx` to log the raw world
-   landmarks the native callback hands over, BEFORE any processing, to
-   confirm the ~90° rotation is already present at that boundary. That
-   places the bug conclusively inside the native plugin/MediaPipe, not this
-   repo's TS. Don't re-attempt swapping `forceOutputOrientation` values live
-   — already tried, didn't isolate it.
-2. **#22** (distance triangulation never activates) — likely shares the same
-   root cause as #23 (both plausibly explained by #24's coordinate-frame
-   mismatch); investigate together, but instrument the frontality guard
-   directly to confirm rather than assume.
-3. **#24** (disagreeing sensor-orientation values) — investigate as a
-   candidate root cause for #22/#23, but treat as unconfirmed; the #23
-   experiment shows the app's own orientation input isn't the whole story.
-4. **#25** (Tailored Blazer calibration data) — separate track, not code:
+**Phase G — re-verify the session-2 geometry fixes now that orientation/distance are sane:**
+1. Re-test the four session-2 geometry fixes (#1 `unprojectToZ0`, #2
+   `exactScale`, #3 `rollRad`, #6 `skeletalRetargeter` fallback) now that
+   #22/#23's compensation gives them correctly-oriented input with working
+   distance triangulation — session 3 found them impossible to evaluate
+   meaningfully while the upstream data was wrong; that blocker is gone.
+2. Investigate the remaining ~2.1-2.3x oversizing seen after #23's fix — a
+   distinct scale-calibration question (real wearer shoulder width vs.
+   `rest_pose_metric_width`), not the rotation bug. Test with a known
+   physical reference width per the original device-verification checklist.
+3. **#25** (Tailored Blazer calibration data) — separate track, not code:
    flag to whoever owns admin-dashboard product calibration for
-   re-ingestion. Confirmed isolated to this one product.
+   re-ingestion. Confirmed isolated to this one product. Use the Cotton
+   T-Shirt or Black tee for further testing in the meantime.
 
-**Only after Phase F lands and is re-verified on device:** re-test the four
-session-2 geometry fixes (#1 `unprojectToZ0`, #2 `exactScale`, #3 `rollRad`,
-#6 `skeletalRetargeter` fallback) — they cannot be meaningfully verified
-while the upstream orientation/distance data feeding them is wrong.
+**Phase H — the real native-library fix (lower urgency, #23 is worked around):**
+4. **#24** (disagreeing sensor-orientation values) — the actual root cause
+   of #22/#23, still open. Needs investigation inside
+   `react-native-mediapipe-posedetection`'s own orientation-resolution logic
+   (`BaseViewCoordinator`'s source, or the Kotlin frame-processor plugin),
+   not further changes to this repo's `forceOutputOrientation` value. Once
+   fixed there, `shouldCorrectNativeLandmarkRotation`'s guard should stop
+   triggering on this device — verify that, then consider removing the
+   compensation entirely rather than leaving two fixes stacked.
+5. **Verify the session-4 compensation's guard on a second device** — it's
+   confirmed correct and necessary on the Infinix X6880, but its
+   never-misfires-on-a-working-device behavior is unverified elsewhere.
 
 **Then, needs a product/measurement/numerical decision, not just code:**
 - **#5** (body-ratio scale convention) — needs real anthropometric reasoning;
