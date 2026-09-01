@@ -590,6 +590,19 @@ What's left, in priority order:
    confounds this specific test — distance itself drifts with yaw, so
    `exactScale` growing during a turn can't yet be cleanly attributed to #2
    specifically vs. #27. Fix #27 first, then re-attempt #2's verification.
+
+   **#3 (`rollRad` sign) provisionally confirmed, not visually verified**:
+   captured a clean neutral baseline (yaw≈-6°, roll≈-9.8°) then asked the
+   wearer to tilt their right shoulder down — `roll` flipped to +9.3°, the
+   sign `torsoEulerDegrees`'s formula predicts for that exact tilt direction
+   (`xAxis.y` becomes positive when the left shoulder is relatively higher
+   than the right). This is a real, meaningful numeric result. However, the
+   corresponding screenshot captured a different, later moment (the wearer
+   had moved to scratching their head) due to screenshot/log timing drift
+   when one person is both posing and operating the phone solo — so this
+   is NOT independently visually confirmed against the exact numeric
+   sample. Worth a clean two-person re-test (one person poses, one drives
+   the capture) before fully closing out #3's live verification.
 2. ~~Investigate the remaining ~2.1-2.3x oversizing~~ — **done, confirmed
    data-only (#26)**: A/B tested Black tee (sane calibration) against Cotton
    T-Shirt (broken calibration) same session, `exactScale` dropped to
