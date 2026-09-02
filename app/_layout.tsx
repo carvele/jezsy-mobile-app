@@ -180,18 +180,22 @@ function InitialLayout() {
     const onProfileSetup = pathSegments[1] === 'profile-setup';
     const onResetPassword = pathSegments[1] === 'reset-password';
 
-    // TEMP DEBUG: chasing a Welcome-flash report; (tabs)/_layout.tsx's own logging
-    // showed a real remount (two different mountIds) right at cold-boot but never
-    // itself observed session/profile going falsy -- this effect is the only other
-    // place that can router.replace() to Welcome/profile-setup/tabs, so logging
-    // every input plus which branch fires should show what (tabs)/_layout.tsx's
-    // remount is actually reacting to. Remove once root-caused.
-    console.log('[ROOT-LAYOUT-EFFECT] segments=' + JSON.stringify(pathSegments)
-      + ' inAuthGroup=' + inAuthGroup + ' routeSettled=' + routeSettled
-      + ' hasAuthenticated=' + hasAuthenticated.current + ' flagsReady=' + flagsReady
-      + ' session=' + (session ? 'present' : 'null') + ' profile=' + (profile ? 'present' : 'null')
-      + ' profileDeleted=' + !!profile?.deleted + ' isPasswordRecovery=' + isPasswordRecovery
-      + ' onboardingSeen=' + onboardingSeen + ' t=' + Date.now());
+    // Snapshot BEFORE this run can mutate it below. Root-caused live: this effect
+    // lists `routeSettled` in its own dependency array and sets it at its own end,
+    // so confirming auth self-triggers one more run of this same effect. `segments`
+    // (from useSegments()) updates asynchronously relative to router.replace() --
+    // on that self-triggered re-run it can still read the OLD segment for a tick,
+    // so `inAuthGroup` is stale-true even though the replace() to /(tabs) already
+    // fired. That breaks the guards below (both require `!inAuthGroup`) and the
+    // branch logic re-issues router.replace('/(tabs)') a second time, which React
+    // Navigation treats as a real navigation, not a no-op -- remounting the tabs
+    // screen and producing exactly the "flashes Welcome then Home" symptom
+    // reported live, confirmed via mountId logging in (tabs)/_layout.tsx showing
+    // two distinct mount ids moments apart. wasAlreadyAuthenticated distinguishes
+    // "confirming auth for the first time this mount" from "re-running because our
+    // own state change re-triggered us", so the tabs redirect below can never fire
+    // twice regardless of how stale `segments` is on that second pass.
+    const wasAlreadyAuthenticated = hasAuthenticated.current;
 
     // CRITICAL: Once we have confirmed a fully authenticated session AND the route
     // has already settled, skip ALL future re-evaluations. Tab navigation changes
@@ -221,31 +225,26 @@ function InitialLayout() {
     // updateUser succeeds (or they sign out from the screen itself).
     if (isPasswordRecovery) {
       if (!onResetPassword) {
-        console.log('[ROOT-LAYOUT-EFFECT] branch=reset-password t=' + Date.now());
         router.replace('/(auth)/reset-password' as any);
       }
     } else if (profile?.deleted) {
-      console.log('[ROOT-LAYOUT-EFFECT] branch=signOut(profile.deleted) t=' + Date.now());
       signOut();
     } else if (!session) {
       // Require authentication — guests must create an account or sign in.
       if (!inAuthGroup) {
-        console.log('[ROOT-LAYOUT-EFFECT] branch=welcome(!session) t=' + Date.now());
         router.replace(onboardingSeen ? '/(auth)/welcome' : '/(auth)');
       }
     } else {
       // User is logged in
       if (!profile || !profile.first_name) {
         if (!onProfileSetup) {
-          console.log('[ROOT-LAYOUT-EFFECT] branch=profile-setup(!profile) t=' + Date.now());
           router.replace('/(auth)/profile-setup');
         }
       } else {
         // Fully authenticated with a complete profile — latch the flag so
         // future tab switches and token refreshes never trigger a redirect.
         hasAuthenticated.current = true;
-        if (inAuthGroup) {
-          console.log('[ROOT-LAYOUT-EFFECT] branch=tabs(inAuthGroup) t=' + Date.now());
+        if (inAuthGroup && !wasAlreadyAuthenticated) {
           router.replace('/(tabs)');
         }
       }
