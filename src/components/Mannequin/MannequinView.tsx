@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
   StyleSheet,
@@ -34,7 +33,7 @@ import {
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { buildSilhouetteParams } from '@/src/utils/bodySilhouette';
-import { gradeOutfit, StylistCritique } from '@/src/utils/aiStylistAdvisor';
+import { gradeOutfit } from '@/src/utils/aiStylistAdvisor';
 import { StylistCritiqueModal } from './StylistCritiqueModal';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
 

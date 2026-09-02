@@ -1,6 +1,5 @@
-/* eslint-disable */
 import { useEffect, useState } from 'react';
-import { Dimensions, useWindowDimensions } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 import { Spacing } from '@/constants/theme';
 
 /**
@@ -13,8 +12,6 @@ import { Spacing } from '@/constants/theme';
  * collapsed a grid. Both cards and all three screens now read the same
  * constants, which makes the padding a token rather than a magic number.
  */
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 /** Page padding on each side of a grid. */
 export const GRID_GUTTER = Spacing.lg; // 16

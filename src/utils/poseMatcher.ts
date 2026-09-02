@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * poseMatcher.ts
  *
@@ -52,13 +51,6 @@ export interface PoseMatchResult {
 // Vector helper functions
 const dist = (p1: Landmark, p2: Landmark) =>
   Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-
-const midPoint = (p1: Landmark, p2: Landmark): Landmark => ({
-  x: (p1.x + p2.x) / 2,
-  y: (p1.y + p2.y) / 2,
-  z: ((p1.z ?? 0) + (p2.z ?? 0)) / 2,
-  visibility: (p1.visibility + p2.visibility) / 2,
-});
 
 /**
  * Helper to detect if a landmark is clipped by the camera boundary or unreliable

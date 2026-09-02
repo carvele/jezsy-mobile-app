@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,24 +37,8 @@ type WearFilter = 'all' | 'never' | 'neglected';
 const VALID_TABS: Tab[] = ['items', 'outfits', 'capsules', 'mannequin'];
 const STORAGE_KEY = 'jezsy_wardrobe_active_tab';
 
-// Read the persisted tab from localStorage (web) so it survives component unmounts
-// caused by Expo Router's tab navigator unmounting screens on navigation.
-function getPersistedTab(): Tab {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const saved = null;
-      if (saved && VALID_TABS.includes(saved as Tab)) return saved as Tab;
-    }
-  } catch {}
-  return 'items';
-}
-
 function persistTab(tab: Tab) {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      AsyncStorage.setItem(STORAGE_KEY, tab).catch(() => {});
-    }
-  } catch {}
+  AsyncStorage.setItem(STORAGE_KEY, tab).catch(() => {});
 }
 
 const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'];
@@ -75,20 +58,22 @@ export default function WardrobeScreen() {
     if (params.tab && VALID_TABS.includes(params.tab as Tab)) {
       return params.tab as Tab;
     }
-    // Otherwise restore from localStorage so the tab persists across navigation
-    return getPersistedTab();
-  }, []);  
+    return 'items';
+  }, [params.tab]);
 
   const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
   React.useEffect(() => {
-    if (!params.tab) {
-      AsyncStorage.getItem(STORAGE_KEY).then((saved: string | null) => {
+    if (params.tab) return;
+    // Restore the last-used tab so it survives Expo Router unmounting this
+    // screen on tab navigation.
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((saved: string | null) => {
         if (saved && VALID_TABS.includes(saved as Tab)) {
           setActiveTabState(saved as Tab);
         }
-      });
-    }
-  }, []);
+      })
+      .catch(() => {});
+  }, [params.tab]);
 
 
   const setActiveTab = useCallback((tab: Tab) => {
@@ -270,7 +255,7 @@ export default function WardrobeScreen() {
       </TouchableOpacity>
       </FadeInView>
     );
-  }, [colors, router]);
+  }, [colors, router, cardWidth]);
 
   const renderOutfitItem = useCallback(({ item }: { item: SavedOutfit }) => {
     // items is a JSON array

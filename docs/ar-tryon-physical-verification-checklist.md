@@ -2,7 +2,7 @@
 
 Written 2026-09-02, after session 4 (landmark-rotation fix confirmed live,
 A/B calibration confirmation, #24 root cause identified but not fixed, #27
-distance/yaw bug found). See `docs/CURRENT_AR_STATE.md` for the current
+distance/yaw bug found). See `docs/current-ar-state.md` for the current
 authoritative state and `docs/ar-tryon-audit-implementation-plan.md` for
 the full findings history — this file is a controlled, ordered test plan,
 not a findings log.

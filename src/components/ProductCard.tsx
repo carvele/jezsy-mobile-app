@@ -88,13 +88,17 @@ export function ProductCard({
         accessibilityHint="Opens product details"
       >
         <View style={[styles.imageWrap, { backgroundColor: colors.imagePlaceholder }, aspectRatio ? { aspectRatio } : undefined]}>
-          <Image
-            source={{ uri: product.image_url || '' }}
-            style={[styles.image, outOfStock && styles.imageDimmed]}
-            contentFit="cover"
-            transition={300}
-            cachePolicy="memory-disk"
-          />
+          {/* An imageless product shows the tinted placeholder colour rather
+              than the Expo template's React logo, which looked like a bug. */}
+          {product.image_url ? (
+            <Image
+              source={{ uri: product.image_url }}
+              style={[styles.image, outOfStock && styles.imageDimmed]}
+              contentFit="cover"
+              transition={300}
+              cachePolicy="memory-disk"
+            />
+          ) : null}
 
           {/* Left column of badges so they never collide with the heart. */}
           <View style={styles.badgeColumn}>

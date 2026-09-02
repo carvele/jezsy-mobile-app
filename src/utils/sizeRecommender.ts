@@ -55,12 +55,13 @@ export function analyzeFit(
   const classify = (
     zone: FitZone['zone'],
     uRaw?: any,
-    gRaw?: any
+    gRaw?: any,
+    baseEaseThresholds = { snug: 1, fitted: 6, relaxed: 10 }
   ) => {
-    // Dynamic stretch mechanics: 
+    // Dynamic stretch mechanics:
     // Rigid fabrics (like denim) need more ease to not feel tight.
     // High stretch fabrics (like spandex) can have negative ease and still fit perfectly.
-    const customEaseThresholds = { snug: 1, fitted: 6, relaxed: 10 };
+    const customEaseThresholds = { ...baseEaseThresholds };
     if (garment.stretch === 'Rigid') {
       customEaseThresholds.snug += 2;
       customEaseThresholds.fitted += 2;
@@ -104,10 +105,10 @@ export function analyzeFit(
     });
   };
 
-  classify('Bust', user.bust, garment.bust);
-  classify('Waist', user.waist, garment.waist);
-  classify('Hips', user.hips, garment.hips);
-  classify('Shoulders', user.shoulderWidth, garment.shoulderWidth);
+  classify('Bust', user.bust, garment.bust, { snug: 2, fitted: 6, relaxed: 10 });
+  classify('Waist', user.waist, garment.waist, { snug: 2, fitted: 6, relaxed: 12 });
+  classify('Hips', user.hips, garment.hips, { snug: 2, fitted: 7, relaxed: 14 });
+  classify('Shoulders', user.shoulderWidth, garment.shoulderWidth, { snug: 1, fitted: 4, relaxed: 8 });
 
   return zones;
 }

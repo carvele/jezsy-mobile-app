@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useState } from 'react';
 import {
   Modal,
@@ -7,7 +6,6 @@ import {
   Text,
   TouchableOpacity,
   Dimensions,
-  Platform,
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';

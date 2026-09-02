@@ -1,5 +1,4 @@
-/* eslint-disable */
-import type { BodyPose, GarmentFitState, Vec3 } from '../types/pose';
+import type { BodyPose, GarmentFitState } from '../types/pose';
 import type { GarmentFitProfile } from '../types/garment';
 import { normalizePose, IDENTITY_QUAT, type CanonicalPose } from './poseNormalizer';
 import type { UserMeasurements } from './sizeRecommender';

@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -61,7 +60,7 @@ export default function ReservationScreen() {
     itemIds: string;
   }>();
   const isCartMode = id === CART_ROUTE_ID;
-  const { items: cartItems, removeItems, clearCart } = useCart();
+  const { items: cartItems, removeItems } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);

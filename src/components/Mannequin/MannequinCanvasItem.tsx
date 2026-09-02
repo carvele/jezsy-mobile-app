@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -61,7 +60,13 @@ export function MannequinCanvasItem({
     savedScale.value = item.scale;
     rotation.value = item.rotation;
     savedRotation.value = item.rotation;
-  }, [item.x, item.y, item.scale, item.rotation, canvasWidth, canvasHeight]);
+    // Reanimated SharedValues keep a stable identity across renders, so
+    // listing them here is safe and doesn't cause extra re-runs.
+  }, [
+    item.x, item.y, item.scale, item.rotation, canvasWidth, canvasHeight,
+    translationX, translationY, prevTranslationX, prevTranslationY,
+    scale, savedScale, rotation, savedRotation,
+  ]);
 
   const notifyTransformComplete = () => {
     const normX = translationX.value / canvasWidth;

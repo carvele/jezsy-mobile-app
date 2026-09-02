@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * aiStylistAdvisor.ts
  * Deterministic Fashion Stylist & Outfit Grader Engine for the Mannequin.
@@ -80,19 +79,21 @@ export function extractColors(
     }
 
     // Inspect item name, sub_category, category if not found
-    const textSources = [
-      item.name,
-      matchingWardrobe?.sub_category,
-      matchingWardrobe?.category,
-      (item as any).color,
-    ].filter(Boolean).map((s) => String(s).toLowerCase());
+    if (!found) {
+      const textSources = [
+        item.name,
+        matchingWardrobe?.sub_category,
+        matchingWardrobe?.category,
+        (item as any).color,
+      ].filter(Boolean).map((s) => String(s).toLowerCase());
 
-    for (const text of textSources) {
-      for (const kc of KNOWN_COLORS) {
-        if (text.includes(kc)) {
-          colors.push(kc);
-          found = true;
-          break;
+      for (const text of textSources) {
+        for (const kc of KNOWN_COLORS) {
+          if (text.includes(kc)) {
+            colors.push(kc);
+            found = true;
+            break;
+          }
         }
       }
     }

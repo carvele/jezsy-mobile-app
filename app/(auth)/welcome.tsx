@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React from 'react';
 import {
   View,
@@ -10,7 +9,6 @@ import {
   ActivityIndicator,
   Platform,
   Modal,
-  SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';

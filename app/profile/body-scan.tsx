@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
@@ -27,6 +26,7 @@ import { SilhouetteOverlay } from "@/src/components/SilhouetteOverlay";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FirstUseHintModal } from "@/src/components/FirstUseHintModal";
 import { ScanPrep } from "@/src/components/ScanPrep";
+import { PoseLandmarkFilter } from "@/src/utils/oneEuroFilter";
 import {
   isPoseValid,
   isSidePoseValid,
@@ -112,7 +112,6 @@ export default function BodyScanScreen() {
   // Temporal smoothing for world metrics
   const nativeFilterRef = useRef<import('@/src/utils/oneEuroFilter').PoseLandmarkFilter | null>(null);
   if (!nativeFilterRef.current) {
-    const { PoseLandmarkFilter } = require('@/src/utils/oneEuroFilter');
     nativeFilterRef.current = new PoseLandmarkFilter(1.2, 0.015, 1.0);
   }
 

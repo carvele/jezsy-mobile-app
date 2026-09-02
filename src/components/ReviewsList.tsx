@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
@@ -83,7 +82,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
         });
         setStats({
           average: sum / items.length,
-          count: items.length,
+          count: count ?? items.length,
           breakdown: bd
         });
       } else {

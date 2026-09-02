@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   StyleSheet,
@@ -9,7 +8,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Animated,
-  Easing,
   useWindowDimensions,
   Pressable,
   Platform,
@@ -113,7 +111,7 @@ export default function HomeScreen() {
     }
   }, [session?.user?.id]);
 
-  const fetchProducts = async (fromCache = false) => {
+  const fetchProducts = useCallback(async (fromCache = false) => {
     // Immediately seed UI from cache so there's something to look at before the
     // network responds. fromCache=true is used by the mount-time call to avoid
     // showing a loading spinner when stale data is already available.
@@ -212,7 +210,7 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [showToast]);
 
   // Focus, not mount-only: Shop by Category's order depends on affinity
   // counts that recordCategoryVisit writes when the user taps into a
@@ -232,8 +230,7 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchProducts(true);
     fetchProducts(false);
-   
-  }, []);
+  }, [fetchProducts]);
 
   // Lands on a clone (extended index 0 or featuredProducts.length + 1) and
   // instantly, unanimatedly repositions onto the identical real card at the
@@ -289,7 +286,7 @@ export default function HomeScreen() {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchProducts();
-  }, []);
+  }, [fetchProducts]);
 
   if (loading && !refreshing) {
     return (

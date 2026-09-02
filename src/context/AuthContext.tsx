@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { Session, User } from "@supabase/supabase-js";
 import React, {
     createContext,
@@ -196,7 +195,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Profile caches are user-scoped; remove the legacy shared key as part of
       // the migration so it can never be used by an older build after logout.
       await AsyncStorage.multiRemove(['jezsy_cart', 'jezsy_profile_cache']);
-    } catch (e) {}
+    } catch {}
     await supabase.auth.signOut();
   }, []);
 

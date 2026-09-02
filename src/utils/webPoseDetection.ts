@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * webPoseDetection.ts
  *
@@ -157,7 +156,7 @@ export class WebPoseTracker {
     if (this.poseLandmarker) {
       try {
         this.poseLandmarker.close();
-      } catch (_) {}
+      } catch {}
       this.poseLandmarker = null;
     }
     this.isReady = false;

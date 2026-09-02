@@ -1,11 +1,10 @@
-/* eslint-disable */
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, AppState, Platform, LogBox } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform, LogBox } from 'react-native';
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -20,7 +19,6 @@ import { CartProvider } from '@/src/context/CartContext';
 import { MessagesProvider } from '@/src/context/MessagesContext';
 import { ToastProvider } from '@/src/context/ToastContext';
 import { AppThemeProvider, useThemeContext } from '@/src/context/ThemeContext';
-import { supabase } from '@/src/lib/supabase';
 import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
 import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
@@ -178,7 +176,6 @@ function InitialLayout() {
   useEffect(() => {
     const pathSegments = segments as string[];
     const inAuthGroup = pathSegments[0] === '(auth)';
-    const inTabsGroup = pathSegments[0] === '(tabs)';
     const onProfileSetup = pathSegments[1] === 'profile-setup';
     const onResetPassword = pathSegments[1] === 'reset-password';
 
@@ -254,6 +251,10 @@ function InitialLayout() {
 
     // Whichever branch ran, the correct route is now committed.
     setRouteSettled(true);
+    // routeSettled is deliberately excluded: this effect reads and sets it, so
+    // listing it self-triggers a re-run on confirm -- see the stale-`segments`
+    // comment above for the exact double-navigation bug that caused.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut]);
 
   useEffect(() => {

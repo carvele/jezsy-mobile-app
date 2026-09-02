@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import { formatPHDate } from '@/src/utils/dateFormatter';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
@@ -12,6 +11,7 @@ import { statusBucket, statusLabel, isAwaitingPayment, canReschedule } from '@/s
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import {
+  formatPHDate,
   formatTimeLabel,
   formatManilaDate,
   generateManilaDates,

@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -7,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -17,8 +15,6 @@ import { Colors, Spacing, Type as Typography } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSafeBack } from '@/src/hooks/useSafeBack';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface StylePoseDetail {
   id: string;

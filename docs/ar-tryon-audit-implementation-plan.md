@@ -50,7 +50,7 @@ cause in the **separate `admin-dashboard` repo** (commit `a3eef9c`, not
 pushed): its ingestion modal was silently marking anchor calibration as
 merchant-confirmed on edits to fields unrelated to the anchor.
 
-See `docs/CURRENT_AR_STATE.md` for the current authoritative state — this
+See `docs/current-ar-state.md` for the current authoritative state — this
 file is the historical audit record.
 
 **Methodology note:** tonight's device test used the pre-existing installed
@@ -235,7 +235,7 @@ indefinitely.
 Fixed: `<Camera isActive>` now also gates on `AppState` (`isAppActive`), not
 just navigation focus. Not audited for whether the MediaPipe detector session
 itself also needs an explicit stop/release call — flagged in
-`docs/CURRENT_AR_STATE.md`.
+`docs/current-ar-state.md`.
 
 ### 15 (was Medium). `usePoseDetection` return identity churned every render
 **`app/ar-tryon/[id].tsx`** — commit `fe36506`
@@ -857,7 +857,7 @@ What's left, in priority order:
 - **#16** (web smoothing parity) — deliberately deferred, native-only scope
   decision stands.
 
-See `docs/CURRENT_AR_STATE.md` for the full current-state summary and exact
+See `docs/current-ar-state.md` for the full current-state summary and exact
 next steps.
 
 **Deferred, not in this plan:** removing the temporary debug instrumentation

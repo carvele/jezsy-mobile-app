@@ -207,6 +207,28 @@ export function formatReceiptTime(iso: string): string {
   return `${datePart}, ${time}`;
 }
 
+/** Formats an arbitrary instant in the Asia/Manila timezone via Intl, for
+ * call sites that need weekday/hour/minute options formatManilaDate can't
+ * express (formatManilaDate/manilaCalendarDay above cover the calendar-day
+ * case without depending on Intl timezone data). */
+export function formatPHDate(dateString: string | Date | null | undefined, options: Intl.DateTimeFormatOptions = {}): string {
+  if (!dateString) return "N/A";
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return "N/A";
+
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      ...options
+    }).format(d);
+  } catch {
+    return "N/A";
+  }
+}
+
 export function formatTimeLabel(time: string | null | undefined): string {
   if (!time) return 'N/A';
 

@@ -1,5 +1,4 @@
-/* eslint-disable */
-import { gradeOutfit, scoreToGrade, extractColors } from '../aiStylistAdvisor';
+import { gradeOutfit } from '../aiStylistAdvisor';
 import { MannequinCanvasItem } from '../mannequinConfig';
 
 function mockItem(

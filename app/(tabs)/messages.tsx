@@ -8,7 +8,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
-import { formatPHDate } from '@/src/utils/dateFormatter';
+import { formatPHDate } from '@/src/utils/dateTime';
 // import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';

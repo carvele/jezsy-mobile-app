@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BottomSheetModal, BottomSheetScrollView, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import {
@@ -8,12 +7,8 @@ import {
   TextInput,
   ScrollView,
   TouchableOpacity,
-  FlatList,
-  KeyboardAvoidingView,
   Platform,
   Dimensions,
-  Pressable,
-  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MasonryList from '@react-native-seoul/masonry-list';
@@ -59,7 +54,6 @@ type Category = {
 const FILTER_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 const FILTER_FITS = ['Regular Fit', 'Slim Fit', 'Oversized', 'Relaxed', 'Tailored'];
 const FILTER_MATERIALS = ['Cotton', 'Silk', 'Linen', 'Wool', 'Cashmere', 'Denim', 'Leather', 'Satin', 'Polyester'];
-const FILTER_TAGS = ['Limited Edition', 'Sustainable', 'Unisex', 'Plus Size'];
 
 const SORT_OPTIONS = [
   { id: 'recommended', label: 'Recommended' },
@@ -69,6 +63,12 @@ const SORT_OPTIONS = [
   { id: 'popular', label: 'Most Popular' },
   { id: 'rating', label: 'Best Rated' },
 ];
+
+// Stable identity across renders so BottomSheetModal doesn't see a changed
+// backdropComponent prop (and re-render the backdrop tree) on every render.
+const renderSheetBackdrop = (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+  <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior="close" />
+);
 
 export default function ExploreScreen() {
   const { columns } = useGridCardWidth();
@@ -240,7 +240,7 @@ export default function ExploreScreen() {
   };
 
   // Fetch search results from Supabase
-  const fetchSearchResults = async (text: string) => {
+  const fetchSearchResults = useCallback(async (text: string) => {
     if (!text.trim()) {
       setSearchResults([]);
       return;
@@ -275,14 +275,14 @@ export default function ExploreScreen() {
       console.error(err);
       showToast('Search failed. Please try again.', 'error');
     }
-  };
+  }, [subCategoryIdsMatching, showToast]);
 
   // Trigger search on query change
   useEffect(() => {
     if (isSearchActive) {
       fetchSearchResults(searchQuery);
     }
-  }, [searchQuery, isSearchActive]);
+  }, [searchQuery, isSearchActive, fetchSearchResults]);
 
   // Builds the base query for whichever mode is active (category/subcategory
   // drill-down or "Shop All"), shared by the initial fetch and loadMore so
@@ -638,12 +638,6 @@ export default function ExploreScreen() {
     );
   };
 
-  const toggleTempTag = (tag: string) => {
-    setTempTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
-  };
-
   const toggleTempMaterial = (material: string) => {
     setTempMaterials((prev) =>
       prev.includes(material) ? prev.filter((m) => m !== material) : [...prev, material]
@@ -666,10 +660,6 @@ export default function ExploreScreen() {
 
   const removeMaterialFilter = useCallback((material: string) => {
     setSelectedMaterials((prev) => prev.filter((m) => m !== material));
-  }, []);
-
-  const removeTagFilter = useCallback((tag: string) => {
-    setSelectedTags((prev) => prev.filter((t) => t !== tag));
   }, []);
 
   // Breadcrumbs renderer (e.g. Tops > Knits & Sweaters)
@@ -715,13 +705,17 @@ export default function ExploreScreen() {
     );
   };
 
-  const renderProductItem = useCallback(({ item, i }: { item: unknown, i: number }) => {
-    const p = item as any;
+  const renderProductItem = useCallback(({ item }: { item: unknown }) => {
+    // MasonryList's default export is wrapped in React.memo, which erases its
+    // generic <T> -- renderItem's declared type is always `unknown`, so a
+    // single narrow cast here is unavoidable. Everything downstream of this
+    // point is fully typed as Product.
+    const product = item as Product;
     return (
       <ProductCard
-        product={p}
+        product={product}
         variant="grid"
-        recommendedSize={recommendedSizes.get(p.id)}
+        recommendedSize={recommendedSizes.get(product.id)}
       />
     );
   }, [recommendedSizes]);
@@ -751,9 +745,9 @@ export default function ExploreScreen() {
     return chips;
   }, [
     selectedNewArrivalsOnly, selectedSaleOnly, selectedArOnly, selectedMySizeOnly,
-    selectedSizes, selectedColors, selectedFits, selectedMaterials, selectedTags,
+    selectedSizes, selectedColors, selectedFits, selectedMaterials,
     selectedPriceRange, customMinPrice, customMaxPrice,
-    removeSizeFilter, removeColorFilter, removeFitFilter, removeMaterialFilter, removeTagFilter,
+    removeSizeFilter, removeColorFilter, removeFitFilter, removeMaterialFilter,
   ]);
 
   const activeFiltersCount = activeFilterChips.length;
@@ -912,7 +906,6 @@ export default function ExploreScreen() {
                 key={`grid-${columns}`}
                 numColumns={columns}
                 contentContainerStyle={styles.productList}
-                // columnWrapperStyle={styles.productRow}
                 ListHeaderComponent={
                   <View style={{ backgroundColor: colors.background }}>
                     {renderGridHeader(
@@ -1041,7 +1034,6 @@ export default function ExploreScreen() {
                   key={`grid-${columns}`}
                   numColumns={columns}
                   contentContainerStyle={styles.productList}
-                  // columnWrapperStyle={styles.productRow}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderGridHeader(
@@ -1060,7 +1052,9 @@ export default function ExploreScreen() {
                   }
                   onEndReached={loadMoreProducts}
                   onEndReachedThreshold={0.5}
-                  refreshing={refreshing} onRefresh={onRefreshProducts}
+                  refreshing={refreshing}
+                  onRefresh={onRefreshProducts}
+                  refreshControlProps={{ tintColor: colors.tint, colors: [colors.tint] }}
                   ListFooterComponent={
                     loadingMore ? (
                       <View style={styles.loadMoreFooter}>
@@ -1081,7 +1075,7 @@ export default function ExploreScreen() {
       <BottomSheetModal
         ref={filterSheetRef}
         snapPoints={filterSnapPoints}
-        backdropComponent={(props) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior="close" />}
+        backdropComponent={renderSheetBackdrop}
         backgroundStyle={{ backgroundColor: colors.background }}
         handleIndicatorStyle={{ backgroundColor: colors.border }}
         keyboardBehavior="extend"
@@ -1384,7 +1378,7 @@ export default function ExploreScreen() {
       <BottomSheetModal
         ref={sortSheetRef}
         snapPoints={sortSnapPoints}
-        backdropComponent={(props) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior="close" />}
+        backdropComponent={renderSheetBackdrop}
         backgroundStyle={{ backgroundColor: colors.background }}
         handleIndicatorStyle={{ backgroundColor: colors.border }}
       >

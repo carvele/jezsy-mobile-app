@@ -1,9 +1,8 @@
-/* eslint-disable */
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import { tapLight, tapMedium, notifySuccess } from '@/src/utils/haptics';
-import React, { useCallback, useEffect, useState, useMemo } from "react";
+import { tapLight, notifySuccess } from '@/src/utils/haptics';
+import React, { useCallback, useEffect, useState } from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -37,7 +36,7 @@ import { useMessages } from "@/src/context/MessagesContext";
 import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
 import { CATEGORY_SELECT, getMainCategoryId, getMainCategoryName, WithCategoryEmbed } from "@/src/utils/categoryDisplay";
-import { recommendSize, analyzeFit, ProductMeasurements, UserMeasurements, FitZone } from "@/src/utils/sizeRecommender";
+import { recommendSize, ProductMeasurements } from "@/src/utils/sizeRecommender";
 import { SizeChartModal } from "@/src/components/SizeChartModal";
 import { ImageViewerModal } from "@/src/components/ImageViewerModal";
 import { useToast } from '@/src/context/ToastContext';
@@ -64,8 +63,6 @@ export default function ProductDetailScreen() {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const { user } = useAuth();
   const [recommendedSize, setRecommendedSize] = useState<string | null>(null);
-  const [userMeasurements, setUserMeasurements] = useState<UserMeasurements | null>(null);
-  const [fitPreference, setFitPreference] = useState<string>('regular');
   const [addedToBag, setAddedToBag] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -86,12 +83,6 @@ export default function ProductDetailScreen() {
 
   const goBack = useSafeBack('/');
   const handleBack = goBack;
-
-  const activeFitZones = useMemo(() => {
-    const sizeToAnalyze = selectedSize || recommendedSize;
-    if (!product?.measurements || !sizeToAnalyze || !userMeasurements) return [];
-    return analyzeFit(userMeasurements, (product.measurements as any)[sizeToAnalyze]);
-  }, [product?.measurements, selectedSize, recommendedSize, userMeasurements]);
 
   useFocusEffect(
     useCallback(() => {
@@ -133,10 +124,8 @@ export default function ProductDetailScreen() {
               ]);
 
               const pref = profile?.fit_preference || "regular";
-              setFitPreference(pref);
 
               if (metrics && metrics.measurements) {
-                setUserMeasurements(metrics.measurements as any);
                 const categoryName = (data.category as any)?.name || (data as any).category_id || data.name || "";
                 const rec = recommendSize(
                   metrics.measurements as any,

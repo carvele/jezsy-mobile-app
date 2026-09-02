@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, FlatList, TouchableOpacity } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { formatPHDate } from '@/src/utils/dateFormatter';
+import { formatPHDate, formatTimeLabel } from '@/src/utils/dateTime';
 import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { Database } from '@/src/types/database.types';
@@ -11,7 +11,6 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
-import { formatTimeLabel } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
 import {
   STATUS_FILTERS,

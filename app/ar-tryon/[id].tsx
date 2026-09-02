@@ -1,11 +1,9 @@
-/* eslint-disable */
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform, useWindowDimensions, AppState } from 'react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { Camera, useCameraDevice, useCameraFormat, useCameraPermission, usePoseDetection, RunningMode, Delegate, NATIVE_VISION_AVAILABLE } from '@/src/utils/nativeVision';
-import { Image } from 'expo-image';
+import { Camera, useCameraDevice, useCameraFormat, useCameraPermission, usePoseDetection, RunningMode, Delegate } from '@/src/utils/nativeVision';
 import * as Speech from 'expo-speech';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
@@ -19,23 +17,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { ConsentModal } from '@/src/components/ConsentModal';
 import { useToast } from '@/src/context/ToastContext';
-import { getForegroundOcclusionSegments } from '@/src/utils/poseMatcher';
 import { constructBodyPose } from '@/src/utils/poseConstructor';
 import { calculateGarmentFit } from '@/src/utils/garmentFitter';
 import { calculateBoneRotationsFromCanonical } from '@/src/utils/skeletalRetargeter';
 import { normalizePose, torsoEulerDegrees } from '@/src/utils/poseNormalizer';
 import type { GarmentFitProfile } from '@/src/types/garment';
-import Animated, {
+import {
   useSharedValue,
-  useAnimatedStyle,
   withTiming,
-  withSpring,
-  Easing,
 } from 'react-native-reanimated';
 
 import { WebPoseTracker } from '@/src/utils/webPoseDetection';
 import { PoseLandmarkFilter } from '@/src/utils/oneEuroFilter';
-import type { Landmark } from '@/src/utils/poseDetector';
 import type { PoseFrame } from '@/src/types/pose';
 import { GarmentRenderer } from '@/src/components/AR/GarmentRenderer';
 type Product = Database['public']['Tables']['products']['Row'];
@@ -267,6 +260,32 @@ function correctNormalized2DLandmarkRotation(p: any) {
   return { ...p, x: p.y, y: 1 - p.x };
 }
 
+function buildFallbackMetadata(p: Product | null | undefined): import('@/src/types/garment').GarmentMetadata {
+  const cat = (p?.category || 'shirt').toLowerCase();
+  return {
+    id: p?.id || 'mock',
+    category: cat as any,
+    calibrationVersion: '1.0.0',
+    ingestionStatus: 'AR_READY',
+    anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
+    anchorConfidence: 'inferred',
+    anchorType: 'SHOULDER_CENTER',
+    restPoseMetricWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
+    boneMap: {
+      'Spine': 'mixamorigSpine',
+      'Spine1': 'mixamorigSpine1',
+      'Spine2': 'mixamorigSpine2',
+      'LeftShoulder': 'mixamorigLeftShoulder',
+      'LeftArm': 'mixamorigLeftArm',
+      'LeftForeArm': 'mixamorigLeftForeArm',
+      'RightShoulder': 'mixamorigRightShoulder',
+      'RightArm': 'mixamorigRightArm',
+      'RightForeArm': 'mixamorigRightForeArm'
+    },
+    restPose: 'A_POSE'
+  };
+}
+
 export default function ARTryOnScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -309,42 +328,11 @@ export default function ARTryOnScreen() {
   const compGuardLogCounter = React.useRef(0);
   const garmentRendererRef = React.useRef<any>(null);
 
-  const animatedGarmentStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    // Phase 4A/4B: Full 3D transform is applied inside GarmentRenderer's WebGL context.
-  }));
-
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const stageWidth = stageLayout.width || Math.min(winWidth || 390, 480);
   const stageHeight = stageLayout.height || Math.min(winHeight || 844, 900);
 
   // Phase 5B: Real garment metadata from Supabase, with a clearly-labelled fallback
-  const buildFallbackMetadata = (p: typeof product): import('@/src/types/garment').GarmentMetadata => {
-    const cat = (p?.category || 'shirt').toLowerCase();
-      return {
-        id: p?.id || 'mock',
-        category: cat as any,
-        calibrationVersion: '1.0.0',
-        ingestionStatus: 'AR_READY',
-        anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
-        anchorConfidence: 'inferred',
-        anchorType: 'SHOULDER_CENTER',
-        restPoseMetricWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
-        boneMap: {
-        'Spine': 'mixamorigSpine',
-        'Spine1': 'mixamorigSpine1',
-        'Spine2': 'mixamorigSpine2',
-        'LeftShoulder': 'mixamorigLeftShoulder',
-        'LeftArm': 'mixamorigLeftArm',
-        'LeftForeArm': 'mixamorigLeftForeArm',
-        'RightShoulder': 'mixamorigRightShoulder',
-        'RightArm': 'mixamorigRightArm',
-        'RightForeArm': 'mixamorigRightForeArm'
-      },
-      restPose: 'A_POSE'
-    };
-  };
-
   const [garmentMetadata, setGarmentMetadata] = useState<import('@/src/types/garment').GarmentMetadata | null>(null);
   const [isDemoRig, setIsDemoRig] = useState(false);
 
@@ -1026,59 +1014,6 @@ export default function ARTryOnScreen() {
             mv.fieldOfView = 'auto';
             mv.setAttribute('exposure', '1.1');
           }
-        </script>
-      </body>
-    </html>
-  `;
-
-  const htmlContentOverlay = `
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <style>
-          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-          body, html {
-            width: 100%; height: 100%;
-            background: transparent !important;
-            overflow: hidden;
-          }
-          model-viewer {
-            width: 100%; height: 100%;
-            --poster-color: transparent;
-            background-color: transparent !important;
-          }
-        </style>
-        <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
-      </head>
-      <body>
-        <model-viewer
-          id="mv-overlay"
-          src="${modelUrl}"
-          ios-src="${iosModelUrl}"
-          camera-orbit="0deg 75deg 105%"
-          interpolation-decay="80"
-          shadow-intensity="0.8"
-          shadow-softness="0.8"
-          exposure="1.15"
-          tone-mapping="commerce"
-          environment-image="legacy"
-          alt="A 3D model of ${safeName}">
-        </model-viewer>
-        <script>
-          const mv = document.getElementById('mv-overlay');
-          window.addEventListener('message', (e) => {
-            if (e.data && e.data.type === 'UPDATE_3D_POSE') {
-              const { yaw, pitch } = e.data;
-              if (mv) {
-                // Invert yaw for mirrored camera display
-                const orbitYaw = (-(yaw || 0)).toFixed(1);
-                const orbitPitch = Math.max(55, Math.min(95, 75 + (pitch || 0))).toFixed(1);
-                mv.cameraOrbit = orbitYaw + 'deg ' + orbitPitch + 'deg 105%';
-              }
-            }
-          });
         </script>
       </body>
     </html>
