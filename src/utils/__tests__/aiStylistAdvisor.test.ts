@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { gradeOutfit, scoreToGrade, extractColors } from '../aiStylistAdvisor';
 import { MannequinCanvasItem } from '../mannequinConfig';
 

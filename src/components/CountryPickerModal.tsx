@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { COUNTRIES, type Country } from '@/src/utils/profileFields';
 
@@ -59,27 +59,27 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
+    padding: Spacing.xxl,
     paddingBottom: Platform.OS === 'ios' ? 44 : 24,
     maxHeight: '75%',
     borderWidth: 1,
   },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 18, fontWeight: '700', letterSpacing: 0.2 },
-  closeBtn: { padding: 4 },
-  closeText: { fontSize: 15, fontWeight: '600' },
-  list: { gap: 8 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xl },
+  title: { ...Type.subtitle, letterSpacing: 0.2 },
+  closeBtn: { padding: Spacing.xs },
+  closeText: { ...Type.bodyStrong },
+  list: { gap: Spacing.sm },
   item: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
     borderWidth: 1,
   },
-  itemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  itemLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   itemFlag: { fontSize: 20 },
   itemName: { fontSize: 15, fontWeight: '500' },
   itemDialCode: { fontSize: 14, fontWeight: '600' },

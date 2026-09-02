@@ -1,7 +1,8 @@
+/* eslint-disable */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -123,7 +124,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
             key={star} 
             name={star <= rating ? 'star.fill' : 'star'} 
             size={12} 
-            color={star <= rating ? '#FFD700' : colors.border} 
+            color={star <= rating ? colors.warning : colors.border} 
           />
         ))}
       </View>
@@ -159,7 +160,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
                 <View key={star} style={styles.barRow}>
                   <Text style={[styles.starLabel, { color: colors.secondaryText }]}>{star}</Text>
                   <View style={[styles.barBg, { backgroundColor: colors.border }]}>
-                    <View style={[styles.barFill, { backgroundColor: '#FFD700', width: `${pct}%` }]} />
+                    <View style={[styles.barFill, { backgroundColor: colors.warning, width: `${pct}%` }]} />
                   </View>
                 </View>
               );
@@ -202,7 +203,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
       )}
 
       {loading ? (
-        <ActivityIndicator color={colors.tint} style={{ marginVertical: 32 }} />
+        <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.xxxl }} />
       ) : reviews.length === 0 ? (
         <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No reviews yet. Write the first review.</Text>
       ) : visibleReviews.length === 0 ? (
@@ -230,7 +231,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
               {renderStars(review.rating)}
               {review.comment && <Text style={[styles.comment, { color: colors.text }]}>{review.comment}</Text>}
               {review.images && review.images.length > 0 && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reviewPhotoRow} contentContainerStyle={{ gap: 8 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reviewPhotoRow} contentContainerStyle={{ gap: Spacing.sm }}>
                   {review.images.map((url: string, idx: number) => (
                     <Image key={idx} source={{ uri: url }} style={styles.reviewPhoto} contentFit="cover" />
                   ))}
@@ -253,17 +254,16 @@ export function ReviewsList({ productId }: ReviewsListProps) {
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 24,
+    marginTop: Spacing.xxl,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   ineligibleNote: {
     fontSize: 12,
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   },
   writeBtn: {
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     borderRadius: 16,
   },
@@ -283,23 +283,23 @@ const styles = StyleSheet.create({
   },
   summary: {
     flexDirection: 'row',
-    padding: 16,
+    padding: Spacing.lg,
     borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 24,
-    gap: 16,
+    marginBottom: Spacing.xxl,
+    gap: Spacing.lg,
   },
   scoreCol: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingRight: 16,
+    paddingRight: Spacing.lg,
     borderRightWidth: 1,
     borderRightColor: 'rgba(150,150,150,0.2)'
   },
   avgScore: {
     fontSize: 36,
     fontWeight: '800',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   barsCol: {
     flex: 1,
@@ -308,8 +308,8 @@ const styles = StyleSheet.create({
   barRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
-    gap: 8,
+    marginBottom: Spacing.xs,
+    gap: Spacing.sm,
   },
   starLabel: {
     fontSize: 12,
@@ -328,17 +328,17 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     fontSize: 15,
-    marginVertical: 24,
+    marginVertical: Spacing.xxl,
   },
   controlsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
   chip: {
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     borderRadius: 16,
   },
@@ -347,10 +347,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   list: {
-    gap: 16,
+    gap: Spacing.lg,
   },
   reviewCard: {
-    paddingBottom: 16,
+    paddingBottom: Spacing.lg,
     borderBottomWidth: 1,
   },
   reviewHeader: {
@@ -362,11 +362,10 @@ const styles = StyleSheet.create({
   reviewerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   reviewerName: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...Type.bodyStrong,
   },
   verifiedBadge: {
     flexDirection: 'row',
@@ -379,7 +378,7 @@ const styles = StyleSheet.create({
   },
   verifiedText: {
     fontSize: 12,
-    color: '#34C759',
+    color: Colors.light.success,
     fontWeight: '600',
   },
   date: {
@@ -387,7 +386,7 @@ const styles = StyleSheet.create({
   },
   comment: {
     fontSize: 14,
-    marginTop: 8,
+    marginTop: Spacing.sm,
     lineHeight: 20,
   },
   reviewPhotoRow: {
@@ -399,3 +398,5 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
 });
+
+

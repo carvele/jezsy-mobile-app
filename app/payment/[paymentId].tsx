@@ -108,7 +108,7 @@ export default function PaymentScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>This payment link is no longer valid.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: Spacing.lg }}>
           <Text style={{ color: colors.tint }}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -180,6 +180,6 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: Spacing.xs, width: 32 },
   headerTitle: { ...Type.subtitle },
-  settlingText: { fontSize: 16, fontWeight: '700', marginTop: Spacing.lg },
+  settlingText: { ...Type.bodyLargeStrong, marginTop: Spacing.lg },
   settlingHint: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: Spacing.sm },
 });

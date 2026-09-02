@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
+import { formatPHDate } from '@/src/utils/dateFormatter';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
@@ -244,7 +245,7 @@ export default function ReservationDetailScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.text }}>Reservation not found.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: Spacing.xl }}>
           <Text style={{ color: colors.tint }}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -252,7 +253,7 @@ export default function ReservationDetailScreen() {
   }
 
   const dateStr = reservation.date
-    ? new Date(reservation.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    ? formatPHDate(reservation.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : 'N/A';
   const statusColor = getStatusColor(reservation.status);
   // Raw arithmetic, not "what's still owed" -- see isBalanceSettled below.
@@ -319,11 +320,11 @@ export default function ReservationDetailScreen() {
         </View>
 
         {Boolean((reservation as any).confirmed_by_name) && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, marginBottom: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.xs, marginBottom: Spacing.md }}>
             <IconSymbol name="checkmark.seal.fill" size={14} color={colors.tint} />
-            <Text style={{ fontSize: 12, color: colors.secondaryText, marginLeft: 4 }}>
+            <Text style={{ fontSize: 12, color: colors.secondaryText, marginLeft: Spacing.xs }}>
               Confirmed by {(reservation as any).confirmed_by_name}
-              {(reservation as any).confirmed_at ? ` on ${new Date((reservation as any).confirmed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
+              {(reservation as any).confirmed_at ? ` on ${formatPHDate((reservation as any).confirmed_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
             </Text>
           </View>
         )}
@@ -411,7 +412,7 @@ export default function ReservationDetailScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <View style={[styles.infoRow, { marginTop: 12 }]}>
+          <View style={[styles.infoRow, { marginTop: Spacing.md }]}>
             <IconSymbol name="calendar" size={18} color={colors.tint} />
             <Text style={[styles.infoText, { color: colors.text }]}>
               {dateStr} at {formatTimeLabel(reservation.appointment_time)}
@@ -435,7 +436,7 @@ export default function ReservationDetailScreen() {
           {showReschedule && (
             <View style={[styles.reschedulePanel, { borderTopColor: colors.border }]}>
               <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new date</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.lg }}>
                 {generateManilaDates(14).map((d, index) => {
                   const isSelected = isSameManilaDay(d, rescheduleDate);
                   return (
@@ -496,7 +497,7 @@ export default function ReservationDetailScreen() {
         {awaitingPayment && (
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.tint }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment needed</Text>
-            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: 12 }]}>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
               Your request was accepted. Pay ₱{(reservation.deposit || 0).toFixed(2)} to keep this item.
             </Text>
 
@@ -581,7 +582,7 @@ export default function ReservationDetailScreen() {
           </View>
           {isBalanceSettled && reservation.balance_settled_at && (
             <Text style={[styles.rowText, { color: colors.secondaryText, fontSize: 12, marginTop: 2 }]}>
-              Collected {new Date(reservation.balance_settled_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              Collected {formatPHDate(reservation.balance_settled_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </Text>
           )}
           <View style={[styles.paymentStatusRow, { borderTopColor: colors.border }]}>
@@ -598,7 +599,7 @@ export default function ReservationDetailScreen() {
             ) : receiptLoadFailed ? (
               <View style={[styles.receiptImage, styles.receiptPlaceholder]}>
                 <IconSymbol name="exclamationmark.circle" size={20} color={colors.error} />
-                <Text style={[styles.rowText, { color: colors.error, marginTop: 8 }]}>
+                <Text style={[styles.rowText, { color: colors.error, marginTop: Spacing.sm }]}>
                   Could not load your receipt. Pull to refresh, or try again later.
                 </Text>
               </View>
@@ -736,7 +737,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   dayName: { fontSize: 12, marginBottom: Spacing.xs },
-  dateNum: { fontSize: 18, fontWeight: '700' },
+  dateNum: { ...Type.subtitle },
   rescheduleActions: {
     flexDirection: 'row',
     gap: Spacing.md,

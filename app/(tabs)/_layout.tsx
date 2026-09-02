@@ -83,7 +83,7 @@ export default function TabLayout() {
       left: horizontalMargin,
       right: horizontalMargin,
       height: barHeight,
-      backgroundColor: isDark ? '#121212' : '#ffffff',
+      backgroundColor: isDark ? '#121212' : 'white',
       borderRadius: barHeight / 2,
       borderTopWidth: 0,
       borderWidth: isDark ? 1 : 0.5,
@@ -92,7 +92,7 @@ export default function TabLayout() {
       paddingTop: 0,
       ...(Platform.OS === 'ios'
         ? {
-            shadowColor: '#000',
+            shadowColor: 'black',
             shadowOffset: { width: 0, height: 8 },
             shadowOpacity: isDark ? 0.6 : 0.15,
             shadowRadius: 24,

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
@@ -98,10 +98,10 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 20,
+    marginBottom: Spacing.xl,
   },
   iconContainer: {
     width: 48,
@@ -110,15 +110,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 90, 95, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: Spacing.lg,
   },
   textContainer: {
     flex: 1,
   },
   title: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
+    ...Type.bodyLargeStrong,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
     fontSize: 13,

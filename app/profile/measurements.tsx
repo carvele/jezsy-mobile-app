@@ -374,8 +374,8 @@ export default function MeasurementsScreen() {
     const conf = fieldConfidence[fieldKey];
     let confColor = 'transparent';
     if (conf) {
-      if (conf > 0.85) confColor = '#00FF00';
-      else if (conf > 0.6) confColor = '#FFCC00';
+      if (conf > 0.85) confColor = colors.success;
+      else if (conf > 0.6) confColor = colors.warning;
       else confColor = '#FF3B30';
     }
 
@@ -447,7 +447,7 @@ export default function MeasurementsScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           
           {scanConfidence && (
-            <View style={[styles.infoCard, { backgroundColor: 'rgba(0,255,0,0.1)', borderColor: '#00FF00', borderWidth: 1 }]}>
+            <View style={[styles.infoCard, { backgroundColor: 'rgba(0,255,0,0.1)', borderColor: colors.success, borderWidth: 1 }]}>
               <IconSymbol name="checkmark.circle.fill" size={20} color="#00FF00" />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.infoText, { color: colors.text, fontWeight: 'bold' }]}>Scan Successful</Text>
@@ -585,7 +585,7 @@ export default function MeasurementsScreen() {
 
       <View style={[styles.footer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
         {saveError && (
-          <Text style={{ color: '#c0392b', fontSize: 12, marginBottom: Spacing.sm, textAlign: 'center' }}>
+          <Text style={{ color: colors.error, fontSize: 12, marginBottom: Spacing.sm, textAlign: 'center' }}>
             {saveError}
           </Text>
         )}
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
   guideBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Spacing.xs,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: Radius.md,
@@ -675,8 +675,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   unitToggleOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   unitToggleText: {
     fontSize: 13,
@@ -747,3 +747,4 @@ const styles = StyleSheet.create({
     ...Type.bodyLargeStrong,
   },
 });
+

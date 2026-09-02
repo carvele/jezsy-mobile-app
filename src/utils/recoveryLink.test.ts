@@ -1,3 +1,5 @@
+import { parseRecoveryTokens, handleRecoveryUrl } from './recoveryLink';
+
 const mockSetSession = jest.fn();
 
 jest.mock('@/src/lib/supabase', () => ({
@@ -7,8 +9,6 @@ jest.mock('@/src/lib/supabase', () => ({
     },
   },
 }));
-
-import { parseRecoveryTokens, handleRecoveryUrl } from './recoveryLink';
 
 const RECOVERY_URL =
   'jezsymobileapp://reset-password#access_token=at123&refresh_token=rt456&type=recovery';

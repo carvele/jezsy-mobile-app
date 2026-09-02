@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.lg,
     marginBottom: Spacing.md,
-    gap: 4,
+    gap: Spacing.xs,
   },
   creditTitle: {
     ...Type.headline,

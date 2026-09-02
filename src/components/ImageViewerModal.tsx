@@ -116,7 +116,7 @@ export function ImageViewerModal({ visible, uri, onClose }: ImageViewerModalProp
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'black',
     justifyContent: 'center',
     alignItems: 'center',
   },

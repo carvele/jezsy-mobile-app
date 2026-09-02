@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, Modal, TouchableOpacity, ScrollView } from 'react-native';
-import { Colors, Spacing } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -176,18 +176,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
     borderBottomWidth: 1,
     position: 'relative',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   closeBtn: {
     position: 'absolute',
     right: 16,
-    padding: 8,
+    padding: Spacing.sm,
   },
   body: {
     padding: Spacing.xl,
@@ -207,7 +206,7 @@ const styles = StyleSheet.create({
   },
   optionButton: { paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
   optionDisabled: { opacity: 0.4 },
-  optionText: { fontSize: 15, fontWeight: '600' },
+  optionText: { ...Type.bodyStrong },
   saveBtn: {
     height: 52,
     borderRadius: 14,

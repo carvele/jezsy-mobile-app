@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, Text, Modal, TouchableOpacity } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -93,32 +93,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: Spacing.xxl,
   },
   modalContent: {
     width: '100%',
     borderRadius: 24,
-    padding: 24,
+    padding: Spacing.xxl,
     borderWidth: 1,
     alignItems: 'center',
   },
   iconContainer: {
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   title: {
     fontSize: 22,
     fontWeight: '800',
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
     textAlign: 'center',
   },
   bulletList: {
-    gap: 16,
-    marginBottom: 24,
+    gap: Spacing.lg,
+    marginBottom: Spacing.xxl,
   },
   bulletItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
   },
   bulletText: {
     flex: 1,
@@ -135,14 +135,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: Spacing.xxxl,
   },
   privacyLink: {
     textDecorationLine: 'underline',
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
     width: '100%',
   },
   btn: {
@@ -157,8 +157,7 @@ const styles = StyleSheet.create({
   },
   acceptBtn: {},
   btnText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
   acceptText: {
     

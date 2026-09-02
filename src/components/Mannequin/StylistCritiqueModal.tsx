@@ -284,8 +284,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
     borderBottomWidth: 1,
   },
   headerTitleWrap: {
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
     borderRadius: Radius.pill,
     gap: 5,
   },
@@ -311,16 +311,16 @@ const styles = StyleSheet.create({
     flexGrow: 0,
   },
   scrollContent: {
-    padding: 20,
+    padding: Spacing.xl,
     paddingBottom: 30,
-    gap: 16,
+    gap: Spacing.lg,
   },
   /* Score Card */
   scoreCard: {
-    padding: 16,
+    padding: Spacing.lg,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    gap: 12,
+    gap: Spacing.md,
   },
   scoreRow: {
     flexDirection: 'row',
@@ -336,8 +336,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   gradeText: {
-    fontSize: 24,
-    fontWeight: '800',
+    ...Type.headline,
     lineHeight: 28,
   },
   gradeSub: {
@@ -346,11 +345,10 @@ const styles = StyleSheet.create({
   },
   scoreInfo: {
     flex: 1,
-    gap: 4,
+    gap: Spacing.xs,
   },
   scoreHeadline: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
   vibeRow: {
     flexDirection: 'row',
@@ -358,11 +356,11 @@ const styles = StyleSheet.create({
   vibePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     borderRadius: Radius.sm,
     borderWidth: 1,
-    gap: 4,
+    gap: Spacing.xs,
   },
   vibeText: {
     fontSize: 11,
@@ -403,7 +401,7 @@ const styles = StyleSheet.create({
   },
   /* Palette Row */
   section: {
-    gap: 8,
+    gap: Spacing.sm,
   },
   sectionTitle: {
     fontSize: 13,
@@ -414,7 +412,7 @@ const styles = StyleSheet.create({
   paletteRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: Spacing.sm,
   },
   paletteChip: {
     flexDirection: 'row',
@@ -458,7 +456,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statusBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     borderRadius: Radius.sm,
   },
@@ -476,12 +474,12 @@ const styles = StyleSheet.create({
   },
   /* Tips */
   tipsList: {
-    gap: 8,
+    gap: Spacing.sm,
   },
   tipCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    padding: 12,
+    padding: Spacing.md,
     borderRadius: Radius.md,
     borderWidth: 1,
     gap: 10,
@@ -503,7 +501,7 @@ const styles = StyleSheet.create({
   /* Bottom Bar */
   bottomBar: {
     flexDirection: 'row',
-    padding: 16,
+    padding: Spacing.lg,
     borderTopWidth: 1,
     gap: 10,
   },
@@ -512,7 +510,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderRadius: Radius.md,
     gap: 6,
   },
@@ -524,7 +522,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderRadius: Radius.md,
     borderWidth: 1,
   },
@@ -534,11 +532,11 @@ const styles = StyleSheet.create({
   },
   /* Disclaimer */
   disclaimerCard: {
-    padding: 12,
+    padding: Spacing.md,
     borderRadius: Radius.md,
     borderWidth: 1,
-    gap: 4,
-    marginTop: 4,
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
   },
   disclaimerHeader: {
     flexDirection: 'row',

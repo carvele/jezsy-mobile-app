@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, useWindowDimensions, TouchableOpacity, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors, Spacing, Radius } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { ArrowRight } from 'lucide-react-native';
 import { markOnboardingSeen } from '@/src/utils/onboarding';
 import { useAuth } from '@/src/context/AuthContext';
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 48,
     fontWeight: '800',
-    color: '#fff',
+    color: 'white',
     marginBottom: 10,
     lineHeight: 52,
   },
@@ -234,7 +234,6 @@ const styles = StyleSheet.create({
   },
   nextText: {
     color: c.onTint,
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
 });

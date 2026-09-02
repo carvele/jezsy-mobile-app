@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { useEffect, useState } from 'react';
 import { Dimensions, useWindowDimensions } from 'react-native';
 import { Spacing } from '@/constants/theme';

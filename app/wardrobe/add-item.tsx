@@ -1,3 +1,4 @@
+import { notifySuccess } from '@/src/utils/haptics';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -265,6 +266,7 @@ export default function AddWardrobeItemScreen() {
         showToast('Item added to your wardrobe.', 'success');
         router.back();
       } else {
+        notifySuccess();
         Alert.alert('Item Added', 'Item added to your wardrobe.', [
           { text: 'Done', onPress: () => router.back() }
         ]);
@@ -338,7 +340,7 @@ export default function AddWardrobeItemScreen() {
               value={removeBg}
               onValueChange={setRemoveBg}
               trackColor={{ false: '#767577', true: colors.tint }}
-              thumbColor={Platform.OS === 'android' ? (removeBg ? '#fff' : '#f4f3f4') : undefined}
+              thumbColor={Platform.OS === 'android' ? (removeBg ? 'white' : '#f4f3f4') : undefined}
             />
           </View>
 
@@ -457,7 +459,7 @@ export default function AddWardrobeItemScreen() {
                       <IconSymbol
                         name="checkmark"
                         size={16}
-                        color={col.name === 'White' || col.name === 'Gold' || col.name === 'Silver' ? '#000000' : '#FFFFFF'}
+                        color={col.name === 'White' || col.name === 'Gold' || col.name === 'Silver' ? 'black' : '#FFFFFF'}
                       />
                     )}
                   </TouchableOpacity>
@@ -574,7 +576,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: 'black',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,

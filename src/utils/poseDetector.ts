@@ -15,6 +15,8 @@
  *   28 = right_ankle
  */
 
+import type { BodyCoordinateFrame, Vec3 } from '../types/pose';
+
 export interface Landmark {
   x: number;      // normalized [0, 1] horizontal position
   y: number;      // normalized [0, 1] vertical position
@@ -152,8 +154,6 @@ export function getPoseConfidence(landmarks: Landmark[]): number {
     REQUIRED_JOINTS.length
   );
 }
-
-import type { BodyCoordinateFrame, Vec3 } from '../types/pose';
 
 /**
  * Normalizes a 3D vector

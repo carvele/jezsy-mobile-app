@@ -192,7 +192,7 @@ export function ImageCropModal({ visible, uri, initialSize, onCancel, onConfirm 
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleCancel} statusBarTranslucent>
-      <SafeAreaView style={[styles.container, { backgroundColor: '#000' }]} edges={['top', 'bottom']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: 'black' }]} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={handleCancel} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel">
             <Text style={styles.headerBtnText}>Cancel</Text>
@@ -285,7 +285,7 @@ const styles = StyleSheet.create({
   headerBtnText: {
     ...Type.body,
     fontWeight: '600',
-    color: '#fff',
+    color: 'white',
   },
   confirmText: {
     textAlign: 'right',
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...Type.bodyStrong,
     fontWeight: '700',
-    color: '#fff',
+    color: 'white',
   },
   frameOuter: {
     flex: 1,
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   processingText: {
-    color: '#fff',
+    color: 'white',
     marginTop: Spacing.md,
     ...Type.bodyStrong,
   },
