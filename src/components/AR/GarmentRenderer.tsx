@@ -166,6 +166,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let loggedPosedBBox = false;
           let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
           let smoothedCameraDistance = null;
+          // Fix for #17 in the AR audit plan: cross-frame state, per 2026-09-02's
+          // decision to invest in a real fix rather than leave the floor as-is. See
+          // the yawCosCorrection computation below for the full explanation. Starts
+          // at the old floor value (not 1/frontal) so a session that starts already
+          // turned, before any frontal frame ever arrives, degrades to the same
+          // worst-case behavior the floor previously guaranteed rather than to no
+          // correction at all.
+          let lastReliableCosYaw = 0.65;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
 
@@ -611,13 +619,33 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     // yaw -50 to -68deg -> 1.67-1.72m, frontal baseline ~0.9m, no actual
                     // movement). Hoisted from its original spot next to targetWorldWidth further
                     // down so both foreshortening corrections share one yaw read per frame.
+                    //
+                    // Fix for #17 in the AR audit plan (2026-09-02, per that day's decision to
+                    // invest in a real fix): simply clamping cos(yaw) to a 0.65 floor doesn't
+                    // saturate -- once true |cos(yaw)| drops below the floor, dividing by a now-
+                    // FIXED 0.65 while the numerator (apparent width) keeps shrinking with real
+                    // foreshortening means the corrected result keeps shrinking too, just no
+                    // longer compensated for. A single frame at steep yaw can't recover true
+                    // frontal width anyway (near 90 deg the shoulders' projection genuinely
+                    // collapses toward zero) -- the only way to actually hold steady is to freeze
+                    // the correction at the last value computed while yaw was still in the
+                    // reliable range, which needs state carried across frames. lastReliableCosYaw
+                    // (declared at module scope above) is that state: updated only while
+                    // |cos(yaw)| is above the floor, held unchanged otherwise, so the corrected
+                    // width genuinely plateaus past ~49deg instead of continuing to shrink.
                     let yawCosCorrection = 1;
                     const rotValidForYaw = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w);
                     if (rotValidForYaw) {
                       const yawEuler = new THREE.Euler().setFromQuaternion(
                         new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w), 'YXZ'
                       );
-                      yawCosCorrection = Math.max(0.65, Math.abs(Math.cos(yawEuler.y)));
+                      const rawCosYaw = Math.abs(Math.cos(yawEuler.y));
+                      if (rawCosYaw >= 0.65) {
+                        lastReliableCosYaw = rawCosYaw;
+                        yawCosCorrection = rawCosYaw;
+                      } else {
+                        yawCosCorrection = lastReliableCosYaw;
+                      }
                     }
 
                     // Phase 3: real distance triangulation. Real focal length (px) and the
