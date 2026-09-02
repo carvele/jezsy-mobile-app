@@ -26,6 +26,7 @@ import { useWishlist } from '@/src/context/WishlistContext';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { Database } from '@/src/types/database.types';
+import { removeBackground } from '@six33/react-native-bg-removal';
 import { evaluateColors } from '@/src/utils/colorMatcher';
 
 import { useToast } from '@/src/context/ToastContext';
@@ -292,8 +293,15 @@ export default function OutfitBuilderScreen() {
         }
         
         const item = pool[Math.floor(Math.random() * pool.length)];
-        const finalImageUrl = item.image_url || '';
-        
+        let finalImageUrl = item.image_url || '';
+        if (item.image_url && Platform.OS !== 'web') {
+          try {
+            finalImageUrl = await removeBackground(item.image_url);
+          } catch (e) {
+            console.log('Background removal failed or fallback required, using original image', e);
+          }
+        }
+
         const slotItem: SlotItem = {
           product_id: item.product_id,
           image_url: finalImageUrl,
@@ -337,7 +345,14 @@ export default function OutfitBuilderScreen() {
     setSaving(true); // Re-use saving state to show a loader during BG removal
 
     try {
-      const finalImageUrl = item.image_url || '';
+      let finalImageUrl = item.image_url || '';
+      if (item.image_url && Platform.OS !== 'web') {
+        try {
+          finalImageUrl = await removeBackground(item.image_url);
+        } catch (e) {
+          console.log('Background removal failed or fallback required, using original image', e);
+        }
+      }
 
       setSlots((prev) => ({
         ...prev,
@@ -361,7 +376,18 @@ export default function OutfitBuilderScreen() {
     setSaving(true); // Re-use saving state to show a loader during BG removal
 
     try {
-      const finalImageUrl = item.image_url || '';
+      // Same background-removal treatment as My Wardrobe items -- was
+      // previously skipped entirely for catalog/wishlist picks, so a
+      // product photo's studio background always showed up in the canvas
+      // preview while wardrobe items didn't.
+      let finalImageUrl = item.image_url || '';
+      if (item.image_url && Platform.OS !== 'web') {
+        try {
+          finalImageUrl = await removeBackground(item.image_url);
+        } catch (e) {
+          console.log('Background removal failed or fallback required, using original image', e);
+        }
+      }
 
       setSlots((prev) => ({
         ...prev,

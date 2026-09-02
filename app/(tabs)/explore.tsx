@@ -560,6 +560,13 @@ export default function ExploreScreen() {
   const openFilterModal = () => {
     setTempSizes(selectedSizes);
     setTempColors(selectedColors);
+    setTempPriceRange(selectedPriceRange);
+    setTempMinPrice(customMinPrice);
+    setTempMaxPrice(customMaxPrice);
+    setTempNewArrivalsOnly(selectedNewArrivalsOnly);
+    setTempSaleOnly(selectedSaleOnly);
+    setTempArOnly(selectedArOnly);
+    setTempMySizeOnly(selectedMySizeOnly);
     setTempFits(selectedFits);
     setTempMaterials(selectedMaterials);
     setTempTags(selectedTags);
