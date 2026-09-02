@@ -218,33 +218,33 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
   );
 }
 
-// Device-specific compensation for a native/MediaPipe orientation bug, CONFIRMED
-// FIXED live on an Infinix X6880 (2026-09-02): raw landmarks arrive from the
-// native pose-detection callback already rotated ~90deg -- the two shoulder
-// landmarks show near-zero separation on X and the full shoulder-width
-// separation on Y, confirmed at the exact native-callback boundary before
-// poseNormalizer.ts or any other TS in this repo runs (see
+// Device-specific compensation for a native/MediaPipe orientation bug. Raw
+// landmarks arrive from the native pose-detection callback already rotated
+// ~90deg -- the two shoulder landmarks show near-zero separation on X and the
+// full shoulder-width separation on Y (see
 // docs/ar-tryon-audit-implementation-plan.md #23/#24). Applying a proper 90deg
 // rotation (x,y) -> (y,-x) for metric world landmarks -- derived algebraically
-// from ~30 captured live samples, verified against every one -- and re-testing
-// live confirmed the fix on all three fronts simultaneously: roll dropped from
-// a pinned ~-90deg to ~0-9deg, camera distance triangulation started actually
-// varying with real distance instead of being stuck at its 0.6m bootstrap seed,
-// and the garment rendered upright and centered on the wearer's shoulders
-// instead of edge-on/off-screen. For normalized [0,1] image-space landmarks the
-// same rotation is applied about the image center (0.5, 0.5): (x,y) -> (y, 1-x).
+// from ~30 captured live samples, verified against every one -- confirmed the
+// fix on all three fronts simultaneously: roll dropped from a pinned ~-90deg
+// to ~0-9deg, camera distance triangulation started actually varying with real
+// distance instead of being stuck at its 0.6m bootstrap seed, and the garment
+// rendered upright and centered on the wearer's shoulders instead of
+// edge-on/off-screen. For normalized [0,1] image-space landmarks the same
+// rotation is applied about the image center (0.5, 0.5): (x,y) -> (y, 1-x).
 //
 // Only wired into the NATIVE pose-detection path (onNativePoseResults below) --
 // the web path (WebCameraFeed/handlePoseResults) is untouched and unaffected.
-// NOT KNOWN to be needed or safe on other Android devices -- this compensates
-// for whatever this device's camera/MediaPipe orientation handling gets wrong
-// (forceOutputOrientation set correctly to device.sensorOrientation=
-// 'landscape-right' here, yet the bug persists identically). Gated behind a
+// 2026-09-02: tried removing this in favor of the forceCameraOrientation fix
+// below (BaseViewCoordinator.constructor logs sensorOrientation="landscape-right"
+// correctly and consistently), but live re-test showed the bug still occurs
+// intermittently (roll swinging to -90/-106deg, landmarks stacked vertically,
+// cameraDistanceM stuck at the 0.6m bootstrap value) even with the coordinator
+// reporting the right config -- so whatever BaseViewCoordinator does with that
+// config doesn't fully/reliably prevent the rotated landmarks. Keeping this
+// compensation as the actual fix; forceCameraOrientation is left in place since
+// it's still correct to set, just not sufficient on its own. Gated behind a
 // plausibility check so a device that DOESN'T have this bug (dx already larger
-// than dy) is left untouched -- see shouldCorrectNativeLandmarkRotation. Should
-// be revisited once the real fix lands in the native library or its
-// orientation-resolution logic, at which point this compensation should either
-// no-op (guard never triggers) or can be removed outright.
+// than dy) is left untouched -- see shouldCorrectNativeLandmarkRotation.
 function shouldCorrectNativeLandmarkRotation(landmarks: any[]): boolean {
   const l11 = landmarks[11];
   const l12 = landmarks[12];
@@ -299,6 +299,7 @@ export default function ARTryOnScreen() {
   const hasTrackedRef = React.useRef(false);
   const lastStateUpdateRef = React.useRef(0);
   const torsoLogCounter = React.useRef(0);
+  const compGuardLogCounter = React.useRef(0);
   const garmentRendererRef = React.useRef<any>(null);
 
   const animatedGarmentStyle = useAnimatedStyle(() => ({
@@ -628,9 +629,24 @@ export default function ARTryOnScreen() {
       let landmarks = result.results?.[0]?.landmarks?.[0];
       let worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
 
-      if (landmarks && landmarks.length > 0 && shouldCorrectNativeLandmarkRotation(landmarks)) {
+      const compGuardTriggered = !!(landmarks && landmarks.length > 0 && shouldCorrectNativeLandmarkRotation(landmarks));
+      if (compGuardTriggered) {
         landmarks = landmarks.map(correctNormalized2DLandmarkRotation);
         if (worldLandmarks) worldLandmarks = worldLandmarks.map(correctWorldLandmarkRotation);
+      }
+      compGuardLogCounter.current += 1;
+      if (compGuardLogCounter.current % 15 === 0) {
+        const rawL11 = result.results?.[0]?.landmarks?.[0]?.[11];
+        const rawL12 = result.results?.[0]?.landmarks?.[0]?.[12];
+        const wl11 = worldLandmarks?.[11];
+        const wl12 = worldLandmarks?.[12];
+        console.log('[COMP-GUARD] triggered=' + compGuardTriggered
+          + ' rawDx=' + (rawL11 && rawL12 ? Math.abs(rawL12.x - rawL11.x).toFixed(3) : 'n/a')
+          + ' rawDy=' + (rawL11 && rawL12 ? Math.abs(rawL12.y - rawL11.y).toFixed(3) : 'n/a')
+          + ' postL11=(' + landmarks?.[11]?.x?.toFixed(3) + ',' + landmarks?.[11]?.y?.toFixed(3) + ')'
+          + ' postL12=(' + landmarks?.[12]?.x?.toFixed(3) + ',' + landmarks?.[12]?.y?.toFixed(3) + ')'
+          + ' worldL11=(' + wl11?.x?.toFixed(3) + ',' + wl11?.y?.toFixed(3) + ',' + wl11?.z?.toFixed(3) + ')'
+          + ' worldL12=(' + wl12?.x?.toFixed(3) + ',' + wl12?.y?.toFixed(3) + ',' + wl12?.z?.toFixed(3) + ')');
       }
 
       if (!landmarks || landmarks.length === 0) {
@@ -732,6 +748,21 @@ export default function ARTryOnScreen() {
     // real separation. forceOutputOrientation and device.sensorOrientation share the
     // same Orientation type, so the device's real value can be passed straight through.
     forceOutputOrientation: device?.sensorOrientation,
+    // BaseViewCoordinator's own "sensorOrientation" (used for its point-rotation
+    // math) is built from forceCameraOrientation.value ?? frameOrientation.value --
+    // NOT forceOutputOrientation above, which only reaches the separate
+    // outputOrientation constructor argument. Still correct to set this so the
+    // coordinator's declared config matches the device's real sensor mount.
+    // 2026-09-02: with this set, BaseViewCoordinator.constructor logs
+    // sensorOrientation="landscape-right" correctly and consistently, but a live
+    // re-test with the JS-side compensation removed still hit the ~90deg-rotated
+    // landmark bug intermittently (roll swinging to -90/-106deg). Whatever
+    // BaseViewCoordinator does downstream with this config doesn't reliably
+    // prevent the rotated landmarks, so shouldCorrectNativeLandmarkRotation's
+    // runtime compensation (above) remains the actual fix -- this option is left
+    // set because it's still correct, not because it's sufficient on its own.
+    // See docs/ar-tryon-audit-implementation-plan.md #24.
+    forceCameraOrientation: device?.sensorOrientation,
   });
 
   // react-native-mediapipe-posedetection's own <MediapipeCamera> wrapper wires
