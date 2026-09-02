@@ -232,7 +232,7 @@ function InitialLayout() {
     } else if (!session) {
       // Require authentication — guests must create an account or sign in.
       if (!inAuthGroup) {
-        router.replace(onboardingSeen ? '/(auth)/welcome' : '/(auth)/onboarding');
+        router.replace((onboardingSeen ? '/(auth)/welcome' : '/(auth)/onboarding') as any);
       }
     } else {
       // User is logged in
