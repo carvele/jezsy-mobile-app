@@ -612,6 +612,42 @@ uses them.
 
 ---
 
+### 29. `<Camera>`'s `onError` has no user-visible recovery path — silent stuck black feed on a real OS-level camera restriction
+**`app/ar-tryon/[id].tsx:1202-1204`** (the `<Camera onError={...}>` handler) — found live during checklist Step K (background/foreground lifecycle test)
+
+Backgrounded the app during Live Camera AR (Tailored Blazer), waited, then
+foregrounded it again. The #13 background-pause fix worked correctly (zero
+`onResults` events while backgrounded, confirmed via log). On return to
+foreground, the detector/`BaseViewCoordinator` re-initialized cleanly (no
+crash, correct `sensorOrientation` logged) -- but the camera feed itself
+stayed permanently black, with the "AI Body Tracking Active" pill still
+showing (a stale/incorrect state, since tracking was not actually active).
+Metro's log showed the real cause: `WARN Camera Error:
+[system/camera-is-restricted: Camera functionality is not available
+because it has been restricted by the operating system, possibly due to a
+device policy.]` -- an OS-level restriction (likely this device's
+background-camera-access policy or a battery-saver interaction, not
+something this app's code caused or can prevent outright).
+
+**The gap this exposes**: `<Camera>`'s own `onError` handler
+(`app/ar-tryon/[id].tsx:1202-1204`) only does `console.warn(...)` --
+no state update, no user-visible banner, no retry action. A real device
+restriction (or any other camera-level error) leaves the user staring at
+a permanently black screen with a misleading "tracking active" indicator
+and no in-app way to recover except force-restarting the app. Confirmed
+by reading the source, not just inferring from the stuck screen.
+
+**Not fixed** -- needs an error banner similar to the GLB-load-failure
+banner already added for #8/#11 (state + UI wired to `onError`, ideally
+with a retry action that re-mounts `<Camera>`), plus probably clearing
+`isTrackerActive`/the "AI Body Tracking Active" pill when this fires so
+the UI doesn't lie about tracking state. A full app restart recovered the
+camera cleanly on this device, confirming the OS restriction itself was
+transient and not a persistent lock -- so a retry-without-full-restart is
+plausible, not just a cosmetic ask.
+
+---
+
 ## Open — High
 
 ### 5. Body-ratio measurements inflated ~14% by a scale-convention mismatch
