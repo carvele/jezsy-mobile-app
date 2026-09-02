@@ -180,6 +180,19 @@ function InitialLayout() {
     const onProfileSetup = pathSegments[1] === 'profile-setup';
     const onResetPassword = pathSegments[1] === 'reset-password';
 
+    // TEMP DEBUG: chasing a Welcome-flash report; (tabs)/_layout.tsx's own logging
+    // showed a real remount (two different mountIds) right at cold-boot but never
+    // itself observed session/profile going falsy -- this effect is the only other
+    // place that can router.replace() to Welcome/profile-setup/tabs, so logging
+    // every input plus which branch fires should show what (tabs)/_layout.tsx's
+    // remount is actually reacting to. Remove once root-caused.
+    console.log('[ROOT-LAYOUT-EFFECT] segments=' + JSON.stringify(pathSegments)
+      + ' inAuthGroup=' + inAuthGroup + ' routeSettled=' + routeSettled
+      + ' hasAuthenticated=' + hasAuthenticated.current + ' flagsReady=' + flagsReady
+      + ' session=' + (session ? 'present' : 'null') + ' profile=' + (profile ? 'present' : 'null')
+      + ' profileDeleted=' + !!profile?.deleted + ' isPasswordRecovery=' + isPasswordRecovery
+      + ' onboardingSeen=' + onboardingSeen + ' t=' + Date.now());
+
     // CRITICAL: Once we have confirmed a fully authenticated session AND the route
     // has already settled, skip ALL future re-evaluations. Tab navigation changes
     // `segments` which re-fires this effect — but we must never re-run the overlay
@@ -207,23 +220,32 @@ function InitialLayout() {
     // the tabs, and never require a new password. Pin the user here until
     // updateUser succeeds (or they sign out from the screen itself).
     if (isPasswordRecovery) {
-      if (!onResetPassword) router.replace('/(auth)/reset-password' as any);
+      if (!onResetPassword) {
+        console.log('[ROOT-LAYOUT-EFFECT] branch=reset-password t=' + Date.now());
+        router.replace('/(auth)/reset-password' as any);
+      }
     } else if (profile?.deleted) {
+      console.log('[ROOT-LAYOUT-EFFECT] branch=signOut(profile.deleted) t=' + Date.now());
       signOut();
     } else if (!session) {
       // Require authentication — guests must create an account or sign in.
       if (!inAuthGroup) {
+        console.log('[ROOT-LAYOUT-EFFECT] branch=welcome(!session) t=' + Date.now());
         router.replace(onboardingSeen ? '/(auth)/welcome' : '/(auth)');
       }
     } else {
       // User is logged in
       if (!profile || !profile.first_name) {
-        if (!onProfileSetup) router.replace('/(auth)/profile-setup');
+        if (!onProfileSetup) {
+          console.log('[ROOT-LAYOUT-EFFECT] branch=profile-setup(!profile) t=' + Date.now());
+          router.replace('/(auth)/profile-setup');
+        }
       } else {
         // Fully authenticated with a complete profile — latch the flag so
         // future tab switches and token refreshes never trigger a redirect.
         hasAuthenticated.current = true;
         if (inAuthGroup) {
+          console.log('[ROOT-LAYOUT-EFFECT] branch=tabs(inAuthGroup) t=' + Date.now());
           router.replace('/(tabs)');
         }
       }
