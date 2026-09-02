@@ -479,6 +479,16 @@ evidence of a pipeline-wide bug.
 bug. Needs re-calibration in admin-dashboard for this specific product, not
 a code fix — do not guess a replacement number.
 
+**PARTIALLY ADDRESSED 2026-09-02**: confirmed with the product owner this
+GLB came from Mixamo directly, with no verified-correct reference to derive
+a real `anchor_offset.y` from (unlike #26's sibling-GLB situation) — so per
+"do not guess a replacement number" above, no anchor value was written.
+Instead, flipped `garment_metadata.ingestion_status` from `AR_READY` to
+`NEEDS_CALIBRATION` directly in the live DB, so the app's existing #18
+demo-rig fallback now engages for this product instead of rendering the
+known-broken 1.3m offset. Still needs real re-calibration in admin-dashboard
+before it can go back to `AR_READY`.
+
 ### 26. Cotton T-Shirt: broken `rest_pose_metric_width`, confirmed by A/B test against a sibling product sharing the identical GLB
 
 **`garment_metadata.rest_pose_metric_width`, product id `b0000009-0000-4000-8000-000000000002`** — same class of bug as #25, different field, different product
@@ -507,6 +517,15 @@ This conclusively confirms the remaining oversizing after fixing #22/#23
 was **entirely due to this one product's calibration data**, not a residual
 bug in `exactScale`, cover-crop remapping, or anything else touched this
 session. `garmentFitter.ts`/`GarmentRenderer.tsx`'s scale math is correct.
+
+**FIXED 2026-09-02**: unlike #25, this one had a verified-correct reference
+to copy from -- Black tee shares the *identical* GLB file and its values
+are live A/B-confirmed correct (`exactScale` ~1.19-1.22 vs. Cotton
+T-Shirt's ~2.1-2.3 for the same file). Updated `rest_pose_metric_width` to
+`0.4` and `anatomical_anchor_offset` to Black tee's exact values directly
+in the live DB; set `anchor_confidence` to `inferred` (not
+`merchant_confirmed` -- this was a same-GLB copy, not a fresh merchant
+confirmation, and not a raw auto-detection either).
 
 **New observation, not yet investigated:** with sane calibration, the Black
 tee rendered notably elongated vertically (like a dress reaching well past
