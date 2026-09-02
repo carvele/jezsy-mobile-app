@@ -605,6 +605,13 @@ to hide this from the user.
 
 ## Remaining sequencing
 
+**Superseded by `docs/ar-tryon-physical-verification-checklist.md`** — a
+precisely-ordered, controlled physical-device test plan written after this
+session specifically to avoid conflating #2 and #27 (which is exactly how
+this session's own first yaw-test attempt reached an inconclusive result).
+Use that file for the next device session; the summary below is kept for
+narrative continuity with the findings above.
+
 Physical device verification happened (session 3) and found the pipeline
 runs end-to-end without crashing, but didn't render correctly. Session 4
 fixed the two critical findings via a JS-side compensation, confirmed live.
