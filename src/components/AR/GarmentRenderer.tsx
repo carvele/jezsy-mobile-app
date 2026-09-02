@@ -212,17 +212,31 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // Remaps a landmark normalized against the FULL video frame into normalized
           // coordinates within the visible 'cover'-cropped region, so it lines up with
           // what 'stretch to fill' NDC mapping (unprojectToZ0) assumes.
+          //
+          // Fix for #28 in the AR audit plan: neither this remap nor unprojectToZ0 used
+          // to clamp their input, so a landmark MediaPipe reports slightly outside [0,1]
+          // (the wearer partially out of the camera's actual sensor frame -- confirmed
+          // live, l11.x=1.0045) passed straight through. Because visW/visH are often well
+          // under 1 on this device (video/container aspect mismatch), that small overshoot
+          // amplified into a much larger NDC-space overshoot after the crop remap,
+          // producing a garment badly offset from the visible body instead of just
+          // clipping gracefully at the frame edge like a normal in-range landmark would.
+          // Clamping the input here (not the output) keeps every downstream consumer --
+          // distance triangulation, position, scale -- working from the same
+          // frame-truncated coordinate a landmark at the real edge would have produced.
           function mapCoverCrop(nx, ny) {
+            const cx = Math.max(0, Math.min(1, nx));
+            const cy = Math.max(0, Math.min(1, ny));
             if (!CAMERA_CALIBRATION || !CAMERA_CALIBRATION.videoWidthPx || !CAMERA_CALIBRATION.videoHeightPx) {
-              return { nx: nx, ny: ny };
+              return { nx: cx, ny: cy };
             }
             const videoAspect = CAMERA_CALIBRATION.videoWidthPx / CAMERA_CALIBRATION.videoHeightPx;
             const containerAspect = window.innerWidth / window.innerHeight;
             const visW = Math.min(1, containerAspect / videoAspect);
             const visH = Math.min(1, videoAspect / containerAspect);
             return {
-              nx: (nx - (1 - visW) / 2) / visW,
-              ny: (ny - (1 - visH) / 2) / visH,
+              nx: (cx - (1 - visW) / 2) / visW,
+              ny: (cy - (1 - visH) / 2) / visH,
             };
           }
 
