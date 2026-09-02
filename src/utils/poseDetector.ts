@@ -279,7 +279,25 @@ export function extractBodyRatios(landmarks: Landmark[]): BodyRatios {
 
   // Use the directly observable anatomical span as the denominator,
   // without applying unverified 0.83 stature assumptions.
-  const visualBodySpan = Math.max(0.01, headToShoulder + torsoLength + legLengthBase);
+  //
+  // Fix for open item #5 in the AR audit plan (rough/provisional, per
+  // 2026-09-02's decision): this nose-to-ankle polyline is NOT full stature --
+  // measurementCalculator converts these ratios to cm using the user's actual
+  // height, which structurally includes the head above the nose and the foot
+  // below the ankle. Without correction, every ratio-derived measurement reads
+  // inflated by roughly that missing fraction. STATURE_CORRECTION approximates
+  // (head-above-nose + foot-below-ankle) as a fraction of total stature using
+  // commonly-cited body-segment proportions (Drillis & Contini-style anthropometry:
+  // ankle height above floor is approx 3.9% of stature; nose-tip-to-crown is
+  // approximated here as approx 7.5%, taken as roughly 60% of the classic ~12.5%
+  // head-height-is-1/8-of-stature figure). This is a generic population average,
+  // NOT measured on this app's actual users -- flagged here as provisional; replace
+  // with real reference data (e.g. a calibration study against known-height
+  // subjects) when available. Dividing by (1 - STATURE_CORRECTION) inflates the
+  // denominator to approximate full stature, which reduces every ratio (and
+  // therefore every derived cm measurement) by the same fraction.
+  const STATURE_CORRECTION = 0.114; // ~3.9% ankle + ~7.5% nose-to-crown, both of stature
+  const visualBodySpan = Math.max(0.01, (headToShoulder + torsoLength + legLengthBase) / (1 - STATURE_CORRECTION));
 
   const shoulderWidth = dist2D(lm[L.leftShoulder], lm[L.rightShoulder]);
   const hipWidth = dist2D(lm[L.leftHip], lm[L.rightHip]);
