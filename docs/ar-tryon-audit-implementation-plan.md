@@ -685,6 +685,16 @@ in the reference data used to build the ratios, or apply a correction factor
 for the head+foot delta. Needs real anthropometric reasoning, not a guess —
 flag for whoever owns the body-scan measurement math.
 
+**PROVISIONALLY ADDRESSED 2026-09-02 (`9ed64ec`)**: per that day's explicit
+decision ("apply a rough correction now"), added `STATURE_CORRECTION = 0.114`
+based on commonly-cited body-segment proportions (ankle height ~3.9% of
+stature, nose-to-crown ~7.5%) rather than leaving the inflation uncorrected.
+Clearly commented as a generic population average, not measured on this
+app's actual users -- still needs real anthropometric reference data (e.g.
+a calibration study against known-height subjects) to replace this
+approximation. Type-checked, existing test suite unaffected (no test covers
+`extractBodyRatios` directly).
+
 ---
 
 ## Open — Medium (unfinished features)
@@ -698,6 +708,12 @@ called anywhere in the file. `isMatched` is permanently `false`,
 effect gated on them is dead code. Either this is a real, unfinished feature
 (finish it) or genuinely dead (remove the state and whatever renders off it).
 Needs a decision, not just a fix.
+
+**RESOLVED 2026-09-02 (`e2f8504`)**: decided "remove it". Deleted the dead
+state, the speech-feedback effect and its now-unused refs, and simplified
+the tracking pill to its only reachable branch ("AI Body Tracking Active").
+`poseMatcher.ts` itself untouched -- `[id].tsx` still imports
+`getForegroundOcclusionSegments` from it for an unrelated purpose.
 
 ### 16. Web pose path never smooths `worldLandmarks`; native does
 **`app/ar-tryon/[id].tsx:132`**
@@ -719,6 +735,18 @@ The yaw-foreshortening correction clamps `cos(yaw)` to a floor of 0.65 but keeps
 exceeds `arccos(0.65)` (~49°), the corrected width keeps shrinking with further
 yaw instead of holding steady at the clamped value. Nothing degrades the overlay
 to hide this from the user.
+
+**FIXED 2026-09-02 (`d7a3140`), scoped to the 3D path only**: per that day's
+decision to invest in a real fix, added `lastReliableCosYaw` cross-frame state
+in `GarmentRenderer.tsx` (same pattern as its existing `smoothedCameraDistance`)
+-- updated only while `|cos(yaw)|` is above the floor, held unchanged otherwise,
+so the correction genuinely plateaus past ~49° instead of continuing to shrink.
+`garmentFitter.ts:58`'s identical floor (the legacy 2D overlay path) was
+deliberately left as-is -- adding cross-frame state to its stateless exported
+function is a larger API change for a lower-value, superseded path. Type-checked,
+test suite unaffected, smoke-tested live for crashes/regressions only -- the
+actual yaw-saturation behavior itself was NOT re-verified on-device (needs a
+live yaw sweep past ~49°, deferred on low battery).
 
 ---
 
