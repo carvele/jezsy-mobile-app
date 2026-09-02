@@ -7,9 +7,92 @@ authoritative state and `docs/ar-tryon-audit-implementation-plan.md` for
 the full findings history — this file is a controlled, ordered test plan,
 not a findings log.
 
-**Core principle: this is not a "does AR work?" smoke test.** It's a
-controlled verification pass that deliberately separates five things that
-are currently tangled together in the working tree:
+## The actual goal
+
+Not "make the pose tracker work" — that's an implementation detail. The
+actual goal: **a person stands in front of their phone camera, selects a
+garment, and sees that garment convincingly fitted to their body in real
+time — staying attached to their body as they move, turn, and tilt,
+without obvious jumping, drifting, scaling errors, or wrong orientation.**
+
+Five things that goal requires:
+1. **Correct spatial tracking** — detect the body, know where the torso
+   is, keep the garment anchored to it as the person moves.
+2. **Correct 3D behavior** — garment scales with apparent distance;
+   turning sideways looks like turning a garment, not moving farther away;
+   body roll produces correct garment rotation; no sudden jump/stretch/flip.
+3. **Correct garment fitting** — a correctly calibrated garment looks
+   appropriately sized; bad product calibration is treated as bad product
+   data, not "fixed" by compensating in the AR math (see #25/#26 — this
+   principle is why those were left as content bugs, not patched in code).
+4. **Robust real-world behavior** — tracking can disappear, the user can
+   move/turn/raise arms, the app can background and resume; the system
+   recovers rather than getting stuck in a broken transform.
+5. **On an actual phone** — Android native camera → MediaPipe → pose math
+   → Three.js renderer. Not merely correct-looking in a browser or mock.
+
+**Where we are:** the pipeline is proven to work end-to-end (camera → pose
+detection → landmarks → fitting math → Three.js garment → live transform).
+What's left is proving the *geometry is actually correct*, not merely
+approximately right in one favorable pose. The biggest open question is
+the native orientation problem (#24) and the yaw/distance coupling (#27) —
+e.g. the same person at the same 1m distance reads as ~0.9m facing the
+camera but ~1.7m after turning 50° sideways, which is obviously wrong and
+would silently mis-scale the garment on nothing more than a turn. This is
+what the current work is actually for: **turning the prototype into a
+geometrically trustworthy AR system**, not "keep adding fixes until the
+shirt looks okay."
+
+**The fundamental acceptance test, everything else is in service of:** if
+the human moves in the real world, does the virtual garment behave as
+though it is actually attached to their body?
+
+## Definition of Done — 8 tests
+
+Reduce the whole effort to these 8 objective tests, in this order — native
+orientation must be trusted *before* tests 2-5 mean anything, since a wrong
+orientation silently invalidates every distance/scale/roll reading built on
+top of it:
+
+**Order: native orientation → yaw/distance → scale → translation → roll →
+tracking loss → stress → lifecycle.**
+
+1. **Front-facing baseline** — user ~1m from camera. Garment centered,
+   upright, correctly sized. No visible drift or jitter.
+2. **Move toward/away** — user moves ~0.6m → 1.2m. Garment follows
+   continuously, doesn't suddenly grow/shrink incorrectly. Returning to the
+   original distance reproduces approximately the original fit.
+3. **Turn left/right** — same physical distance, rotate 0°→60°. Estimated
+   camera distance must NOT falsely increase just because of yaw. Garment
+   stays attached to the torso. **This is #27 — currently blocking
+   trustworthy yaw/scale verification; nothing past this test can be
+   trusted until it passes.**
+4. **Body roll** — tilt shoulders left and right. Garment follows the
+   body's roll in the correct direction. No unexplained 180°/sign inversion.
+5. **Move around** — translate left/right and up/down. Garment follows the
+   body, not the screen.
+6. **Temporarily lose tracking** — leave frame or occlude enough to break
+   tracking. Garment disappears/fades rather than freezing at a wrong
+   position. Recovers cleanly on return.
+7. **Stress the pose** — raise arms, partially occlude torso, turn. No
+   catastrophic garment rotation/jump; skeletal fallback doesn't introduce
+   double transforms (this is #6).
+8. **Restart/lifecycle** — AR → leave → return; background → foreground.
+   Camera/detector/renderer recover without stale transforms or duplicate
+   processing.
+
+Once all 8 pass on a real device: the garment is actually tracking the
+user's body, not merely looking right in one test pose. That's the finish
+line — not the sprawling checklist below, which exists to give each of
+these 8 tests concrete step-by-step mechanics, not to replace them as the
+goalpost.
+
+---
+
+**Core principle for the detailed steps below: this is not a "does AR
+work?" smoke test.** It's a controlled verification pass that deliberately
+separates five things that are currently tangled together in the working
+tree:
 1. the native orientation fix (#24)
 2. the remaining geometry fixes (#1, #2, #6 from session 2)
 3. yaw/distance behavior (#27)
