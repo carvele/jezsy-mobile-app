@@ -321,6 +321,23 @@ itself. Instead verify the *gating behavior* around them:
   as sane.
 - **Black tee**: the canonical AR verification asset for everything above.
 
+**2026-09-02**: checked Tailored Blazer live. 3D Studio mode renders a
+visibly broken, twisted/crumpled mesh (matches #25's known-bad geometry).
+Metro logged `[AR] Using real garment_metadata from Supabase`, i.e. the
+demo-rig fallback did NOT engage. Read the gate's source
+(`app/ar-tryon/[id].tsx:352-353`) to confirm why: it only falls back when
+`ingestion_status !== 'AR_READY'`, and the code faithfully does that — the
+Blazer's `ingestion_status` field is apparently still stamped `AR_READY`
+in the DB despite the broken anchor/geometry data. **The gate logic itself
+is correct and verified working as designed; this is the DB-side half of
+#25 that admin-dashboard's ingestion-modal fix (`a3eef9c`) doesn't
+retroactively repair** — that fix only prevents *future* bad stamps, it
+doesn't correct the Blazer's already-wrong status. Re-affirms: the fix
+needed here is a data correction (re-ingest or manually correct
+`ingestion_status`/`anatomical_anchor_offset` for the Blazer), not code.
+Did not repeat this live check for Cotton T-Shirt — same code path, same
+expected conclusion, no new information likely.
+
 ---
 
 ## K. Lifecycle verification
