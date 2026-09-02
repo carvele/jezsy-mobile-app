@@ -433,6 +433,26 @@ still launches normally, then check whether `BaseViewCoordinator`'s logged
 session's JS-side compensation becomes a no-op because the library's own
 rotation logic is now doing the job correctly).
 
+**RE-ATTEMPTED 2026-09-02 on a charged device (`ce5daef`)**: added
+`forceCameraOrientation: device?.sensorOrientation`. App launches normally.
+`BaseViewCoordinator` now logs `sensorOrientation="landscape-right"`
+correctly and consistently — but `shouldCorrectNativeLandmarkRotation`'s
+guard does **not** stop triggering; the rotated-landmark bug still occurs.
+Whatever `BaseViewCoordinator` does downstream with the corrected config
+doesn't reliably prevent the rotated landmarks reaching this app. Verdict:
+`forceCameraOrientation` is correct to set but confirmed insufficient on
+its own — the JS-side compensation remains the actual, load-bearing fix,
+not a removable workaround pending a native-level resolution. Re-confirmed
+the compensation's own reliability with throttled `[COMP-GUARD]`
+instrumentation after a full app restart: 39/39 sampled frames triggered
+correctly, clean roll (~0-5°), correct shoulder-side signs. (An earlier
+same-session bad reading, roll pinned ~-105°, traced to a long-lived app
+instance that hadn't been restarted since before this config change landed
+— stale native-camera-pipeline state, not a guard logic bug. Always do a
+full app restart before any live orientation test.) This finding is now
+considered closed at the JS-compensation level; only a genuine upstream
+library fix would change that.
+
 ### 25. Tailored Blazer: broken calibration data, isolated to this one product
 **`garment_metadata.anatomical_anchor_offset`, product id `b0000008-0000-4000-8000-000000000002`**
 
@@ -545,6 +565,50 @@ before distance is computed, which it currently isn't at that point in the
 per-frame sequence — the ordering may need to change). Flagging as a new
 finding rather than attempting a live fix tonight; same "no arbitrary
 constants, verify on device" caution as #1/#2 applies.
+
+**FIXED 2026-09-02 (`02fbfb7`)**: hoisted the `yawCosCorrection` computation
+(previously local to the `exactScale` block) earlier in the frame handler
+and multiplied the raw triangulated distance by it — the same cos(yaw)
+foreshortening correction #2 already applied to the projected width, now
+also applied to the distance estimate feeding it. Live-verified: frontal
+baseline ~0.94-1.12m held steady; ~15-19° yaw held ~1.14-1.17m (no
+runaway); ~54-59° yaw rose to only 1.37-1.54m (vs. the pre-fix 1.67-1.72m
+at a similar angle in trial 2 above). The residual rise past ~49° yaw is
+the pre-existing 0.65 floor on `yawCosCorrection` saturating (see #17) —
+a separate already-known item, not reintroduced by this fix.
+
+---
+
+### 28. `mapCoverCrop`/`unprojectToZ0` mis-project when a landmark exceeds the [0,1] normalized range
+**`src/components/AR/GarmentRenderer.tsx`** (`mapCoverCrop`, called from the `UPDATE_TRANSFORM` handler) — found live during Step B of the physical verification checklist, re-testing #1 now that #27 no longer confounds movement tests
+
+While testing horizontal movement across the frame (checklist Step B), the
+wearer moved far enough left that the raw shoulder landmark exceeded the
+normalized frame: `l11.x = 1.0045` (>1.0, meaning that shoulder tracked
+past the edge of the camera's actual sensor frame). At that exact frame,
+the garment rendered badly offset — covering roughly the left third of the
+visible torso instead of the actual shoulder span. Re-tested immediately
+after at a more moderate left position with both shoulders fully in frame
+(`l11.x = 0.907`, within range) and alignment was correct — confirmed this
+is specifically triggered by the out-of-range landmark, not a general
+horizontal-tracking regression (Step B's core "move across frame at
+constant distance" scenario otherwise passes cleanly, including a full
+distance sweep at ~0.69m/~0.88m/~1.36m with `targetWorldWidth`/`exactScale`
+staying stable throughout, as expected).
+
+**Likely mechanism:** neither `mapCoverCrop` nor `unprojectToZ0` clamp
+their input to [0,1] before mapping; an already-out-of-range input
+propagates through unclamped, and depending on the cover-crop scale factor
+(`visW`/`visH`, often well under 1 for this device's video/container
+aspect mismatch) a small overshoot in the raw landmark can amplify into a
+much larger NDC-space overshoot after the crop remap.
+
+**Not fixed** — narrow edge case (only triggers when a landmark tracks
+partially out of the camera's actual field of view, an unusual pose for
+garment try-on), not a blocker for the core verification pass. Candidate
+fix: clamp `nx`/`ny` to [0,1] either at the top of `mapCoverCrop` or right
+after extracting `l11`/`l12`, before any distance/width/position math
+uses them.
 
 ---
 
