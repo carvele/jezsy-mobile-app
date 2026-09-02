@@ -365,6 +365,23 @@ intended (the #12 hysteresis fix), garment reacquires when tracking
 resumes. Repeat with partial occlusion instead of leaving the frame
 entirely.
 
+**2026-09-02**: stepped fully out of frame on Black tee. Garment did NOT
+freeze at its last large size -- `exactScale` shrank toward ~0 (0.066 to
+0.091 across samples) rather than jumping or staying frozen, a reasonable
+degradation. Note: this shrink appears driven by the real-metric math
+naturally degrading as MediaPipe kept returning low-confidence/implausible
+landmark guesses (never literally zero landmarks in this test), not
+necessarily by the explicit #12 zero-landmarks hysteresis path (`lostFramesRef`
+> 6) -- didn't confirm which path fired. "AI Body Tracking Active" pill
+did not visibly clear during this window (untracked whether the underlying
+`isTrackerActive` state actually flipped false -- would need a dedicated
+debug log to know for sure). **Reacquisition on stepping back in was
+clean and immediate**: `targetWorldWidth`/`exactScale` snapped right back
+to the correct baseline (~0.476/~1.19, matching the pre-loss frontal
+value) with no stale artifact, no jump, no discontinuity. Core pass
+criterion (no freeze, clean reacquisition) met; the pill-clearing detail
+is a minor open question, not investigated further.
+
 ---
 
 ## M. GLB failure/error path
@@ -373,6 +390,21 @@ Test the #8/#11 error-surfacing fix with an intentionally invalid or
 unavailable GLB URL on a controlled test product record. Expected chain:
 GLB failure → WebView error → `postMessage` → React handler → visible AR
 error banner. The app must not silently show a dead/blank renderer.
+
+**2026-09-02**: no live trigger this session -- the Supabase MCP tool had
+no access token configured, so no read or write access to create/find a
+test product with a broken URL (and this is a shared live DB, not
+something to improvise around). Verified the wiring statically instead by
+reading the full chain: `GarmentRenderer.tsx`'s injected script's
+`notifyLoadError(message)` (called on GLB load failure, line ~514) posts
+`{type: 'AR_LOAD_ERROR', message}` via `ReactNativeWebView.postMessage`
+(native) or `window.parent.postMessage` (web) -> native `<WebView>`'s own
+`onMessage` (line 1063-1069) parses it, checks `type === 'AR_LOAD_ERROR'`,
+calls `onLoadError?.(message)` -> `[id].tsx`'s `onLoadError={setArLoadError}`
+(line 1220) sets state -> `arLoadError && <View>...<Text>Garment failed to
+load. Try again shortly.</Text></View>` (line 1224-1226) renders the
+banner. Chain is complete and correctly wired end-to-end; not the same
+confidence as an actual live trigger, but no gap found on inspection.
 
 ---
 
@@ -384,6 +416,17 @@ distance vs. `cameraDistanceM`. No laboratory precision needed — just
 confirm `cameraDistanceM` monotonically tracks real distance and returns
 toward the same value when returning to the original position. Then repeat
 at yaw, to cleanly separate distance correctness from yaw correctness.
+
+**2026-09-02**: effectively covered already during Steps B/C/E and the
+#27 fix verification, same session. Distance sequence (approximate,
+holding each position, frontal): ~0.69m -> `cameraDistanceM` 0.69-0.70m;
+~0.88-1.0m -> 0.86-0.95m; ~1.36m -> 1.36m. Monotonic, tracks real distance
+reasonably closely (no lab-grade precision expected or needed). Yaw
+sequence (separate session moment, same day): frontal baseline
+0.94-1.12m; ~15-19deg yaw 1.14-1.17m; ~54-59deg yaw 1.37-1.54m (residual
+rise past ~49deg is the known `yawCosCorrection` floor, not a distance
+bug). Both halves pass; not re-run as a single unbroken sequence but the
+same ground was covered.
 
 ---
 
