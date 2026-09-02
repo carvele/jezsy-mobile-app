@@ -44,6 +44,14 @@ This project uses environment variables for Supabase configuration. Copy `.env.e
 
 Do not commit `.env`; it is ignored by `.gitignore`.
 
+### Supabase MCP (for Claude Code / AI-assisted development)
+
+Copy `.mcp.json.example` to `.mcp.json` and fill in a personal access token
+from your own [Supabase account settings](https://supabase.com/dashboard/account/tokens)
+(needs read access to the `wufcmtndotfvxvvxkamv` project). This lets your AI
+assistant query the live schema, check RLS policies, and apply migrations
+directly. `.mcp.json` is gitignored -- each developer's token stays local.
+
 ## Database migrations
 
 Schema changes live in `supabase/migrations/`, applied against a live, shared

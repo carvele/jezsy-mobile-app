@@ -6,6 +6,22 @@ name: EAS Build (preview)
 # permission to build this project. Until that secret is added, this
 # workflow will fail at the "eas build" step -- CI above (typecheck/lint)
 # is unaffected and still gates PRs on its own.
+#
+# Sentry source maps: app.config.js already includes the
+# "@sentry/react-native/expo" config plugin, but it has no org/project/auth
+# token configured anywhere (checked 2026-09-03: no SENTRY_AUTH_TOKEN,
+# SENTRY_ORG, or SENTRY_PROJECT in this repo, no sentry.properties file).
+# That means every "eas build" here silently skips source-map upload --
+# crashes in Sentry show minified stack traces instead of real file/line
+# info. This is NOT a GitHub Actions secret: the plugin's upload step runs
+# inside the EAS cloud build container (this workflow just triggers it via
+# --no-wait), so it needs an EAS secret instead:
+#   eas secret:create --scope project --name SENTRY_AUTH_TOKEN --value <token>
+#   eas secret:create --scope project --name SENTRY_ORG --value <org-slug>
+#   eas secret:create --scope project --name SENTRY_PROJECT --value <project-slug>
+# Generate the auth token at https://sentry.io/settings/account/api/auth-tokens/
+# (needs project:releases scope). Once set, no further changes are needed
+# here -- the config plugin picks them up automatically during the build.
 
 on:
   push:
