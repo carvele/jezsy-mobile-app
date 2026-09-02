@@ -610,6 +610,13 @@ fix: clamp `nx`/`ny` to [0,1] either at the top of `mapCoverCrop` or right
 after extracting `l11`/`l12`, before any distance/width/position math
 uses them.
 
+**FIXED 2026-09-02 (`63512ba`)**: clamped `nx`/`ny` to [0,1] at the top of
+`mapCoverCrop`, the single entry point all three call sites (midpoint,
+left shoulder, right shoulder) go through. Type-checked and unit tests
+still pass; smoke-tested live (fresh app restart, camera/detector init
+cleanly, no errors) but did not specifically re-reproduce the original
+out-of-frame trigger to visually confirm the fix on-device.
+
 ---
 
 ### 29. `<Camera>`'s `onError` has no user-visible recovery path — silent stuck black feed on a real OS-level camera restriction
@@ -645,6 +652,18 @@ the UI doesn't lie about tracking state. A full app restart recovered the
 camera cleanly on this device, confirming the OS restriction itself was
 transient and not a persistent lock -- so a retry-without-full-restart is
 plausible, not just a cosmetic ask.
+
+**FIXED 2026-09-02 (`486d90c`)**: added `cameraError` state driving a
+banner (same visual style as the GLB-error banner) with a Retry button;
+Retry bumps a `cameraRetryKey` used as `<Camera>`'s `key` prop, forcing a
+real remount rather than relying on state alone. `onError` also clears
+`isTrackerActive`/`hasTrackedRef` so the pill stops claiming tracking is
+active. A real pose-detection frame arriving also clears `cameraError` as
+a safety net, in case the same `<Camera>` instance self-recovers without
+the user tapping Retry. Type-checked and unit tests still pass;
+smoke-tested live (fresh restart, camera initialized cleanly, no errors)
+but did not specifically re-reproduce the original `camera-is-restricted`
+condition to confirm the banner/retry flow itself on-device.
 
 ---
 
