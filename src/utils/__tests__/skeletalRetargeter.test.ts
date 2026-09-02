@@ -1,4 +1,5 @@
-import { calculateBoneRotations } from '../skeletalRetargeter';
+import { calculateBoneRotations, calculateBoneRotationsFromCanonical } from '../skeletalRetargeter';
+import { normalizePose } from '../poseNormalizer';
 import type { WorldLandmark } from '../poseDetector';
 
 function makeWorldLandmarks(): WorldLandmark[] {
@@ -123,6 +124,78 @@ describe('Torso-local retargeting (P0-D torso-bend fix)', () => {
     const rotations = calculateBoneRotations(w);
 
     expect(rotations['RightArm']).toEqual({ x: 0, y: 0, z: 0, w: 1 });
+  });
+
+});
+
+describe('Invalid-torso fallback roll cancellation (#6)', () => {
+
+  // Hips deliberately omitted/invisible below MIN_JOINT_VISIBILITY (0.3) so
+  // normalizePose returns torso.valid = false -- the common try-on-framing case
+  // this fallback exists for (hips out of frame at typical distance).
+  function armsAtRestNoHips(): WorldLandmark[] {
+    const w = makeWorldLandmarks();
+    w[11] = { x: 0.2, y: -0.4, z: 0, visibility: 1 };   // left shoulder
+    w[12] = { x: -0.2, y: -0.4, z: 0, visibility: 1 };  // right shoulder
+    w[13] = { x: 0.4, y: -0.4, z: 0, visibility: 1 };   // left elbow, along the T-pose rest direction
+    w[14] = { x: -0.4, y: -0.4, z: 0, visibility: 1 };  // right elbow, along the T-pose rest direction
+    w[23] = { x: 0.1, y: 0.4, z: 0, visibility: 0.0 };  // left hip, invisible
+    w[24] = { x: -0.1, y: 0.4, z: 0, visibility: 0.0 }; // right hip, invisible
+    return w;
+  }
+
+  it('confirms the test fixture actually produces an invalid torso', () => {
+    const pose = normalizePose(armsAtRestNoHips());
+    expect(pose.torso.valid).toBe(false);
+  });
+
+  it('without fallbackRollRad, arm bones stay at their prior (double-counting) behavior: identity for an at-rest arm', () => {
+    const pose = normalizePose(armsAtRestNoHips());
+    const rotations = calculateBoneRotationsFromCanonical(pose, 'T_POSE');
+
+    // Arms are exactly along the T-pose rest direction and the invalid torso's
+    // untouched quaternion is identity, so with no fallback the delta is identity --
+    // this is the pre-fix behavior the omit-the-parameter case preserves on purpose.
+    expect(rotations['LeftArm']).toEqual({ x: 0, y: 0, z: 0, w: 1 });
+    expect(rotations['RightArm']).toEqual({ x: 0, y: 0, z: 0, w: 1 });
+  });
+
+  it('with fallbackRollRad, arm bones cancel the same roll the garment group applies, instead of leaving it double-counted', () => {
+    const pose = normalizePose(armsAtRestNoHips());
+    const fallbackRollRad = 30 * Math.PI / 180; // poseConstructor's Y-down convention
+
+    const rotations = calculateBoneRotationsFromCanonical(pose, 'T_POSE', fallbackRollRad);
+
+    // garmentFitter's fallback group rotation uses the same CANONICAL_Y_UP_ROLL_SIGN
+    // (-1) flip on fallbackRollRad -- this function must build the IDENTICAL
+    // roll-only quaternion internally and remove it from arm directions, so the
+    // bone delta here should be the INVERSE of that group rotation: r = -1 * -rollRad
+    // = +rollRad half-angle, i.e. sin(+rollRad/2)/cos(+rollRad/2) on Z.
+    const expectedZ = Math.sin(fallbackRollRad / 2);
+    const expectedW = Math.cos(fallbackRollRad / 2);
+
+    expect(rotations['LeftArm'].z).toBeCloseTo(expectedZ, 5);
+    expect(rotations['LeftArm'].w).toBeCloseTo(expectedW, 5);
+    expect(rotations['RightArm'].z).toBeCloseTo(expectedZ, 5);
+    expect(rotations['RightArm'].w).toBeCloseTo(expectedW, 5);
+
+    // Not identity -- confirms the fallback actually changed the bone delta rather
+    // than silently no-op'ing (which would leave #6's double-roll bug in place).
+    expect(rotations['LeftArm']).not.toEqual({ x: 0, y: 0, z: 0, w: 1 });
+  });
+
+  it('a VALID torso ignores fallbackRollRad entirely -- the parameter only matters when the real torso basis failed', () => {
+    const w = armsAtRestNoHips();
+    w[23] = { x: 0.1, y: 0.4, z: 0, visibility: 1 }; // hips visible now -> valid torso
+    w[24] = { x: -0.1, y: 0.4, z: 0, visibility: 1 };
+    const pose = normalizePose(w);
+    expect(pose.torso.valid).toBe(true);
+
+    const withoutFallback = calculateBoneRotationsFromCanonical(pose, 'T_POSE');
+    const withFallback = calculateBoneRotationsFromCanonical(pose, 'T_POSE', 30 * Math.PI / 180);
+
+    expect(withFallback['LeftArm']).toEqual(withoutFallback['LeftArm']);
+    expect(withFallback['RightArm']).toEqual(withoutFallback['RightArm']);
   });
 
 });
