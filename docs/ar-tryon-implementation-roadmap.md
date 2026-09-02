@@ -77,7 +77,8 @@ Goal: lock M1 and make the system's assumptions explicit before new work
 depends on them.
 
 Tasks:
-1. Write `docs/ar-system-contract.md`: inputs (33 landmarks, world
+1. **Done** — `docs/ar-system-contract.md` written 2026-09-02. Original
+   scope: inputs (33 landmarks, world
    landmarks, optional segmentation, user measurements, garment
    calibration), normalization (canonical-v1), body model (torso basis,
    yaw/pitch/roll, joints), garment fit (anchor, world scale, camera
@@ -115,11 +116,14 @@ Instrumentation (small, low risk, ship first):
 - Effective update rate: count `updateTransform` calls per second on the
   native side and frames rendered per second inside the WebView; log both.
 - Make the tracking pill honest. It latches true on the first frame and
-  never reflects `pose.trackingState`. `TrackingState` already computes
-  seven states (`INITIALIZING`, `GOOD_FIT`, `TURN_TOO_FAR`, `STEP_BACK`,
-  `FULL_BODY_REQUIRED`, `LOW_LIGHT`, `TRACKING_LOST`) and the screen
-  currently collapses all of them into one boolean. Surfacing them is
-  wiring, not new detection, and it is most of Phase 5's guidance for free.
+  never reflects `pose.trackingState`. Correction to an earlier draft of
+  this roadmap: `TrackingState` *declares* seven members but
+  `poseConstructor.ts` only ever produces three — `GOOD_FIT`,
+  `TURN_TOO_FAR` (at `abs(yaw) >= 25°`), and `TRACKING_LOST` (shoulder
+  visibility `< 0.35`). `INITIALIZING`, `STEP_BACK`, `FULL_BODY_REQUIRED`
+  and `LOW_LIGHT` are declared and never assigned. Surfacing the three real
+  states is wiring; the other four need detection written first (see
+  Phase 5).
 - Client-side calibration sanity guard in the metadata path: if
   `anatomical_anchor_offset` magnitude or `rest_pose_metric_width` fall
   outside plausible garment bounds, treat the record as
@@ -230,10 +234,15 @@ Goal: a first-time user gets to a good frame without coaching, and the
 system behaves on hardware other than the one it was tuned on.
 
 Tasks:
-- Framing guidance: map each of the seven `TrackingState` values to one
-  short instruction (step back, get your whole body in frame, face the
-  camera, more light, hold still). The states are already computed; this
-  is copy plus the pill from Phase 1, no new detection and no new assets.
+- Framing guidance, in two parts. Free: map the three states that actually
+  exist (`GOOD_FIT`, `TURN_TOO_FAR`, `TRACKING_LOST`) to one short
+  instruction each — copy plus the Phase 1 pill, no new detection. Costed:
+  `STEP_BACK` and `LOW_LIGHT` are declared but never assigned, so they need
+  real detection written — distance is already available from
+  `cameraDistanceM` on calibrated native, and a frame-luma estimate covers
+  lighting. `FULL_BODY_REQUIRED` needs a decision first: at try-on framing
+  the hips are routinely out of view and the pipeline tolerates it, so the
+  state may not be wanted at all. Decide before implementing.
 - Transport diet: drop `worldLandmarks` from the payload when the occluder
   is off; throttle `updateTransform` to the WebView's measured render rate
   instead of the detector rate; measure before and after.
