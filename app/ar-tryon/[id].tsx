@@ -283,9 +283,6 @@ export default function ARTryOnScreen() {
   // resolution as long as format and the values read from it agree.
   const format = useCameraFormat(device, [{ videoResolution: { width: 1280, height: 720 } }]);
 
-  const [matchScore, setMatchScore] = useState(0);
-  const [isMatched, setIsMatched] = useState(false);
-  const [matchFeedback, setMatchFeedback] = useState('Align with outline');
   const [isTrackerActive, setIsTrackerActive] = useState(false);
   const [arLoadError, setArLoadError] = useState<string | null>(null);
   // Fix for #29 in the AR audit plan: <Camera>'s onError used to only console.warn,
@@ -851,32 +848,6 @@ export default function ARTryOnScreen() {
     });
     return () => sub.remove();
   }, []);
-  const lastSpokenSpeechRef = React.useRef<string>('');
-  const isSpeechThrottledRef = React.useRef<boolean>(false);
-  const speechTimeoutRef = React.useRef<any>(null);
-
-  useEffect(() => {
-    if (isMatched && matchFeedback && mode === '2d' && isFocused) {
-      if (matchFeedback !== lastSpokenSpeechRef.current && !isSpeechThrottledRef.current) {
-        Speech.stop();
-        Speech.speak(matchFeedback, { rate: 1.0, pitch: 1.0 });
-        lastSpokenSpeechRef.current = matchFeedback;
-        isSpeechThrottledRef.current = true;
-        if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
-        speechTimeoutRef.current = setTimeout(() => {
-          isSpeechThrottledRef.current = false;
-        }, 3000);
-      }
-    }
-  }, [isMatched, matchFeedback, mode, isFocused]);
-
-  useEffect(() => {
-    return () => {
-      Speech.stop();
-      if (speechTimeoutRef.current) clearTimeout(speechTimeoutRef.current);
-    };
-  }, []);
-
   if (hasConsented === false) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -1263,10 +1234,8 @@ export default function ARTryOnScreen() {
             {/* AI Tracking Status Pill */}
             {isTrackerActive && (
               <View style={styles.trackingPill}>
-                <View style={[styles.statusDot, { backgroundColor: isMatched ? '#34C759' : '#00E5FF' }]} />
-                <Text style={styles.trackingPillText}>
-                  {isMatched ? 'Pose Matched' : 'AI Body Tracking Active'}
-                </Text>
+                <View style={[styles.statusDot, { backgroundColor: '#00E5FF' }]} />
+                <Text style={styles.trackingPillText}>AI Body Tracking Active</Text>
               </View>
             )}
 
