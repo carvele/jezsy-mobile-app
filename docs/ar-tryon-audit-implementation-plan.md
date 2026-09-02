@@ -705,6 +705,14 @@ What's left, in priority order:
    is NOT independently visually confirmed against the exact numeric
    sample. Worth a clean two-person re-test (one person poses, one drives
    the capture) before fully closing out #3's live verification.
+
+   **CLOSED 2026-09-02** — clean two-person-style re-test (wearer posing,
+   agent driving capture immediately after each hold, no solo timing
+   drift): baseline roll=3.3°; right-shoulder-down → roll=+11.2°, garment
+   visibly tilts with its screen-right side lower; left-shoulder-down →
+   roll=-9.0°, garment visibly tilts the opposite way (screen-left lower).
+   Both sign and visual direction correct and consistent, matching the
+   prediction. #3 is now fully closed, numerically and visually.
 2. ~~Investigate the remaining ~2.1-2.3x oversizing~~ — **done, confirmed
    data-only (#26)**: A/B tested Black tee (sane calibration) against Cotton
    T-Shirt (broken calibration) same session, `exactScale` dropped to
