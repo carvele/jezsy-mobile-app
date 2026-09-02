@@ -589,6 +589,23 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     const l11 = normalizedLandmarks[11];
                     const l12 = normalizedLandmarks[12];
 
+                    // Fix for #27 in the AR audit plan: this block's similar-triangles
+                    // distance formula assumed the measured shoulder pixel width is always
+                    // the frontal width, but it foreshortens by cos(yaw) exactly like
+                    // targetWorldWidth below -- so turning away made a constant real distance
+                    // read as progressively farther (confirmed live: yaw -49deg -> 1.1-1.2m,
+                    // yaw -50 to -68deg -> 1.67-1.72m, frontal baseline ~0.9m, no actual
+                    // movement). Hoisted from its original spot next to targetWorldWidth further
+                    // down so both foreshortening corrections share one yaw read per frame.
+                    let yawCosCorrection = 1;
+                    const rotValidForYaw = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w);
+                    if (rotValidForYaw) {
+                      const yawEuler = new THREE.Euler().setFromQuaternion(
+                        new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w), 'YXZ'
+                      );
+                      yawCosCorrection = Math.max(0.65, Math.abs(Math.cos(yawEuler.y)));
+                    }
+
                     // Phase 3: real distance triangulation. Real focal length (px) and the
                     // wearer's own real shoulder width give real distance from this frame's
                     // measured pixel separation -- the standard similar-triangles formula,
@@ -611,7 +628,12 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // profile turn, raised arm), so triangulating from it is meaningless.
                       const isRoughlyFrontal = Math.abs(dxPx) > Math.abs(dyPx);
                       if (measuredPixelWidth > 1 && isRoughlyFrontal) {
-                        const rawDistance = (CAMERA_CALIBRATION.wearerShoulderWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth;
+                        // measuredPixelWidth foreshortens by cos(yaw) at a fixed real distance,
+                        // which the naive formula misreads as farther away the more the wearer
+                        // turns -- correct back out by the same yawCosCorrection used for
+                        // targetWorldWidth below, so a real distance change is what moves this,
+                        // not yaw alone.
+                        const rawDistance = ((CAMERA_CALIBRATION.wearerShoulderWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;
                         // Realistic handheld-phone try-on range, not the theoretical camera
                         // range -- the old [0.05, 20]m bound let a bad bootstrap frame (e.g.
                         // 19m) seed smoothedCameraDistance, and the per-frame clamp below then
@@ -691,15 +713,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // out by the same cos(yaw) so the foreshortening is applied exactly
                       // once, via the 3D rotation itself. Same 0.65 floor convention as
                       // garmentFitter's 2D-path correctedShoulderWidthPx, for consistency.
-                      // NOT verified on a physical device -- see the AR audit plan doc.
-                      let yawCosCorrection = 1;
-                      const rotValidForYaw = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w);
-                      if (rotValidForYaw) {
-                        const yawEuler = new THREE.Euler().setFromQuaternion(
-                          new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w), 'YXZ'
-                        );
-                        yawCosCorrection = Math.max(0.65, Math.abs(Math.cos(yawEuler.y)));
-                      }
+                      // yawCosCorrection itself is now computed once, earlier in this handler,
+                      // and shared with the #27 distance-triangulation fix above.
                       const targetWorldWidth = targetL.distanceTo(targetR) / yawCosCorrection;
 
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
