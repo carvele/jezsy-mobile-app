@@ -256,6 +256,21 @@ second roll: arm bones should stay visually coherent with the garment.
 **Pass:** when torso validity recovers, no sudden rotational jump, no
 doubled arm tilt, no discontinuity between torso and sleeves/arms.
 
+**2026-09-02**: physically attempted hand-occlusion of one shoulder and a
+true ~81° profile turn on the Black tee — `pose.torso.valid` stayed `true`
+through both; MediaPipe's world-landmark estimation is more robust than
+expected and never actually dropped into the invalid-torso path during
+normal in-frame posing. No visual glitch either way (profile turn just
+shrank the garment gracefully via the yaw floor). Since the fallback path
+targets hips-out-of-frame (common at typical try-on distance, not
+occlusion) and couldn't be forced physically, verified deterministically
+instead with 4 new unit tests in `skeletalRetargeter.test.ts` (see
+`0e39aea`): confirms the fixture produces `torso.valid=false`, confirms
+omitting `fallbackRollRad` preserves the old double-counting behavior,
+confirms passing it produces the exact analytically-predicted
+roll-cancelling quaternion, confirms a valid torso ignores the parameter
+entirely. #6 is considered verified via this route.
+
 ---
 
 ## H. Test the #23 compensation's guard itself — second device
