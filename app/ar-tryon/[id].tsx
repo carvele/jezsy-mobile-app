@@ -288,6 +288,15 @@ export default function ARTryOnScreen() {
   const [matchFeedback, setMatchFeedback] = useState('Align with outline');
   const [isTrackerActive, setIsTrackerActive] = useState(false);
   const [arLoadError, setArLoadError] = useState<string | null>(null);
+  // Fix for #29 in the AR audit plan: <Camera>'s onError used to only console.warn,
+  // leaving a permanently black feed with the "AI Body Tracking Active" pill still
+  // shown (stale/false) whenever a camera-level error fired -- confirmed live on this
+  // device via a real system/camera-is-restricted error after a background/foreground
+  // cycle. cameraRetryKey remounts <Camera> on retry (clearing state alone doesn't
+  // force vision-camera to re-attempt); a full app restart was confirmed to recover
+  // the same error, so the underlying condition is transient, not a persistent lock.
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraRetryKey, setCameraRetryKey] = useState(0);
 
   // Reanimated SharedValues for 60FPS UI-thread smooth garment positioning
   const translateX = useSharedValue(0);
@@ -682,6 +691,10 @@ export default function ARTryOnScreen() {
         hasTrackedRef.current = true;
         setIsTrackerActive(true);
       }
+      // A real landmark frame means the camera is genuinely producing output --
+      // clear any stale error banner even if the user hasn't tapped Retry yet
+      // (e.g. a transient error that self-resolved on this same <Camera> instance).
+      setCameraError((prev) => (prev ? null : prev));
 
       // Evaluate pose
       const normalizedLandmarks = landmarks.map((p: any) => ({
@@ -1191,6 +1204,7 @@ export default function ARTryOnScreen() {
             />
           ) : device ? (
             <Camera
+              key={cameraRetryKey}
               style={styles.camera}
               device={device}
               format={format}
@@ -1201,6 +1215,9 @@ export default function ARTryOnScreen() {
               onOutputOrientationChanged={poseDetection.cameraOrientationChangedHandler}
               onError={(e: any) => {
                 console.warn('Camera Error:', e);
+                setCameraError(e?.message || 'Camera error');
+                hasTrackedRef.current = false;
+                setIsTrackerActive(false);
               }}
             />
           ) : (
@@ -1224,6 +1241,21 @@ export default function ARTryOnScreen() {
           {arLoadError && (
             <View style={styles.arLoadErrorBanner} pointerEvents="none">
               <Text style={styles.arLoadErrorText}>Garment failed to load. Try again shortly.</Text>
+            </View>
+          )}
+
+          {cameraError && (
+            <View style={styles.arLoadErrorBanner} pointerEvents="box-none">
+              <Text style={styles.arLoadErrorText}>Camera unavailable. This can happen after switching apps -- try again.</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setCameraError(null);
+                  setCameraRetryKey((k) => k + 1);
+                }}
+                style={styles.cameraErrorRetryButton}
+              >
+                <Text style={styles.cameraErrorRetryText}>Retry</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -1299,6 +1331,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     textAlign: 'center',
+  },
+  cameraErrorRetryButton: {
+    marginTop: Spacing.sm,
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 8,
+  },
+  cameraErrorRetryText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   fitPanel: {
     position: 'absolute',
