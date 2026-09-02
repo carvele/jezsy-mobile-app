@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   questionText: {
     ...Type.headline,

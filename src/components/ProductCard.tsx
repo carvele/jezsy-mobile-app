@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-nativ
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useWishlist } from '@/src/context/WishlistContext';
@@ -26,6 +26,7 @@ type Props = {
   /** Shown as a "Your size" chip when the fit recommender has a match. */
   recommendedSize?: string | null;
   showStock?: boolean;
+  aspectRatio?: number;
 };
 
 export function ProductCard({
@@ -33,6 +34,7 @@ export function ProductCard({
   variant = 'grid',
   recommendedSize,
   showStock = true,
+  aspectRatio,
 }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -85,16 +87,14 @@ export function ProductCard({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint="Opens product details"
       >
-        <View style={[styles.imageWrap, { backgroundColor: colors.imagePlaceholder }]}>
-          {/* An imageless product shows the tinted placeholder colour rather
-              than the Expo template's React logo, which looked like a bug. */}
-          {product.image_url ? (
-            <Image
-              source={{ uri: product.image_url }}
-              style={[styles.image, outOfStock && styles.imageDimmed]}
-              contentFit="cover"
-            />
-          ) : null}
+        <View style={[styles.imageWrap, { backgroundColor: colors.imagePlaceholder }, aspectRatio ? { aspectRatio } : undefined]}>
+          <Image
+            source={{ uri: product.image_url || '' }}
+            style={[styles.image, outOfStock && styles.imageDimmed]}
+            contentFit="cover"
+            transition={300}
+            cachePolicy="memory-disk"
+          />
 
           {/* Left column of badges so they never collide with the heart. */}
           <View style={styles.badgeColumn}>
@@ -113,7 +113,7 @@ export function ProductCard({
             {!!(product.model_3d_url && product.tags && product.tags.includes('AR Try-On')) && (
               <View style={[styles.badge, styles.badgeRow, { backgroundColor: '#6366f1' }]}>
                 <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
-                <Text style={[styles.badgeText, { color: '#ffffff' }]}>AR</Text>
+                <Text style={[styles.badgeText, { color: 'white' }]}>AR</Text>
               </View>
             )}
           </View>
@@ -186,7 +186,7 @@ export function ProductCard({
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: 20 },
+  card: { marginBottom: Spacing.xl },
   cardGrid: {},
   cardRail: { width: RAIL_WIDTH, marginRight: 14, marginBottom: 0 },
   imageWrap: {
@@ -198,10 +198,10 @@ const styles = StyleSheet.create({
   },
   image: { width: '100%', height: '100%' },
   imageDimmed: { opacity: 0.45 },
-  badgeColumn: { position: 'absolute', top: 8, left: 8, gap: 4, alignItems: 'flex-start' },
-  badge: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  badgeColumn: { position: 'absolute', top: 8, left: 8, gap: Spacing.xs, alignItems: 'flex-start' },
+  badge: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: Radius.sm },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  badgeText: { fontSize: 12, fontWeight: '800' },
+  badgeText: { ...Type.caption, fontWeight: '800' },
   heart: { position: 'absolute', top: 6, right: 6 },
   // Real backdrop blur (expo-blur BlurView), not a flat rgba(0,0,0,0.45)
   // fill: floats over a product photo in every card variant, the one case
@@ -228,23 +228,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   soldOutText: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    color: '#FFF',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
+      ...Type.caption,
+      fontWeight: '800',
+      letterSpacing: 1.5,
+      color: '#FFF',
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs,
+      borderRadius: Radius.sm,
     overflow: 'hidden',
   },
-  info: { paddingTop: 8, paddingHorizontal: 2, gap: 3 },
-  category: { fontSize: 12, fontWeight: '700', letterSpacing: 1 },
-  name: { fontSize: 13, fontWeight: '500' },
+  info: { paddingTop: Spacing.sm, paddingHorizontal: Spacing.xs, gap: 3 },
+  category: { ...Type.label },
+  name: { ...Type.body },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  price: { fontSize: 13, fontWeight: '700' },
-  priceWas: { fontSize: 12, textDecorationLine: 'line-through' },
-  fitRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  fitText: { fontSize: 12, fontWeight: '700' },
-  stock: { fontSize: 12, fontWeight: '600' },
+  price: { ...Type.bodyStrong },
+  priceWas: { ...Type.caption, textDecorationLine: 'line-through' },
+  fitRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  fitText: { ...Type.caption, fontWeight: '700' },
+  stock: { ...Type.caption, fontWeight: '600' },
 });
+
+

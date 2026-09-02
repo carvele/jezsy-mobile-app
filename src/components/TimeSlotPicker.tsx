@@ -1,4 +1,4 @@
-import { Colors } from "@/constants/theme";
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { supabase } from "@/src/lib/supabase";
 import {
@@ -372,21 +372,21 @@ export function TimeSlotPicker({
 
 const styles = StyleSheet.create({
   center: {
-    padding: 20,
+    padding: Spacing.xl,
     alignItems: "center",
     justifyContent: "center",
   },
   trigger: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: Spacing.md,
     height: 52,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     borderRadius: 12,
     borderWidth: 1,
   },
-  triggerText: { flex: 1, fontSize: 15, fontWeight: "600" },
-  availabilityHint: { fontSize: 12, marginTop: 8 },
+  triggerText: { flex: 1, ...Type.bodyStrong },
+  availabilityHint: { fontSize: 12, marginTop: Spacing.sm },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",
@@ -395,8 +395,8 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
     paddingBottom: Platform.OS === "ios" ? 40 : 20,
     maxHeight: "70%",
   },
@@ -404,23 +404,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
-  sheetTitle: { fontSize: 18, fontWeight: "700" },
+  sheetTitle: { ...Type.subtitle },
   sheetClose: { fontSize: 15, fontWeight: "700" },
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 16,
-    paddingHorizontal: 8,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.sm,
     borderRadius: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  rowLabel: { fontSize: 15, fontWeight: "600" },
+  rowLabel: { ...Type.bodyStrong },
   rowReason: { fontSize: 12 },
   closedContainer: {
-    padding: 20,
+    padding: Spacing.xl,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: "center",

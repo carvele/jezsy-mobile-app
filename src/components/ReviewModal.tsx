@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, Modal, TouchableOpacity, TextInput, ActivityInd
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -151,7 +151,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
             />
 
             <Text style={[styles.label, { color: colors.text }]}>Add photos (optional)</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow} contentContainerStyle={{ gap: 12 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoRow} contentContainerStyle={{ gap: Spacing.md }}>
               {images.map(img => (
                 <View key={img.uri} style={styles.photoThumbWrap}>
                   <Image source={{ uri: img.uri }} style={styles.photoThumb} contentFit="cover" />
@@ -213,49 +213,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
     borderBottomWidth: 1,
     position: 'relative',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   closeBtn: {
     position: 'absolute',
     right: 16,
-    padding: 8,
+    padding: Spacing.sm,
   },
   body: {
-    padding: 24,
+    padding: Spacing.xxl,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   starsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 12,
-    marginBottom: 8,
+    gap: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   starBtn: {
-    padding: 4,
+    padding: Spacing.xs,
   },
   ratingText: {
     textAlign: 'center',
     fontSize: 15,
     fontWeight: '500',
-    marginBottom: 32,
+    marginBottom: Spacing.xxxl,
   },
   input: {
     height: 120,
     borderWidth: 1,
     borderRadius: 12,
-    padding: 16,
+    padding: Spacing.lg,
     fontSize: 15,
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   submitBtn: {
     height: 56,
@@ -265,11 +264,10 @@ const styles = StyleSheet.create({
   },
   submitBtnText: {
     
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
   photoRow: {
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   photoThumbWrap: {
     position: 'relative',

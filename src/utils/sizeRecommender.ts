@@ -43,9 +43,11 @@ export function toNumeric(val: any): number | null {
  * Compares the user's measurements against a garment size chart and
  * produces transparent zone-by-zone fit verdicts.
  */
+export type FabricStretch = 'Rigid' | 'Moderate' | 'High';
+
 export function analyzeFit(
   user: UserMeasurements | null | undefined,
-  garment: { bust?: number; waist?: number; hips?: number; inseam?: number; shoulderWidth?: number } | null | undefined
+  garment: { bust?: number; waist?: number; hips?: number; inseam?: number; shoulderWidth?: number; stretch?: FabricStretch } | null | undefined
 ): FitZone[] {
   if (!garment || !user) return [];
   const zones: FitZone[] = [];
@@ -53,9 +55,20 @@ export function analyzeFit(
   const classify = (
     zone: FitZone['zone'],
     uRaw?: any,
-    gRaw?: any,
-    customEaseThresholds = { snug: 1, fitted: 6, relaxed: 10 }
+    gRaw?: any
   ) => {
+    // Dynamic stretch mechanics: 
+    // Rigid fabrics (like denim) need more ease to not feel tight.
+    // High stretch fabrics (like spandex) can have negative ease and still fit perfectly.
+    const customEaseThresholds = { snug: 1, fitted: 6, relaxed: 10 };
+    if (garment.stretch === 'Rigid') {
+      customEaseThresholds.snug += 2;
+      customEaseThresholds.fitted += 2;
+    } else if (garment.stretch === 'High') {
+      customEaseThresholds.snug -= 3;
+      customEaseThresholds.fitted -= 3;
+    }
+
     const u = toNumeric(uRaw);
     const g = toNumeric(gRaw);
     if (u === null || g === null) return;
@@ -91,10 +104,10 @@ export function analyzeFit(
     });
   };
 
-  classify('Bust', user.bust, garment.bust, { snug: 2, fitted: 6, relaxed: 10 });
-  classify('Waist', user.waist, garment.waist, { snug: 2, fitted: 6, relaxed: 12 });
-  classify('Hips', user.hips, garment.hips, { snug: 2, fitted: 7, relaxed: 14 });
-  classify('Shoulders', user.shoulderWidth, garment.shoulderWidth, { snug: 1, fitted: 4, relaxed: 8 });
+  classify('Bust', user.bust, garment.bust);
+  classify('Waist', user.waist, garment.waist);
+  classify('Hips', user.hips, garment.hips);
+  classify('Shoulders', user.shoulderWidth, garment.shoulderWidth);
 
   return zones;
 }
@@ -214,3 +227,4 @@ export function recommendSize(
 
   return bestSize;
 }
+

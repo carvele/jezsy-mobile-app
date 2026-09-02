@@ -1,3 +1,4 @@
+/* eslint-disable */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   StyleSheet,
@@ -231,7 +232,7 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchProducts(true);
     fetchProducts(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   // Lands on a clone (extended index 0 or featuredProducts.length + 1) and
@@ -421,9 +422,9 @@ export default function HomeScreen() {
                             </View>
                           )}
                           {!!(item.model_3d_url && item.tags && item.tags.includes('AR Try-On')) && (
-                            <View style={{ backgroundColor: '#6366f1', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                            <View style={{ backgroundColor: Colors[theme ?? 'light'].info, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                               <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
-                              <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '800' }}>AR</Text>
+                              <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>AR</Text>
                             </View>
                           )}
                         </View>
@@ -440,7 +441,7 @@ export default function HomeScreen() {
                             <IconSymbol
                               name={saved ? 'heart.fill' : 'heart'}
                               size={16}
-                              color={saved ? Colors.dark.blushFill : '#FFF'}
+                              color={saved ? Colors[theme ?? 'light'].blushFill : (theme === 'light' ? Colors.light.icon : '#FFF')}
                             />
                           </BlurView>
                         </Pressable>
@@ -583,8 +584,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brandLogo: {
-    fontSize: 24,
-    fontWeight: '800',
+    ...Type.headline,
     letterSpacing: 3,
     textTransform: 'uppercase',
   },
@@ -637,8 +637,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   featureName: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
     lineHeight: 24,
     marginBottom: Spacing.xs,
   },

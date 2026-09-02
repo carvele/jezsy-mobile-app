@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LevelIndicator } from '@/src/components/LevelIndicator';
@@ -146,22 +146,22 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 20,
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   stepCount: { fontSize: 15, fontWeight: '700', width: 34 },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: '700' },
-  body: { padding: 24, paddingBottom: 40, alignItems: 'center' },
+  body: { padding: Spacing.xxl, paddingBottom: 40, alignItems: 'center' },
   lead: { fontSize: 18, lineHeight: 26, textAlign: 'center', fontWeight: '600' },
   centerArt: { alignItems: 'center', marginTop: 48, gap: 18 },
-  hint: { fontSize: 14, lineHeight: 20, textAlign: 'center', paddingHorizontal: 12 },
+  hint: { fontSize: 14, lineHeight: 20, textAlign: 'center', paddingHorizontal: Spacing.md },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginTop: 32,
+    marginTop: Spacing.xxxl,
     rowGap: 26,
   },
   gridItem: { width: '48%', alignItems: 'center', gap: 10 },
@@ -176,8 +176,8 @@ const styles = StyleSheet.create({
   gridLabel: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
   footer: {
     flexDirection: 'row',
-    gap: 12,
-    padding: 20,
+    gap: Spacing.md,
+    padding: Spacing.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   primary: { flex: 1, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
@@ -190,5 +190,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryText: { fontSize: 15, fontWeight: '600' },
+  secondaryText: { ...Type.bodyStrong },
 });

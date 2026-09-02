@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View, ViewStyle, DimensionValue } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing } from 'react-native-reanimated';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface SkeletonProps {
@@ -37,7 +37,7 @@ export function Skeleton({ width = '100%', height = 16, radius = 8, style }: Ske
 /** Grid card placeholder, matching the Explore/Home product card shape. */
 export function ProductCardSkeleton({ width = 160 }: { width?: number }) {
   return (
-    <View style={{ width, marginBottom: 20 }}>
+    <View style={{ width, marginBottom: Spacing.xl }}>
       <Skeleton width={width} height={width * 1.3} radius={12} />
       <Skeleton width={width * 0.8} height={13} style={{ marginTop: 10 }} />
       <Skeleton width={width * 0.45} height={13} style={{ marginTop: 6 }} />
@@ -52,8 +52,8 @@ export function ListRowSkeleton() {
       <Skeleton width={64} height={64} radius={10} />
       <View style={styles.rowBody}>
         <Skeleton width="70%" height={15} />
-        <Skeleton width="45%" height={13} style={{ marginTop: 8 }} />
-        <Skeleton width="30%" height={12} style={{ marginTop: 8 }} />
+        <Skeleton width="45%" height={13} style={{ marginTop: Spacing.sm }} />
+        <Skeleton width="30%" height={12} style={{ marginTop: Spacing.sm }} />
       </View>
     </View>
   );

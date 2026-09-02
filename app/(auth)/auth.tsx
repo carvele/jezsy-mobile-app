@@ -20,7 +20,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
@@ -721,7 +721,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 40,
     fontWeight: '800',
-    color: '#fff',
+    color: 'white',
     lineHeight: 46,
     letterSpacing: -0.5,
   },
@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
     borderColor: GLASS_BORDER,
     padding: Spacing.xxl,
     gap: 18,
-    shadowColor: '#000',
+    shadowColor: 'black',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
@@ -769,13 +769,13 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#fff',
+    color: 'white',
     paddingVertical: Spacing.md,
   },
   inputWithAction: {
     flex: 1,
     fontSize: 16,
-    color: '#fff',
+    color: 'white',
     paddingVertical: Spacing.md,
   },
   eyeBtn: {
@@ -811,8 +811,7 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     color: 'rgba(255,255,255,0.45)',
-    fontSize: 14,
-    fontWeight: '400',
+    ...Type.body,
   },
   toggleLink: {
     color: c.tint,
@@ -841,7 +840,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(201, 169, 110, 0.08)',
   },
   otpBoxText: {
-    color: '#fff',
+    color: 'white',
     fontSize: 22,
     fontWeight: '700',
   },

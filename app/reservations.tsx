@@ -3,6 +3,7 @@ import { StyleSheet, View, Text, FlatList, TouchableOpacity } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { formatPHDate } from '@/src/utils/dateFormatter';
 import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { Database } from '@/src/types/database.types';
@@ -127,7 +128,7 @@ export default function ReservationsScreen() {
   }, [reservations, activeFilter]);
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {
-    const dateStr = item.date ? new Date(item.date).toLocaleDateString() : 'N/A';
+    const dateStr = item.date ? formatPHDate(item.date) : 'N/A';
     
     return (
       <TouchableOpacity
@@ -243,7 +244,7 @@ export default function ReservationsScreen() {
       )}
 
       {loading ? (
-        <View style={{ paddingHorizontal: 20 }}>
+        <View style={{ paddingHorizontal: Spacing.xl }}>
           <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
         </View>
       ) : reservations.length === 0 ? (

@@ -5,10 +5,10 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
   useWindowDimensions,
 } from 'react-native';
+import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
@@ -37,6 +37,7 @@ export function StyleGallery() {
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   
   // Don't stretch horizontally to fill half of an iPad screen
   const cardWidth = Math.min(220, (width - Spacing.lg * 2 - Spacing.md) / 2);
@@ -86,9 +87,13 @@ export function StyleGallery() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color={colors.tint} />
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md }}>
+        <View style={{ flexDirection: 'row', gap: Spacing.md }}>
+          <SkeletonList count={4}>
+            <ProductCardSkeleton width={cardWidth} />
+          </SkeletonList>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -191,7 +196,7 @@ export function StyleGallery() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     marginVertical: Spacing.md,
   },
@@ -209,11 +214,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...Typography.title,
     fontWeight: '700',
-    color: Colors.light.text,
+    color: colors.text,
   },
   sectionSubtitle: {
     ...Typography.caption,
-    color: Colors.light.tabIconDefault,
+    color: colors.tabIconDefault,
     marginTop: 2,
   },
   chipsContainer: {
@@ -225,18 +230,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.card,
   },
   activeChip: {
-    backgroundColor: Colors.light.tint,
+    backgroundColor: colors.tint,
   },
   chipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4B5563',
+    color: colors.secondaryText,
   },
   activeChipText: {
-    color: '#FFFFFF',
+    color: colors.onTint,
   },
   scrollFeed: {
     paddingHorizontal: Spacing.lg,
@@ -244,10 +249,10 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -256,7 +261,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: '100%',
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.imagePlaceholder,
     position: 'relative',
   },
   image: {
@@ -278,7 +283,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   occasionText: {
-    color: '#FDE68A',
+    color: colors.tint,
     fontSize: 10,
     fontWeight: '700',
   },
@@ -286,7 +291,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     right: 8,
-    backgroundColor: Colors.light.tint,
+    backgroundColor: colors.tint,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -295,7 +300,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tryBadgeText: {
-    color: '#FFFFFF',
+    color: colors.onTint,
     fontSize: 10,
     fontWeight: '700',
   },
@@ -305,7 +310,7 @@ const styles = StyleSheet.create({
   poseName: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.light.text,
+    color: colors.text,
   },
   metaRow: {
     flexDirection: 'row',
@@ -315,12 +320,12 @@ const styles = StyleSheet.create({
   },
   difficultyText: {
     fontSize: 10,
-    color: '#059669',
+    color: colors.success,
     fontWeight: '600',
   },
   tagText: {
     fontSize: 10,
-    color: Colors.light.tabIconDefault,
+    color: colors.tabIconDefault,
   },
   emptyContainer: {
     width: SCREEN_WIDTH - Spacing.lg * 2,
@@ -330,6 +335,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 13,
-    color: Colors.light.tabIconDefault,
+    color: colors.tabIconDefault,
   },
 });

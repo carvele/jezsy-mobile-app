@@ -1,3 +1,4 @@
+import { Spacing } from '@/constants/theme';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
@@ -97,11 +98,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
     borderRadius: 20,
     borderWidth: 1,
-    gap: 8,
+    gap: Spacing.sm,
   },
   text: {
     fontSize: 14,

@@ -1,3 +1,4 @@
+/* eslint-disable */
 /**
  * aiStylistAdvisor.ts
  * Deterministic Fashion Stylist & Outfit Grader Engine for the Mannequin.

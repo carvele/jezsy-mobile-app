@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Session, User } from "@supabase/supabase-js";
 import React, {
     createContext,

@@ -26,11 +26,11 @@ import { useWishlist } from '@/src/context/WishlistContext';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { Database } from '@/src/types/database.types';
-import { removeBackground } from '@six33/react-native-bg-removal';
 import { evaluateColors } from '@/src/utils/colorMatcher';
+
 import { useToast } from '@/src/context/ToastContext';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, ZoomIn, FadeOut } from 'react-native-reanimated';
 import { MannequinSilhouette } from '@/src/components/MannequinSilhouette';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
@@ -118,7 +118,12 @@ function DraggableCanvasItem({ uri, baseStyle, resetKey }: { uri: string; baseSt
 
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View style={[baseStyle, animatedStyle]}>
+      <Animated.View 
+        key={resetKey}
+        entering={ZoomIn.duration(500).springify()} 
+        exiting={FadeOut.duration(200)}
+        style={[baseStyle, animatedStyle]}
+      >
         <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" />
       </Animated.View>
     </GestureDetector>
@@ -277,32 +282,28 @@ export default function OutfitBuilderScreen() {
 
     setShuffling(true);
     try {
-      const picks = await Promise.all(
-        SLOT_KEYS.map(async (slotKey) => {
-          const pool = wardrobeItems.filter((item) => item.garment_type === SLOT_TO_GARMENT_TYPE[slotKey]);
-          if (pool.length === 0) return [slotKey, null] as const;
-          const item = pool[Math.floor(Math.random() * pool.length)];
-
-          let finalImageUrl = item.image_url || '';
-          if (item.image_url && Platform.OS !== 'web') {
-            try {
-              finalImageUrl = await removeBackground(item.image_url);
-            } catch (e) {
-              console.log('Background removal failed or fallback required, using original image', e);
-            }
-          }
-
-          const slotItem: SlotItem = {
-            product_id: item.product_id,
-            image_url: finalImageUrl,
-            original_image_url: item.image_url || '',
-            name: item.category || 'Item',
-            color_tags: item.color_tags,
-            source: 'wardrobe',
-          };
-          return [slotKey, slotItem] as const;
-        })
-      );
+      // Process sequentially to prevent multiple heavy ML tasks from crashing the device concurrently
+      const picks: [string, SlotItem | null][] = [];
+      for (const slotKey of SLOT_KEYS) {
+        const pool = wardrobeItems.filter((item) => item.garment_type === SLOT_TO_GARMENT_TYPE[slotKey]);
+        if (pool.length === 0) {
+          picks.push([slotKey, null]);
+          continue;
+        }
+        
+        const item = pool[Math.floor(Math.random() * pool.length)];
+        const finalImageUrl = item.image_url || '';
+        
+        const slotItem: SlotItem = {
+          product_id: item.product_id,
+          image_url: finalImageUrl,
+          original_image_url: item.image_url || '',
+          name: item.category || 'Item',
+          color_tags: item.color_tags,
+          source: 'wardrobe',
+        };
+        picks.push([slotKey, slotItem]);
+      }
 
       const filled = picks.filter(([, item]) => item !== null).length;
       if (filled === 0) {
@@ -336,14 +337,7 @@ export default function OutfitBuilderScreen() {
     setSaving(true); // Re-use saving state to show a loader during BG removal
 
     try {
-      let finalImageUrl = item.image_url || '';
-      if (item.image_url && Platform.OS !== 'web') {
-        try {
-          finalImageUrl = await removeBackground(item.image_url);
-        } catch (e) {
-          console.log('Background removal failed or fallback required, using original image', e);
-        }
-      }
+      const finalImageUrl = item.image_url || '';
 
       setSlots((prev) => ({
         ...prev,
@@ -367,18 +361,7 @@ export default function OutfitBuilderScreen() {
     setSaving(true); // Re-use saving state to show a loader during BG removal
 
     try {
-      // Same background-removal treatment as My Wardrobe items -- was
-      // previously skipped entirely for catalog/wishlist picks, so a
-      // product photo's studio background always showed up in the canvas
-      // preview while wardrobe items didn't.
-      let finalImageUrl = item.image_url || '';
-      if (item.image_url && Platform.OS !== 'web') {
-        try {
-          finalImageUrl = await removeBackground(item.image_url);
-        } catch (e) {
-          console.log('Background removal failed or fallback required, using original image', e);
-        }
-      }
+      const finalImageUrl = item.image_url || '';
 
       setSlots((prev) => ({
         ...prev,
@@ -1066,7 +1049,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     borderRadius: Radius.pill,
     overflow: 'hidden',
-    padding: 4,
+    padding: Spacing.xs,
   },
   viewToggleBtn: {
     flex: 1,
@@ -1135,3 +1118,7 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
 });
+
+
+
+

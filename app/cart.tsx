@@ -3,8 +3,10 @@ import { Colors, Radius, Spacing, Type } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCart, CartItem } from "@/src/context/CartContext";
 import { EditVariantModal } from "@/src/components/EditVariantModal";
+import { BrandEmptyState } from "@/src/components/BrandEmptyState";
 import { Image } from "expo-image";
 import { useRouter, useFocusEffect } from "expo-router";
+import { tapMedium } from '@/src/utils/haptics';
 import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/src/lib/supabase";
 import {
@@ -19,6 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function CartScreen() {
   const theme = useColorScheme() ?? "dark";
   const colors = Colors[theme];
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
   const { items, updateQuantity, removeFromCart, updateVariant } = useCart();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -212,7 +215,7 @@ export default function CartScreen() {
           >
             <TouchableOpacity
               style={styles.qtyBtn}
-              onPress={() => updateQuantity(item.id, item.quantity - 1)}
+              onPress={() => { tapMedium(); updateQuantity(item.id, item.quantity - 1); }}
               accessibilityRole="button"
               accessibilityLabel={`Decrease quantity of ${item.product.name}`}
               accessibilityHint="Reduces item quantity by one"
@@ -224,7 +227,7 @@ export default function CartScreen() {
             </Text>
             <TouchableOpacity
               style={[styles.qtyBtn, atMaxQty && styles.qtyBtnDisabled]}
-              onPress={() => !atMaxQty && updateQuantity(item.id, item.quantity + 1)}
+              onPress={() => { if (!atMaxQty) { tapMedium(); updateQuantity(item.id, item.quantity + 1); } }}
               disabled={atMaxQty}
               accessibilityRole="button"
               accessibilityLabel={`Increase quantity of ${item.product.name}`}
@@ -235,7 +238,7 @@ export default function CartScreen() {
             </TouchableOpacity>
           </View>
           <TouchableOpacity
-            onPress={() => removeFromCart(item.id)}
+            onPress={() => { tapMedium(); removeFromCart(item.id); }}
             style={styles.removeBtn}
             accessibilityRole="button"
             accessibilityLabel={`Remove ${item.product.name} from bag`}
@@ -310,26 +313,13 @@ export default function CartScreen() {
       )}
 
       {items.length === 0 ? (
-        <View style={styles.emptyState}>
-          <View style={[styles.emptyIconBg, { backgroundColor: colors.card }]}>
-            <IconSymbol name="bag" size={64} color={colors.icon} />
-          </View>
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            Your bag is empty
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-            Browse the catalog to add items to your bag.
-          </Text>
-          <TouchableOpacity
-            style={[styles.shopBtn, { backgroundColor: colors.tint }]}
-            onPress={() => router.push("/(tabs)/explore")}
-            accessibilityRole="button"
-            accessibilityLabel="Explore Catalog"
-            accessibilityHint="Opens the product catalog"
-          >
-            <Text style={styles.shopBtnText}>Explore Catalog</Text>
-          </TouchableOpacity>
-        </View>
+        <BrandEmptyState
+          icon="bag"
+          title="Your Bag is Empty"
+          message="Discover pieces that speak to your style and add them to your bag."
+          actionLabel="Explore Catalog"
+          onAction={() => router.push("/(tabs)/explore")}
+        />
       ) : (
         <>
           <FlatList
@@ -410,7 +400,7 @@ export default function CartScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: { flex: 1 },
   header: {
     flexDirection: "row",
@@ -450,7 +440,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xxxl,
     paddingVertical: Spacing.lg,
     borderRadius: 30,
-    shadowColor: "#C9A96E",
+    shadowColor: colors.tint,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -492,7 +482,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 100,
     borderRadius: Radius.sm,
-    backgroundColor: "#2A2A2A",
+    backgroundColor: colors.card,
   },
   itemInfo: {
     flex: 1,
@@ -558,7 +548,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    shadowColor: "#000",
+    shadowColor: colors.text,
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,

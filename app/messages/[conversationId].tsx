@@ -518,7 +518,7 @@ export default function ChatScreen() {
         <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
         <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
           {!isMe && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, marginLeft: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, marginLeft: Spacing.xs }}>
               <IconSymbol name="checkmark.seal.fill" size={12} color={colors.tint} />
               <Text style={{ fontSize: 11, fontWeight: '600', color: colors.secondaryText, marginLeft: 3 }}>
                 {item.sender_name && item.sender_name !== 'Staff' ? item.sender_name : 'Boutique Support'}
@@ -585,10 +585,10 @@ export default function ChatScreen() {
                 activeOpacity={0.8}
               >
                 <IconSymbol name="calendar" size={12} color={isMe ? colors.onTint : colors.tint} />
-                <Text style={[styles.contextChipText, { color: isMe ? colors.onTint : colors.text, fontWeight: '600', marginLeft: 4 }]} numberOfLines={1}>
+                <Text style={[styles.contextChipText, { color: isMe ? colors.onTint : colors.text, fontWeight: '600', marginLeft: Spacing.xs }]} numberOfLines={1}>
                   Reservation: {item.context_label || jsonContext?.label || reservationRef || 'Details'}
                 </Text>
-                <IconSymbol name="chevron.right" size={12} color={isMe ? 'rgba(0,0,0,0.4)' : colors.secondaryText} style={{ marginLeft: 4 }} />
+                <IconSymbol name="chevron.right" size={12} color={isMe ? 'rgba(0,0,0,0.4)' : colors.secondaryText} style={{ marginLeft: Spacing.xs }} />
               </TouchableOpacity>
             ) : item.context_label ? (
               <View style={[styles.contextChip, { backgroundColor: isMe ? 'rgba(0,0,0,0.12)' : colors.background, borderColor: isMe ? 'transparent' : colors.border }]}>
@@ -665,7 +665,7 @@ export default function ChatScreen() {
                     </Text>
                   </TouchableOpacity>
                 ) : (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: Spacing.xs }}>
                     {item._status === 'sending' ? (
                       <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sending • </Text>
                     ) : item.read_at ? (
@@ -722,12 +722,12 @@ export default function ChatScreen() {
         <View style={{ alignItems: 'center' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Boutique Support</Text>
-            <IconSymbol name="checkmark.seal.fill" size={16} color={colors.tint} style={{ marginLeft: 4 }} />
+            <IconSymbol name="checkmark.seal.fill" size={16} color={colors.tint} style={{ marginLeft: Spacing.xs }} />
           </View>
           {otherTyping ? (
             <Text style={{ fontSize: 11, color: colors.tint, fontWeight: '600' }}>typing...</Text>
           ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
               {isStaffOnline && <View style={[styles.presenceDot, { backgroundColor: colors.success }]} />}
               <Text style={{ fontSize: 11, color: colors.secondaryText }}>
                 {isStaffOnline ? 'Active now' : 'Verified Staff Team'}
@@ -974,8 +974,8 @@ const styles = StyleSheet.create({
   typingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 12,
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
   },
   typingDot: {
     width: 6,

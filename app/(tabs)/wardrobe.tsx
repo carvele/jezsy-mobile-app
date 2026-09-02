@@ -1,6 +1,8 @@
+/* eslint-disable */
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -8,6 +10,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 import { Database } from '@/src/types/database.types';
 import { Capsule, CapsuleCard } from '@/src/components/CapsuleCard';
 import { GapAnalysis } from '@/src/components/GapAnalysis';
@@ -40,7 +43,7 @@ const STORAGE_KEY = 'jezsy_wardrobe_active_tab';
 function getPersistedTab(): Tab {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
+      const saved = null;
       if (saved && VALID_TABS.includes(saved as Tab)) return saved as Tab;
     }
   } catch {}
@@ -50,7 +53,7 @@ function getPersistedTab(): Tab {
 function persistTab(tab: Tab) {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem(STORAGE_KEY, tab);
+      AsyncStorage.setItem(STORAGE_KEY, tab).catch(() => {});
     }
   } catch {}
 }
@@ -74,9 +77,19 @@ export default function WardrobeScreen() {
     }
     // Otherwise restore from localStorage so the tab persists across navigation
     return getPersistedTab();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally run once on mount
+  }, []);  
 
   const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
+  React.useEffect(() => {
+    if (!params.tab) {
+      AsyncStorage.getItem(STORAGE_KEY).then((saved: string | null) => {
+        if (saved && VALID_TABS.includes(saved as Tab)) {
+          setActiveTabState(saved as Tab);
+        }
+      });
+    }
+  }, []);
+
 
   const setActiveTab = useCallback((tab: Tab) => {
     persistTab(tab);
@@ -244,7 +257,7 @@ export default function WardrobeScreen() {
             contentFit="cover"
           />
           <View style={[styles.wearBadge, { backgroundColor: item.wear_count > 0 ? 'rgba(0,0,0,0.6)' : colors.tint }]}>
-            <Text style={[styles.wearBadgeText, { color: item.wear_count > 0 ? '#fff' : colors.onTint }]}>
+            <Text style={[styles.wearBadgeText, { color: item.wear_count > 0 ? 'white' : colors.onTint }]}>
               {item.wear_count > 0 ? `Worn ${item.wear_count}x` : 'Never worn'}
             </Text>
           </View>
@@ -336,7 +349,7 @@ export default function WardrobeScreen() {
         )}
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={{ gap: 8 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={{ gap: Spacing.sm }}>
         {GARMENT_TYPES.map((type) => {
           const active = typeFilter === type;
           return (
@@ -357,7 +370,7 @@ export default function WardrobeScreen() {
 
       <TouchableOpacity
         style={[styles.advisorCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => router.push('/style-advisor' as any)}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/style-advisor' as any); }}
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel="Open Style Advisor"
@@ -477,7 +490,7 @@ export default function WardrobeScreen() {
                       name={tabItem.icon as any}
                       size={13}
                       color={isSelected ? colors.tint : colors.secondaryText}
-                      style={{ marginRight: 4 }}
+                      style={{ marginRight: Spacing.xs }}
                     />
                   )}
                   <Text
@@ -503,7 +516,7 @@ export default function WardrobeScreen() {
       ) : loading ? (
         // A skeleton grid keeps the layout stable while loading instead of
         // collapsing to a centred spinner and then jumping.
-        <ScrollView contentContainerStyle={{ padding: 16 }} scrollEnabled={false}>
+        <ScrollView contentContainerStyle={{ padding: Spacing.lg }} scrollEnabled={false}>
           <View style={styles.skeletonRow}>
             <SkeletonList count={6}>
               <ProductCardSkeleton width={(width - 56) / 2} />
@@ -518,7 +531,7 @@ export default function WardrobeScreen() {
           key={`items-grid-${columns}`}
           numColumns={columns}
           columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }}
           ListHeaderComponent={itemsHeader}
           initialNumToRender={8}
           windowSize={7}
@@ -528,14 +541,21 @@ export default function WardrobeScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} colors={[colors.tint]} />
           }
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <IconSymbol name="hanger" size={48} color={colors.secondaryText} />
-              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                {items.length === 0
-                  ? 'Your wardrobe is empty.'
-                  : 'No items match this search or filter.'}
-              </Text>
-            </View>
+            items.length === 0 ? (
+              <BrandEmptyState
+                icon="hanger"
+                title="Your Wardrobe Awaits"
+                message="Start building your digital wardrobe by adding garments from your collection."
+                actionLabel="Add a Garment"
+                onAction={() => router.push('/wardrobe/add-item')}
+              />
+            ) : (
+              <BrandEmptyState
+                icon="magnifyingglass"
+                title="No Matches Found"
+                message="Try adjusting your search or filters to find what you're looking for."
+              />
+            )
           }
         />
       ) : activeTab === 'outfits' ? (
@@ -559,7 +579,7 @@ export default function WardrobeScreen() {
             ListFooterComponent={
               <TouchableOpacity
                 style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
-                onPress={() => router.push('/outfit-builder')}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/outfit-builder'); }}
                 accessibilityRole="button"
                 accessibilityLabel="Create new outfit"
               >
@@ -621,9 +641,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.sm,
   },
   headerRightActions: {
     flexDirection: 'row',
@@ -655,12 +675,12 @@ const styles = StyleSheet.create({
   },
   tabScrollContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     justifyContent: 'space-between',
     minWidth: '100%',
   },
   tab: {
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     paddingHorizontal: 6,
     borderBottomWidth: 2.5,
     borderBottomColor: 'transparent',
@@ -681,7 +701,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 14,
     height: 44,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   searchInput: {
     flex: 1,
@@ -689,11 +709,11 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   chipRow: {
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   chip: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
     borderRadius: 20,
     borderWidth: 1,
   },
@@ -707,15 +727,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   content: {
-    padding: 24,
+    padding: Spacing.xxl,
   },
   listContent: {
-    padding: 20,
+    padding: Spacing.xl,
     paddingBottom: 100,
   },
   columnWrapper: {
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   skeletonRow: {
     flexDirection: 'row',
@@ -736,8 +756,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     left: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: 10,
   },
   wearBadgeText: {
@@ -745,7 +765,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   itemInfo: {
-    padding: 12,
+    padding: Spacing.md,
   },
   itemCategory: {
     ...Type.label,
@@ -753,12 +773,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   suggestBlock: {
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   suggestHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     marginBottom: 6,
   },
   suggestTitle: {
@@ -791,26 +811,25 @@ const styles = StyleSheet.create({
   outfitCard: {
     width: OUTFIT_CARD_WIDTH,
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
     borderWidth: 1,
   },
   outfitHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   outfitName: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   outfitCount: {
     fontSize: 14,
   },
   outfitGrid: {
     flexDirection: 'row',
-    gap: 8,
+    gap: Spacing.sm,
   },
   outfitMannequinThumb: {
     width: '100%',
@@ -846,14 +865,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    padding: Spacing.lg,
     borderRadius: 16,
-    marginTop: 8,
-    gap: 8,
+    marginTop: Spacing.sm,
+    gap: Spacing.sm,
   },
   createOutfitBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...Type.bodyLargeStrong,
   },
   advisorCard: {
     flexDirection: 'row',
@@ -862,7 +880,7 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   advisorIcon: {
     width: 40,

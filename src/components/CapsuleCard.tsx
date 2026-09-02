@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -63,25 +63,24 @@ export function CapsuleCard({ capsule, onPress }: CapsuleCardProps) {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
+    padding: Spacing.xl,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   count: {
     fontSize: 14,
@@ -89,14 +88,14 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 14,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
     lineHeight: 20,
   },
   progressTrack: {
     height: 8,
     borderRadius: 4,
     overflow: 'hidden',
-    marginTop: 8,
+    marginTop: Spacing.sm,
   },
   progressFill: {
     height: '100%',

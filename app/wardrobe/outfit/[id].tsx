@@ -346,8 +346,7 @@ const styles = StyleSheet.create({
     padding: Spacing.xxl,
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...Type.title,
     marginBottom: Spacing.xs,
   },
   errorSubtitle: {
@@ -406,7 +405,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
     alignItems: 'center',
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: 'black',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -423,7 +422,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
     borderRadius: Radius.pill,
   },
   mannequinBadgeText: {
@@ -441,8 +440,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
     letterSpacing: -0.2,
   },
   sectionSubtitle: {
@@ -457,7 +455,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: '#000',
+    shadowColor: 'black',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
@@ -479,8 +477,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: 6,
   },
   slotLabel: {

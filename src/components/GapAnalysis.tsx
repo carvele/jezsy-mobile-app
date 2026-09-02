@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Database } from '@/src/types/database.types';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -67,7 +67,7 @@ export function GapAnalysis({ items }: GapAnalysisProps) {
     return (
       <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <IconSymbol name="sparkles" size={32} color={colors.tint} />
-        <Text style={[styles.title, { color: colors.text, marginTop: 12 }]}>Wardrobe Insights</Text>
+        <Text style={[styles.title, { color: colors.text, marginTop: Spacing.md }]}>Wardrobe Insights</Text>
         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>Add some items to get personalized recommendations and gap analysis.</Text>
       </View>
     );
@@ -119,77 +119,75 @@ export function GapAnalysis({ items }: GapAnalysisProps) {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
+    padding: Spacing.xl,
     borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 24,
+    marginBottom: Spacing.xxl,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   subtitle: {
     fontSize: 14,
-    marginTop: 4,
+    marginTop: Spacing.xs,
     lineHeight: 20,
   },
   statsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
   },
   statChip: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
     borderRadius: 12,
   },
   statValue: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   statLabel: {
     fontSize: 12,
-    marginTop: 4,
+    marginTop: Spacing.xs,
   },
   uncategorizedNote: {
     fontSize: 12,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
     fontStyle: 'italic',
   },
   gapsContainer: {
     borderTopWidth: 1,
-    paddingTop: 16,
+    paddingTop: Spacing.lg,
   },
   gapsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   gapItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
+    padding: Spacing.md,
     borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   gapMessage: {
     fontSize: 14,
     flex: 1,
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   actionBtn: {
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     borderRadius: 8,
   },
   actionText: {

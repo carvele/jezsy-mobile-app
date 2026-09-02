@@ -311,7 +311,7 @@ export default function ProfileSetupScreen() {
             </View>
           </View>
           <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: colors.secondaryText, marginTop: 8 }]}>Date of birth</Text>
+            <Text style={[styles.label, { color: colors.secondaryText, marginTop: Spacing.sm }]}>Date of birth</Text>
             <View style={styles.dobInputRow}>
               <TextInput keyboardAppearance={theme}
                 style={[styles.input, styles.dobInput, { color: colors.text, borderBottomColor: colors.border }]}
@@ -330,7 +330,7 @@ export default function ProfileSetupScreen() {
               </TouchableOpacity>
             </View>
           </View>
-          <View style={{ marginTop: 8 }}>
+          <View style={{ marginTop: Spacing.sm }}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Gender</Text>
             <View style={styles.chipGrid}>
               {GENDER_OPTIONS.map(g => (

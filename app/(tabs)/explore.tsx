@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+/* eslint-disable */
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { BottomSheetModal, BottomSheetScrollView, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import {
   StyleSheet,
   View,
@@ -7,7 +9,6 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
-    Modal,
   KeyboardAvoidingView,
   Platform,
   Dimensions,
@@ -15,6 +16,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import MasonryList from '@react-native-seoul/masonry-list';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -191,10 +193,13 @@ export default function ExploreScreen() {
 
   // Sorting State
   const [selectedSort, setSelectedSort] = useState<string>('recommended');
-  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+  const sortSheetRef = useRef<BottomSheetModal>(null);
+  const filterSheetRef = useRef<BottomSheetModal>(null);
+  // Snap points: filter sheet is tall (85%), sort sheet is short (auto)
+  const filterSnapPoints = useMemo(() => ['85%'], []);
+  const sortSnapPoints = useMemo(() => ['40%'], []);
 
-  // Temp Filter States (Within Modal)
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  // Temp Filter States (Within Bottom Sheet)
   const [tempSizes, setTempSizes] = useState<string[]>([]);
   const [tempColors, setTempColors] = useState<string[]>([]);
   const [tempPriceRange, setTempPriceRange] = useState<string | null>(null);
@@ -555,17 +560,10 @@ export default function ExploreScreen() {
   const openFilterModal = () => {
     setTempSizes(selectedSizes);
     setTempColors(selectedColors);
-    setTempPriceRange(selectedPriceRange);
-    setTempMinPrice(customMinPrice);
-    setTempMaxPrice(customMaxPrice);
-    setTempNewArrivalsOnly(selectedNewArrivalsOnly);
-    setTempSaleOnly(selectedSaleOnly);
-    setTempArOnly(selectedArOnly);
-    setTempMySizeOnly(selectedMySizeOnly);
     setTempFits(selectedFits);
     setTempMaterials(selectedMaterials);
     setTempTags(selectedTags);
-    setIsFilterModalOpen(true);
+    filterSheetRef.current?.present();
   };
 
   const applyFilters = () => {
@@ -581,7 +579,7 @@ export default function ExploreScreen() {
     setSelectedFits(tempFits);
     setSelectedMaterials(tempMaterials);
     setSelectedTags(tempTags);
-    setIsFilterModalOpen(false);
+    filterSheetRef.current?.dismiss();
   };
 
   const clearAllFilters = () => {
@@ -710,13 +708,16 @@ export default function ExploreScreen() {
     );
   };
 
-  const renderProductItem = useCallback(({ item }: { item: Product }) => (
-    <ProductCard
-      product={item}
-      variant="grid"
-      recommendedSize={recommendedSizes.get(item.id)}
-    />
-  ), [recommendedSizes]);
+  const renderProductItem = useCallback(({ item, i }: { item: unknown, i: number }) => {
+    const p = item as any;
+    return (
+      <ProductCard
+        product={p}
+        variant="grid"
+        recommendedSize={recommendedSizes.get(p.id)}
+      />
+    );
+  }, [recommendedSizes]);
 
   // One description of every active filter, rendered by the header and counted
   // for the badge. These were previously eight hand-written JSX blocks plus a
@@ -779,7 +780,7 @@ export default function ExploreScreen() {
           <TouchableOpacity
             style={[styles.filterTrigger, { backgroundColor: colors.card, borderColor: colors.border }]}
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-            onPress={() => setIsSortModalOpen(true)}
+            onPress={() => sortSheetRef.current?.present()}
             accessibilityRole="button"
             accessibilityLabel={sortA11y}
           >
@@ -878,7 +879,7 @@ export default function ExploreScreen() {
           {searchQuery.trim().length === 0 ? (
             // Idle / Search Focused suggestions: Uniqlo Minimal Aesthetic
             <View style={styles.suggestionsContainer}>
-              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 12 }]}>Suggested Searches</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: Spacing.md }]}>Suggested Searches</Text>
               <View style={styles.tagsContainer}>
                 {['Summer Dress', 'Denim Jacket', 'Vintage', 'Minimalist', 'Streetwear'].map((tag, index) => (
                   <TouchableOpacity
@@ -897,18 +898,14 @@ export default function ExploreScreen() {
           ) : (
             // Search Results Grid with Filter capabilities
             <View style={styles.flexOne}>
-              <FlatList
+              <MasonryList
                 data={processedProducts}
                 renderItem={renderProductItem}
                 keyExtractor={(item) => item.id}
                 key={`grid-${columns}`}
                 numColumns={columns}
                 contentContainerStyle={styles.productList}
-                columnWrapperStyle={styles.productRow}
-                initialNumToRender={6}
-                maxToRenderPerBatch={4}
-                windowSize={5}
-                removeClippedSubviews={true}
+                // columnWrapperStyle={styles.productRow}
                 ListHeaderComponent={
                   <View style={{ backgroundColor: colors.background }}>
                     {renderGridHeader(
@@ -1030,18 +1027,14 @@ export default function ExploreScreen() {
                   <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
                 </View>
               ) : (
-                <FlatList
+                <MasonryList
                   data={processedProducts}
                   renderItem={renderProductItem}
                   keyExtractor={(item) => item.id}
                   key={`grid-${columns}`}
                   numColumns={columns}
                   contentContainerStyle={styles.productList}
-                  columnWrapperStyle={styles.productRow}
-                  initialNumToRender={6}
-                  maxToRenderPerBatch={4}
-                  windowSize={5}
-                  removeClippedSubviews={true}
+                  // columnWrapperStyle={styles.productRow}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderGridHeader(
@@ -1060,14 +1053,7 @@ export default function ExploreScreen() {
                   }
                   onEndReached={loadMoreProducts}
                   onEndReachedThreshold={0.5}
-                  refreshControl={
-                    <RefreshControl
-                      refreshing={refreshing}
-                      onRefresh={onRefreshProducts}
-                      tintColor={colors.tint}
-                      colors={[colors.tint]}
-                    />
-                  }
+                  refreshing={refreshing} onRefresh={onRefreshProducts}
                   ListFooterComponent={
                     loadingMore ? (
                       <View style={styles.loadMoreFooter}>
@@ -1084,378 +1070,359 @@ export default function ExploreScreen() {
       )}
 
 
-      {/* FILTER BOTTOM SHEET MODAL */}
-      <Modal
-        visible={isFilterModalOpen}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsFilterModalOpen(false)}
+            {/* FILTER BOTTOM SHEET MODAL */}
+      <BottomSheetModal
+        ref={filterSheetRef}
+        snapPoints={filterSnapPoints}
+        backdropComponent={(props) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior="close" />}
+        backgroundStyle={{ backgroundColor: colors.background }}
+        handleIndicatorStyle={{ backgroundColor: colors.border }}
+        keyboardBehavior="extend"
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setIsFilterModalOpen(false)}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.keyboardAvoidingView}
-          >
-            <Pressable
-              style={[styles.modalContent, { backgroundColor: colors.background }]}
-              onPress={(e) => e.stopPropagation()}
-              accessibilityViewIsModal
+        <BottomSheetView style={{ flex: 1 }}>
+          {/* Modal Header */}
+          <View style={styles.modalHeader}>
+            <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
+            <TouchableOpacity
+              onPress={clearAllFilters}
+              accessibilityRole="button"
+              accessibilityLabel="Clear all filters"
             >
-              {/* Drag Handle */}
-              <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
+              <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
+            </TouchableOpacity>
+          </View>
 
-              {/* Modal Header */}
-              <View style={styles.modalHeader}>
-                <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
+          <BottomSheetScrollView style={styles.modalScroll}>
+            {/* Special Offers Section */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Collections & Offers</Text>
+              <View style={styles.filterOptionsRow}>
                 <TouchableOpacity
-                  onPress={clearAllFilters}
-                  accessibilityRole="button"
-                  accessibilityLabel="Clear all filters"
+                  style={[
+                    styles.chipButton,
+                    {
+                      backgroundColor: tempNewArrivalsOnly ? colors.tint : colors.card,
+                      borderColor: tempNewArrivalsOnly ? colors.tint : colors.border,
+                    },
+                  ]}
+                  onPress={() => setTempNewArrivalsOnly(!tempNewArrivalsOnly)}
+                  accessibilityRole="switch"
+                  accessibilityLabel="New arrivals only"
+                  accessibilityState={{ checked: tempNewArrivalsOnly }}
                 >
-                  <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
+                  <IconSymbol name="flame.fill" size={14} color={tempNewArrivalsOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
+                  <Text style={[styles.chipButtonText, { color: tempNewArrivalsOnly ? colors.onTint : colors.text }]}>New Arrivals</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.chipButton,
+                    {
+                      backgroundColor: tempSaleOnly ? colors.tint : colors.card,
+                      borderColor: tempSaleOnly ? colors.tint : colors.border,
+                    },
+                  ]}
+                  onPress={() => setTempSaleOnly(!tempSaleOnly)}
+                  accessibilityRole="switch"
+                  accessibilityLabel="On sale only"
+                  accessibilityState={{ checked: tempSaleOnly }}
+                >
+                  <IconSymbol name="tag.fill" size={14} color={tempSaleOnly ? colors.onTint : colors.notification} style={{ marginRight: 6 }} />
+                  <Text style={[styles.chipButtonText, { color: tempSaleOnly ? colors.onTint : colors.text }]}>On Sale</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.chipButton,
+                    {
+                      backgroundColor: tempArOnly ? colors.tint : colors.card,
+                      borderColor: tempArOnly ? colors.tint : colors.border,
+                    },
+                  ]}
+                  onPress={() => setTempArOnly(!tempArOnly)}
+                  accessibilityRole="switch"
+                  accessibilityLabel="Try in AR only"
+                  accessibilityState={{ checked: tempArOnly }}
+                >
+                  <IconSymbol name="cube.transparent" size={14} color={tempArOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
+                  <Text style={[styles.chipButtonText, { color: tempArOnly ? colors.onTint : colors.text }]}>Try in AR</Text>
+                </TouchableOpacity>
+
+                {sizingReady && (
+                  <TouchableOpacity
+                    style={[
+                      styles.chipButton,
+                      {
+                        backgroundColor: tempMySizeOnly ? colors.tint : colors.card,
+                        borderColor: tempMySizeOnly ? colors.tint : colors.border,
+                      },
+                    ]}
+                    onPress={() => setTempMySizeOnly(!tempMySizeOnly)}
+                    accessibilityRole="switch"
+                    accessibilityLabel="My size only"
+                    accessibilityState={{ checked: tempMySizeOnly }}
+                  >
+                    <IconSymbol name="checkmark.circle.fill" size={14} color={tempMySizeOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
+                    <Text style={[styles.chipButtonText, { color: tempMySizeOnly ? colors.onTint : colors.text }]}>My Size</Text>
+                  </TouchableOpacity>
+                )}
               </View>
+            </View>
 
-              <ScrollView style={styles.modalScroll}>
-                {/* Special Offers Section */}
-                <View style={styles.filterSection}>
-                  <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Collections & Offers</Text>
-                  <View style={styles.filterOptionsRow}>
+            {/* Size Filter */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Sizes</Text>
+              <View style={styles.filterOptionsRow}>
+                {FILTER_SIZES.map((size) => {
+                  const isSelected = tempSizes.includes(size);
+                  return (
                     <TouchableOpacity
+                      key={size}
                       style={[
-                        styles.chipButton,
+                        styles.sizeChip,
                         {
-                          backgroundColor: tempNewArrivalsOnly ? colors.tint : colors.card,
-                          borderColor: tempNewArrivalsOnly ? colors.tint : colors.border,
+                          backgroundColor: isSelected ? colors.tint : colors.card,
+                          borderColor: isSelected ? colors.tint : colors.border,
                         },
                       ]}
-                      onPress={() => setTempNewArrivalsOnly(!tempNewArrivalsOnly)}
-                      accessibilityRole="switch"
-                      accessibilityLabel="New arrivals only"
-                      accessibilityState={{ checked: tempNewArrivalsOnly }}
+                      onPress={() => toggleTempSize(size)}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={`${size} size`}
+                      accessibilityState={{ checked: isSelected }}
                     >
-                      <IconSymbol name="flame.fill" size={14} color={tempNewArrivalsOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
-                      <Text style={[styles.chipButtonText, { color: tempNewArrivalsOnly ? colors.onTint : colors.text }]}>New Arrivals</Text>
+                      <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
+                        {size}
+                      </Text>
                     </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
 
+            {/* Fit / Cut Filter */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Fit / Cut</Text>
+              <View style={styles.filterOptionsRow}>
+                {FILTER_FITS.map((fit) => {
+                  const isSelected = tempFits.includes(fit);
+                  return (
                     <TouchableOpacity
+                      key={fit}
                       style={[
-                        styles.chipButton,
+                        styles.sizeChip,
                         {
-                          backgroundColor: tempSaleOnly ? colors.tint : colors.card,
-                          borderColor: tempSaleOnly ? colors.tint : colors.border,
+                          backgroundColor: isSelected ? colors.tint : colors.card,
+                          borderColor: isSelected ? colors.tint : colors.border,
                         },
                       ]}
-                      onPress={() => setTempSaleOnly(!tempSaleOnly)}
-                      accessibilityRole="switch"
-                      accessibilityLabel="On sale only"
-                      accessibilityState={{ checked: tempSaleOnly }}
+                      onPress={() => toggleTempFit(fit)}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={`${fit} fit`}
+                      accessibilityState={{ checked: isSelected }}
                     >
-                      <IconSymbol name="tag.fill" size={14} color={tempSaleOnly ? colors.onTint : colors.notification} style={{ marginRight: 6 }} />
-                      <Text style={[styles.chipButtonText, { color: tempSaleOnly ? colors.onTint : colors.text }]}>On Sale</Text>
+                      <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
+                        {fit}
+                      </Text>
                     </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
 
+            {/* Material / Fabric Filter */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Material / Fabric</Text>
+              <View style={styles.filterOptionsRow}>
+                {FILTER_MATERIALS.map((mat) => {
+                  const isSelected = tempMaterials.includes(mat);
+                  return (
                     <TouchableOpacity
+                      key={mat}
                       style={[
-                        styles.chipButton,
+                        styles.sizeChip,
                         {
-                          backgroundColor: tempArOnly ? colors.tint : colors.card,
-                          borderColor: tempArOnly ? colors.tint : colors.border,
+                          backgroundColor: isSelected ? colors.tint : colors.card,
+                          borderColor: isSelected ? colors.tint : colors.border,
                         },
                       ]}
-                      onPress={() => setTempArOnly(!tempArOnly)}
-                      accessibilityRole="switch"
-                      accessibilityLabel="Try in AR only"
-                      accessibilityState={{ checked: tempArOnly }}
+                      onPress={() => toggleTempMaterial(mat)}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={`${mat} material`}
+                      accessibilityState={{ checked: isSelected }}
                     >
-                      <IconSymbol name="cube.transparent" size={14} color={tempArOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
-                      <Text style={[styles.chipButtonText, { color: tempArOnly ? colors.onTint : colors.text }]}>Try in AR</Text>
+                      <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
+                        {mat}
+                      </Text>
                     </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
 
-                    {sizingReady && (
-                      <TouchableOpacity
+            {/* Color Filter */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Colors & Patterns</Text>
+              <View style={styles.filterOptionsRow}>
+                {colorOptions.map((color) => {
+                  const isSelected = tempColors.includes(color.name);
+                  return (
+                    <TouchableOpacity
+                      key={color.name}
+                      style={[
+                        styles.colorChip,
+                        {
+                          backgroundColor: isSelected ? colors.tint : colors.card,
+                          borderColor: isSelected ? colors.tint : colors.border,
+                        },
+                      ]}
+                      onPress={() => toggleTempColor(color.name)}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={`${color.name} color`}
+                      accessibilityState={{ checked: isSelected }}
+                    >
+                      <View
                         style={[
-                          styles.chipButton,
-                          {
-                            backgroundColor: tempMySizeOnly ? colors.tint : colors.card,
-                            borderColor: tempMySizeOnly ? colors.tint : colors.border,
-                          },
+                          styles.colorChipDot,
+                          { backgroundColor: color.hex, borderColor: color.border, borderWidth: color.name === "White" ? 1 : 0 },
                         ]}
-                        onPress={() => setTempMySizeOnly(!tempMySizeOnly)}
-                        accessibilityRole="switch"
-                        accessibilityLabel="My size only"
-                        accessibilityState={{ checked: tempMySizeOnly }}
-                      >
-                        <IconSymbol name="checkmark.circle.fill" size={14} color={tempMySizeOnly ? colors.onTint : colors.tint} style={{ marginRight: 6 }} />
-                        <Text style={[styles.chipButtonText, { color: tempMySizeOnly ? colors.onTint : colors.text }]}>My Size</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-
-                {/* Size Filter */}
-                <View style={styles.filterSection}>
-                  <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Sizes</Text>
-                  <View style={styles.filterOptionsRow}>
-                    {FILTER_SIZES.map((size) => {
-                      const isSelected = tempSizes.includes(size);
-                      return (
-                        <TouchableOpacity
-                          key={size}
-                          style={[
-                            styles.sizeChip,
-                            {
-                              backgroundColor: isSelected ? colors.tint : colors.card,
-                              borderColor: isSelected ? colors.tint : colors.border,
-                            },
-                          ]}
-                          onPress={() => toggleTempSize(size)}
-                          accessibilityRole="checkbox"
-                          accessibilityLabel={`${size} size`}
-                          accessibilityState={{ checked: isSelected }}
-                        >
-                          <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                            {size}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* Fit / Cut Filter */}
-                <View style={styles.filterSection}>
-                  <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Fit / Cut</Text>
-                  <View style={styles.filterOptionsRow}>
-                    {FILTER_FITS.map((fit) => {
-                      const isSelected = tempFits.includes(fit);
-                      return (
-                        <TouchableOpacity
-                          key={fit}
-                          style={[
-                            styles.sizeChip,
-                            {
-                              backgroundColor: isSelected ? colors.tint : colors.card,
-                              borderColor: isSelected ? colors.tint : colors.border,
-                            },
-                          ]}
-                          onPress={() => toggleTempFit(fit)}
-                          accessibilityRole="checkbox"
-                          accessibilityLabel={`${fit} fit`}
-                          accessibilityState={{ checked: isSelected }}
-                        >
-                          <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                            {fit}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* Material / Fabric Filter */}
-                <View style={styles.filterSection}>
-                  <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Material / Fabric</Text>
-                  <View style={styles.filterOptionsRow}>
-                    {FILTER_MATERIALS.map((mat) => {
-                      const isSelected = tempMaterials.includes(mat);
-                      return (
-                        <TouchableOpacity
-                          key={mat}
-                          style={[
-                            styles.sizeChip,
-                            {
-                              backgroundColor: isSelected ? colors.tint : colors.card,
-                              borderColor: isSelected ? colors.tint : colors.border,
-                            },
-                          ]}
-                          onPress={() => toggleTempMaterial(mat)}
-                          accessibilityRole="checkbox"
-                          accessibilityLabel={`${mat} material`}
-                          accessibilityState={{ checked: isSelected }}
-                        >
-                          <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                            {mat}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* Color Filter */}
-                <View style={styles.filterSection}>
-                  <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Colors & Patterns</Text>
-                  <View style={styles.filterOptionsRow}>
-                    {colorOptions.map((color) => {
-                      const isSelected = tempColors.includes(color.name);
-                      return (
-                        <TouchableOpacity
-                          key={color.name}
-                          style={[
-                            styles.colorChip,
-                            {
-                              backgroundColor: isSelected ? colors.tint : colors.card,
-                              borderColor: isSelected ? colors.tint : colors.border,
-                            },
-                          ]}
-                          onPress={() => toggleTempColor(color.name)}
-                          accessibilityRole="checkbox"
-                          accessibilityLabel={`${color.name} color`}
-                          accessibilityState={{ checked: isSelected }}
-                        >
-                          <View
-                            style={[
-                              styles.colorChipDot,
-                              { backgroundColor: color.hex, borderColor: color.border, borderWidth: color.name === 'White' ? 1 : 0 },
-                            ]}
-                          />
-                          <Text style={[styles.colorChipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                            {color.name}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* Preset Price Ranges */}
-                <View style={styles.filterSection}>
-                  <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Price Preset Ranges</Text>
-                  <View style={styles.pricePresetsGrid}>
-                    {[
-                      { id: 'under1000', label: 'Under ₱1,000' },
-                      { id: '1000to2000', label: '₱1,000 - ₱2,000' },
-                      { id: '2000to4000', label: '₱2,000 - ₱4,000' },
-                      { id: 'over4000', label: '₱4,000+' },
-                    ].map((preset) => {
-                      const isSelected = tempPriceRange === preset.id;
-                      return (
-                        <TouchableOpacity
-                          key={preset.id}
-                          style={[
-                            styles.pricePresetCard,
-                            {
-                              backgroundColor: isSelected ? colors.tint : colors.card,
-                              borderColor: isSelected ? colors.tint : colors.border,
-                            },
-                          ]}
-                          onPress={() => setTempPriceRange(isSelected ? null : preset.id)}
-                          accessibilityRole="radio"
-                          accessibilityLabel={preset.label}
-                          accessibilityState={{ checked: isSelected }}
-                        >
-                          <Text style={[styles.pricePresetLabel, { color: isSelected ? colors.onTint : colors.text }]}>
-                            {preset.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* Custom Price Inputs */}
-                <View style={styles.filterSection}>
-                  <Text style={[styles.filterSectionSubTitle, { color: colors.secondaryText }]}>Custom Price (₱)</Text>
-                  <View style={styles.customPriceInputs}>
-                    <TextInput keyboardAppearance={theme}
-                      style={[styles.customPriceInput, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]}
-                      placeholder="Min Price"
-                      placeholderTextColor={colors.secondaryText}
-                      accessibilityLabel="Minimum rental price in Philippine pesos"
-                      keyboardType="numeric"
-                      value={tempMinPrice}
-                      onChangeText={setTempMinPrice}
-                    />
-                    <Text style={{ color: colors.text, marginHorizontal: 12 }}>to</Text>
-                    <TextInput keyboardAppearance={theme}
-                      style={[styles.customPriceInput, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]}
-                      placeholder="Max Price"
-                      placeholderTextColor={colors.secondaryText}
-                      accessibilityLabel="Maximum rental price in Philippine pesos"
-                      keyboardType="numeric"
-                      value={tempMaxPrice}
-                      onChangeText={setTempMaxPrice}
-                    />
-                  </View>
-                </View>
-
-                <View style={{ height: 40 }} />
-              </ScrollView>
-
-              {/* Bottom Actions */}
-              <View style={[styles.modalFooter, { borderTopColor: colors.border }]}>
-                <TouchableOpacity
-                  style={[styles.footerButton, { backgroundColor: colors.tint }]}
-                  onPress={applyFilters}
-                  accessibilityRole="button"
-                  accessibilityLabel="Apply filters"
-                >
-                  <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
-                </TouchableOpacity>
+                      />
+                      <Text style={[styles.colorChipText, { color: isSelected ? colors.onTint : colors.text }]}>
+                        {color.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            </Pressable>
-          </KeyboardAvoidingView>
-        </Pressable>
-      </Modal>
+            </View>
+
+            {/* Preset Price Ranges */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Price Preset Ranges</Text>
+              <View style={styles.pricePresetsGrid}>
+                {[
+                  { id: "under1000", label: "Under ₱1,000" },
+                  { id: "1000to2000", label: "₱1,000 - ₱2,000" },
+                  { id: "2000to4000", label: "₱2,000 - ₱4,000" },
+                  { id: "over4000", label: "₱4,000+" },
+                ].map((preset) => {
+                  const isSelected = tempPriceRange === preset.id;
+                  return (
+                    <TouchableOpacity
+                      key={preset.id}
+                      style={[
+                        styles.pricePresetCard,
+                        {
+                          backgroundColor: isSelected ? colors.tint : colors.card,
+                          borderColor: isSelected ? colors.tint : colors.border,
+                        },
+                      ]}
+                      onPress={() => setTempPriceRange(isSelected ? null : preset.id)}
+                      accessibilityRole="radio"
+                      accessibilityLabel={preset.label}
+                      accessibilityState={{ checked: isSelected }}
+                    >
+                      <Text style={[styles.pricePresetLabel, { color: isSelected ? colors.onTint : colors.text }]}>
+                        {preset.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Custom Price Inputs */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionSubTitle, { color: colors.secondaryText }]}>Custom Price (₱)</Text>
+              <View style={styles.customPriceInputs}>
+                <TextInput keyboardAppearance={theme}
+                  style={[styles.customPriceInput, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]}
+                  placeholder="Min Price"
+                  placeholderTextColor={colors.secondaryText}
+                  accessibilityLabel="Minimum rental price in Philippine pesos"
+                  keyboardType="numeric"
+                  value={tempMinPrice}
+                  onChangeText={setTempMinPrice}
+                />
+                <Text style={{ color: colors.text, marginHorizontal: Spacing.md }}>to</Text>
+                <TextInput keyboardAppearance={theme}
+                  style={[styles.customPriceInput, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border }]}
+                  placeholder="Max Price"
+                  placeholderTextColor={colors.secondaryText}
+                  accessibilityLabel="Maximum rental price in Philippine pesos"
+                  keyboardType="numeric"
+                  value={tempMaxPrice}
+                  onChangeText={setTempMaxPrice}
+                />
+              </View>
+            </View>
+
+            <View style={{ height: 40 }} />
+          </BottomSheetScrollView>
+
+          {/* Bottom Actions */}
+          <View style={[styles.modalFooter, { borderTopColor: colors.border, paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}>
+            <TouchableOpacity
+              style={[styles.footerButton, { backgroundColor: colors.tint }]}
+              onPress={applyFilters}
+              accessibilityRole="button"
+              accessibilityLabel="Apply filters"
+            >
+              <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
+            </TouchableOpacity>
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
 
       {/* SORT OPTIONS BOTTOM SHEET MODAL */}
-      <Modal
-        visible={isSortModalOpen}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsSortModalOpen(false)}
+      <BottomSheetModal
+        ref={sortSheetRef}
+        snapPoints={sortSnapPoints}
+        backdropComponent={(props) => <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} pressBehavior="close" />}
+        backgroundStyle={{ backgroundColor: colors.background }}
+        handleIndicatorStyle={{ backgroundColor: colors.border }}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setIsSortModalOpen(false)}>
-          <View
-            style={[styles.modalContent, { backgroundColor: colors.background, paddingBottom: Platform.OS === 'ios' ? 40 : 24 }]}
-            accessibilityViewIsModal
-          >
-            {/* Drag Handle */}
-            <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
-
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Sort Options</Text>
-              <TouchableOpacity
-                onPress={() => setIsSortModalOpen(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Close sort options"
-                hitSlop={12}
-              >
-                <IconSymbol name="xmark" size={20} color={colors.icon} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Sort Options List */}
-            <View style={styles.sortListContainer}>
-              {SORT_OPTIONS.map((option) => {
-                const isSelected = selectedSort === option.id;
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[styles.sortOptionRow, { borderBottomColor: colors.border }]}
-                    onPress={() => {
-                      setSelectedSort(option.id);
-                      setIsSortModalOpen(false);
-                    }}
-                    accessibilityRole="radio"
-                    accessibilityLabel={option.label}
-                    accessibilityState={{ checked: isSelected }}
-                  >
-                    <Text style={[styles.sortOptionLabel, { color: isSelected ? colors.tint : colors.text, fontWeight: isSelected ? '700' : '500' }]}>
-                      {option.label}
-                    </Text>
-                    {isSelected && (
-                      <IconSymbol name="checkmark" size={18} color={colors.tint} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+        <BottomSheetView style={{ flex: 1, paddingBottom: Platform.OS === 'ios' ? 40 : 24 }}>
+          {/* Modal Header */}
+          <View style={styles.modalHeader}>
+            <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Sort Options</Text>
+            <TouchableOpacity
+              onPress={() => sortSheetRef.current?.dismiss()}
+              accessibilityRole="button"
+              accessibilityLabel="Close sort options"
+              hitSlop={12}
+            >
+              <IconSymbol name="xmark" size={20} color={colors.icon} />
+            </TouchableOpacity>
           </View>
-        </Pressable>
-      </Modal>
+
+          {/* Sort Options List */}
+          <View style={styles.sortListContainer}>
+            {SORT_OPTIONS.map((option) => {
+              const isSelected = selectedSort === option.id;
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[styles.sortOptionRow, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setSelectedSort(option.id);
+                    sortSheetRef.current?.dismiss();
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ checked: isSelected }}
+                >
+                  <Text style={[styles.sortOptionLabel, { color: isSelected ? colors.tint : colors.text, fontWeight: isSelected ? '700' : '500' }]}>
+                    {option.label}
+                  </Text>
+                  {isSelected && (
+                    <IconSymbol name="checkmark" size={18} color={colors.tint} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }
@@ -1530,7 +1497,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xs,
   },
   cartBadgeText: {
-    color: '#fff',
+    color: 'white',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -1902,3 +1869,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 });
+
+
+
+
+
+
+
+
+
+

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useGridCardWidth } from '@/src/utils/layout';
@@ -95,10 +95,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: Spacing.sm,
   },
   textRowGrid: { paddingHorizontal: 10, paddingBottom: 10 },
-  textRowRail: { paddingHorizontal: 12, paddingBottom: 12 },
+  textRowRail: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md },
   // Left-aligned at the base, the editorial convention, instead of floated in
   // the dead centre of a dimmed rectangle.
   name: {

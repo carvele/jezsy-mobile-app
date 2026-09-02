@@ -174,7 +174,7 @@ export default function ProfileScreen() {
               <View style={{ position: 'relative' }}>
                 <IconSymbol name="clock.arrow.circlepath" size={24} color={colors.icon} />
                 {counts.pending > 0 && (
-                  <View style={styles.statusBadgeBubble}>
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
                     <Text style={styles.statusBadgeText}>{counts.pending}</Text>
                   </View>
                 )}
@@ -190,7 +190,7 @@ export default function ProfileScreen() {
               <View style={{ position: 'relative' }}>
                 <IconSymbol name="creditcard" size={24} color={colors.icon} />
                 {counts.toPay > 0 && (
-                  <View style={styles.statusBadgeBubble}>
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
                     <Text style={styles.statusBadgeText}>{counts.toPay}</Text>
                   </View>
                 )}
@@ -206,7 +206,7 @@ export default function ProfileScreen() {
               <View style={{ position: 'relative' }}>
                 <IconSymbol name="bag.fill" size={24} color={colors.icon} />
                 {counts.preparing > 0 && (
-                  <View style={styles.statusBadgeBubble}>
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
                     <Text style={styles.statusBadgeText}>{counts.preparing}</Text>
                   </View>
                 )}
@@ -222,7 +222,7 @@ export default function ProfileScreen() {
               <View style={{ position: 'relative' }}>
                 <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
                 {counts.ready > 0 && (
-                  <View style={styles.statusBadgeBubble}>
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
                     <Text style={styles.statusBadgeText}>{counts.ready}</Text>
                   </View>
                 )}
@@ -392,11 +392,11 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: Spacing.xs,
     zIndex: 10,
   },
   statusBadgeText: {
-    color: '#ffffff',
+    color: 'white',
     fontSize: 10,
     fontWeight: '800',
   },

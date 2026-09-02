@@ -1,3 +1,4 @@
+import { Spacing } from '@/constants/theme';
 import { Link } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
@@ -20,7 +21,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: Spacing.xl,
   },
   link: {
     marginTop: 15,

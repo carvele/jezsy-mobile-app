@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -197,14 +197,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   subtitle: {
     fontSize: 12,
@@ -218,9 +217,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tipsBanner: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 12,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    padding: Spacing.md,
     borderRadius: Radius.md,
     borderWidth: 1,
     gap: 6,
@@ -228,24 +227,23 @@ const styles = StyleSheet.create({
   tipItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   tipIcon: {
     fontSize: 13,
   },
   tipBannerText: {
-    fontSize: 12,
-    fontWeight: '500',
+    ...Type.caption,
   },
   filterRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
   },
   filterChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     borderRadius: Radius.pill,
     borderWidth: 1,
@@ -258,8 +256,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    gap: 12,
+    padding: Spacing.lg,
+    gap: Spacing.md,
     paddingBottom: 36,
   },
   card: {
@@ -271,7 +269,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   cardTitleWrap: {
     flexDirection: 'row',
@@ -304,7 +302,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
-    padding: 8,
+    padding: Spacing.sm,
     borderRadius: Radius.sm,
   },
   proTipText: {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { MONTH_NAMES, YEARS, DAYS, getDaysInMonth } from '@/src/utils/profileFields';
 
@@ -75,7 +75,7 @@ export function DobPickerModal({ visible, value, onConfirm, onClose }: Props) {
                     style={[styles.item, { borderBottomColor: colors.border }, month === idx && { backgroundColor: `${colors.tint}18` }]}
                     onPress={() => selectMonth(idx)}
                   >
-                    <Text style={[styles.itemText, { color: colors.secondaryText }, month === idx && { color: colors.tint, fontSize: 16, fontWeight: '700' }]}>
+                    <Text style={[styles.itemText, { color: colors.secondaryText }, month === idx && { color: colors.tint, ...Type.bodyLargeStrong }]}>
                       {name.substring(0, 3)}
                     </Text>
                   </TouchableOpacity>
@@ -92,7 +92,7 @@ export function DobPickerModal({ visible, value, onConfirm, onClose }: Props) {
                     style={[styles.item, { borderBottomColor: colors.border }, day === d && { backgroundColor: `${colors.tint}18` }]}
                     onPress={() => setDay(d)}
                   >
-                    <Text style={[styles.itemText, { color: colors.secondaryText }, day === d && { color: colors.tint, fontSize: 16, fontWeight: '700' }]}>{d}</Text>
+                    <Text style={[styles.itemText, { color: colors.secondaryText }, day === d && { color: colors.tint, ...Type.bodyLargeStrong }]}>{d}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -107,7 +107,7 @@ export function DobPickerModal({ visible, value, onConfirm, onClose }: Props) {
                     style={[styles.item, { borderBottomColor: colors.border }, year === yr && { backgroundColor: `${colors.tint}18` }]}
                     onPress={() => selectYear(yr)}
                   >
-                    <Text style={[styles.itemText, { color: colors.secondaryText }, year === yr && { color: colors.tint, fontSize: 16, fontWeight: '700' }]}>{yr}</Text>
+                    <Text style={[styles.itemText, { color: colors.secondaryText }, year === yr && { color: colors.tint, ...Type.bodyLargeStrong }]}>{yr}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -128,16 +128,16 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
+    padding: Spacing.xxl,
     paddingBottom: Platform.OS === 'ios' ? 44 : 24,
     maxHeight: '75%',
     borderWidth: 1,
   },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 18, fontWeight: '700', letterSpacing: 0.2 },
-  closeBtn: { padding: 4 },
-  closeText: { fontSize: 15, fontWeight: '600' },
-  columnsRow: { flexDirection: 'row', justifyContent: 'space-between', height: 220, marginBottom: 20, gap: 8 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xl },
+  title: { ...Type.subtitle, letterSpacing: 0.2 },
+  closeBtn: { padding: Spacing.xs },
+  closeText: { ...Type.bodyStrong },
+  columnsRow: { flexDirection: 'row', justifyContent: 'space-between', height: 220, marginBottom: Spacing.xl, gap: Spacing.sm },
   column: { flex: 1, alignItems: 'center' },
   columnLabel: { fontSize: 12, fontWeight: '700', letterSpacing: 1.5, marginBottom: 10 },
   columnList: {
@@ -148,6 +148,6 @@ const styles = StyleSheet.create({
   },
   item: { height: 44, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1 },
   itemText: { fontSize: 15, fontWeight: '500' },
-  confirmBtn: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  confirmBtn: { height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: Spacing.sm },
   confirmBtnText: { fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
 });

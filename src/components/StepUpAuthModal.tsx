@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -177,18 +177,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
     borderBottomWidth: 1,
     position: 'relative',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   closeBtn: {
     position: 'absolute',
     right: 16,
-    padding: 8,
+    padding: Spacing.sm,
   },
   body: {
     padding: Spacing.xl,

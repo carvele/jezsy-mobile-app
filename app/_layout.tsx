@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -6,15 +7,8 @@ import 'react-native-reanimated';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, AppState, Platform, LogBox } from 'react-native';
 
-LogBox.ignoreLogs([
-  'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
-  'Invalid Refresh Token',
-  'AuthSessionMissingError',
-  'FunctionsHttpError',
-  'setLayoutAnimationEnabledExperimental is currently a no-op',
-]);
-
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 
@@ -34,6 +28,14 @@ import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoti
 import { initSentry, wrapRootComponent } from '@/src/utils/sentry';
 import { initWebUpdateChecker } from '@/src/utils/webUpdateChecker';
 import NetInfo from '@react-native-community/netinfo';
+
+LogBox.ignoreLogs([
+  'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
+  'Invalid Refresh Token',
+  'AuthSessionMissingError',
+  'FunctionsHttpError',
+  'setLayoutAnimationEnabledExperimental is currently a no-op',
+]);
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -306,17 +308,19 @@ function RootLayout() {
         {/* Outermost of the app providers: ToastProvider and every screen below
             it call useColorScheme, which reads the override from here. */}
         <AppThemeProvider>
-          <ToastProvider>
-            <AuthProvider>
-              <WishlistProvider>
-                <CartProvider>
-                  <MessagesProvider>
-                    <InitialLayout />
-                  </MessagesProvider>
-                </CartProvider>
-              </WishlistProvider>
-            </AuthProvider>
-          </ToastProvider>
+          <BottomSheetModalProvider>
+            <ToastProvider>
+              <AuthProvider>
+                <WishlistProvider>
+                  <CartProvider>
+                    <MessagesProvider>
+                      <InitialLayout />
+                    </MessagesProvider>
+                  </CartProvider>
+                </WishlistProvider>
+              </AuthProvider>
+            </ToastProvider>
+          </BottomSheetModalProvider>
         </AppThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

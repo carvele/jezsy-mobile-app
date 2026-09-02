@@ -8,7 +8,7 @@ export type ColorOption = { name: string; hex: string; border: string };
 export const DEFAULT_COLOR_OPTIONS: ColorOption[] = [
   { name: 'Red', hex: '#DC2626', border: 'transparent' },
   { name: 'Blue', hex: '#2563EB', border: 'transparent' },
-  { name: 'Black', hex: '#000000', border: 'transparent' },
+  { name: 'Black', hex: 'black', border: 'transparent' },
   { name: 'White', hex: '#FFFFFF', border: '#D1D5DB' },
   { name: 'Gold', hex: '#D4AF37', border: 'transparent' },
   { name: 'Silver', hex: '#C0C0C0', border: 'transparent' },

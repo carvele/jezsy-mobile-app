@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/src/lib/supabase';
 import { getRecentlyViewed } from '@/src/utils/recentlyViewed';
@@ -60,17 +60,16 @@ export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 24,
-    marginBottom: 24,
+    marginTop: Spacing.xxl,
+    marginBottom: Spacing.xxl,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-    marginLeft: 24,
+    ...Type.subtitle,
+    marginBottom: Spacing.lg,
+    marginLeft: Spacing.xxl,
   },
   list: {
-    paddingLeft: 24,
+    paddingLeft: Spacing.xxl,
     paddingRight: 10,
   },
 });

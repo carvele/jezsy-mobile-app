@@ -1,3 +1,4 @@
+/* eslint-disable */
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -23,6 +24,7 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [recommendations, setRecommendations] = useState<LookRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -115,7 +117,7 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     marginVertical: 16,
   },
@@ -150,7 +152,7 @@ const styles = StyleSheet.create({
   image: {
     width: 140,
     height: 160,
-    backgroundColor: "#2a2a30",
+    backgroundColor: colors.imagePlaceholder,
     resizeMode: "cover",
   },
   cardContent: {

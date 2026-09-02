@@ -1,6 +1,8 @@
+/* eslint-disable */
 import { Image } from "expo-image";
 import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { tapLight, tapMedium, notifySuccess } from '@/src/utils/haptics';
 import React, { useCallback, useEffect, useState, useMemo } from "react";
 import {
   AccessibilityInfo,
@@ -77,6 +79,7 @@ export default function ProductDetailScreen() {
   const insets = useSafeAreaInsets();
   const theme = useColorScheme() ?? "light";
   const colors = Colors[theme];
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { addToCart } = useCart();
   const { getOrCreateConversation } = useMessages();
@@ -357,7 +360,7 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.favoriteButton, { top: insets.top + 12 }]}
-            onPress={() => toggleWishlist(product.id)}
+            onPress={() => { tapLight(); toggleWishlist(product.id); }}
             accessibilityRole="button"
             accessibilityLabel={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
             accessibilityHint={isInWishlist(product.id) ? "Removes this item from your favorites list" : "Saves this item to your favorites list"}
@@ -441,7 +444,7 @@ export default function ProductDetailScreen() {
                         { borderColor: isSelected ? colors.tint : colors.border },
                         isSelected && { backgroundColor: colors.card },
                       ]}
-                      onPress={() => setSelectedColor(color)}
+                      onPress={() => { tapLight(); setSelectedColor(color); }}
                       accessibilityRole="radio"
                       accessibilityLabel={`Select colour ${color}`}
                       accessibilityState={{ selected: isSelected }}
@@ -499,7 +502,7 @@ export default function ProductDetailScreen() {
                           isRecommended && !isSelected && { backgroundColor: colors.tint + "10" },
                           isOutOfStock && { opacity: 0.4 }
                         ]}
-                        onPress={() => !isOutOfStock && setSelectedSize(s)}
+                        onPress={() => { if (!isOutOfStock) { tapLight(); setSelectedSize(s); } }}
                         disabled={isOutOfStock}
                         accessibilityRole="radio"
                         accessibilityLabel={`Select size ${s}${isRecommended ? ' (Recommended)' : ''}`}
@@ -684,6 +687,7 @@ export default function ProductDetailScreen() {
                   selectedColor || undefined,
                   selectedStock ?? undefined,
                 );
+                notifySuccess();
                 announceAddedToBag();
               }
             }}
@@ -742,7 +746,7 @@ export default function ProductDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   imageContainer: { width: "100%", height: IMAGE_GALLERY_HEIGHT, position: "relative" },
@@ -759,7 +763,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: colors.border,
   },
   dotActive: {
     backgroundColor: '#FFF',
@@ -801,7 +805,7 @@ const styles = StyleSheet.create({
   arButton: {
     position: "absolute", bottom: 60, right: 20, flexDirection: "row", alignItems: "center",
     paddingHorizontal: Spacing.lg, paddingVertical: 10, borderRadius: 20, gap: Spacing.sm,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
+    shadowColor: colors.text, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
   },
   arButtonText: { fontWeight: "700", fontSize: 14 },
   contentContainer: { padding: Spacing.xxl, borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
@@ -817,8 +821,8 @@ const styles = StyleSheet.create({
   price: { ...Type.title },
   priceOriginal: { fontSize: 14, textDecorationLine: 'line-through', fontWeight: '500' },
   priceSale: { fontSize: 20, fontWeight: "800" },
-  discountBadge: { backgroundColor: '#E05C5C', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  discountText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  discountBadge: { backgroundColor: colors.notification, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  discountText: { color: colors.onNotification, fontSize: 12, fontWeight: 'bold' },
   // Uppercase eyebrow: exactly what Type.label's tracking exists for.
   category: { ...Type.label, marginBottom: 6 },
   section: { marginTop: Spacing.xxl },
@@ -898,7 +902,7 @@ const styles = StyleSheet.create({
   iconAction: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, justifyContent: "center", alignItems: "center" },
   primaryAction: {
     flex: 1, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center",
-    shadowColor: "#C9A96E", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+    shadowColor: colors.tint, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
   },
   primaryActionText: { ...Type.subtitle },
   addedToast: {

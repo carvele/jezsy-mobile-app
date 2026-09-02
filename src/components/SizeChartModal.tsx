@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, Modal, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
-import { Colors } from '@/constants/theme';
+import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ProductMeasurements } from '@/src/utils/sizeRecommender';
@@ -113,7 +113,7 @@ export function SizeChartModal({ visible, measurements, sizes, recommendedSize, 
               })}
 
               {recommendedSize && (
-                <Text style={[styles.caption, { color: colors.tint, marginTop: 16 }]}>
+                <Text style={[styles.caption, { color: colors.tint, marginTop: Spacing.lg }]}>
                   Highlighted row is your recommended size.
                 </Text>
               )}
@@ -143,26 +143,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: Spacing.lg,
     borderBottomWidth: 1,
     position: 'relative',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...Type.subtitle,
   },
   closeBtn: {
     position: 'absolute',
     right: 16,
-    padding: 8,
+    padding: Spacing.sm,
   },
   body: {
-    padding: 24,
+    padding: Spacing.xxl,
   },
   unitToggleRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    paddingTop: 16,
+    paddingTop: Spacing.lg,
   },
   unitToggle: {
     flexDirection: 'row',
@@ -171,8 +170,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   unitOption: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.sm,
   },
   unitOptionText: {
     fontSize: 13,
@@ -180,12 +179,12 @@ const styles = StyleSheet.create({
   },
   caption: {
     fontSize: 13,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderRadius: 6,
   },
@@ -200,7 +199,7 @@ const styles = StyleSheet.create({
   sizeCell: {
     flex: 0.7,
     textAlign: 'left',
-    paddingLeft: 8,
+    paddingLeft: Spacing.sm,
   },
   headText: {
     fontWeight: '700',
@@ -209,6 +208,6 @@ const styles = StyleSheet.create({
   empty: {
     fontSize: 15,
     textAlign: 'center',
-    padding: 32,
+    padding: Spacing.xxxl,
   },
 });

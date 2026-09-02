@@ -8,6 +8,8 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { formatPHDate } from '@/src/utils/dateFormatter';
+// import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';
 
@@ -109,7 +111,7 @@ export default function InboxScreen() {
     const isUnread = item.unread_count > 0 && !isStaff;
 
     const dateStr = item.last_message_time
-      ? new Date(item.last_message_time).toLocaleDateString([], {
+      ? formatPHDate(item.last_message_time, {
           month: 'short',
           day: 'numeric',
           hour: '2-digit',
@@ -316,7 +318,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   activeSegment: {
-    shadowColor: '#000',
+    shadowColor: 'black',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,

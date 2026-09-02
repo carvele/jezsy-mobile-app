@@ -276,8 +276,8 @@ export default function AccountSettingsScreen() {
               </>
             ) : unsettledInfo?.hasUnsettledBalance ? (
               <>
-                <View style={[styles.noticeBox, { borderColor: '#EAB308', backgroundColor: 'rgba(234,179,8,0.08)' }]}>
-                  <IconSymbol name="exclamationmark.triangle.fill" size={18} color="#EAB308" />
+                <View style={[styles.noticeBox, { borderColor: colors.warning, backgroundColor: colors.warning + '1A' }]}>
+                  <IconSymbol name="exclamationmark.triangle.fill" size={18} color={colors.warning} />
                   <Text style={[styles.noticeText, { color: colors.text, fontWeight: '500' }]}>
                     You have an outstanding balance of ₱{unsettledInfo.totalBalance.toFixed(2)} across {unsettledInfo.unsettledCount} reservation(s). You must settle all remaining balances before requesting account deletion.
                   </Text>
