@@ -39,20 +39,6 @@ export default function TabLayout() {
     setConfirmedSignedOut(false);
   }, [session, isLoading]);
 
-  // TEMP DEBUG: the Welcome-flash-on-Home-tap report persisted after the debounce
-  // fix above, meaning either the blip outlasts 400ms or this component is
-  // remounting outright (which would reset confirmedSignedOut's state each time,
-  // making the debounce a no-op). mountId is stable across re-renders but NOT
-  // across remounts, so two consecutive log lines with different mountId values
-  // proves a remount, not just a re-render. Remove once root-caused.
-  const mountId = React.useRef(Math.random().toString(36).slice(2, 8)).current;
-  console.log('[TABS-LAYOUT] mountId=' + mountId
-    + ' session=' + (session ? 'present' : 'null')
-    + ' isLoading=' + isLoading
-    + ' isPasswordRecovery=' + isPasswordRecovery
-    + ' confirmedSignedOut=' + confirmedSignedOut
-    + ' t=' + Date.now());
-
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
 

@@ -220,16 +220,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // TEMP DEBUG: chasing a Welcome-flash-on-Home-tap report -- this logs
-        // every event this listener ever receives, specifically to catch one
-        // that carries event !== 'SIGNED_OUT' but session === null (or any
-        // event firing more often than expected during plain in-app tab
-        // navigation, which shouldn't touch auth state at all). Remove once
-        // root-caused.
-        console.log('[AUTH-STATE-CHANGE] event=' + event
-          + ' session=' + (session ? 'present' : 'null')
-          + ' t=' + Date.now());
-
         // Belt-and-braces alongside the explicit begin/end calls: on platforms
         // where the SDK detects the recovery link itself, this is the only
         // signal we get.
