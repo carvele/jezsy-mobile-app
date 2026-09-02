@@ -101,6 +101,7 @@ export type Database = {
           id: string
           title: string
           type: string
+          updated_at: string | null
         }
         Insert: {
           body: string
@@ -110,6 +111,7 @@ export type Database = {
           id?: string
           title: string
           type?: string
+          updated_at?: string | null
         }
         Update: {
           body?: string
@@ -119,6 +121,7 @@ export type Database = {
           id?: string
           title?: string
           type?: string
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -281,6 +284,7 @@ export type Database = {
           parent_id: string | null
           slug: string
           sort_order: number | null
+          updated_at: string | null
         }
         Insert: {
           created_at?: string | null
@@ -290,6 +294,7 @@ export type Database = {
           parent_id?: string | null
           slug: string
           sort_order?: number | null
+          updated_at?: string | null
         }
         Update: {
           created_at?: string | null
@@ -299,6 +304,7 @@ export type Database = {
           parent_id?: string | null
           slug?: string
           sort_order?: number | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -441,6 +447,7 @@ export type Database = {
           id: string
           rating: number | null
           text: string | null
+          updated_at: string | null
           user_id: string | null
           user_name: string | null
         }
@@ -449,6 +456,7 @@ export type Database = {
           id?: string
           rating?: number | null
           text?: string | null
+          updated_at?: string | null
           user_id?: string | null
           user_name?: string | null
         }
@@ -457,6 +465,7 @@ export type Database = {
           id?: string
           rating?: number | null
           text?: string | null
+          updated_at?: string | null
           user_id?: string | null
           user_name?: string | null
         }
@@ -475,6 +484,7 @@ export type Database = {
           adjusted_score: number | null
           available: number | null
           category: string | null
+          color: string
           created_at: string | null
           deleted: boolean | null
           deleted_at: string | null
@@ -482,6 +492,7 @@ export type Database = {
           demand_scored_at: string | null
           id: string
           item: string | null
+          pattern: string
           product_doc_id: string | null
           reserved: number | null
           size: string | null
@@ -489,11 +500,13 @@ export type Database = {
           stock_tier: string | null
           total: number | null
           updated_at: string | null
+          variant_sku: string | null
         }
         Insert: {
           adjusted_score?: number | null
           available?: number | null
           category?: string | null
+          color?: string
           created_at?: string | null
           deleted?: boolean | null
           deleted_at?: string | null
@@ -501,6 +514,7 @@ export type Database = {
           demand_scored_at?: string | null
           id?: string
           item?: string | null
+          pattern?: string
           product_doc_id?: string | null
           reserved?: number | null
           size?: string | null
@@ -508,11 +522,13 @@ export type Database = {
           stock_tier?: string | null
           total?: number | null
           updated_at?: string | null
+          variant_sku?: string | null
         }
         Update: {
           adjusted_score?: number | null
           available?: number | null
           category?: string | null
+          color?: string
           created_at?: string | null
           deleted?: boolean | null
           deleted_at?: string | null
@@ -520,6 +536,7 @@ export type Database = {
           demand_scored_at?: string | null
           id?: string
           item?: string | null
+          pattern?: string
           product_doc_id?: string | null
           reserved?: number | null
           size?: string | null
@@ -527,6 +544,7 @@ export type Database = {
           stock_tier?: string | null
           total?: number | null
           updated_at?: string | null
+          variant_sku?: string | null
         }
         Relationships: [
           {
@@ -664,6 +682,7 @@ export type Database = {
           pushed_at: string | null
           title: string
           type: string
+          updated_at: string | null
           user_id: string
         }
         Insert: {
@@ -675,6 +694,7 @@ export type Database = {
           pushed_at?: string | null
           title: string
           type: string
+          updated_at?: string | null
           user_id: string
         }
         Update: {
@@ -686,6 +706,7 @@ export type Database = {
           pushed_at?: string | null
           title?: string
           type?: string
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -878,7 +899,6 @@ export type Database = {
       products: {
         Row: {
           ar_data: Json
-          garment_metadata: Json | null
           base_color: string | null
           care_instructions: string | null
           category: string | null
@@ -892,6 +912,7 @@ export type Database = {
           description: string | null
           discount_percentage: number | null
           fit_and_sizing: string | null
+          garment_metadata: Json | null
           id: string
           image_url: string | null
           images: string[] | null
@@ -924,7 +945,6 @@ export type Database = {
         }
         Insert: {
           ar_data?: Json
-          garment_metadata?: Json | null
           base_color?: string | null
           care_instructions?: string | null
           category?: string | null
@@ -938,6 +958,7 @@ export type Database = {
           description?: string | null
           discount_percentage?: number | null
           fit_and_sizing?: string | null
+          garment_metadata?: Json | null
           id?: string
           image_url?: string | null
           images?: string[] | null
@@ -970,7 +991,6 @@ export type Database = {
         }
         Update: {
           ar_data?: Json
-          garment_metadata?: Json | null
           base_color?: string | null
           care_instructions?: string | null
           category?: string | null
@@ -984,6 +1004,7 @@ export type Database = {
           description?: string | null
           discount_percentage?: number | null
           fit_and_sizing?: string | null
+          garment_metadata?: Json | null
           id?: string
           image_url?: string | null
           images?: string[] | null
@@ -1174,6 +1195,7 @@ export type Database = {
           balance_settled_by: string | null
           balance_settled_by_name: string | null
           balance_settled_method: string | null
+          cancellation_reason: string | null
           color: string | null
           confirmed_at: string | null
           confirmed_by_id: string | null
@@ -1216,6 +1238,7 @@ export type Database = {
           balance_settled_by?: string | null
           balance_settled_by_name?: string | null
           balance_settled_method?: string | null
+          cancellation_reason?: string | null
           color?: string | null
           confirmed_at?: string | null
           confirmed_by_id?: string | null
@@ -1258,6 +1281,7 @@ export type Database = {
           balance_settled_by?: string | null
           balance_settled_by_name?: string | null
           balance_settled_method?: string | null
+          cancellation_reason?: string | null
           color?: string | null
           confirmed_at?: string | null
           confirmed_by_id?: string | null
@@ -1339,6 +1363,7 @@ export type Database = {
           product_id: string
           rating: number
           reviewer_name: string | null
+          updated_at: string | null
           user_id: string
           verified_purchase: boolean
         }
@@ -1350,6 +1375,7 @@ export type Database = {
           product_id: string
           rating: number
           reviewer_name?: string | null
+          updated_at?: string | null
           user_id: string
           verified_purchase?: boolean
         }
@@ -1361,6 +1387,7 @@ export type Database = {
           product_id?: string
           rating?: number
           reviewer_name?: string | null
+          updated_at?: string | null
           user_id?: string
           verified_purchase?: boolean
         }
@@ -1912,6 +1939,7 @@ export type Database = {
         Returns: Json
       }
       process_account_deletion: { Args: { _request_id: string }; Returns: Json }
+      recalculate_inventory_stock: { Args: never; Returns: Json }
       reject_account_deletion_request: {
         Args: { _request_id: string }
         Returns: Json
@@ -1943,6 +1971,17 @@ export type Database = {
       send_customer_notification: {
         Args: { _body: string; _title: string; _user_id: string }
         Returns: string
+      }
+      settle_payment_webhook: {
+        Args: {
+          _event: Json
+          _event_id: string
+          _method: string
+          _next_status: string
+          _payment_id: string
+          _provider_payment_id: string
+        }
+        Returns: Json
       }
       settle_reservation_balance: {
         Args: { _method?: string; _reservation_id: string }
@@ -1986,12 +2025,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2015,11 +2054,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2040,11 +2079,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2065,11 +2104,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2082,11 +2121,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

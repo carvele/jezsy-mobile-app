@@ -36,7 +36,7 @@ import { initWebUpdateChecker } from '@/src/utils/webUpdateChecker';
 import NetInfo from '@react-native-community/netinfo';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: '(tabs)',
 };
 
 // As early as possible, before anything else in the app can throw.
@@ -252,7 +252,7 @@ function InitialLayout() {
 
     // Whichever branch ran, the correct route is now committed.
     setRouteSettled(true);
-  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut, routeSettled]);
+  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut]);
 
   useEffect(() => {
     if (hasBootstrapped) {
@@ -262,13 +262,13 @@ function InitialLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack initialRouteName="(tabs)" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
       </Stack>
       {/* Covers the Stack rather than replacing it only during cold bootstrap before routeSettled */}
-      {!routeSettled && Platform.OS !== 'web' && (
+      {!routeSettled && (
         <View
           pointerEvents="none"
           style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, zIndex: 999 }]}
