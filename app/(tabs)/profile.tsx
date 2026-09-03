@@ -251,6 +251,12 @@ export default function ProfileScreen() {
               () => router.push('/profile/account-settings' as any),
             )}
             {renderSettingItem(
+              'lock.fill',
+              'Privacy Settings',
+              'Wardrobe sharing',
+              () => router.push('/profile/privacy-settings' as any),
+            )}
+            {renderSettingItem(
               'moon.fill',
               'Appearance',
               'Light, dark, or match device',

@@ -264,7 +264,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     );
 
     return () => authListener.subscription.unsubscribe();
-  }, [signOut, syncProfile]);
+  }, [syncProfile]);
 
 
   const contextValue = useMemo(() => ({

@@ -70,6 +70,9 @@ const MAPPING = {
   'exclamationmark.circle': 'error-outline',
   'exclamationmark.triangle.fill': 'warning',
   'info.circle.fill': 'info',
+  'hand.thumbsup.fill': 'thumb-up',
+  'hand.thumbsdown.fill': 'thumb-down',
+  'pin.fill': 'push-pin',
 
   // User & Profile
   'person.fill': 'person',

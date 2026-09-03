@@ -23,7 +23,6 @@ import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
 import { hasSeenOnboarding } from '@/src/utils/onboarding';
 import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
 import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoticeModal';
-import { initSentry, wrapRootComponent } from '@/src/utils/sentry';
 import { initWebUpdateChecker } from '@/src/utils/webUpdateChecker';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -33,14 +32,13 @@ LogBox.ignoreLogs([
   'AuthSessionMissingError',
   'FunctionsHttpError',
   'setLayoutAnimationEnabledExperimental is currently a no-op',
+  '"shadow*" style props are deprecated. Use "boxShadow".',
+  'props.pointerEvents is deprecated. Use style.pointerEvents'
 ]);
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
-
-// As early as possible, before anything else in the app can throw.
-initSentry();
 initWebUpdateChecker();
 
 // Held until the auth bootstrap (session + profile) and the onboarding-seen
@@ -328,7 +326,7 @@ function RootLayout() {
   );
 }
 
-export default wrapRootComponent(RootLayout);
+export default RootLayout;
 
 const styles = StyleSheet.create({
   offlineBanner: {

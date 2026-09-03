@@ -67,7 +67,6 @@ module.exports = {
           assetsPaths: ["./assets/models/"],
         },
       ],
-      "@sentry/react-native/expo",
     ],
     experiments: {
       typedRoutes: true,

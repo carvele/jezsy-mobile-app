@@ -104,9 +104,12 @@ export function ReviewsList({ productId }: ReviewsListProps) {
       ? reviews.filter(r => r.images && r.images.length > 0)
       : reviews;
     const sorted = [...filtered];
-    if (sortBy === 'highest') sorted.sort((a, b) => b.rating - a.rating);
-    else if (sortBy === 'lowest') sorted.sort((a, b) => a.rating - b.rating);
-    else sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    sorted.sort((a, b) => {
+      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+      if (sortBy === 'highest') return b.rating - a.rating;
+      if (sortBy === 'lowest') return a.rating - b.rating;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
     return sorted;
   }, [reviews, sortBy, photosOnly]);
 
@@ -210,9 +213,10 @@ export function ReviewsList({ productId }: ReviewsListProps) {
       ) : (
         <View style={styles.list}>
           {visibleReviews.map(review => (
-            <View key={review.id} style={[styles.reviewCard, { borderBottomColor: colors.border }]}>
+            <View key={review.id} style={[styles.reviewCard, { borderBottomColor: colors.border }, review.is_pinned && { backgroundColor: colors.tint + '10', borderColor: colors.tint, borderWidth: 1, padding: Spacing.md, borderRadius: 8 }]}>
               <View style={styles.reviewHeader}>
                 <View style={styles.reviewerInfo}>
+                  {review.is_pinned && <IconSymbol name="pin.fill" size={14} color={colors.tint} style={{ marginRight: 4 }} />}
                   <Text style={[styles.reviewerName, { color: colors.text }]}>
                     {review.reviewer_name || 'Anonymous'}
                   </Text>
@@ -235,6 +239,28 @@ export function ReviewsList({ productId }: ReviewsListProps) {
                     <Image key={idx} source={{ uri: url }} style={styles.reviewPhoto} contentFit="cover" />
                   ))}
                 </ScrollView>
+              )}
+              {review.admin_reply && (
+                <View style={{ marginTop: Spacing.md, padding: Spacing.md, backgroundColor: colors.card, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 4 }}>Response from JezSy Couture</Text>
+                  <Text style={{ fontSize: 13, color: colors.secondaryText, lineHeight: 18 }}>{review.admin_reply}</Text>
+                </View>
+              )}
+              {(review.likes > 0 || review.dislikes > 0) && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md, gap: Spacing.lg }}>
+                  {review.likes > 0 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <IconSymbol name="hand.thumbsup.fill" size={12} color={colors.secondaryText} />
+                      <Text style={{ fontSize: 12, color: colors.secondaryText }}>{review.likes}</Text>
+                    </View>
+                  )}
+                  {review.dislikes > 0 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <IconSymbol name="hand.thumbsdown.fill" size={12} color={colors.secondaryText} />
+                      <Text style={{ fontSize: 12, color: colors.secondaryText }}>{review.dislikes}</Text>
+                    </View>
+                  )}
+                </View>
               )}
             </View>
           ))}
