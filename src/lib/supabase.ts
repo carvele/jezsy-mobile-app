@@ -82,5 +82,11 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: hasAuthCallbackInUrl,
+    // Provide an immediate lock to prevent navigator.locks 5000ms timeouts and AbortError in browser tabs
+    lock: {
+      acquire: async (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => {
+        return await fn();
+      },
+    },
   },
 });
