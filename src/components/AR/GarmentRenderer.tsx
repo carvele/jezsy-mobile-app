@@ -163,6 +163,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let skeletonBones = {};
           let boneCorrection = {};
           let debugFrameCount = 0;
+          // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): the native side
+          // counts calls INTO the transport (see transportRateCountRef in [id].tsx); this
+          // counts UPDATE_TRANSFORM messages actually PROCESSED here, on the other side of
+          // JSON.stringify + injectJavaScript. The two rates can differ -- that gap is
+          // itself the measurement the roadmap's Tier 2 occlusion gate and the contract's
+          // "unmeasured prototype transport" note are waiting on.
+          let transportRateCount = 0;
+          let transportRateWindowStart = 0;
           let loggedPosedBBox = false;
           let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
           let smoothedCameraDistance = null;
@@ -592,6 +600,20 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 const { pos, rot, scl, boneRotations, normalizedLandmarks } = data;
                 debugFrameCount++;
                 const shouldLog = (debugFrameCount % 20 === 0);
+
+                // Phase 1 instrumentation: real processed-frame rate, rolling 1s window
+                // for the same reason as the native-side counter -- a frame-count modulus
+                // would stretch or compress silently if the true rate drifted.
+                const rateNow = performance.now();
+                if (transportRateWindowStart === 0) transportRateWindowStart = rateNow;
+                transportRateCount++;
+                const rateElapsedMs = rateNow - transportRateWindowStart;
+                if (rateElapsedMs >= 1000) {
+                  const ratePerSec = (transportRateCount / rateElapsedMs) * 1000;
+                  console.log('[AR-TRANSPORT-RATE-WEBVIEW] processed/sec=' + ratePerSec.toFixed(1));
+                  transportRateCount = 0;
+                  transportRateWindowStart = rateNow;
+                }
 
                 // Pure Metric Camera Projection (Fixing P0/P1 Alignment)
                 if (normalizedLandmarks && normalizedLandmarks[11] && normalizedLandmarks[12] && camera.projectionMatrix) {

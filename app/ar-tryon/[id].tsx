@@ -337,6 +337,16 @@ export default function ARTryOnScreen() {
   const lastStateUpdateRef = React.useRef(0);
   const torsoLogCounter = React.useRef(0);
   const compGuardLogCounter = React.useRef(0);
+  // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): the roadmap's own
+  // occlusion-scoping decision (Tier 2 base64-mask-in-the-loop, only if measurements
+  // justify it) and the contract's "native transport is prototype-grade and unmeasured"
+  // gap both depend on knowing the real per-second call rate into updateTransform, not
+  // an assumed detector frame rate. This ref-pair counts calls in a rolling 1s window and
+  // logs the rate once per window; see the matching WebView-side counter in
+  // GarmentRenderer.tsx for what actually reaches the renderer, since a call here does
+  // not guarantee the WebView processed it before the next one arrived.
+  const transportRateCountRef = React.useRef(0);
+  const transportRateWindowStartRef = React.useRef(0);
   const garmentRendererRef = React.useRef<any>(null);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
@@ -608,6 +618,24 @@ export default function ARTryOnScreen() {
               + ' pitch=' + e.pitch.toFixed(1)
               + ' yaw=' + e.yaw.toFixed(1)
               + ' roll=' + e.roll.toFixed(1));
+          }
+
+          // Phase 1 instrumentation: real per-second call rate into the transport, not an
+          // assumed one. Rolling 1s window rather than a frame-count modulus, since the
+          // detector's own frame rate isn't constant (drops under load, on backgrounding
+          // resume, etc.) -- a modulus would silently stretch or compress the logging
+          // interval along with it.
+          const rateNow = performance.now();
+          if (transportRateWindowStartRef.current === 0) {
+            transportRateWindowStartRef.current = rateNow;
+          }
+          transportRateCountRef.current += 1;
+          const rateElapsedMs = rateNow - transportRateWindowStartRef.current;
+          if (rateElapsedMs >= 1000) {
+            const ratePerSec = (transportRateCountRef.current / rateElapsedMs) * 1000;
+            console.log('[AR-TRANSPORT-RATE] updateTransform calls/sec=' + ratePerSec.toFixed(1));
+            transportRateCountRef.current = 0;
+            transportRateWindowStartRef.current = rateNow;
           }
 
           garmentRendererRef.current.updateTransform(
