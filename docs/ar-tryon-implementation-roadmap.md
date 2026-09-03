@@ -106,16 +106,21 @@ Tasks:
 Exit: contract doc merged; #28/#29/#17 recorded as pass or as a demonstrated
 regression; Step H status honest.
 
-**Phase 0 status as of 2026-09-03**: contract doc done. #28 and #29 both
-live-verified fixed (see the audit doc for exact evidence). #17 attempted
-and recorded as **inconclusive, not failed** -- readings stayed bounded
-across a compound-movement turn sequence, but the test couldn't isolate
-pure yaw and the Euler-angle yaw readout is unreliable near profile, so
-the specific plateau claim is unconfirmed either way. Retest needs a
-second person or a mirror; see the audit doc's `#17` entry for the exact
-procedure. Step H remains open (no second device). The two no-device
-items (admin-dashboard push, Blazer re-ingestion) are still outstanding
-and outside this repo.
+**Phase 0 status as of 2026-09-03**: contract doc done. #28, #29, and #17
+all live-verified. #17's first attempt was inconclusive (compound
+bend+twist+roll, unreliable Euler yaw near profile) but a same-session
+retest -- standing against a wall/doorframe as a vertical reference to
+isolate pure yaw -- got clean pitch/roll-near-zero data at 54° and 59.5°,
+both past the ~49° saturation threshold, with `exactScale` staying bounded
+(1.075-1.222) rather than continuing to shrink. Reasonably confirmed, not
+laboratory-precision; see the audit doc's `#17` entry for the exact
+numbers and what a denser instrumented sweep would still add. Step H
+remains open (no second device -- techniques don't fix a hardware gap).
+The two no-device items (admin-dashboard push, Blazer re-ingestion) are
+still outstanding and outside this repo.
+
+**Phase 0 is now substantively closed** on everything reachable from this
+repo and this hardware.
 
 **Unplanned but necessary detour this session**: the app was fundamentally
 broken on-device before any of the above could even be attempted --

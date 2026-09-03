@@ -164,7 +164,11 @@ threshold the value **holds at the last reliable reading**
 (`lastReliableCosYaw`, cross-frame state in the renderer) rather than
 continuing to shrink. Initial value is 0.65, so a session that begins
 already turned degrades to the old floor behaviour, not to no correction.
-Live plateau behaviour is implemented but **not yet device-verified**.
+Live plateau behaviour **reasonably confirmed 2026-09-03**: isolated-yaw
+readings at 54° and 59.5° (both past the floor) showed `exactScale`
+bounded at 1.075-1.222, not continuing to shrink with deeper turn. See
+`ar-tryon-audit-implementation-plan.md`'s `#17` entry for the full data;
+not laboratory-precision but no longer unverified.
 
 ### Camera distance (native, calibrated only)
 

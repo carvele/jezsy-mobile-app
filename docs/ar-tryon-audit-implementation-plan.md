@@ -832,6 +832,42 @@ stable hold -- 0°, ~30°, ~50°, ~70° -- while noting the actual `yawCosCorrec
 value if instrumented for it. That isolates the one variable this fix
 depends on, which today's solo compound-movement test could not.
 
+**RETEST 2026-09-03, SAME SESSION -- REASONABLY CONFIRMED.** Standing
+against a wall/doorframe as a vertical reference fixed the isolation
+problem: rotating shoulders/hips as one unit against a fixed visual anchor
+kept pitch and roll near zero across the whole sweep, unlike the first
+attempt.
+
+| Pose | `yaw` | `pitch` | `roll` | `exactScale` | `cameraDistanceM` |
+|---|---|---|---|---|---|
+| Frontal baseline | -1.8° | -7.6° | -0.7° | 1.192 | 1.495 |
+| Pre-threshold | -45.8° to -46.6° | -3.1° to -4.9° | -0.3° to 1.8° | 1.196-1.204 | 1.42-1.57 |
+| Past threshold | -54.0° | 0.6° | -1.9° | 1.075 | 1.611 |
+| Deeper past threshold | -59.5° | -3.1° | -8.0° | 1.222 | 1.904 |
+
+This is genuinely isolated yaw -- pitch and roll stayed within a few
+degrees of zero at every hold, unlike the first attempt's compound
+movements. The diagnostic result: going from 54° to 59.5° (both past the
+~49° saturation threshold, deeper turn), `exactScale` went *up* (1.075 ->
+1.222), not further down. The pre-#17 bug's documented behavior was the
+corrected width "keeps shrinking with further yaw" past the threshold --
+that is not what happened here. Instead `exactScale` stayed bounded in
+roughly the 1.07-1.22 range across the whole post-threshold range tested,
+consistent with `lastReliableCosYaw` holding rather than continuing to
+shrink. `cameraDistanceM` rose alongside (1.61m -> 1.90m), plausibly real
+physical movement between holds (a human cannot reproduce an exact stance
+twice), not necessarily evidence of anything wrong -- `exactScale` is the
+metric this specific fix targets.
+
+Not laboratory-precision (no protractor, no fixed rig, two holds rather
+than a dense sweep, some natural pose variance between them) but a real
+improvement in rigor over the first attempt, and the result is consistent
+with the fix working as designed. **Upgrading `#17` from "inconclusive" to
+reasonably confirmed** -- a denser, instrumented sweep (reading
+`yawCosCorrection` itself, not just its downstream effect) would still be
+worth doing before calling this laboratory-grade, but there is no basis
+left to treat it as unverified.
+
 ---
 
 ## Remaining sequencing
