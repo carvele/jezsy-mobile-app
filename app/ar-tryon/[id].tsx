@@ -21,6 +21,7 @@ import { constructBodyPose } from '@/src/utils/poseConstructor';
 import { calculateGarmentFit } from '@/src/utils/garmentFitter';
 import { calculateBoneRotationsFromCanonical } from '@/src/utils/skeletalRetargeter';
 import { normalizePose, torsoEulerDegrees } from '@/src/utils/poseNormalizer';
+import { checkCalibrationPlausibility } from '@/src/utils/garmentCalibrationGuard';
 import type { GarmentFitProfile } from '@/src/types/garment';
 import {
   useSharedValue,
@@ -377,8 +378,26 @@ export default function ARTryOnScreen() {
         boneMap: invertedBoneMap,
         restPose: raw.rest_pose,
       };
-      setGarmentMetadata(mapped);
-      setIsDemoRig(false);
+
+      // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): AR_READY in the DB
+      // is not proof of calibration -- see ar-system-contract.md section 9. Tailored
+      // Blazer sat AR_READY with anatomicalAnchorOffset.y = 1.304 (should be ~0.1) and
+      // rendered visibly broken live before anyone caught it manually. This is a coarse
+      // last-line check, not a replacement for real ingestion validation: it only
+      // catches grossly implausible values, not subtly wrong ones (see
+      // garmentCalibrationGuard.ts's own doc comment for what it does not catch).
+      const plausibility = checkCalibrationPlausibility(mapped);
+      if (!plausibility.plausible) {
+        console.warn(
+          '[AR] garment_metadata is AR_READY but failed the calibration sanity guard -- ' +
+          'using fallback (demo rig) instead of trusting it: ' + plausibility.reasons.join('; ')
+        );
+        setGarmentMetadata(buildFallbackMetadata(product));
+        setIsDemoRig(true);
+      } else {
+        setGarmentMetadata(mapped);
+        setIsDemoRig(false);
+      }
     } else {
       console.log(product.garment_metadata
         ? '[AR] garment_metadata not AR_READY (' + rawStatus + ') — using fallback (demo rig)'
