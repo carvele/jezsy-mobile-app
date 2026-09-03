@@ -13,6 +13,7 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -133,6 +134,12 @@ function DraggableCanvasItem({ uri, baseStyle, resetKey }: { uri: string; baseSt
 
 export default function OutfitBuilderScreen() {
   const { showToast } = useToast();
+  // Reactive replacement for the module-scope Dimensions.get('window') below
+  // (still used as the initial StyleSheet value) -- these two keep the
+  // picker grid and canvas stage sized correctly on rotation/split-screen.
+  const { width: windowWidth } = useWindowDimensions();
+  const pickerCardSize = (windowWidth - 48 - 12) / 2;
+  const canvasStageWidth = windowWidth - Spacing.xl * 2;
   const theme = useColorScheme();
   const colors = Colors[theme];
   const isDark = theme === 'dark';
@@ -193,7 +200,8 @@ export default function OutfitBuilderScreen() {
         .select('*')
         .eq('user_id', session.user.id)
         .eq('deleted', false)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
       if (!error) setWardrobeItems(data || []);
     } finally {
       setPickerLoading(false);
@@ -232,42 +240,34 @@ export default function OutfitBuilderScreen() {
     }
   }, [wishlistIds]);
 
+  // Shared scoring step for the three sorted*Items derivations below: ranks
+  // items by how well their colors harmonize with whatever's already filled.
+  const sortByColorHarmony = useCallback(<T,>(items: T[], getColors: (item: T) => string[]): T[] => {
+    if (filledCount === 0) return items;
+    const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
+    const scored = items.map(item => ({
+      item,
+      score: evaluateColors([...currentColors, ...getColors(item)]).score,
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map(s => s.item);
+  }, [filledCount, slots]);
+
   // Derive sorted items based on color harmony with already selected slots
   const sortedWardrobeItems = useMemo(() => {
     const forSlot = activeSlot
       ? wardrobeItems.filter((item) => item.garment_type === SLOT_TO_GARMENT_TYPE[activeSlot])
       : wardrobeItems;
-    if (filledCount === 0) return forSlot;
-    const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
-    const scored = forSlot.map(item => ({
-      item,
-      score: evaluateColors([...currentColors, ...(item.color_tags || [])]).score,
-    }));
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map(s => s.item);
-  }, [wardrobeItems, slots, filledCount, activeSlot]);
+    return sortByColorHarmony(forSlot, (item) => item.color_tags || []);
+  }, [wardrobeItems, activeSlot, sortByColorHarmony]);
 
   const sortedCatalogItems = useMemo(() => {
-    if (filledCount === 0) return catalogItems;
-    const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
-    const scored = catalogItems.map(item => ({
-      item,
-      score: evaluateColors([...currentColors, ...(item.color ? [item.color] : [])]).score,
-    }));
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map(s => s.item);
-  }, [catalogItems, slots, filledCount]);
+    return sortByColorHarmony(catalogItems, (item) => item.color ? [item.color] : []);
+  }, [catalogItems, sortByColorHarmony]);
 
   const sortedWishlistItems = useMemo(() => {
-    if (filledCount === 0) return wishlistItems;
-    const currentColors = SLOT_KEYS.filter(k => slots[k]?.color_tags).flatMap(k => slots[k]!.color_tags || []);
-    const scored = wishlistItems.map(item => ({
-      item,
-      score: evaluateColors([...currentColors, ...(item.color ? [item.color] : [])]).score,
-    }));
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map(s => s.item);
-  }, [wishlistItems, slots, filledCount]);
+    return sortByColorHarmony(wishlistItems, (item) => item.color ? [item.color] : []);
+  }, [wishlistItems, sortByColorHarmony]);
 
   // Loaded eagerly (not just when the picker opens) so Shuffle has a pool to
   // draw from as soon as the screen mounts.
@@ -676,7 +676,7 @@ export default function OutfitBuilderScreen() {
         </ScrollView>
       ) : (
         <GestureScrollView contentContainerStyle={styles.canvasContainer} showsVerticalScrollIndicator={false}>
-          <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={[styles.canvasStage, { backgroundColor: colors.background }]}>
+          <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={[styles.canvasStage, { width: canvasStageWidth, backgroundColor: colors.background }]}>
             <MannequinSilhouette color={colors.secondaryText} opacity={isDark ? 0.35 : 0.25} />
             {slots.shoes && <DraggableCanvasItem uri={slots.shoes.image_url} baseStyle={styles.canvasShoes} resetKey={slots.shoes.image_url} />}
             {slots.bottom && <DraggableCanvasItem uri={slots.bottom.image_url} baseStyle={styles.canvasBottom} resetKey={slots.bottom.image_url} />}
@@ -756,7 +756,7 @@ export default function OutfitBuilderScreen() {
                 columnWrapperStyle={styles.pickerRow}
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    style={[styles.pickerCard, { backgroundColor: colors.card }]}
+                    style={[styles.pickerCard, { width: pickerCardSize, backgroundColor: colors.card }]}
                     onPress={() => selectWardrobeItem(item)}
                     activeOpacity={0.8}
                   >
@@ -788,7 +788,7 @@ export default function OutfitBuilderScreen() {
               columnWrapperStyle={styles.pickerRow}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[styles.pickerCard, { backgroundColor: colors.card }]}
+                  style={[styles.pickerCard, { width: pickerCardSize, backgroundColor: colors.card }]}
                   onPress={() => selectProduct(item, pickerTab === 'wishlist' ? 'wishlist' : 'catalog')}
                   activeOpacity={0.8}
                   accessibilityRole="button"

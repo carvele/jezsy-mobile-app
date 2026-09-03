@@ -13,6 +13,7 @@ import type {
   PoseDetectionOptions,
   PoseDetectionResultBundle,
   RunningMode as RunningModeType,
+  Delegate as DelegateType,
 } from "react-native-mediapipe-posedetection";
 
 // react-native-vision-camera and react-native-mediapipe-posedetection are
@@ -41,16 +42,16 @@ try {
 export const NATIVE_VISION_AVAILABLE = VisionCamera != null && PoseDetection != null;
 
 export const Camera: ComponentType<any> = NATIVE_VISION_AVAILABLE
-  ? (VisionCamera as any).Camera
+  ? VisionCamera!.Camera
   : () => null;
 
 export const RunningMode = NATIVE_VISION_AVAILABLE
-  ? (PoseDetection as any).RunningMode
-  : ({ LIVE_STREAM: "LIVE_STREAM" } as any);
+  ? PoseDetection!.RunningMode
+  : ({ LIVE_STREAM: "LIVE_STREAM" } as unknown as typeof RunningModeType);
 
 export const Delegate = NATIVE_VISION_AVAILABLE
-  ? (PoseDetection as any).Delegate
-  : ({ CPU: "CPU", GPU: "GPU" } as any);
+  ? PoseDetection!.Delegate
+  : ({ CPU: "CPU", GPU: "GPU" } as unknown as typeof DelegateType);
 
 // Each pair below is one real implementation (delegates to the native hook)
 // and one stub (calls no native code, just returns an inert value). Which
@@ -60,7 +61,7 @@ export const Delegate = NATIVE_VISION_AVAILABLE
 // a missing native module still can't crash the call site.
 
 function useCameraDeviceReal(position: CameraPosition, filter?: DeviceFilter): CameraDevice | undefined {
-  return (VisionCamera as any).useCameraDevice(position, filter);
+  return VisionCamera!.useCameraDevice(position, filter);
 }
 function useCameraDeviceStub(): CameraDevice | undefined {
   return undefined;
@@ -68,7 +69,7 @@ function useCameraDeviceStub(): CameraDevice | undefined {
 export const useCameraDevice = NATIVE_VISION_AVAILABLE ? useCameraDeviceReal : useCameraDeviceStub;
 
 function useCameraPermissionReal(): { hasPermission: boolean; requestPermission: () => Promise<boolean> } {
-  return (VisionCamera as any).useCameraPermission();
+  return VisionCamera!.useCameraPermission();
 }
 function useCameraPermissionStub(): { hasPermission: boolean; requestPermission: () => Promise<boolean> } {
   return useMemo(() => ({ hasPermission: false, requestPermission: async () => false }), []);
@@ -76,7 +77,7 @@ function useCameraPermissionStub(): { hasPermission: boolean; requestPermission:
 export const useCameraPermission = NATIVE_VISION_AVAILABLE ? useCameraPermissionReal : useCameraPermissionStub;
 
 function useCameraFormatReal(device: CameraDevice | undefined, filters: FormatFilter[]): CameraDeviceFormat | undefined {
-  return (VisionCamera as any).useCameraFormat(device, filters);
+  return VisionCamera!.useCameraFormat(device, filters);
 }
 function useCameraFormatStub(): CameraDeviceFormat | undefined {
   return undefined;
@@ -89,7 +90,7 @@ function usePoseDetectionReal(
   model: string,
   options?: Partial<PoseDetectionOptions>,
 ): MediaPipeSolution {
-  return (PoseDetection as any).usePoseDetection(callbacks, runningMode, model, options);
+  return PoseDetection!.usePoseDetection(callbacks, runningMode, model, options);
 }
 function usePoseDetectionStub(): MediaPipeSolution {
   const cameraViewLayoutChangeHandler = useCallback(() => {}, []);

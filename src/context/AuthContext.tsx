@@ -11,6 +11,7 @@ import { Database } from "../types/database.types";
 import { savePushTokenToProfile } from "../utils/pushNotifications";
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSecureValue, setSecureValue, deleteSecureValue } from '../utils/secureStorage';
 
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
@@ -70,23 +71,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
       if (error) {
         // Network/server error — fall back to cached profile
-        const cached = await AsyncStorage.getItem(profileCacheKey(userId));
+        const cached = await getSecureValue(profileCacheKey(userId));
         const parsed = cached ? JSON.parse(cached) : null;
         const nextProfile = parsed?.id === userId ? parsed : null;
         setProfile(nextProfile);
         return nextProfile;
       }
       const nextProfile = data ?? null;
-      // Cache successful fetches for offline resilience
+      // Cache successful fetches for offline resilience. SecureStore (not
+      // AsyncStorage) because the profile carries email/name/measurements.
       if (nextProfile) {
-        await AsyncStorage.setItem(profileCacheKey(userId), JSON.stringify(nextProfile));
+        await setSecureValue(profileCacheKey(userId), JSON.stringify(nextProfile));
       }
       setProfile(nextProfile);
       return nextProfile;
     } catch {
       // Total failure — try cache before giving up
       try {
-        const cached = await AsyncStorage.getItem(profileCacheKey(userId));
+        const cached = await getSecureValue(profileCacheKey(userId));
         const parsed = cached ? JSON.parse(cached) : null;
         const nextProfile = parsed?.id === userId ? parsed : null;
         setProfile(nextProfile);
@@ -162,7 +164,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         let fallback = existing ?? null;
         if (!fallback) {
           try {
-            const cached = await AsyncStorage.getItem(profileCacheKey(authUser.id));
+            const cached = await getSecureValue(profileCacheKey(authUser.id));
             const parsed = cached ? JSON.parse(cached) : null;
             fallback = parsed?.id === authUser.id ? parsed : null;
           } catch { /* ignore */ }
@@ -174,7 +176,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const nextProfile = data ?? existing ?? null;
       // Cache successful profiles for offline resilience
       if (nextProfile) {
-        await AsyncStorage.setItem(profileCacheKey(authUser.id), JSON.stringify(nextProfile)).catch(() => {});
+        await setSecureValue(profileCacheKey(authUser.id), JSON.stringify(nextProfile)).catch(() => {});
       }
       setProfile(nextProfile);
       savePushTokenToProfile(authUser.id);
@@ -192,12 +194,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = useCallback(async () => {
     try {
-      // Profile caches are user-scoped; remove the legacy shared key as part of
-      // the migration so it can never be used by an older build after logout.
+      // Remove the legacy shared AsyncStorage key (pre-SecureStore migration)
+      // so it can never be used by an older build after logout.
       await AsyncStorage.multiRemove(['jezsy_cart', 'jezsy_profile_cache']);
+      if (user?.id) await deleteSecureValue(profileCacheKey(user.id));
     } catch {}
     await supabase.auth.signOut();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     // The local PIN feature was removed; drop the secrets it left behind on

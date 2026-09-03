@@ -63,10 +63,10 @@ export async function startReservationPayment(reservationId: string): Promise<St
 // about whether the money moved.
 export async function getPaymentStatus(paymentId: string): Promise<PaymentStatus | null> {
   const { data } = await supabase
-    .from('payments' as any)
+    .from('payments')
     .select('status')
     .eq('id', paymentId)
     .maybeSingle();
 
-  return ((data as any)?.status as PaymentStatus) ?? null;
+  return (data?.status as PaymentStatus) ?? null;
 }

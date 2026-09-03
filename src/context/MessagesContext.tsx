@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useAuth } from './AuthContext';
@@ -131,24 +132,16 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
           schema: 'public',
           table: 'messages',
         },
-        () => {
+        (payload: RealtimePostgresChangesPayload<Message>) => {
           refreshConversations();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-        },
-        (payload: any) => {
+
           // Marks a message Delivered the instant it lands while this app is
           // running and subscribed, regardless of whether the recipient has
           // that specific conversation open -- the same live signal the
           // admin dashboard uses on its side. A message sent while this app
           // is fully closed still gets caught by the conversation screen's
           // catch-up call to markDelivered on open.
+          if (payload.eventType !== 'INSERT') return;
           const msg = payload.new;
           if (msg && msg.sender_id && msg.sender_id !== session.user.id && !msg.delivered_at) {
             supabase
@@ -156,7 +149,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
               .update({ delivered_at: new Date().toISOString() })
               .eq('id', msg.id)
               .is('delivered_at', null)
-              .then(({ error }: any) => {
+              .then(({ error }) => {
                 if (error) console.error('Error marking message delivered:', error);
               });
           }
@@ -216,7 +209,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { data, error } = await supabase
         .from('messages')
-        .update({ text: trimmed, edited_at: new Date().toISOString() } as any)
+        .update({ text: trimmed, edited_at: new Date().toISOString() })
         .eq('id', messageId)
         .eq('sender_id', session.user.id)
         .select()
@@ -323,7 +316,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       setConversations(prev => [newConv, ...prev]);
       return newConv;
     } catch (error) {
-      if ((error as any).code === 'PGRST116') {
+      if ((error as { code?: string } | null)?.code === 'PGRST116') {
         const { data: newConv, error: createError } = await supabase
           .from('conversations')
           .insert({
