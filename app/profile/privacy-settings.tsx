@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Switch, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 
 export default function PrivacySettingsScreen() {
-  const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
   const colors = Colors.light;
@@ -18,27 +16,31 @@ export default function PrivacySettingsScreen() {
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      loadPrivacySettings();
-    }
-  }, [user]);
+    let mounted = true;
 
-  const loadPrivacySettings = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user!.id)
-        .single();
-      
-      if (error) throw error;
-      setIsShared(!!(data as any)?.is_wardrobe_shared);
-    } catch (err: any) {
-      console.log('Error loading privacy settings:', err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const loadPrivacySettings = async () => {
+      try {
+        if (!user) return;
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('is_wardrobe_shared')
+          .eq('id', user.id)
+          .single();
+        
+        if (error) throw error;
+        if (mounted && data) {
+          setIsShared(!!data.is_wardrobe_shared);
+        }
+      } catch (err: any) {
+        console.log('Error loading privacy settings:', err.message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    loadPrivacySettings();
+    return () => { mounted = false; };
+  }, [user]);
 
   const handleToggle = async (nextValue: boolean) => {
     if (!user) return;
@@ -49,7 +51,7 @@ export default function PrivacySettingsScreen() {
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ is_wardrobe_shared: nextValue } as any)
+        .update({ is_wardrobe_shared: nextValue })
         .eq('id', user.id);
 
       if (error) {
@@ -57,7 +59,7 @@ export default function PrivacySettingsScreen() {
       }
       
       showToast(nextValue ? 'Wardrobe shared with stylists' : 'Wardrobe is now private', 'success');
-    } catch (err: any) {
+    } catch {
       // Revert on error
       setIsShared(!nextValue);
       showToast('Failed to update privacy settings', 'error');
