@@ -458,6 +458,22 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // gltf.scene for why parenting earlier corrupted that measurement.
               garmentGroup.add(garmentModel);
 
+              // r128's SkinnedMesh never recomputes geometry.boundingSphere for the posed
+              // shape -- skinning is GPU-only in this version, so the CPU position attribute
+              // (what computeBoundingSphere reads) always reflects the bind pose, never the
+              // live retargeted pose. WebGLRenderer.projectObject() frustum-culls per object
+              // using that stale sphere transformed by the live (correct) matrixWorld, so a
+              // provably-correct transform can still be silently skipped for the draw call --
+              // confirmed live: the anchorDebugBone diagnostic logged delta=0.000 against
+              // targetPos on frames where the garment still failed to render. Same root cause
+              // this file's own author already worked around for occlusionMesh (frustumCulled
+              // = false, above) but never applied to the actual garment mesh. Recomputing the
+              // bounding sphere per frame would not help -- it would just reproduce the same
+              // wrong bind-pose sphere -- so disable culling on it entirely instead.
+              garmentModel.traverse((child) => {
+                if (child.isMesh) child.frustumCulled = false;
+              });
+
               // Extract skeleton bones for Phase 4B Skinning
               garmentModel.traverse((child) => {
                 if (child.isBone) {

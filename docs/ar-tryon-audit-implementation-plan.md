@@ -594,6 +594,79 @@ to match (14/14 passing).
   (time since GLB load, a specific `AR-STATUS`/`AR-DEBUG-FRAME` value,
   memory/GC pressure, WebView texture upload timing) rather than assuming
   it's anchor-related just because it showed up during anchor testing.
+
+  **ROOT-CAUSED AND FIXED 2026-09-04, later same session**, via a deep
+  research workflow (4 independent research angles + an adversarial
+  stress-test whose job was to try to refute the leading theory, all
+  converging on the same answer using primary-source Three.js r128 code
+  fetched live from GitHub, not memory): the garment `SkinnedMesh` was
+  being silently **frustum-culled**. In r128, `geometry.boundingSphere`
+  for a `GLTFLoader`-produced mesh is computed exactly once, from the raw,
+  un-skinned bind-pose vertex data, and is never updated — skinning in
+  r128 is GPU-only, so the CPU position attribute never reflects the
+  posed/retargeted shape, and even an explicit recompute would reproduce
+  the identical wrong sphere. That stale sphere IS correctly repositioned
+  every frame via the mesh's live `matrixWorld` (which is exactly why the
+  `AR-DEBUG-ANCHOR-BONE` diagnostic logged a perfect `delta=0.000` in both
+  visible and invisible runs — that only proves the transform is correct,
+  not that the culling test using a separate, stale bounding volume is).
+  `WebGLRenderer.projectObject()` gates the actual draw call on
+  `!frustumCulled || frustum.intersectsObject(mesh)`, so whenever that
+  wrongly-sized sphere happened to land outside the camera frustum, the
+  mesh was skipped entirely — zero error, zero crash, identical logged
+  numbers to a working frame. This also explains the anchor-sensitivity
+  that was the most confusing part: `Sphere.applyMatrix4` translates the
+  sphere's center exactly, so a different (or larger) anchor offset shifts
+  *where* that already-wrong sphere lands relative to the frustum boundary,
+  without changing how wrong it is — matching the observed pattern of
+  failure *rate* tracking anchor choice rather than being a deterministic
+  function of it.
+
+  Confirmed by two pieces of directly corroborating evidence already in
+  this codebase: (1) a comment on this exact GLB (~line 794, from an
+  earlier, unrelated investigation) already measured `Box3.setFromObject()`
+  — the same underlying defect family, both downstream of the same static
+  un-skinned position data — as ~17.5x wrong on this rig (0.0068 vs a
+  correct 0.119); (2) this file's own author had *already* discovered and
+  worked around this exact class of bug for a different object
+  (`occlusionMesh.frustumCulled = false`, still present in the file) but
+  that mesh is never added to the scene, and the fix was never applied to
+  the actual garment mesh.
+
+  Fixed with one line in `GarmentRenderer.tsx`, right after
+  `garmentGroup.add(garmentModel)`:
+  ```js
+  garmentModel.traverse((child) => {
+    if (child.isMesh) child.frustumCulled = false;
+  });
+  ```
+  Verified live on-device: the garment now renders reliably across
+  repeated attempts, with zero flicker/invisibility, confirmed via clean
+  logcat (no GLB load errors) across multiple frames.
+
+  Two lower-confidence, lower-priority candidates were investigated and
+  ranked below frustum culling (real risk classes, but neither has a
+  mechanistic tie to the anchor-choice correlation, the report's most
+  distinctive fact, and neither had direct on-device evidence this
+  session): an Android `SurfaceView` z-order compositing race between the
+  vision-camera preview and the transparent WebView (this file's author
+  already hit an analogous compositing bug on the web/`<video>` path, but
+  the fix there is explicitly web-only, leaving native unguarded — worth
+  revisiting if invisibility ever recurs after this fix), and an
+  unmemoized `htmlContent`/`source` WebView prop rebuilt on every parent
+  re-render (real code smell, worth a defensive `useMemo` regardless, but
+  calibration/fit data already flows through `postMessage` rather than
+  being interpolated into the HTML string, so it's unlikely to be firing
+  reloads today).
+
+  **New issue surfaced by this fix, not yet investigated:** now that the
+  garment reliably renders, a previously-masked problem is visible — the
+  sleeves stay in a T-pose (extended straight out to the sides) instead of
+  following the wearer's actual arm position. This is a skeletal-
+  retargeting issue, unrelated to frustum culling, and was presumably
+  present all along but never observed clearly because the garment was so
+  often invisible. Needs its own investigation into `skeletalRetargeter.ts`
+  / the `LeftArm`/`RightArm`/`ForeArm` bone-correction path.
 - **Scale/position instability while turning.** Observed live: over a
   ~22-second window while turning (coincided with the `TURN_TOO_FAR` amber
   tracking pill), `AR-STATUS` logged `scale` swinging between 0.62 and 1.57
