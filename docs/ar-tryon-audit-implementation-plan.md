@@ -636,6 +636,13 @@ still pass; smoke-tested live (fresh app restart, camera/detector init
 cleanly, no errors) but did not specifically re-reproduce the original
 out-of-frame trigger to visually confirm the fix on-device.
 
+**LIVE-VERIFIED 2026-09-03**: deliberately moved to the frame edge on the
+primary device until `l11.x = 1.053` (confirmed via log, genuinely past
+the `[0,1]` boundary -- the exact original trigger condition). Garment
+stayed correctly attached to the shoulder/torso, no misalignment -- the
+clean opposite of the original bug (which offset the garment to cover only
+about a third of the visible torso). **#28 is fully confirmed fixed.**
+
 ---
 
 ### 29. `<Camera>`'s `onError` has no user-visible recovery path — silent stuck black feed on a real OS-level camera restriction
@@ -683,6 +690,14 @@ the user tapping Retry. Type-checked and unit tests still pass;
 smoke-tested live (fresh restart, camera initialized cleanly, no errors)
 but did not specifically re-reproduce the original `camera-is-restricted`
 condition to confirm the banner/retry flow itself on-device.
+
+**LIVE-VERIFIED 2026-09-03**: reproduced the actual OS-level restriction
+on the primary device via a screen-off/on cycle during Live Camera AR.
+The exact banner appeared -- "Camera unavailable. This can happen after
+switching apps -- try again." with a Retry button. Tapped Retry: camera
+feed recovered fully (live video again), banner cleared, tracking pill
+returned to normal "AI Body Tracking Active". **#29 is fully confirmed
+fixed**, both the detection and the recovery path.
 
 ---
 
@@ -766,6 +781,56 @@ function is a larger API change for a lower-value, superseded path. Type-checked
 test suite unaffected, smoke-tested live for crashes/regressions only -- the
 actual yaw-saturation behavior itself was NOT re-verified on-device (needs a
 live yaw sweep past ~49°, deferred on low battery).
+
+**VERIFICATION ATTEMPTED 2026-09-03, INCONCLUSIVE -- not a pass, not a
+regression.** Attempted a live yaw sweep on the primary device (Infinix
+X6880, solo). Readings across progressively deeper turns:
+
+| Pose | `cameraDistanceM` | `exactScale` |
+|---|---|---|
+| Frontal baseline | 1.442 | 0.89 |
+| Turn 1 | 1.812 | 0.51 |
+| Turn 2 | 1.964 | 0.65 |
+| Turn 3 (near-profile) | 2.225 | 0.43 |
+
+No NaN, no blow-up, no discontinuity across the sequence -- the numbers stayed
+bounded and numerically valid throughout. But this does NOT confirm the
+plateau: every turn was a compound movement (bend + twist + roll together,
+confirmed via `AR-DEBUG-TORSO` logging pitch and roll of similar or larger
+magnitude than yaw on each sample), not an isolated rotation about the
+vertical axis, and the logged Euler yaw itself becomes unreliable near
+profile (a pre-existing gimbal-lock-style decomposition ambiguity, not new --
+one sample logged `yaw=-8.2°` on a visually ~90° profile turn). Without a
+trustworthy independent yaw measurement to correlate against, the monotonic
+distance/scale trend cannot be attributed to a working plateau vs. a
+still-shrinking correction -- both would look similar in this data. Solo
+testing cannot isolate a pure-yaw pose (no mirror, no way to check the phone
+while precisely holding an angle).
+
+**Status: `#17` verification deferred, not failed.** `ar-system-contract.md`
+already states this plainly: "Live plateau behaviour is implemented but not
+yet device-verified." That remains accurate. Do not treat the bounded
+numbers above as either a pass or a regression -- they are consistent with
+both outcomes.
+
+**Separate observation, not conflated with #17**: at the near-profile pose,
+the tracking pill showed "AI Body Tracking Active" (cyan / `GOOD_FIT`), not
+the amber `TURN_TOO_FAR` state, despite the visual angle clearly exceeding
+`isFacingForward`'s 25° threshold. `poseConstructor.ts`'s own yaw
+calculation (used for `trackingState`) is a separate code path from
+`poseNormalizer.ts`'s canonical torso yaw (used for the `AR-DEBUG-TORSO` log
+and, via a different Euler extraction, for `yawCosCorrection` itself) -- the
+two can disagree. Worth investigating as its own item in a future session,
+not evidence against the geometry foundation or grounds to reopen anything
+frozen at M1.
+
+**Retest procedure for a real pass/fail** (per `ar-system-contract.md`
+section 3's stated need): same physical distance throughout, wearer stands
+upright, rotates only about the vertical axis (no bend, no lean), a second
+person captures the screen and reads `cameraDistanceM`/`exactScale` at each
+stable hold -- 0°, ~30°, ~50°, ~70° -- while noting the actual `yawCosCorrection`
+value if instrumented for it. That isolates the one variable this fix
+depends on, which today's solo compound-movement test could not.
 
 ---
 

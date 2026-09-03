@@ -106,6 +106,31 @@ Tasks:
 Exit: contract doc merged; #28/#29/#17 recorded as pass or as a demonstrated
 regression; Step H status honest.
 
+**Phase 0 status as of 2026-09-03**: contract doc done. #28 and #29 both
+live-verified fixed (see the audit doc for exact evidence). #17 attempted
+and recorded as **inconclusive, not failed** -- readings stayed bounded
+across a compound-movement turn sequence, but the test couldn't isolate
+pure yaw and the Euler-angle yaw readout is unreliable near profile, so
+the specific plateau claim is unconfirmed either way. Retest needs a
+second person or a mirror; see the audit doc's `#17` entry for the exact
+procedure. Step H remains open (no second device). The two no-device
+items (admin-dashboard push, Blazer re-ingestion) are still outstanding
+and outside this repo.
+
+**Unplanned but necessary detour this session**: the app was fundamentally
+broken on-device before any of the above could even be attempted --
+unrelated to this session's own AR work. A pre-existing, uncommitted local
+edit to `package.json` (bumping `react-native-reanimated` 3.19.5 -> 4.5.1,
+adding `react-native-worklets`, and separately dropping the `@sentry/react-native`
+dependency entirely) had never been followed by a native rebuild, so the
+installed APK's native code didn't match the JS bundle -- a silent hang
+with zero console output. Fixed with `expo run:android` (rebuilds native
+against the current `package.json`) followed by `npm install` (reconciles
+`node_modules`, which pruned the now-undeclared Sentry package cleanly).
+**The native build now genuinely depends on that reanimated 4.5.1 state.**
+If a future session sees `package.json` reverted to 3.19.5 without a
+matching rebuild, expect the same hang, for the same reason, in reverse.
+
 ## Phase 1 — Garment reality validation (evidence before design)
 
 Goal: find out where the frozen geometry stops looking like clothing.
