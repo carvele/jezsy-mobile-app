@@ -557,18 +557,43 @@ to match (14/14 passing).
   `GarmentRenderer.tsx` is clean) rather than leave a misleading number in
   the codebase's own debug output.
 
-  **Correct next step, not yet done:** the observed low-placement (tens of
-  centimeters, per screenshots — not the diagnostic's bogus 1.6m) needs a
-  diagnostic that logs the actual **Spine2 bone's** live world position
-  (resolve `boneMap['Spine2']` → the GLB bone name → `skeletonBones[name].
-  getWorldPosition()`, not `garmentModel`'s), compared against
-  `garmentGroup.position`/`targetPos`. Spine2 is never retargeted per-frame
-  (only the 4 arm bones are — "Spine at bind" per the system contract), so
-  it should stay at its exact bind-pose offset from the mesh origin; if that
-  comparison also comes back near-zero, the anchor math itself is provably
-  fine and the "sits low" appearance is really an anatomical-anchor-choice
-  issue (Spine2/chest vs. true shoulder line) or a garment-proportions
-  issue, not a code bug — a materially different, and cheaper, fix.
+  **DONE 2026-09-04, same session, later:** added the corrected diagnostic
+  — `anchorDebugBone` resolved once at GLB load time (via
+  `resolveBindBoneName('Spine2')`, the same resolution logic the arm-bone
+  bind-correction code already uses) and logged per-frame as `[AR-DEBUG-
+  ANCHOR-BONE]`, comparing the real Spine2 bone's live `getWorldPosition()`
+  against `garmentGroup.position`/`targetPos`. Confirmed live, many frames,
+  stable frontal pose: **delta is exactly `0.000` on every axis, every
+  frame.** The anchor math is provably correct — Spine2 lands precisely
+  where the wearer's tracked shoulder point is. This diagnostic is real and
+  not misleading (unlike the earlier one); left in place in
+  `GarmentRenderer.tsx` (`git diff` shows it as the only change there) since
+  the next open question below still needs it.
+
+  So "sits low" is confirmed to be exactly what it looked like: an
+  anatomical-anchor-choice issue (Spine2/chest height, not the true shoulder
+  line, is what's pinned to the wearer's shoulder), not a code bug. Retried
+  the shoulder-midpoint anchor (`y=1.4367`) a second time now that the math
+  is proven sound — expected it to work this time. **It didn't: the garment
+  rendered nothing, a second time, under clean stable-tracking conditions.**
+  Reverted back to the Spine2 baseline (`app/ar-tryon/[id].tsx` diff is
+  clean again).
+
+  **New finding, not yet explained:** immediately after reverting to the
+  Spine2 baseline — the exact config that rendered visibly earlier this
+  session — the garment failed to render *again*, confirmed via a brightened
+  crop of the screenshot (genuinely nothing there, not just hard to see in
+  low light) despite `[AR-DEBUG-ANCHOR-BONE]` logging the expected
+  `delta=0.000` at that exact moment. Same numbers, sometimes visible,
+  sometimes not. Not a GPU/WebView process crash this time (checked logcat).
+  This looks like a real, intermittent rendering-reliability issue in the
+  live-camera WebView pipeline, independent of calibration data — observed
+  3 times in one session (twice with the shoulder anchor, once with the
+  known-good Spine2 baseline). Needs a fresh investigation, not more guessing
+  at 2am: worth checking whether it correlates with anything observable
+  (time since GLB load, a specific `AR-STATUS`/`AR-DEBUG-FRAME` value,
+  memory/GC pressure, WebView texture upload timing) rather than assuming
+  it's anchor-related just because it showed up during anchor testing.
 - **Scale/position instability while turning.** Observed live: over a
   ~22-second window while turning (coincided with the `TURN_TOO_FAR` amber
   tracking pill), `AR-STATUS` logged `scale` swinging between 0.62 and 1.57

@@ -163,6 +163,12 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let skeletonBones = {};
           let boneCorrection = {};
           let debugFrameCount = 0;
+          // TEMP DEBUG: resolved once at load time (see resolveBindBoneName below), used
+          // per-frame to log the actual anchor bone's live world position vs. targetPos --
+          // NOT the same as garmentModel's own coordinate origin (a prior diagnostic here
+          // measured that by mistake and reported a misleading ~1.6m "delta" that wasn't a
+          // real bug). Remove once the vertical-anchor-placement investigation concludes.
+          let anchorDebugBone = null;
           // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): the native side
           // counts calls INTO the transport (see transportRateCountRef in [id].tsx); this
           // counts UPDATE_TRANSFORM messages actually PROCESSED here, on the other side of
@@ -497,6 +503,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 if (boneMapForBind && boneMapForBind[canonical]) return boneMapForBind[canonical];
                 return 'mixamorig' + canonical;
               };
+              // TEMP DEBUG: resolve the actual anchor bone (Spine2, the DB's current
+              // anatomicalAnchorOffset source) once, for per-frame world-position logging.
+              anchorDebugBone = skeletonBones[resolveBindBoneName('Spine2')] || null;
+              console.log('[AR-DEBUG-ANCHOR-SETUP] anchorDebugBone resolved=' + (anchorDebugBone ? anchorDebugBone.name : 'NOT FOUND'));
               // Product of every bind rotation from garmentGroup down to and including this
               // node -- i.e. the node bind orientation in the same space the retargeter
               // deltas are expressed in. Includes non-Bone ancestors (see above).
@@ -878,6 +888,21 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           + ' groupScale=' + garmentGroup.scale.x.toFixed(3)
                           + ' groupPos=(' + garmentGroup.position.x.toFixed(2) + ',' + garmentGroup.position.y.toFixed(2) + ',' + garmentGroup.position.z.toFixed(2) + ')'
                           + ' bones=' + Object.keys(skeletonBones).length);
+                        // TEMP DEBUG: the REAL anchor-bone check (corrected version -- the
+                        // earlier attempt measured garmentModel's own coordinate origin, not
+                        // the anchor bone itself, and reported a misleading number). Spine2
+                        // is never retargeted per-frame (only the 4 arm bones are), so it
+                        // should sit at its exact bind-pose position; this should land very
+                        // close to targetPos/groupPos if the anchor math is correct.
+                        if (anchorDebugBone) {
+                          const anchorBoneWorldPos = new THREE.Vector3();
+                          anchorDebugBone.getWorldPosition(anchorBoneWorldPos);
+                          const anchorDelta = anchorBoneWorldPos.clone().sub(garmentGroup.position);
+                          console.log('[AR-DEBUG-ANCHOR-BONE] name=' + anchorDebugBone.name
+                            + ' worldPos=(' + anchorBoneWorldPos.x.toFixed(3) + ',' + anchorBoneWorldPos.y.toFixed(3) + ',' + anchorBoneWorldPos.z.toFixed(3) + ')'
+                            + ' targetPos=(' + garmentGroup.position.x.toFixed(3) + ',' + garmentGroup.position.y.toFixed(3) + ',' + garmentGroup.position.z.toFixed(3) + ')'
+                            + ' delta=(' + anchorDelta.x.toFixed(3) + ',' + anchorDelta.y.toFixed(3) + ',' + anchorDelta.z.toFixed(3) + ')');
+                        }
                       }
                     } else if (shouldLog) {
                       console.log('[AR-DEBUG-FRAME] SKIPPED: targetPos/targetL/targetR unprojection failed (likely NaN camera/vector math)');
