@@ -23,10 +23,25 @@ describe('checkCalibrationPlausibility', () => {
     expect(result.plausible).toBe(true);
   });
 
-  it('rejects Tailored Blazer pre-fix (anchor_offset.y = 1.304, the actual live-broken value)', () => {
+  it('accepts Tailored Blazer post-fix (anchor_offset.y = 1.304 -- a legitimate feet-origin anchor, not the bug; see MAX_ANCHOR_Y_M correction note)', () => {
+    // y=1.304 was originally (wrongly) treated as the smoking gun for this product's
+    // live-broken render. The real defect was a mesh/skeleton unit mismatch in the source
+    // GLB (stale inverseBindMatrices from binding before the Armature's scale was set),
+    // fixed by re-binding and re-exporting. The admin dashboard's ingestion pipeline
+    // independently recomputed this SAME anchor value afterward -- it's correct for this
+    // full-body-rigged asset's feet-level origin convention, not a symptom of the bug.
     const result = checkCalibrationPlausibility({
       restPoseMetricWidth: 0.35715197350238126,
       anatomicalAnchorOffset: { x: -0.000005645752991085802, y: 1.3043573201828005, z: 0.001261271625627093 },
+    });
+    expect(result.plausible).toBe(true);
+    expect(result.reasons).toEqual([]);
+  });
+
+  it('rejects an anchor_offset.y that is still implausible under the raised ceiling', () => {
+    const result = checkCalibrationPlausibility({
+      restPoseMetricWidth: 0.4,
+      anatomicalAnchorOffset: { x: 0, y: 3.5, z: 0 },
     });
     expect(result.plausible).toBe(false);
     expect(result.reasons.length).toBe(1);

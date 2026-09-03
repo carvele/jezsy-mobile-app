@@ -489,6 +489,96 @@ demo-rig fallback now engages for this product instead of rendering the
 known-broken 1.3m offset. Still needs real re-calibration in admin-dashboard
 before it can go back to `AR_READY`.
 
+**ROOT CAUSE FOUND AND FIXED 2026-09-04** — the diagnosis above was wrong in
+one important way: `anchor_offset.y ≈ 1.3` was never actually the bug. It's
+a legitimate value for this specific GLB, which (unlike Black tee/Cotton
+T-Shirt) is a full-body Mixamo-rigged asset with its origin at the
+character's feet, not a garment-centered mesh — a shoulder/chest-height
+anchor genuinely sits ~1.3-1.4m up in that convention.
+
+The real defect: measured directly via an offline Node script
+(`three.js` + `GLTFLoader`, reading skeleton bone world positions in bind
+pose rather than trusting `THREE.Box3.setFromObject()`, which is known
+unreliable for a `SkinnedMesh`) that the GLB's own rest-pose bounding box
+was ~0.0097m across — literally 100x too small, matching the Armature
+node's `0.01` glTF scale exactly. Root-caused to a Blender authoring bug:
+the shirt mesh was skin-bound to the Armature *before* the Armature's
+object-level scale was set to `0.01`, so the exported `inverseBindMatrices`
+were stale relative to the final scaled hierarchy — a classic Blender
+apply-scale-after-bind footgun, confirmed by inspecting the raw glTF node
+graph directly (`Ch21_Shirt` parented under `Armature`, `Armature.scale =
+[0.01,0.01,0.01]`) rather than trusting Blender's own panel readouts alone.
+
+Fixed by re-binding in Blender (`Ctrl+A → Apply Scale` on the Armature,
+which bakes the `0.01` into the actual bone rest data and forces a fresh,
+consistent bind on re-export) and re-exporting. Verified directly against
+the new file's raw vertex/skin data (not just Blender's UI): a manual
+posed-skinning test — rotating `LeftArm` 45° off bind pose and computing
+deformed vertex positions the same way `SkinnedMesh` does internally —
+produced a real ~0.92m bounding size instead of the old ~1cm collapse.
+
+Re-uploaded (`1788455887355_Long-sleeve1.glb`); the admin dashboard's own
+ingestion pipeline (`garmentIngestor.ts`'s `buildMetadataFromRigged`, which
+deliberately prefers `LeftArm`/`RightArm` bone distance over
+`LeftShoulder`/`RightShoulder` for width — clavicle bones sit near the
+spine centerline on this rig, per that function's own comment) independently
+recomputed `rest_pose_metric_width = 0.35715`, `anchor_offset = {x: -6e-6,
+y: 1.30436, z: 0.00126}` (Spine2-based), `anchor_confidence: HIGH`, and set
+`ingestion_status: AR_READY` on its own. Confirmed live on-device: the
+garment now renders at a stable, correct scale (no more invisible/giant/
+diagonal artifacts) with real content.
+
+This also meant [garmentCalibrationGuard.ts](../src/utils/garmentCalibrationGuard.ts)'s
+plausibility bound was wrong — it had literally cited this product's
+`anchor_offset.y = 1.304` as the smoking-gun example justifying its `0.6m`
+ceiling. Corrected the comment and raised `MAX_ANCHOR_Y_M` to `1.6` to admit
+legitimate full-body-rig anchors; `garmentCalibrationGuard.test.ts` updated
+to match (14/14 passing).
+
+**Still open, not resolved 2026-09-04:**
+- **Vertical anchor placement is a bit low** (garment sits nearer the waist
+  than the shoulders) using the DB's real Spine2-based anchor. Tried
+  swapping to a `LeftShoulder`/`RightShoulder` midpoint (`y=1.4367`,
+  0.132m higher) as a local-only test — this made it *worse*, not better
+  (garment disappeared entirely). Local experiment reverted; DB still has
+  the correct, admin-computed Spine2 anchor.
+
+  Added a diagnostic in `GarmentRenderer.tsx` to log `garmentModel`'s world
+  position vs. `garmentGroup.position` (the wearer's tracked shoulder
+  point), expecting them to coincide if the anchor cancellation is correct.
+  It reported a ~1.6m delta — but this diagnostic itself was flawed and
+  the number is not evidence of a real bug: `garmentModel.getWorldPosition()`
+  measures the mesh's native coordinate-space origin (wherever the GLB's own
+  export origin happens to sit), not the actual anchor bone (Spine2). The
+  anchor math (`groupPos + groupScale·groupQuat·(modelLocalPos +
+  anchorOffset)`, where `modelLocalPos = -anchorOffset`) cancels to exactly
+  `groupPos` by construction and is self-consistently correct regardless of
+  which bone is chosen as anchor. Reverted the diagnostic (`git diff` on
+  `GarmentRenderer.tsx` is clean) rather than leave a misleading number in
+  the codebase's own debug output.
+
+  **Correct next step, not yet done:** the observed low-placement (tens of
+  centimeters, per screenshots — not the diagnostic's bogus 1.6m) needs a
+  diagnostic that logs the actual **Spine2 bone's** live world position
+  (resolve `boneMap['Spine2']` → the GLB bone name → `skeletonBones[name].
+  getWorldPosition()`, not `garmentModel`'s), compared against
+  `garmentGroup.position`/`targetPos`. Spine2 is never retargeted per-frame
+  (only the 4 arm bones are — "Spine at bind" per the system contract), so
+  it should stay at its exact bind-pose offset from the mesh origin; if that
+  comparison also comes back near-zero, the anchor math itself is provably
+  fine and the "sits low" appearance is really an anatomical-anchor-choice
+  issue (Spine2/chest vs. true shoulder line) or a garment-proportions
+  issue, not a code bug — a materially different, and cheaper, fix.
+- **Scale/position instability while turning.** Observed live: over a
+  ~22-second window while turning (coincided with the `TURN_TOO_FAR` amber
+  tracking pill), `AR-STATUS` logged `scale` swinging between 0.62 and 1.57
+  and `groupPos.y` swinging by nearly 2 meters frame-to-frame, producing a
+  visible "flash/splash" effect. Likely a pre-existing characteristic of the
+  scale computation having no smoothing/damping when the landmark-based
+  width estimate gets noisy during non-frontal poses — probably affects
+  every garment when turning, not something specific to the Blazer or
+  tonight's fix. Not yet investigated further.
+
 ### 26. Cotton T-Shirt: broken `rest_pose_metric_width`, confirmed by A/B test against a sibling product sharing the identical GLB
 
 **`garment_metadata.rest_pose_metric_width`, product id `b0000009-0000-4000-8000-000000000002`** — same class of bug as #25, different field, different product

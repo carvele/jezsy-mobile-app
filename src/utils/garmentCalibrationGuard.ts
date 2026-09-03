@@ -5,11 +5,20 @@ import type { GarmentMetadata } from '../types/garment';
  * check on garment calibration data, independent of the DB's own ingestion_status.
  *
  * Why this exists: ingestion_status === 'AR_READY' is not proof of calibration (see
- * ar-system-contract.md section 9) -- the Tailored Blazer sat AR_READY with
- * anatomicalAnchorOffset.y = 1.304 (should be ~0.1) and rendered visibly broken live
- * before anyone caught it. This is defense in depth: even if a future ingestion or a
- * manual DB edit stamps AR_READY on bad data again, an obviously-wrong value should not
+ * ar-system-contract.md section 9) -- the Tailored Blazer sat AR_READY with a broken
+ * render before anyone caught it. This is defense in depth: even if a future ingestion or
+ * a manual DB edit stamps AR_READY on bad data again, an obviously-wrong value should not
  * reach the renderer silently.
+ *
+ * CORRECTION (2026-09-04): anatomicalAnchorOffset.y = 1.304 was originally treated here as
+ * the smoking gun for that Blazer bug. It wasn't -- the real defect was a mesh/skeleton
+ * unit mismatch baked into the source GLB (Armature object scale 0.01 applied after the
+ * mesh was already skin-bound, producing stale inverseBindMatrices; fixed by re-binding
+ * and re-exporting). Once fixed, the admin dashboard's own ingestion pipeline independently
+ * recomputed anatomicalAnchorOffset.y = 1.3044 -- the SAME magnitude -- because this GLB is
+ * a full-body-rigged asset (Mixamo skeleton, origin at the feet), unlike Black tee/Cotton
+ * T-Shirt's garment-centered-origin convention. A Spine2-based anchor legitimately sits
+ * ~1.3m up for that convention. MAX_ANCHOR_Y_M is raised to admit it.
  *
  * What this deliberately does NOT catch: subtly wrong values within a plausible range.
  * The original Cotton T-Shirt bug (restPoseMetricWidth = 0.22 for a GLB that measures
@@ -29,9 +38,11 @@ const MAX_METRIC_WIDTH_M = 1.0;
 // deliberately generous relative to that noise floor.
 const MAX_ANCHOR_LATERAL_M = 0.05;
 // The demo-rig fallback itself uses y: 0.5 (see buildFallbackMetadata in
-// app/ar-tryon/[id].tsx) -- the real ceiling must sit above that with headroom, while
-// still rejecting the Blazer's 1.304 by a wide margin.
-const MAX_ANCHOR_Y_M = 0.6;
+// app/ar-tryon/[id].tsx). Raised to admit full-body-rigged assets whose anchor is
+// measured from a feet-level origin (confirmed legitimate: Tailored Blazer's Spine2
+// anchor at y=1.3044, see the correction note above) while still catching a genuinely
+// runaway value.
+const MAX_ANCHOR_Y_M = 1.6;
 
 export interface CalibrationPlausibilityResult {
   plausible: boolean;

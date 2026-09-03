@@ -39,6 +39,14 @@ source at `e35479d` (verified claim by claim, not taken on faith) found:
 - Only one GLB has verified-sane calibration (Black tee; Cotton T-Shirt now
   copies it). Tailored Blazer is gated at `NEEDS_CALIBRATION`. The garment
   library is too thin to validate deformation across constructions.
+  **UPDATE 2026-09-04**: Tailored Blazer's underlying GLB bug (a Blender
+  skin-bind-before-scale-apply defect, not a calibration-number problem --
+  see audit doc finding #25's 2026-09-04 update) is fixed and re-ingested;
+  `ingestion_status` is genuinely `AR_READY` now with admin-pipeline-computed
+  values, and the garment renders at correct scale on-device. Not yet a
+  second fully-validated construction for Phase 1, though -- vertical anchor
+  placement is still a bit low and needs one more fix before this counts as
+  "properly calibrated" for the Phase 1 exit criteria below.
 
 ## Milestones
 
@@ -116,8 +124,9 @@ both past the ~49° saturation threshold, with `exactScale` staying bounded
 laboratory-precision; see the audit doc's `#17` entry for the exact
 numbers and what a denser instrumented sweep would still add. Step H
 remains open (no second device -- techniques don't fix a hardware gap).
-The two no-device items (admin-dashboard push, Blazer re-ingestion) are
-still outstanding and outside this repo.
+The admin-dashboard push is still outstanding and outside this repo.
+Blazer re-ingestion is **done** (2026-09-04) -- see the update above and
+audit doc finding #25.
 
 **Phase 0 is now substantively closed** on everything reachable from this
 repo and this hardware.
