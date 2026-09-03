@@ -305,6 +305,16 @@ export default function ARTryOnScreen() {
   const format = useCameraFormat(device, [{ videoResolution: { width: 1280, height: 720 } }]);
 
   const [isTrackerActive, setIsTrackerActive] = useState(false);
+  // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): isTrackerActive only
+  // ever answers "is the pill visible at all" -- it already correctly reflects
+  // GOOD_FIT/TURN_TOO_FAR -> true and TRACKING_LOST -> false via the throttled setter in
+  // handlePoseResults below, contrary to an earlier (corrected) claim in the roadmap that
+  // it "latches once and never updates". The real gap is narrower: whenever the pill IS
+  // visible, its TEXT never distinguished GOOD_FIT from TURN_TOO_FAR -- both showed the
+  // identical "AI Body Tracking Active" label, so a wearer who had turned past the
+  // confident-facing cone (see ar-system-contract.md section 3) got no indication why the
+  // garment dimmed. This state carries the real trackingState so the pill can say so.
+  const [trackingState, setTrackingState] = useState<import('@/src/utils/trackingState').TrackingState | null>(null);
   const [arLoadError, setArLoadError] = useState<string | null>(null);
   // Fix for #29 in the AR audit plan: <Camera>'s onError used to only console.warn,
   // leaving a permanently black feed with the "AI Body Tracking Active" pill still
@@ -627,7 +637,7 @@ export default function ARTryOnScreen() {
       if (now - lastStateUpdateRef.current > 200) {
         lastStateUpdateRef.current = now;
         setIsTrackerActive(isTracking);
-
+        setTrackingState(pose.trackingState);
       }
     },
     [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity, garmentMetadata, product, sizingMeasurements, recommendedSize]
@@ -683,6 +693,7 @@ export default function ARTryOnScreen() {
           rotateDeg.value = withTiming(0, { duration: 250 });
           opacity.value = withTiming(0.85, { duration: 200 });
           setIsTrackerActive(false);
+          setTrackingState('TRACKING_LOST');
         }
         return;
       }
@@ -1149,6 +1160,7 @@ export default function ARTryOnScreen() {
                 setCameraError(e?.message || 'Camera error');
                 hasTrackedRef.current = false;
                 setIsTrackerActive(false);
+                setTrackingState(null);
               }}
             />
           ) : (
@@ -1194,8 +1206,10 @@ export default function ARTryOnScreen() {
             {/* AI Tracking Status Pill */}
             {isTrackerActive && (
               <View style={styles.trackingPill}>
-                <View style={[styles.statusDot, { backgroundColor: '#00E5FF' }]} />
-                <Text style={styles.trackingPillText}>AI Body Tracking Active</Text>
+                <View style={[styles.statusDot, { backgroundColor: trackingState === 'TURN_TOO_FAR' ? '#FFB800' : '#00E5FF' }]} />
+                <Text style={styles.trackingPillText}>
+                  {trackingState === 'TURN_TOO_FAR' ? 'Turn to Face the Camera' : 'AI Body Tracking Active'}
+                </Text>
               </View>
             )}
 
