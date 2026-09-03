@@ -19,8 +19,7 @@ type Profile = Database['public']['Tables']['profiles']['Row'];
 
 export default function ProfileScreen() {
   const { showToast } = useToast();
-  const { user, signOut } = useAuth();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { user, profile, signOut } = useAuth();
   const [showTour, setShowTour] = useState(false);
   const router = useRouter();
   const { wishlistIds } = useWishlist();
@@ -40,52 +39,44 @@ export default function ProfileScreen() {
   const colors = Colors[theme];
 
   useEffect(() => {
-    if (user) {
-      const fetchProfileAndReservations = async () => {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
+    if (!user?.id) return;
+    let isMounted = true;
 
-        if (!error && data) {
-          setProfile(data);
-        }
+    const fetchReservations = async () => {
+      const { data: resData } = await supabase
+        .from('reservations')
+        .select('status')
+        .eq('customer_id', user.id);
 
-        const { data: resData } = await supabase
-          .from('reservations')
-          .select('status')
-          .eq('customer_id', user.id);
+      if (resData && isMounted) {
+        let pending = 0;
+        let toPay = 0;
+        let preparing = 0;
+        let ready = 0;
 
-        if (resData) {
-          let pending = 0;
-          let toPay = 0;
-          let preparing = 0;
-          let ready = 0;
+        // Shared with reservations.tsx and the admin dashboard so a status
+        // only ever needs to be classified in one place.
+        resData.forEach((r: any) => {
+          const bucket = statusBucket(r.status);
+          if (bucket === 'pending') pending++;
+          else if (bucket === 'toPay') toPay++;
+          else if (bucket === 'preparing') preparing++;
+          else if (bucket === 'ready') ready++;
+        });
 
-          // Shared with reservations.tsx and the admin dashboard so a status
-          // only ever needs to be classified in one place.
-          resData.forEach((r: any) => {
-            const bucket = statusBucket(r.status);
-            if (bucket === 'pending') pending++;
-            else if (bucket === 'toPay') toPay++;
-            else if (bucket === 'preparing') preparing++;
-            else if (bucket === 'ready') ready++;
-          });
+        setCounts({
+          pending,
+          toPay,
+          preparing,
+          ready,
+          activeTotal: pending + toPay + preparing + ready,
+        });
+      }
+    };
 
-          setCounts({
-            pending,
-            toPay,
-            preparing,
-            ready,
-            activeTotal: pending + toPay + preparing + ready,
-          });
-        }
-      };
-
-      fetchProfileAndReservations();
-    }
-  }, [user]);
+    fetchReservations();
+    return () => { isMounted = false; };
+  }, [user?.id]);
 
   const handleSignOut = async () => {
     try {

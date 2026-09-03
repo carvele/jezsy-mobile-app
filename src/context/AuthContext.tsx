@@ -4,6 +4,8 @@ import React, {
     useCallback,
     useContext,
     useEffect,
+    useMemo,
+    useRef,
     useState,
 } from "react";
 import { supabase } from "../lib/supabase";
@@ -51,6 +53,8 @@ const PROFILE_CACHE_PREFIX = 'jezsy_profile_cache:';
 const profileCacheKey = (userId: string) => `${PROFILE_CACHE_PREFIX}${userId}`;
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const isSyncingRef = useRef<string | null>(null);
+  const syncedUsersRef = useRef<Set<string>>(new Set());
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,6 +113,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return null;
     }
 
+    // Prevent re-entrant or duplicate sync loops for the same user
+    if (isSyncingRef.current === authUser.id) {
+      return null;
+    }
+    isSyncingRef.current = authUser.id;
+
     // The routing gate in app/_layout.tsx holds off on redirecting while
     // isProfileLoading is true. This flag has to be raised here, before the
     // first await: onAuthStateChange calls this without awaiting it and then
@@ -129,10 +139,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .eq("id", authUser.id)
         .maybeSingle();
 
-      if (existing?.first_name) {
-        setProfile(existing);
-        savePushTokenToProfile(authUser.id);
-        return existing;
+      if (existing) {
+        // If profile already has first_name or auth metadata has no name to seed anyway, do not repeatedly upsert
+        const meta = authUser.user_metadata ?? {};
+        const fName = ((meta.full_name ?? meta.name ?? "").toString().trim().split(/\s+/)[0] ?? "");
+        if (existing.first_name || !fName) {
+          setProfile(existing);
+          syncedUsersRef.current.add(authUser.id);
+          savePushTokenToProfile(authUser.id);
+          return existing;
+        }
       }
 
       const metadata = authUser.user_metadata ?? {};
@@ -179,9 +195,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         await setSecureValue(profileCacheKey(authUser.id), JSON.stringify(nextProfile)).catch(() => {});
       }
       setProfile(nextProfile);
+      syncedUsersRef.current.add(authUser.id);
       savePushTokenToProfile(authUser.id);
       return nextProfile;
     } finally {
+      isSyncingRef.current = null;
       // Must run on every path including a thrown query: leaving this true
       // would strand the app on the pre-bootstrap placeholder forever.
       setIsProfileLoading(false);
@@ -194,6 +212,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = useCallback(async () => {
     try {
+      syncedUsersRef.current.clear();
       // Remove the legacy shared AsyncStorage key (pre-SecureStore migration)
       // so it can never be used by an older build after logout.
       await AsyncStorage.multiRemove(['jezsy_cart', 'jezsy_profile_cache']);
@@ -214,7 +233,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          await syncProfile(session.user);
+          // If we already synced this user once and have a profile, do not re-run sync on routine background auth events
+          if (!syncedUsersRef.current.has(session.user.id)) {
+            await syncProfile(session.user);
+          }
         }
       })
       .finally(() => {
@@ -245,21 +267,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [signOut, syncProfile]);
 
 
+  const contextValue = useMemo(() => ({
+    user,
+    session,
+    isLoading,
+    isProfileLoading,
+    profile,
+    refreshProfile,
+    signOut,
+    isPasswordRecovery,
+    beginPasswordRecovery,
+    endPasswordRecovery,
+  }), [
+    user,
+    session,
+    isLoading,
+    isProfileLoading,
+    profile,
+    refreshProfile,
+    signOut,
+    isPasswordRecovery,
+    beginPasswordRecovery,
+    endPasswordRecovery,
+  ]);
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        isLoading,
-        isProfileLoading,
-        profile,
-        refreshProfile,
-        signOut,
-        isPasswordRecovery,
-        beginPasswordRecovery,
-        endPasswordRecovery,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
