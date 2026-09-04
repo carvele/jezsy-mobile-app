@@ -288,13 +288,24 @@ Tasks:
   same fact could only drift, and that drift was the original defect.
   `DEMO_RIG` is client-only and never written to the DB. Retires the
   standing rule in `ar-system-contract.md` section 9.
-- Extract `src/utils/garmentMetadataAdapter.ts`: snake_case to camelCase,
-  bone-map inversion, and the Phase 1 sanity guard, with unit tests. The
-  screen becomes orchestration for this path.
-- Extract `src/utils/nativePoseCompatibility.ts`: the rotation
-  compensation, its plausibility gate, and the `[COMP-GUARD]` telemetry,
-  with unit tests for the gate on synthetic frontal, yawed, and stacked
-  landmark sets. This is the permanent device-compat layer; isolate it.
+- **DONE 2026-09-04** (`364171d`) — Extracted
+  `src/utils/garmentMetadataAdapter.ts`: snake_case to camelCase, bone-map
+  inversion, and the Phase 1 sanity guard, with 13 unit tests pinning each
+  of the three silent live bugs this logic has shipped from being inline.
+  Also pins that `isDemoRig` can never disagree with the metadata's own
+  `ingestionStatus`.
+- **DONE 2026-09-04** (`364171d`) — Extracted
+  `src/utils/nativePoseCompatibility.ts`: the rotation compensation and its
+  plausibility gate, with 15 unit tests covering the gate on synthetic
+  frontal, near-profile-yawed, leaning, sub-noise-floor and stacked
+  landmark sets. Worth noting what this buys: the gate is the only safety
+  net for a real native-library defect and its no-op behaviour on hardware
+  *without* that defect is unverifiable here (Step H, blocked on a second
+  device) — these tests are the closest deterministic substitute, pinning
+  that it must NOT fire on legitimate poses that superficially resemble the
+  bug. `[COMP-GUARD]` telemetry stays at the call site, since it logs raw
+  pre-correction values the module never sees.
+  Screen drops 1534 -> 1463 lines across both extractions.
 - Length fit signal: compare the selected size's chart length to the
   tracked torso length (shoulder midpoint to hip midpoint, already
   available in world landmarks) and surface "runs long/short" as fit
@@ -307,6 +318,12 @@ Tasks:
 
 Exit: `AR_READY` is unambiguous; adapter and compat layer have tests;
 sizing feedback reflects length, not just width.
+
+**Phase 3 status as of 2026-09-04**: two of the three exit conditions are
+met — `AR_READY` is unambiguous (`DEMO_RIG` exists, `b37f90c`) and both the
+adapter and compat layer have tests (`364171d`). The length fit signal and
+the `STATURE_CORRECTION` provisionality note remain open, so Phase 3 is
+**not** exited.
 
 ## Phase 4 — Deformation quality and the garment library
 
