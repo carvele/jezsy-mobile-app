@@ -224,12 +224,33 @@ the report before resuming that work, per the ordering rule below.
 Goal: the wearer's arms and hands read as in front of the garment when they
 are. Tiered so the capstone can stop at a defensible level.
 
-- Tier 1, no new dependencies: finish what exists. Add the occlusion quad to
-  the scene with depth-write on and colour-write off, feed it the joint
-  uniforms already being updated, and tune capsule radii against Test D
-  screenshots. Accept that it is skeletal approximation and say so in the
-  contract doc. Also stop sending `worldLandmarks` when the occluder is
-  disabled; it is dead payload today.
+- **Tier 1 — DONE 2026-09-04** (`04656a2`, `97da54c`), live-verified: a bare
+  forearm crossing the chest now cuts through the garment instead of the
+  garment drawing over it (the Phase 1 report's Test D failure), at
+  54-57fps — above the Phase 1 floor, so the exit criterion below is met.
+  This was **not** "uncomment `scene.add(occlusionMesh)`". Five independent
+  defects each individually prevented it from working, none of which had
+  ever surfaced because the mesh was never in the scene, so Three.js never
+  compiled the shader: missing `extensions.fragDepth` (program could not
+  compile at all); `uViewProj` declared and never assigned (depth projected
+  through an identity matrix); raw MediaPipe `worldLandmarks` fed to a
+  matrix expecting scene coordinates (the documented reason it was
+  disabled); `vUv` (origin bottom-left) compared against `uJoints2D`
+  (origin top-left); and the uniform-population block sitting outside
+  `targetPos`'s scope, throwing a `ReferenceError` that an empty
+  `catch(e){}` swallowed every frame so the uniforms stayed at (0,0)
+  forever. Then three quality fixes found by driving a temporary debug
+  colour pass on-device (retained behind `OCCLUSION_DEBUG_VISIBLE`, off):
+  the torso was a wireframe of four edge lines rather than a filled quad,
+  leaving the chest interior uncovered; region selection by smallest 2D
+  distance made the torso always beat an arm lying across it once the quad
+  was filled (now picks whichever covering part is nearest the camera); and
+  the radii were roughly double life-size, which for a depth occluder
+  carves away garment pixels that should stay visible.
+  Remaining Tier 1 limits, accepted by design: straight capsule bands
+  rather than a real limb silhouette, and one radius for the whole arm
+  rather than tapering upper arm to wrist. `worldLandmarks` are no longer
+  dead payload — the occluder consumes them.
 - Tier 2, no new dependencies: carry the real segmentation mask, bounded.
   Populate the frame's `width`/`height` from the active camera format,
   downsample the mask on the native side to a small single-channel grid
@@ -244,6 +265,15 @@ are. Tiered so the capstone can stop at a defensible level.
 
 Exit for M2: Test D scores at least 1 on occlusion with Tier 1 or 2, and
 frame rate stays above the Phase 1 floor.
+
+**Met 2026-09-04 with Tier 1.** Test D's occlusion score moves 0 -> 2 (the
+forearm reads as genuinely in front of the garment, not merely partially),
+at 54-57fps against a Phase 1 floor of ~53fps. Tier 2 is therefore not
+required for M2 and stays unscheduled; it remains the route to per-pixel
+accuracy if the capsule approximation's straight-band edges prove
+insufficient in the recorded Phase 6 run. Scores for the rest of the A-E
+protocol have NOT been re-run since these fixes -- the Phase 1 report's
+table still reflects pre-fix behaviour for every other test.
 
 ## Phase 3 — Fit semantics and data-contract hardening
 
