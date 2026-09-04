@@ -267,7 +267,11 @@ function buildFallbackMetadata(p: Product | null | undefined): import('@/src/typ
     id: p?.id || 'mock',
     category: cat as any,
     calibrationVersion: '1.0.0',
-    ingestionStatus: 'AR_READY',
+    // Phase 3: this used to stamp itself 'AR_READY', which made that value mean either
+    // "really calibrated" or "invented defaults here" depending on React state nothing
+    // downstream could see. Every value below is a guess, so say so in the metadata
+    // itself -- see IngestionStatus in src/types/garment.ts.
+    ingestionStatus: 'DEMO_RIG',
     anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
     anchorConfidence: 'inferred',
     anchorType: 'SHOULDER_CENTER',
@@ -355,7 +359,12 @@ export default function ARTryOnScreen() {
 
   // Phase 5B: Real garment metadata from Supabase, with a clearly-labelled fallback
   const [garmentMetadata, setGarmentMetadata] = useState<import('@/src/types/garment').GarmentMetadata | null>(null);
-  const [isDemoRig, setIsDemoRig] = useState(false);
+  // Derived, not separate state: the demo-rig fallback now marks itself DEMO_RIG in the
+  // metadata (see buildFallbackMetadata), so a second source of truth could only ever
+  // drift out of sync with it. That drift was the original problem -- only React state
+  // knew a garment was uncalibrated, which is why ar-system-contract.md had to forbid
+  // trusting ingestionStatus at all.
+  const isDemoRig = garmentMetadata?.ingestionStatus === 'DEMO_RIG';
 
   useEffect(() => {
     if (!product) return;
@@ -413,17 +422,14 @@ export default function ARTryOnScreen() {
           'using fallback (demo rig) instead of trusting it: ' + plausibility.reasons.join('; ')
         );
         setGarmentMetadata(buildFallbackMetadata(product));
-        setIsDemoRig(true);
       } else {
         setGarmentMetadata(mapped);
-        setIsDemoRig(false);
       }
     } else {
       console.log(product.garment_metadata
         ? '[AR] garment_metadata not AR_READY (' + rawStatus + ') — using fallback (demo rig)'
         : '[AR] No garment_metadata — using fallback (demo rig)');
       setGarmentMetadata(buildFallbackMetadata(product));
-      setIsDemoRig(true);
     }
   }, [product]);
 

@@ -280,9 +280,14 @@ table still reflects pre-fix behaviour for every other test.
 Goal: "fit" means one thing, and bad data cannot masquerade as calibrated.
 
 Tasks:
-- Add `DEMO_RIG` to `IngestionStatus` (`src/types/garment.ts`) and have
-  the fallback use it; downstream checks for `AR_READY` then mean
-  calibrated only. Small, safe, do early.
+- **DONE 2026-09-04** — Added `DEMO_RIG` to `IngestionStatus`
+  (`src/types/garment.ts`); the fallback marks itself with it instead of
+  stamping `AR_READY`, so downstream checks for `AR_READY` now mean
+  calibrated only. Also derived `isDemoRig` from the metadata rather than
+  keeping it as separate React state -- a second source of truth for the
+  same fact could only drift, and that drift was the original defect.
+  `DEMO_RIG` is client-only and never written to the DB. Retires the
+  standing rule in `ar-system-contract.md` section 9.
 - Extract `src/utils/garmentMetadataAdapter.ts`: snake_case to camelCase,
   bone-map inversion, and the Phase 1 sanity guard, with unit tests. The
   screen becomes orchestration for this path.
