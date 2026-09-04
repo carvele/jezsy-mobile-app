@@ -199,6 +199,19 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // worst-case behavior the floor previously guaranteed rather than to no
           // correction at all.
           let lastReliableCosYaw = 0.65;
+          // Deep-turn instability (Phase 1 garment-reality report, finding #1): the
+          // raw per-frame quaternion's YXZ Euler extraction below is a genuine
+          // sequential decomposition, unstable whenever the underlying rotation isn't
+          // a clean single-axis yaw -- which real human turning never is, and worse
+          // near-profile where MediaPipe's own landmark accuracy degrades. Unlike
+          // smoothedQuat (which slerps the rotation actually applied to the garment),
+          // this value used to be recomputed fresh from the raw, unsmoothed quaternion
+          // every single frame, so one noisy frame's Euler extraction could swing
+          // yawCosCorrection (and therefore exactScale) independently of the smoothed
+          // rotation -- plausible cause of the report's "invisible one capture, twisted
+          // blob the next, same held pose" pattern. Smoothed the same way
+          // smoothedCameraDistance already is, before the #17 floor logic applies.
+          let smoothedCosYaw = null;
           let occlusionMesh, occlusionMaterial;
           let maskTexture;
 
@@ -713,9 +726,13 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w), 'YXZ'
                       );
                       const rawCosYaw = Math.abs(Math.cos(yawEuler.y));
-                      if (rawCosYaw >= 0.65) {
-                        lastReliableCosYaw = rawCosYaw;
-                        yawCosCorrection = rawCosYaw;
+                      // Smooth the extracted cos(yaw) itself, before the #17 floor logic
+                      // below sees it -- see the smoothedCosYaw declaration above for why.
+                      // Same blend factor as smoothedPos/smoothedScale/smoothedQuat use.
+                      smoothedCosYaw = smoothedCosYaw == null ? rawCosYaw : smoothedCosYaw + (rawCosYaw - smoothedCosYaw) * 0.25;
+                      if (smoothedCosYaw >= 0.65) {
+                        lastReliableCosYaw = smoothedCosYaw;
+                        yawCosCorrection = smoothedCosYaw;
                       } else {
                         yawCosCorrection = lastReliableCosYaw;
                       }
@@ -917,6 +934,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
                           + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
                           + ' exactScale=' + exactScale.toFixed(4)
+                          + ' yawCosCorrection=' + yawCosCorrection.toFixed(4)
+                          + ' smoothedCosYaw=' + (smoothedCosYaw != null ? smoothedCosYaw.toFixed(4) : 'n/a')
                           + ' calibrated=' + !!CAMERA_CALIBRATION
                           + ' cameraDistanceM=' + (smoothedCameraDistance != null ? smoothedCameraDistance.toFixed(3) : 'n/a')
                           + ' verticalFovDeg=' + camera.fov.toFixed(1)
