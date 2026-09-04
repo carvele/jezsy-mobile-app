@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.admin_notifications (
 -- RLS: Only admins can view and manage admin notifications
 ALTER TABLE public.admin_notifications ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY ""Admins can manage admin notifications"" ON public.admin_notifications
+CREATE POLICY "Admins can manage admin notifications" ON public.admin_notifications
 FOR ALL
 TO public
 USING (public.is_staff_or_admin());
