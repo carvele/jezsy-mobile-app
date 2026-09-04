@@ -144,8 +144,18 @@ serve(async (req) => {
         .then((r) => r.json())
         .catch(() => null);
 
-      const url = session?.data?.attributes?.checkout_url;
-      if (url) return json(req, { payment_id: existing.id, checkout_url: url, reused: true });
+      const pmStatus = session?.data?.attributes?.status;
+      const payments = session?.data?.attributes?.payments || [];
+      const hasPaid = payments.some((p: any) => p.attributes?.status === 'paid');
+
+      if (hasPaid) {
+        return json(req, { error: "Your payment has already been received and is being processed." }, 409);
+      }
+
+      if (pmStatus === 'active') {
+        const url = session?.data?.attributes?.checkout_url;
+        if (url) return json(req, { payment_id: existing.id, checkout_url: url, reused: true });
+      }
     }
 
     // Record the payment attempt BEFORE calling PayMongo, not after. The

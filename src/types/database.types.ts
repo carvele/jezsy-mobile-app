@@ -59,6 +59,33 @@ export type Database = {
           },
         ]
       }
+      admin_notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          message: string
+          title: string
+          type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message: string
+          title: string
+          type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          title?: string
+          type?: string | null
+        }
+        Relationships: []
+      }
       announcement_dismissals: {
         Row: {
           announcement_id: string
@@ -365,7 +392,8 @@ export type Database = {
           id: string
           last_message: string | null
           last_message_time: string | null
-          unread_count: number | null
+          unread_customer: number
+          unread_staff: number
           updated_at: string | null
         }
         Insert: {
@@ -374,7 +402,8 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_time?: string | null
-          unread_count?: number | null
+          unread_customer?: number
+          unread_staff?: number
           updated_at?: string | null
         }
         Update: {
@@ -383,7 +412,8 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_time?: string | null
-          unread_count?: number | null
+          unread_customer?: number
+          unread_staff?: number
           updated_at?: string | null
         }
         Relationships: [
@@ -1061,6 +1091,7 @@ export type Database = {
           gender: string | null
           id: string
           is_blocked: boolean | null
+          is_wardrobe_shared: boolean | null
           last_name: string | null
           phone: string | null
           province: string | null
@@ -1083,6 +1114,7 @@ export type Database = {
           gender?: string | null
           id: string
           is_blocked?: boolean | null
+          is_wardrobe_shared?: boolean | null
           last_name?: string | null
           phone?: string | null
           province?: string | null
@@ -1105,6 +1137,7 @@ export type Database = {
           gender?: string | null
           id?: string
           is_blocked?: boolean | null
+          is_wardrobe_shared?: boolean | null
           last_name?: string | null
           phone?: string | null
           province?: string | null
@@ -1356,10 +1389,14 @@ export type Database = {
       }
       reviews: {
         Row: {
+          admin_reply: string | null
           comment: string | null
           created_at: string
+          dislikes: number | null
           id: string
           images: string[] | null
+          is_pinned: boolean | null
+          likes: number | null
           product_id: string
           rating: number
           reviewer_name: string | null
@@ -1368,10 +1405,14 @@ export type Database = {
           verified_purchase: boolean
         }
         Insert: {
+          admin_reply?: string | null
           comment?: string | null
           created_at?: string
+          dislikes?: number | null
           id?: string
           images?: string[] | null
+          is_pinned?: boolean | null
+          likes?: number | null
           product_id: string
           rating: number
           reviewer_name?: string | null
@@ -1380,10 +1421,14 @@ export type Database = {
           verified_purchase?: boolean
         }
         Update: {
+          admin_reply?: string | null
           comment?: string | null
           created_at?: string
+          dislikes?: number | null
           id?: string
           images?: string[] | null
+          is_pinned?: boolean | null
+          likes?: number | null
           product_id?: string
           rating?: number
           reviewer_name?: string | null
@@ -1885,6 +1930,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      auto_cancel_expired_reservations: { Args: never; Returns: number }
       check_email_exists: { Args: { lookup_email: string }; Returns: boolean }
       check_rate_limit: {
         Args: {
@@ -1919,6 +1965,7 @@ export type Database = {
         Returns: Json
       }
       dispatch_pending_push: { Args: never; Returns: number }
+      expire_all_stale_reservations: { Args: never; Returns: number }
       expire_stale_payments: { Args: never; Returns: number }
       expire_unpaid_reservations: { Args: never; Returns: number }
       get_slot_booked_counts: {
@@ -1927,6 +1974,61 @@ export type Database = {
           booked_count: number
           slot_time: string
         }[]
+      }
+      get_trending_products: {
+        Args: { limit_count?: number }
+        Returns: {
+          ar_data: Json
+          base_color: string | null
+          care_instructions: string | null
+          category: string | null
+          category_id: string | null
+          color: string | null
+          created_at: string
+          created_by: string | null
+          dateadded: string | null
+          deleted: boolean | null
+          deleted_at: string | null
+          description: string | null
+          discount_percentage: number | null
+          fit_and_sizing: string | null
+          garment_metadata: Json | null
+          id: string
+          image_url: string | null
+          images: string[] | null
+          is_alterable: boolean | null
+          is_featured: boolean | null
+          is_new_arrival: boolean | null
+          mask_url: string | null
+          material: string | null
+          measurements: Json | null
+          model_3d_url: string | null
+          name: string
+          occasion: string | null
+          on_sale: boolean | null
+          pattern: string | null
+          price: number | null
+          rating: number | null
+          review_count: number | null
+          sale_price: number | null
+          season: string | null
+          sizes: string[] | null
+          status: string | null
+          stock: number | null
+          stockbaseline: number | null
+          style_code: string | null
+          sub_category: string | null
+          tags: string[] | null
+          updated_at: string
+          updated_by: string | null
+          visibility: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "products"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       is_admin_or_owner: { Args: never; Returns: boolean }
       is_awaiting_payment_status: {
@@ -1944,6 +2046,7 @@ export type Database = {
         Args: { _request_id: string }
         Returns: Json
       }
+      request_account_deletion: { Args: { _reason?: string }; Returns: string }
       request_reschedule: {
         Args: {
           _appointment_time: string
@@ -1968,6 +2071,130 @@ export type Database = {
         Args: { _approve: boolean; _reservation_id: string }
         Returns: Json
       }
+      search_catalog: {
+        Args: {
+          ar_only?: boolean
+          category_ids?: string[]
+          color_filters?: string[]
+          fit_filters?: string[]
+          material_filters?: string[]
+          max_price?: number
+          min_price?: number
+          new_arrivals_only?: boolean
+          on_sale_only?: boolean
+          search_query?: string
+          size_filters?: string[]
+          sort_by?: string
+          tag_filters?: string[]
+        }
+        Returns: {
+          ar_data: Json
+          base_color: string | null
+          care_instructions: string | null
+          category: string | null
+          category_id: string | null
+          color: string | null
+          created_at: string
+          created_by: string | null
+          dateadded: string | null
+          deleted: boolean | null
+          deleted_at: string | null
+          description: string | null
+          discount_percentage: number | null
+          fit_and_sizing: string | null
+          garment_metadata: Json | null
+          id: string
+          image_url: string | null
+          images: string[] | null
+          is_alterable: boolean | null
+          is_featured: boolean | null
+          is_new_arrival: boolean | null
+          mask_url: string | null
+          material: string | null
+          measurements: Json | null
+          model_3d_url: string | null
+          name: string
+          occasion: string | null
+          on_sale: boolean | null
+          pattern: string | null
+          price: number | null
+          rating: number | null
+          review_count: number | null
+          sale_price: number | null
+          season: string | null
+          sizes: string[] | null
+          status: string | null
+          stock: number | null
+          stockbaseline: number | null
+          style_code: string | null
+          sub_category: string | null
+          tags: string[] | null
+          updated_at: string
+          updated_by: string | null
+          visibility: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "products"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      search_catalog_fuzzy: {
+        Args: { p_limit?: number; search_term: string }
+        Returns: {
+          ar_data: Json
+          base_color: string | null
+          care_instructions: string | null
+          category: string | null
+          category_id: string | null
+          color: string | null
+          created_at: string
+          created_by: string | null
+          dateadded: string | null
+          deleted: boolean | null
+          deleted_at: string | null
+          description: string | null
+          discount_percentage: number | null
+          fit_and_sizing: string | null
+          garment_metadata: Json | null
+          id: string
+          image_url: string | null
+          images: string[] | null
+          is_alterable: boolean | null
+          is_featured: boolean | null
+          is_new_arrival: boolean | null
+          mask_url: string | null
+          material: string | null
+          measurements: Json | null
+          model_3d_url: string | null
+          name: string
+          occasion: string | null
+          on_sale: boolean | null
+          pattern: string | null
+          price: number | null
+          rating: number | null
+          review_count: number | null
+          sale_price: number | null
+          season: string | null
+          sizes: string[] | null
+          status: string | null
+          stock: number | null
+          stockbaseline: number | null
+          style_code: string | null
+          sub_category: string | null
+          tags: string[] | null
+          updated_at: string
+          updated_by: string | null
+          visibility: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "products"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       send_customer_notification: {
         Args: { _body: string; _title: string; _user_id: string }
         Returns: string
@@ -1987,6 +2214,8 @@ export type Database = {
         Args: { _method?: string; _reservation_id: string }
         Returns: Json
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       submit_reservation_receipt: {
         Args: { _receipt_path: string; _reservation_id: string }
         Returns: Json

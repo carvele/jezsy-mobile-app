@@ -106,9 +106,9 @@ export default function InboxScreen() {
     // conversation -- was shown "Shop Owner" instead of the customer's ref.
     const isStaff =
       profile?.role === 'staff' || profile?.role === 'owner';
-    const displayName = isStaff ? `Customer (${item.customer_id.substring(0, 6)})` : 'Boutique Support';
+    const displayName = isStaff ? `Customer (${item.customer_id?.substring(0, 6) ?? 'Unknown'})` : 'Boutique Support';
     const isOnline = isStaff ? !!onlineUsers[item.customer_id] : isStaffOnline;
-    const isUnread = item.unread_count > 0 && !isStaff;
+    const isUnread = item.unread_customer > 0 && !isStaff;
 
     const dateStr = item.last_message_time
       ? formatPHDate(item.last_message_time, {
@@ -152,7 +152,7 @@ export default function InboxScreen() {
             </Text>
             {isUnread && (
               <View style={[styles.badge, { backgroundColor: colors.notification }]}>
-                <Text style={[styles.badgeText, { color: colors.onNotification }]}>{item.unread_count}</Text>
+                <Text style={[styles.badgeText, { color: colors.onNotification }]}>{item.unread_customer}</Text>
               </View>
             )}
           </View>

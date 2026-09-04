@@ -107,14 +107,14 @@ export default function WardrobeScreen() {
 
     try {
       if (!isRefresh && !hasLoadedOnce.current) setLoading(true);
-      const [itemsRes, outfitsRes, capsulesRes] = await Promise.all([
+      const [itemsRes, outfitsRes, capsulesRes] = await Promise.allSettled([
         supabase
           .from('wardrobe_items')
           .select('*')
           .eq('user_id', session.user.id)
           .eq('deleted', false)
           .order('created_at', { ascending: false })
-          .limit(50),
+          .limit(200),
         supabase
           .from('saved_outfits')
           .select('*')
@@ -130,26 +130,34 @@ export default function WardrobeScreen() {
           .limit(50)
       ]);
 
-      if (itemsRes.error) throw itemsRes.error;
-      if (outfitsRes.error) throw outfitsRes.error;
-      if (capsulesRes.error) throw capsulesRes.error;
+      // Apply each result independently; a failure in capsules must not
+      // hide successfully loaded items or outfits.
+      if (itemsRes.status === 'fulfilled' && !itemsRes.value.error) {
+        setItems(itemsRes.value.data || []);
+      } else {
+        console.error('Error fetching wardrobe items:', itemsRes.status === 'rejected' ? itemsRes.reason : itemsRes.value.error);
+        showToast('Could not load your wardrobe items. Please try again.', 'error');
+      }
 
-      setItems(itemsRes.data || []);
-      setOutfits(outfitsRes.data || []);
+      if (outfitsRes.status === 'fulfilled' && !outfitsRes.value.error) {
+        setOutfits(outfitsRes.value.data || []);
+      } else {
+        console.error('Error fetching outfits:', outfitsRes.status === 'rejected' ? outfitsRes.reason : outfitsRes.value.error);
+      }
 
-      const mappedCapsules = (capsulesRes.data || []).map(c => ({
-        id: c.id,
-        name: c.name,
-        description: c.description,
-        target_count: c.target_count || 30,
-        item_count: c.capsule_items?.[0]?.count || 0
-      }));
-      setCapsules(mappedCapsules);
+      if (capsulesRes.status === 'fulfilled' && !capsulesRes.value.error) {
+        const mappedCapsules = (capsulesRes.value.data || []).map(c => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          target_count: c.target_count || 30,
+          item_count: c.capsule_items?.[0]?.count || 0
+        }));
+        setCapsules(mappedCapsules);
+      } else {
+        console.error('Error fetching capsules:', capsulesRes.status === 'rejected' ? capsulesRes.reason : capsulesRes.value.error);
+      }
     } catch (error) {
-      // A failed fetch left items/outfits/capsules at whatever they were
-      // (empty on first load) with loading cleared, so the screen silently
-      // rendered "nothing here yet" indistinguishable from an actually empty
-      // wardrobe. Surface it instead of hiding a real failure as empty state.
       console.error('Error fetching wardrobe data:', error);
       showToast('Could not load your wardrobe. Please try again.', 'error');
     } finally {
@@ -203,6 +211,7 @@ export default function WardrobeScreen() {
       const payload = outfit.items.map((i) => ({
         slot: (i.garment_type || 'accessory').toLowerCase(),
         product_id: i.product_id,
+        wardrobe_item_id: i.id,
         image_url: i.image_url,
         name: i.garment_type || i.category || 'Item',
         color_tags: i.color_tags,
