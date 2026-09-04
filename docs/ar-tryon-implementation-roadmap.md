@@ -314,6 +314,14 @@ Tasks:
 - Transport diet: drop `worldLandmarks` from the payload when the occluder
   is off; throttle `updateTransform` to the WebView's measured render rate
   instead of the detector rate; measure before and after.
+- Thermal throttling / adaptive performance: currently zero handling.
+  Three concrete strategies from the industry-research comparison below:
+  inference decoupling (skip frames, interpolate the skeleton between),
+  hardware delegation (already done — GPU delegate), dynamic resolution
+  scaling via VisionCamera's Constraints API on rising temperature. Only
+  the first and third are unimplemented. Not yet observed on-device but
+  not instrumented for either — Phase 1 Test A-E ran short holds, not
+  sustained load, so this is unverified either way, not confirmed absent.
 - Second device (Step H) plus one more if available: orientation guard,
   calibration, frame rate. Record per-device results in the checklist.
 
@@ -333,9 +341,110 @@ Tasks:
 
 Exit: M2 declared, with the report and recording as proof.
 
+## Industry-research context (2026-09-04)
+
+A general industry survey of real-time AR-on-mobile approaches
+(`docs/research/ar-industry-survey-2026-09-04.md`, saved verbatim as
+received — external source, author/publisher unknown) was reviewed against
+this project's own architecture and this session's bug history. The
+comparison is worth recording because it explains, rather than merely
+coincides with, findings already in this document:
+
+- **Stack choice validated.** `react-native-vision-camera` +
+  `react-native-worklets-core` + MediaPipe pose detection matches the
+  "Nitro Modules / Frame Processor" pattern the survey describes as the
+  standard approach for real-time camera ML in React Native. Not a
+  coincidence worth re-litigating — this is confirmation, not a signal to
+  change course.
+- **The WebView-hosted renderer is the architecturally fragile part, and
+  this is a known industry pattern, not something this project got wrong
+  in isolation.** Direct quote from the source: "rendering inside a
+  web-view context often introduces unacceptable latency for live AR."
+  `react-native-filament` — a React Native wrapper around Google's
+  Filament, exposing its C++ rendering core so `.glb` loading, PBR
+  materials, and skeletal animation run on the native UI thread in sync
+  with VisionCamera's frame delivery — is the named real-time-grade
+  alternative. Two of this session's worst bugs trace directly to the
+  WebView/Three.js r128 choice:
+  - The frustum-culling bug (§1 of `ar-tryon-audit-implementation-plan.md`
+    finding #25) — a stale bind-pose bounding sphere never updated for a
+    posed `SkinnedMesh` — is specific to that Three.js version and the
+    GPU-only-skinning constraint it operates under.
+  - The WebView/`<video>` z-order compositing risk this project's own audit
+    already flagged (finding #25's "lower-confidence candidates" list) is
+    exactly the latency/synchronization failure class the survey warns
+    about.
+  Citable in the thesis defense as a documented, known limitation of the
+  WebView-rendering approach generally, not evidence of an implementation
+  mistake specific to this codebase. `expo-gl`/native renderer transport
+  (already scoped to M3 below) is the industry-recommended fix; not
+  attempted before M3 for the reasons already stated in this document.
+- **The GLB rest-pose mismatch bug has a named professional-pipeline
+  analogue.** The survey's CLO3D section (rest-pose grading, blend shapes,
+  standardized avatar rigging) describes, at production scale, the same
+  consistency problem this project root-caused by hand: DB
+  `rest_pose = "A_POSE"` disagreeing with a GLB's actual T-pose bind. A
+  real pipeline enforces that consistency at ingestion; this project
+  currently relies on per-garment manual calibration, which is exactly why
+  it drifted. Ties directly to Phase 4's ingestion-hardening task above
+  (measure `rest_pose_metric_width` from GLB geometry instead of trusting a
+  typed number) — that task is this project's version of what the survey
+  describes as standard practice, not a novel idea.
+- **MediaPipe-vs-SMPL tradeoff, now precisely citable.** The survey names
+  SMPL (Skinned Multi-Person Linear model, 6,890-vertex mesh, shape + pose
+  parameters) as the academic/industry-standard full body representation,
+  but explicitly frames it as computationally prohibitive for real-time
+  mobile and names MediaPipe's 33-landmark BlazePose 3D as the practical
+  substitute, supplying "sufficient anchor points and rotational vectors to
+  align a pre-rigged 3D digital garment to the user's skeleton" — this
+  project's exact approach, described almost verbatim. Useful thesis
+  citation for *why* MediaPipe over a full mesh model, not just that this
+  project chose it.
+- **The "loose clothing" failure mode has a name, and it explains more than
+  just occlusion.** The survey's own framing: baggy/loose garments obscure
+  the visible body contours that pose/segmentation algorithms rely on,
+  causing "misaligned digital garments, severe Z-fighting... and a total
+  breakdown of the AR illusion" — cites `ClothHMR`'s two-stage fix
+  (clothing-tailoring silhouette trim, then mesh recovery on the trimmed
+  result) and `MuNet`'s joint body/clothing optimization loop as the
+  research-stage answers. Relevant beyond Test D's already-expected
+  occlusion failure: the Tailored Blazer (a looser-fitting garment than the
+  Black tee) showing worse instability in several of this session's tests
+  may be this same failure class, not purely the pose-orientation bug
+  tracked as finding #1 above — worth re-examining findings #1/#2 with this
+  lens before assuming pure Euler-math causation. Neither `ClothHMR` nor
+  `MuNet` are implementable at capstone scope; cite as context for why the
+  problem is hard, not as a fix to attempt.
+- **Environmental lighting adaptation — a gap this roadmap didn't previously
+  track.** The survey describes ARKit/ARCore ambient light estimation
+  (colour temperature, intensity, light vector) feeding a PBR renderer's
+  directional/ambient lights, so digital garments visually match the room.
+  This project's renderer uses fixed lighting (`GarmentRenderer.tsx`, plus
+  the Light +/- manual controls in 3D Studio mode) — no camera-derived
+  light estimation exists. Not scoped into any phase above; flagging here
+  as a known, real gap rather than silently absent. Low priority relative
+  to findings #1/#2 above, but cheap to name in the thesis as a recognized
+  limitation.
+- **Thermal throttling / adaptive performance — now with concrete
+  mitigation strategies, not just a named risk.** The survey lists three:
+  (1) inference decoupling — run pose detection every Nth frame,
+  interpolate the skeleton on the frames between; (2) hardware delegation —
+  keep all inference on the GPU delegate, never fall back to CPU (this
+  project already does this — MediaPipe's `usePoseDetection` runs a GPU
+  delegate per `ar-system-contract.md`); (3) dynamic resolution scaling via
+  VisionCamera's Constraints API when the OS reports rising temperature.
+  (1) and (3) are genuinely unimplemented here and are the concrete Phase 5
+  task, not just "add thermal handling" in the abstract.
+- **Not actionable for this project, cite only:** enterprise AR SDKs
+  (ZERO10, Snap Camera Kit, DeepAR) and 3D Gaussian Splatting are real
+  approaches the survey covers, but licensing cost and infrastructure rule
+  them out for a capstone. Worth a one-line "known industry alternatives"
+  mention in the thesis, not a scoping candidate.
+
 ## What is deliberately not in scope before M3
 
-- Native renderer transport (`expo-gl` or similar).
+- Native renderer transport (`expo-gl` or `react-native-filament` — the
+  latter is the industry-survey-named alternative, see above).
 - A physically-based fitting model (body model + garment construction +
   pose deformation). The current scale model is its foundation, not its
   replacement.
