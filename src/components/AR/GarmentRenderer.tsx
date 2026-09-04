@@ -317,16 +317,37 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
             // Phase 4C: Occlusion Compositor Shader
             // Maps 3D world joints to camera depth for segmented pixels
+            // TEMP DEBUG (Phase 2 Tier 1 tuning): when true, the occluder draws its
+            // capsule regions in visible colour instead of writing depth only, so the
+            // capsule placement and radius can actually be seen and tuned on-device.
+            // Silhouette-guessing from ordinary screenshots could not distinguish
+            // "occluder working" from "arm happened to fall outside the garment", which
+            // is what motivated this. Set back to false once the radius is tuned.
+            const OCCLUSION_DEBUG_VISIBLE = false;
+
             occlusionMaterial = new THREE.ShaderMaterial({
               transparent: false,
-              colorWrite: false, // Depth pass only!
+              colorWrite: OCCLUSION_DEBUG_VISIBLE, // false = depth pass only (real mode)
               depthWrite: true,
               depthTest: true,
+              // Required for gl_FragDepthEXT below -- without this, Three.js never
+              // injects the "#extension GL_EXT_frag_depth : enable" pragma the shader
+              // needs, and the fragment shader fails to compile. Since this mesh was
+              // never added to the scene, Three.js never actually compiled this
+              // program to find that out -- this was a second, independent reason
+              // Tier 1 occlusion could not have worked even before the coordinate-
+              // space issue below was found.
+              extensions: { fragDepth: true },
               uniforms: {
                 uMask: { value: null },
                 uViewProj: { value: new THREE.Matrix4() },
                 uJoints2D: { value: new Array(33).fill(null).map(()=>new THREE.Vector2()) },
                 uJoints3D: { value: new Array(33).fill(null).map(()=>new THREE.Vector3()) },
+                // Phase 2 Tier 1: capsule proximity radius in normalized [0,1]
+                // landmark-space units (same space as uJoints2D/vUv). Starting value
+                // only -- the roadmap explicitly calls for tuning this against Test D
+                // (crossed-arms) screenshots, not treating it as a fixed constant.
+                uCapsuleRadius: { value: 0.06 },
               },
               vertexShader: \`
                 varying vec2 vUv;
@@ -341,6 +362,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 uniform mat4 uViewProj;
                 uniform vec2 uJoints2D[33];
                 uniform vec3 uJoints3D[33];
+                uniform float uCapsuleRadius;
                 varying vec2 vUv;
 
                 // Distance to line segment
@@ -352,16 +374,19 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 }
 
                 void main() {
-                  // Coverage from segmentation mask (Test G & H)
-                  vec4 maskColor = texture2D(uMask, vec2(vUv.x, 1.0 - vUv.y)); 
-                  if (maskColor.r < 0.5 && maskColor.a < 0.5) {
-                    discard;
-                  }
+                  // vUv is Three.js UV space (origin BOTTOM-left); uJoints2D are image-
+                  // space normalized landmarks (origin TOP-left). Comparing them directly
+                  // put every capsule in the wrong place -- confirmed on-device with the
+                  // debug colour pass: the left-arm region rendered in the bottom-right
+                  // corner of the screen, nowhere near the wearer. The original code's own
+                  // mask sampling already flipped Y for exactly this reason; the capsule
+                  // distance tests never did.
+                  vec2 pt = vec2(vUv.x, 1.0 - vUv.y);
 
                   // 1. Left Arm Region
                   float tLUpper, tLLower;
-                  float dLUpper = lineDist(vUv, uJoints2D[11], uJoints2D[13], tLUpper);
-                  float dLLower = lineDist(vUv, uJoints2D[13], uJoints2D[15], tLLower);
+                  float dLUpper = lineDist(pt, uJoints2D[11], uJoints2D[13], tLUpper);
+                  float dLLower = lineDist(pt, uJoints2D[13], uJoints2D[15], tLLower);
                   float dLeftArm = min(dLUpper, dLLower);
                   vec3 posLUpper = mix(uJoints3D[11], uJoints3D[13], tLUpper);
                   vec3 posLLower = mix(uJoints3D[13], uJoints3D[15], tLLower);
@@ -369,8 +394,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
                   // 2. Right Arm Region
                   float tRUpper, tRLower;
-                  float dRUpper = lineDist(vUv, uJoints2D[12], uJoints2D[14], tRUpper);
-                  float dRLower = lineDist(vUv, uJoints2D[14], uJoints2D[16], tRLower);
+                  float dRUpper = lineDist(pt, uJoints2D[12], uJoints2D[14], tRUpper);
+                  float dRLower = lineDist(pt, uJoints2D[14], uJoints2D[16], tRLower);
                   float dRightArm = min(dRUpper, dRLower);
                   vec3 posRUpper = mix(uJoints3D[12], uJoints3D[14], tRUpper);
                   vec3 posRLower = mix(uJoints3D[14], uJoints3D[16], tRLower);
@@ -378,10 +403,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
                   // 3. Torso Region
                   float tTorsoTop, tTorsoBot, tTorsoLeft, tTorsoRight;
-                  float dTorsoTop = lineDist(vUv, uJoints2D[11], uJoints2D[12], tTorsoTop);
-                  float dTorsoBot = lineDist(vUv, uJoints2D[23], uJoints2D[24], tTorsoBot);
-                  float dTorsoLeft = lineDist(vUv, uJoints2D[11], uJoints2D[23], tTorsoLeft);
-                  float dTorsoRight = lineDist(vUv, uJoints2D[12], uJoints2D[24], tTorsoRight);
+                  float dTorsoTop = lineDist(pt, uJoints2D[11], uJoints2D[12], tTorsoTop);
+                  float dTorsoBot = lineDist(pt, uJoints2D[23], uJoints2D[24], tTorsoBot);
+                  float dTorsoLeft = lineDist(pt, uJoints2D[11], uJoints2D[23], tTorsoLeft);
+                  float dTorsoRight = lineDist(pt, uJoints2D[12], uJoints2D[24], tTorsoRight);
                   float dTorso = min(min(dTorsoTop, dTorsoBot), min(dTorsoLeft, dTorsoRight));
 
                   vec3 posTorsoTop = mix(uJoints3D[11], uJoints3D[12], tTorsoTop);
@@ -396,8 +421,32 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
                   // 4. Determine authoritative body part region (Test D, I)
                   float minDist = min(dLeftArm, min(dRightArm, dTorso));
-                  vec3 best3DPos = posTorso;
 
+                  // Phase 2 Tier 1: no real segmentation mask exists yet (that's Tier
+                  // 2, gated on measured frame rate per the roadmap) -- gate purely on
+                  // proximity to the capsule skeleton instead. Without this, every
+                  // pixel on screen resolves to WHICHEVER body part is nearest (arm or
+                  // torso), even pixels nowhere near the wearer, occluding the entire
+                  // frame. The torso capsule gets a wider radius since it approximates
+                  // a whole chest quad, not a single limb line.
+                  float radius = (minDist == dTorso) ? uCapsuleRadius * 1.6 : uCapsuleRadius;
+
+                  // TEMP DEBUG: joint markers must survive the radius discard below,
+                  // otherwise they can only ever appear inside a region that is already
+                  // being drawn -- which tells us nothing about where the joints
+                  // actually are when the capsules land in the wrong place.
+                  bool isJointMarker = false;
+                  for (int ji = 0; ji < 33; ji++) {
+                    if (ji == 11 || ji == 12 || ji == 13 || ji == 14 || ji == 15 || ji == 16 || ji == 23 || ji == 24) {
+                      if (distance(pt, uJoints2D[ji]) < 0.015) isJointMarker = true;
+                    }
+                  }
+
+                  if (minDist > radius && !isJointMarker) {
+                    discard;
+                  }
+
+                  vec3 best3DPos = posTorso;
                   if (minDist == dLeftArm) best3DPos = posLeftArm;
                   else if (minDist == dRightArm) best3DPos = posRightArm;
 
@@ -407,6 +456,20 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
                   // WebGL expects gl_FragDepth to be [0, 1]
                   gl_FragDepthEXT = (ndcZ + 1.0) * 0.5;
+
+                  // TEMP DEBUG: only visible when the material has colorWrite enabled
+                  // (OCCLUSION_DEBUG_VISIBLE). Colour-codes which capsule region won,
+                  // so misplacement is obvious rather than inferred: red = left arm,
+                  // green = right arm, blue = torso.
+                  vec3 dbg = vec3(0.0, 0.0, 1.0);
+                  if (minDist == dLeftArm) dbg = vec3(1.0, 0.0, 0.0);
+                  else if (minDist == dRightArm) dbg = vec3(0.0, 1.0, 0.0);
+                  // White dots mark exactly where the shader believes each tracked
+                  // joint is. If these don't land on the wearer's real joints, the
+                  // 2D coordinate mapping is wrong -- which is faster to see than to
+                  // reason about from region colours alone.
+                  if (isJointMarker) dbg = vec3(1.0, 1.0, 1.0);
+                  gl_FragColor = vec4(dbg, 1.0);
                 }
               \`
             });
@@ -417,12 +480,15 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             occlusionMesh.frustumCulled = false;
             // Render occlusion BEFORE garment
             occlusionMesh.renderOrder = -1;
-            // Disabled: the depth pre-pass writes depth using raw MediaPipe body-space
-            // joint coordinates run through the scene's view-projection matrix, with no
-            // reconciliation between the two coordinate spaces -- accuracy unverified.
-            // Re-enable once that coordinate mismatch is actually fixed (see AR plan doc,
-            // P0-B / Section 05 data-flow contracts).
-            // scene.add(occlusionMesh);
+            // Phase 2 Tier 1 (was disabled): the coordinate-space mismatch that kept
+            // this out of the scene is fixed in the uJoints3D population above (see
+            // its own comment) -- worldLandmarks are canonicalized and anchored into
+            // scene space via targetPos before being written into the shader uniform,
+            // and uViewProj is now actually set every frame (it never was before).
+            // This is a skeletal-capsule approximation, not per-pixel depth-aware
+            // occlusion (no real segmentation mask; that's Tier 2) -- capsule radius
+            // (uCapsuleRadius) needs live tuning against Test D screenshots.
+            scene.add(occlusionMesh);
             garmentGroup = new THREE.Group();
             scene.add(garmentGroup);
             const loader = new THREE.GLTFLoader();
@@ -606,8 +672,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
           function animate() {
             requestAnimationFrame(animate);
-            // occlusionMesh is not added to the scene (see scene.add(occlusionMesh) above,
-            // commented out pending Phase 4) -- uViewProj has no consumer, don't compute it.
+            // Phase 2 Tier 1: occlusionMesh is in the scene now (see its declaration
+            // above); uViewProj/uJoints2D/uJoints3D are set per-frame in the
+            // UPDATE_TRANSFORM handler, not here -- this just renders the result.
             renderer.render(scene, camera);
 
             // Phase 1 instrumentation: real render-loop FPS, same rolling-1s-window
@@ -661,7 +728,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 return;
               }
               if (data && data.type === 'UPDATE_TRANSFORM' && garmentGroup) {
-                const { pos, rot, scl, boneRotations, normalizedLandmarks } = data;
+                const { pos, rot, scl, boneRotations, normalizedLandmarks, worldLandmarks } = data;
                 debugFrameCount++;
                 const shouldLog = (debugFrameCount % 20 === 0);
 
@@ -927,6 +994,56 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         if (smoothedQuat) garmentGroup.quaternion.copy(smoothedQuat);
                       }
 
+                      // Occlusion Compositor Uniforms (Phase 2 Tier 1).
+                      // MUST live inside this block: targetPos is scoped to the try
+                      // above, and an earlier version of this code sat after that
+                      // scope closed -- referencing targetPos there threw a
+                      // ReferenceError that the outer empty catch(e){} swallowed
+                      // silently, so the uniforms were never written and every capsule
+                      // stayed at (0,0). Confirmed live via uJ2D11={"x":0,"y":0} in the
+                      // frame log while the cover-cropped landmark was a valid
+                      // in-range value.
+                      //
+                      // uJoints3D was previously fed raw MediaPipe worldLandmarks
+                      // (hip-origin-relative, Y-down, Z-away) while uViewProj treated
+                      // them as this scene's own coordinates -- the documented reason
+                      // this mesh was never added to the scene. Canonicalize the axes
+                      // the same single way poseNormalizer.ts does on the RN side
+                      // ((x,-y,-z), reproduced here because this WebView JS context
+                      // can't import that module), then anchor the skeleton into scene
+                      // space with one per-frame translation derived from targetPos --
+                      // the shoulder midpoint unprojectToZ0 has already placed
+                      // correctly. Every other joint inherits that offset, preserving
+                      // MediaPipe's real relative proportions.
+                      if (occlusionMaterial && normalizedLandmarks && worldLandmarks) {
+                        const wl11 = worldLandmarks[11];
+                        const wl12 = worldLandmarks[12];
+                        if (wl11 && wl12) {
+                          const offsetX = targetPos.x - (wl11.x + wl12.x) / 2;
+                          const offsetY = targetPos.y - (-(wl11.y + wl12.y) / 2);
+                          const offsetZ = targetPos.z - (-(wl11.z + wl12.z) / 2);
+                          for (let ji = 0; ji < 33; ji++) {
+                            const nrm = normalizedLandmarks[ji];
+                            if (nrm) {
+                              // Same cover-crop remap the rest of the pipeline uses, so
+                              // the 2D capsule test lines up with what is actually
+                              // visible when video and viewport aspect ratios differ.
+                              const cr = mapCoverCrop(nrm.x, nrm.y);
+                              occlusionMaterial.uniforms.uJoints2D.value[ji].set(cr.nx, cr.ny);
+                            }
+                            const wld = worldLandmarks[ji];
+                            if (wld) {
+                              occlusionMaterial.uniforms.uJoints3D.value[ji].set(
+                                wld.x + offsetX,
+                                -wld.y + offsetY,
+                                -wld.z + offsetZ
+                              );
+                            }
+                          }
+                          occlusionMaterial.uniforms.uViewProj.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+                        }
+                      }
+
                       // TEMP DEBUG: throttled diagnostic dump -- remove once the wrong-arm /
                       // disappearing-garment issues are root-caused. Logs every ~20 frames.
                       if (shouldLog) {
@@ -941,6 +1058,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           + ' verticalFovDeg=' + camera.fov.toFixed(1)
                           + ' l11(raw)=' + JSON.stringify(l11)
                           + ' l12(raw)=' + JSON.stringify(l12)
+                          // Phase 2 Tier 1: confirms the occluder's capsule uniforms are
+                          // actually being written (they silently were not before the
+                          // scope fix -- see the occlusion uniform block above).
+                          + ' uJ2D11=' + (occlusionMaterial ? JSON.stringify(occlusionMaterial.uniforms.uJoints2D.value[11]) : 'n/a')
                           + ' boneRotations=' + JSON.stringify(boneRotations));
                         // TEMP DEBUG: remove once blazer visibility is root-caused.
                         showDebug('valid=' + transformValid + ' width=' + targetWorldWidth.toFixed(3)
@@ -1046,19 +1167,6 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   garmentGroup.updateMatrixWorld(true);
                 }
 
-                // 3. Occlusion Compositor Uniforms
-                if (occlusionMaterial && data.normalizedLandmarks && data.worldLandmarks) {
-                  for (let i = 0; i < 33; i++) {
-                    const norm = data.normalizedLandmarks[i];
-                    if (norm) {
-                      occlusionMaterial.uniforms.uJoints2D.value[i].set(norm.x, norm.y);
-                    }
-                    const world = data.worldLandmarks[i];
-                    if (world) {
-                      occlusionMaterial.uniforms.uJoints3D.value[i].set(world.x, world.y, world.z);
-                    }
-                  }
-                }
               }
             } catch(e) {}
           });
