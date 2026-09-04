@@ -177,6 +177,17 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // "unmeasured prototype transport" note are waiting on.
           let transportRateCount = 0;
           let transportRateWindowStart = 0;
+          // Phase 1 instrumentation: the roadmap asks for "frames rendered per second
+          // inside the WebView" as its OWN measurement, distinct from
+          // transportRateCount above (which counts UPDATE_TRANSFORM messages processed,
+          // not actual draw calls). requestAnimationFrame keeps calling renderer.render()
+          // every compositor tick regardless of whether fresh transform data has arrived
+          // -- so this number can legitimately sit near the display's native refresh rate
+          // even while transportRateCount is much lower, and a low reading here (not just
+          // a low transportRateCount) is what would actually indicate the WebView's own
+          // GPU/compositor is the bottleneck rather than the native-to-WebView transport.
+          let renderFrameCount = 0;
+          let renderRateWindowStart = 0;
           let loggedPosedBBox = false;
           let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
           let smoothedCameraDistance = null;
@@ -585,6 +596,20 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             // occlusionMesh is not added to the scene (see scene.add(occlusionMesh) above,
             // commented out pending Phase 4) -- uViewProj has no consumer, don't compute it.
             renderer.render(scene, camera);
+
+            // Phase 1 instrumentation: real render-loop FPS, same rolling-1s-window
+            // pattern as transportRateCount below -- see its declaration for why this is
+            // a genuinely different number, not a duplicate.
+            const renderRateNow = performance.now();
+            if (renderRateWindowStart === 0) renderRateWindowStart = renderRateNow;
+            renderFrameCount++;
+            const renderRateElapsedMs = renderRateNow - renderRateWindowStart;
+            if (renderRateElapsedMs >= 1000) {
+              const renderFps = (renderFrameCount / renderRateElapsedMs) * 1000;
+              console.log('[AR-RENDER-FPS] fps=' + renderFps.toFixed(1));
+              renderFrameCount = 0;
+              renderRateWindowStart = renderRateNow;
+            }
           }
 
           window.addEventListener('message', (event) => {
