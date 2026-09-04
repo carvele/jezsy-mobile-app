@@ -118,9 +118,9 @@ Tasks:
 3. Step H (second-device guard): stays open until a second Android device
    exists. Do not fake it.
 4. Housekeeping outside this repo: push `admin-dashboard@a3eef9c`
-   manually; re-ingest Tailored Blazer in admin-dashboard against the
-   Mixamo source and only then return it to `AR_READY`. Never guess the
-   anchor offset.
+   manually (**done** — confirmed on `origin/main`); re-ingest Tailored
+   Blazer in admin-dashboard against the Mixamo source and only then
+   return it to `AR_READY`. Never guess the anchor offset.
 
 Exit: contract doc merged; #28/#29/#17 recorded as pass or as a demonstrated
 regression; Step H status honest.
@@ -163,22 +163,28 @@ This phase decides the priorities of Phases 2 to 4. No architectural code
 changes; instrumentation only.
 
 Instrumentation (small, low risk, ship first):
-- Effective update rate: count `updateTransform` calls per second on the
-  native side and frames rendered per second inside the WebView; log both.
-- Make the tracking pill honest. It latches true on the first frame and
-  never reflects `pose.trackingState`. Correction to an earlier draft of
-  this roadmap: `TrackingState` *declares* seven members but
-  `poseConstructor.ts` only ever produces three — `GOOD_FIT`,
-  `TURN_TOO_FAR` (at `abs(yaw) >= 25°`), and `TRACKING_LOST` (shoulder
-  visibility `< 0.35`). `INITIALIZING`, `STEP_BACK`, `FULL_BODY_REQUIRED`
-  and `LOW_LIGHT` are declared and never assigned. Surfacing the three real
-  states is wiring; the other four need detection written first (see
-  Phase 5).
-- Client-side calibration sanity guard in the metadata path: if
-  `anatomical_anchor_offset` magnitude or `rest_pose_metric_width` fall
-  outside plausible garment bounds, treat the record as
-  `NEEDS_CALIBRATION` regardless of what the DB says. Defense in depth
-  against the Blazer class of data; log loudly.
+- **Done** (`b51e479`) — Make the tracking pill honest. `TrackingState`
+  *declares* seven members but `poseConstructor.ts` only ever produces
+  three — `GOOD_FIT`, `TURN_TOO_FAR` (at `abs(yaw) >= 25°`), and
+  `TRACKING_LOST` (shoulder visibility `< 0.35`). The pill now hides on
+  `TRACKING_LOST`, shows an amber "Turn to Face the Camera" on
+  `TURN_TOO_FAR`, and cyan "AI Body Tracking Active" on `GOOD_FIT`
+  (`app/ar-tryon/[id].tsx:1233-1242`). `INITIALIZING`, `STEP_BACK`,
+  `FULL_BODY_REQUIRED` and `LOW_LIGHT` are still declared and never
+  assigned; that part needs detection written first (see Phase 5).
+- **Done** (`3c8f626`) — Client-side calibration sanity guard in the
+  metadata path: if `anatomical_anchor_offset` magnitude or
+  `rest_pose_metric_width` fall outside plausible garment bounds, the
+  record is treated as `NEEDS_CALIBRATION` regardless of what the DB
+  says. Defense in depth against the Blazer class of data; logs loudly.
+- **Done** (`3a46127`, extended same day) — effective update rate: native
+  side counts `updateTransform` calls/sec, and the WebView's own render
+  loop now separately counts frames rendered/sec (`[AR-RENDER-FPS]`,
+  `GarmentRenderer.tsx`) — a genuinely different number from the
+  transport-call count, since `requestAnimationFrame` keeps drawing every
+  compositor tick regardless of whether fresh transform data arrived.
+  Both live-verified on-device (Tailored Blazer, Live Camera AR,
+  ~55-60fps render / variable transport rate).
 
 Test protocol, two calibrated garments minimum (Black tee plus one
 long-sleeve; the Blazer once re-ingested), two people (one poses, one
@@ -200,6 +206,13 @@ intersection, occlusion, frame rate. Write
 
 Exit: report exists with scores for both garments; Phases 2-4 are re-ordered
 from its findings, not from this document's guesses.
+
+**Phase 1 status as of 2026-09-04**: all three instrumentation items are
+done (see above, each marked with its commit). The Test protocol (A-E) and
+`docs/ar-tryon-garment-reality-report.md` remain outstanding — this is a
+manual, two-person, on-device exercise (one poses, one captures) and has
+not been run yet. Phase 1 is not exited; do not start Phase 2-4
+architecture work until it is, per the ordering rule below.
 
 ## Phase 2 — Occlusion (the biggest gap)
 
