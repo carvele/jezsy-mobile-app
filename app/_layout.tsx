@@ -172,6 +172,9 @@ function InitialLayout() {
   const [routeSettled, setRouteSettled] = useState(false);
 
   useEffect(() => {
+    if (!session) {
+      hasAuthenticated.current = false;
+    }
     const pathSegments = segments as string[];
     const inAuthGroup = pathSegments[0] === '(auth)';
     const onProfileSetup = pathSegments[1] === 'profile-setup';
