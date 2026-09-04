@@ -106,9 +106,12 @@ re-tested, since they affect different stages that currently compound).
 
 ## 0. Test setup
 
-- **Black tee only** as the calibration reference. Tailored Blazer and
-  Cotton T-Shirt are confirmed-broken content, not geometry references —
-  don't use them for math verification.
+- **Black tee only** as the calibration reference *at the time this
+  checklist was written*. Tailored Blazer and Cotton T-Shirt were
+  confirmed-broken content then, not geometry references. **Both are now
+  fixed** (Cotton T-Shirt 2026-09-02, Tailored Blazer 2026-09-04 — see
+  `docs/ar-tryon-audit-implementation-plan.md` findings #25/#26) and are
+  usable as a second/third calibrated reference going forward.
 - A **charged** physical Android device (session 4 was cut short by a dead
   battery mid-test).
 - Ideally **two people**: one poses, one operates/logs/screenshots — solo
@@ -337,6 +340,15 @@ needed here is a data correction (re-ingest or manually correct
 `ingestion_status`/`anatomical_anchor_offset` for the Blazer), not code.
 Did not repeat this live check for Cotton T-Shirt — same code path, same
 expected conclusion, no new information likely.
+
+**2026-09-04 update**: the crumpled-mesh geometry observed above was a
+separate GLB-authoring bug, since fixed and re-ingested (a different
+`model_3d_url` is live now). The `ingestion_status`/data-correctness gap
+described above is also closed — `rest_pose` and
+`anatomical_anchor_offset.y` were corrected directly in Supabase, live-
+verified on device (arm rotation, collar height). Tailored Blazer is no
+longer bad-data content; it's a genuinely calibrated `AR_READY` product.
+See `docs/ar-tryon-audit-implementation-plan.md` finding #25.
 
 ---
 

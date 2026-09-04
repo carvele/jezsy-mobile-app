@@ -43,10 +43,21 @@ source at `e35479d` (verified claim by claim, not taken on faith) found:
   skin-bind-before-scale-apply defect, not a calibration-number problem --
   see audit doc finding #25's 2026-09-04 update) is fixed and re-ingested;
   `ingestion_status` is genuinely `AR_READY` now with admin-pipeline-computed
-  values, and the garment renders at correct scale on-device. Not yet a
-  second fully-validated construction for Phase 1, though -- vertical anchor
-  placement is still a bit low and needs one more fix before this counts as
-  "properly calibrated" for the Phase 1 exit criteria below.
+  values, and the garment renders at correct scale on-device.
+  **UPDATE 2026-09-04, later same session**: the remaining gap closed. Three
+  more bugs found and fixed, all live-verified: (1) intermittent invisibility
+  -- Three.js r128 frustum-culls against a `SkinnedMesh`'s stale, never-
+  updated bind-pose bounding sphere, so a correct transform could still
+  silently fail to draw; fixed by disabling frustum culling on the garment
+  mesh (`92cce3d`); (2) sleeves stuck in a T-pose regardless of real arm
+  position -- `garment_metadata.rest_pose` stored `"A_POSE"` but the GLB's
+  real bind pose is T-pose, so every arm rotation delta was computed against
+  the wrong 35°-drooped reference; fixed in the DB; (3) the "sits low"
+  vertical anchor -- `anatomical_anchor_offset.y` pinned to `Spine2` (chest
+  height) instead of the shoulder line; bisected live to `y=1.35`, fixed in
+  the DB. Full writeup: audit doc finding #25. **The Tailored Blazer is now
+  a second fully-validated construction** -- Phase 1's two-garment minimum
+  (Black tee + one long-sleeve) is satisfied.
 
 ## Milestones
 

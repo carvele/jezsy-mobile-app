@@ -1,6 +1,21 @@
 # AR Try-On — Current State
 
-Last updated: 2026-09-02, late evening (engineering work complete; planning artifacts written; baseline moved under us by a teammate). Repo: `jezsy-mobile-app`, branch `main` @ `4148355`, **in sync with `origin/main`, zero ahead / zero behind**, working tree clean apart from this file (deliberately untracked). Paste this whole file into a new conversation for full context; no other history is needed.
+Last updated: 2026-09-04, late night (frustum-culling bug root-caused and fixed; Tailored Blazer's T-pose sleeves and low anchor root-caused, fixed, and committed live to Supabase). Repo: `jezsy-mobile-app`, branch `main`. Frustum-culling fix is committed (`92cce3d`, **not pushed**). The T-pose/anchor fix was a DB-only correction (no code diff — temp overrides used to verify it were added and then fully removed from `[id].tsx`, `git diff` on that file is clean). Paste this whole file into a new conversation for full context; no other history is needed.
+
+## 2026-09-04 session — read this before anything below (which is from 2026-09-02 and partly stale)
+
+Three real bugs found and fixed on the Tailored Blazer, all device-verified:
+
+1. **Intermittent invisibility (root cause of the "#25 anchor retry failed twice" mystery below).** Three.js r128 computes a `SkinnedMesh`'s `boundingSphere` once from raw bind-pose data and never updates it for the posed/retargeted shape. `WebGLRenderer` frustum-culls against that stale sphere, so a provably-correct transform could still be silently skipped — explains why identical, correct numbers sometimes rendered and sometimes didn't. Fixed with one line in `GarmentRenderer.tsx`, right after `garmentGroup.add(garmentModel)`: `garmentModel.traverse(child => { if (child.isMesh) child.frustumCulled = false })`. Committed `92cce3d`. Full writeup: `ar-tryon-audit-implementation-plan.md` item #25.
+2. **T-pose sleeves** (only visible once #1 stopped masking it). DB had `garment_metadata.rest_pose = "A_POSE"` for this product, but the GLB's actual bind pose is T-pose. `calculateBoneRotationsFromCanonical` computed every arm rotation delta relative to the wrong 35°-drooped reference, systematically under-rotating (~47-49° instead of the ~90° a lowered arm needs). Fixed in the DB: `rest_pose` → `"T_POSE"`. Live-verified: arm rotation now ~85°, sleeves hang down naturally.
+3. **Anchor too low** ("sits low" symptom noted below, that session couldn't resolve because #1 made every retry look like a fresh failure). DB's `anatomical_anchor_offset.y = 1.304` pins the garment to `Spine2` (chest height) instead of the shoulder line. Bisected live between that and the shoulder-midpoint value (`1.4367`, which overshot to the jawline): `y = 1.35` puts the collar right at the neck/shoulder line. Fixed in the DB.
+
+**Not re-tested this session, carry forward:**
+- Arms raised / bent poses (only the fully-arms-down case was verified for the T-pose fix — should generalize since the fix is just correcting a reference angle, but not confirmed).
+- The pre-existing "scale/position instability while turning" item (below, and in the audit plan) — unrelated to tonight's three fixes, still open.
+- A fresh cold-launch re-check of the Blazer end-to-end, now that both DB fields are live (tonight's live verification was via local-only overrides that matched what's now actually in the DB, but a from-scratch confirmation costs little and rules out any transcription slip in the manual SQL edit).
+
+**Below this point is the 2026-09-02 state** — still accurate for everything it covers except the Blazer-specific items just listed, which the above supersedes.
 
 ## Read these first
 
@@ -102,7 +117,7 @@ Confirmed live: Black tee and Cotton T-Shirt share the *identical* GLB file (`17
 1. **Step H not run** — second-device guard test for `shouldCorrectNativeLandmarkRotation` needs a second Android device to confirm it correctly no-ops on hardware without the native bug (or correctly fires on hardware that has it). None available. Left open, not faked.
 2. **#28/#29 not deeply re-verified live** — both fixes are implemented, type-checked, unit-tested, and smoke-tested for regressions, but their *exact* original trigger conditions (a landmark past [0,1]; a real `camera-is-restricted` OS error) weren't specifically re-reproduced to confirm the fix on-device.
 3. **#17's saturation behavior not re-verified live** — implemented and reasoned through, but needs an actual yaw sweep past ~49° on-device to confirm the plateau behaves as designed.
-4. **Tailored Blazer still needs real re-calibration** in admin-dashboard (Mixamo-sourced GLB, no verified anchor offset) before it can go back to `AR_READY`. Currently safely gated to the demo-rig fallback.
+4. ~~Tailored Blazer still needs real re-calibration~~ — **fixed 2026-09-04**, see the session note at the top of this file. `rest_pose` and `anatomical_anchor_offset.y` corrected live in Supabase; product is `AR_READY` with real (not demo-rig) data.
 5. **Debug instrumentation left in place**: `[CAL-DEBUG]`, `[WEBVIEW-RELAY]`, `[COMP-GUARD]` console logging. Deliberately kept — the JS-side rotation compensation is a permanent load-bearing fix, not a removable workaround pending a native-library fix, so there's no clear trigger to remove the instrumentation either.
 6. `poseNormalizer.test.ts` exists and passes but wasn't specifically re-run against every change this session beyond the standard full-suite runs already done.
 7. **Occlusion is inactive**, not merely approximate. The capsule shader, full-screen quad and per-frame joint uniforms all exist, but `scene.add(occlusionMesh)` is commented out (`GarmentRenderer.tsx:387`). Consequence: `worldLandmarks` are serialised into every transport frame to feed a mesh that is never drawn. Roadmap Phase 2 Tier 1 is reconnection, not new construction.
@@ -126,7 +141,8 @@ Work the roadmap's Phase 0 to completion before starting anything from Phases 1-
 
 **Needs no device, can be done any time:**
 6. Push `admin-dashboard`'s `a3eef9c` manually: `cd C:\Users\carlv\admin-dashboard && git push origin main`. The permission classifier blocks the agent from doing it.
-7. Re-calibrate the Tailored Blazer GLB in admin-dashboard against the Mixamo source. Only then return it to `AR_READY`. **Never guess the anchor offset.**
+7. ~~Re-calibrate the Tailored Blazer GLB~~ — done 2026-09-04, see the session note at the top of this file.
+8. Push this repo's `92cce3d` (frustum-culling fix) — committed, not yet pushed.
 
 **Then, and only then:** Phase 1 — instrumentation (effective update rate, honest tracking pill, client-side calibration sanity guard) followed by the A-E garment-reality tests on two calibrated garments with two people. That report re-orders Phases 2-4. The next substantive question is no longer "what else is wrong with the AR math" but "how well does this behave as clothing".
 

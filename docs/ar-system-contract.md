@@ -277,10 +277,13 @@ roadmap Phase 3 adds `DEMO_RIG`, **no code may treat
 `merchant_confirmed` was historically stamped by unrelated field edits and
 is not evidence of anchor correctness.
 
-Current live calibration state: Black tee verified sane; Cotton T-Shirt
-corrected by copying it (same GLB file); Tailored Blazer gated at
-`NEEDS_CALIBRATION` and must not return to `AR_READY` without genuine
-measurement.
+Current live calibration state (updated 2026-09-04): Black tee verified
+sane; Cotton T-Shirt corrected by copying it (same GLB file); Tailored
+Blazer re-ingested, its frustum-culling render bug fixed, and its
+`rest_pose`/`anatomical_anchor_offset.y` corrected in the DB -- genuinely
+`AR_READY` with real, live-verified calibration, not the demo-rig fallback.
+See `docs/ar-tryon-audit-implementation-plan.md` finding #25 for the full
+history and root causes.
 
 ---
 

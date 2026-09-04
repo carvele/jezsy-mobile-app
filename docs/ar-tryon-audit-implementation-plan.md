@@ -675,7 +675,48 @@ to match (14/14 passing).
   scale computation having no smoothing/damping when the landmark-based
   width estimate gets noisy during non-frontal poses — probably affects
   every garment when turning, not something specific to the Blazer or
-  tonight's fix. Not yet investigated further.
+  tonight's fix. **Still not investigated — carry into next session.**
+
+**T-pose sleeves — ROOT-CAUSED AND FIXED 2026-09-04, later same session.**
+Live-tested `LeftArm`/`RightArm` bone rotation with the wearer's real arm
+straight down: `boneRotations` was actively computing and applying non-
+identity deltas every frame (`hadBindCorrection=true`, quaternion varying
+frame to frame) — so the retargeting pipeline was not dead, ruling out the
+initial "Shoulder/clavicle bone never corrected" hypothesis as the primary
+cause. The logged rotation angle was only ~47-49° from rest, though, well
+short of the ~90° a fully-lowered arm needs. Checked
+`garment_metadata.rest_pose` for this product directly: DB stores
+`"A_POSE"` (35° droop reference), but the GLB's actual bind pose is
+T-pose (`LeftArm` bind direction measured close to +X, only ~6° droop, back
+in the earlier Armature-rotation investigation this session).
+`calculateBoneRotationsFromCanonical` computes every arm delta relative to
+whichever reference `rest_pose` claims — with the wrong 35°-drooped
+reference, every delta was systematically short by roughly that gap.
+
+Verified live before committing: forced `restPose: 'T_POSE'` via a local-
+only override (not committed) and re-tested the identical arms-down pose.
+`LeftArm` rotation jumped to ~85° (matching a fully-lowered arm), and the
+frontal capture showed the sleeves hanging down along the arms instead of
+stuck out horizontally.
+
+**Anchor height** — also re-tested now that frustum culling (above) no
+longer makes success/failure look random. The shoulder-midpoint anchor
+(`y=1.4367`, `LeftShoulder`/`RightShoulder` midpoint) that failed to render
+twice earlier this session rendered fine once frustum culling was fixed —
+confirming those two "failures" were the frustum-culling bug, not a bad
+anchor value. Visually it overshot (collar near the jawline). Bisected to
+`y=1.35`, live-confirmed: collar sits at the true neck/shoulder line.
+
+**Both committed live to Supabase** (`wufcmtndotfvxvvxkamv`, product
+`b0000008-0000-4000-8000-000000000002`), after removing the local-only
+overrides from `[id].tsx` (`git diff` on that file is clean):
+- `garment_metadata.rest_pose`: `"A_POSE"` → `"T_POSE"`
+- `garment_metadata.anatomical_anchor_offset.y`: `1.304` → `1.35`
+  (`x`/`z` unchanged)
+
+Item #25 (and its two follow-on findings, frustum culling and T-pose) is
+now **fully closed** for the Tailored Blazer. Only the pre-existing
+turning-instability item above remains open, and it is not Blazer-specific.
 
 ### 26. Cotton T-Shirt: broken `rest_pose_metric_width`, confirmed by A/B test against a sibling product sharing the identical GLB
 
