@@ -208,11 +208,16 @@ Exit: report exists with scores for both garments; Phases 2-4 are re-ordered
 from its findings, not from this document's guesses.
 
 **Phase 1 status as of 2026-09-04**: all three instrumentation items are
-done (see above, each marked with its commit). The Test protocol (A-E) and
-`docs/ar-tryon-garment-reality-report.md` remain outstanding — this is a
-manual, two-person, on-device exercise (one poses, one captures) and has
-not been run yet. Phase 1 is not exited; do not start Phase 2-4
-architecture work until it is, per the ordering rule below.
+done. The Test protocol (A-E) has now also been run, solo (device on a
+stand, remote-ADB screenshot capture standing in for a second capturer),
+on both garments, with two poses retested for reproducibility. Full
+results, scored screenshots, and re-ordering recommendations are in
+`docs/ar-tryon-garment-reality-report.md`. Headline finding: a severe,
+reproducible pose-orientation breakdown past ~45° yaw on both garments,
+plus an asymmetric left/right arm-deformation bug — both rank above
+Phase 2's occlusion gap in the report's own recommended re-ordering.
+**Phase 1 is exited.** Phase 2-4 sequencing should be revisited against
+the report before resuming that work, per the ordering rule below.
 
 ## Phase 2 — Occlusion (the biggest gap)
 
