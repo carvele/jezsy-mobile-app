@@ -21,7 +21,8 @@ import { constructBodyPose } from '@/src/utils/poseConstructor';
 import { calculateGarmentFit } from '@/src/utils/garmentFitter';
 import { calculateBoneRotationsFromCanonical } from '@/src/utils/skeletalRetargeter';
 import { normalizePose, torsoEulerDegrees } from '@/src/utils/poseNormalizer';
-import { checkCalibrationPlausibility } from '@/src/utils/garmentCalibrationGuard';
+import { adaptGarmentMetadata } from '@/src/utils/garmentMetadataAdapter';
+import { applyNativePoseCompatibility } from '@/src/utils/nativePoseCompatibility';
 import type { GarmentFitProfile } from '@/src/types/garment';
 import {
   useSharedValue,
@@ -213,54 +214,6 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
   );
 }
 
-// Device-specific compensation for a native/MediaPipe orientation bug. Raw
-// landmarks arrive from the native pose-detection callback already rotated
-// ~90deg -- the two shoulder landmarks show near-zero separation on X and the
-// full shoulder-width separation on Y (see
-// docs/ar-tryon-audit-implementation-plan.md #23/#24). Applying a proper 90deg
-// rotation (x,y) -> (y,-x) for metric world landmarks -- derived algebraically
-// from ~30 captured live samples, verified against every one -- confirmed the
-// fix on all three fronts simultaneously: roll dropped from a pinned ~-90deg
-// to ~0-9deg, camera distance triangulation started actually varying with real
-// distance instead of being stuck at its 0.6m bootstrap seed, and the garment
-// rendered upright and centered on the wearer's shoulders instead of
-// edge-on/off-screen. For normalized [0,1] image-space landmarks the same
-// rotation is applied about the image center (0.5, 0.5): (x,y) -> (y, 1-x).
-//
-// Only wired into the NATIVE pose-detection path (onNativePoseResults below) --
-// the web path (WebCameraFeed/handlePoseResults) is untouched and unaffected.
-// 2026-09-02: tried removing this in favor of the forceCameraOrientation fix
-// below (BaseViewCoordinator.constructor logs sensorOrientation="landscape-right"
-// correctly and consistently), but live re-test showed the bug still occurs
-// intermittently (roll swinging to -90/-106deg, landmarks stacked vertically,
-// cameraDistanceM stuck at the 0.6m bootstrap value) even with the coordinator
-// reporting the right config -- so whatever BaseViewCoordinator does with that
-// config doesn't fully/reliably prevent the rotated landmarks. Keeping this
-// compensation as the actual fix; forceCameraOrientation is left in place since
-// it's still correct to set, just not sufficient on its own. Gated behind a
-// plausibility check so a device that DOESN'T have this bug (dx already larger
-// than dy) is left untouched -- see shouldCorrectNativeLandmarkRotation.
-function shouldCorrectNativeLandmarkRotation(landmarks: any[]): boolean {
-  const l11 = landmarks[11];
-  const l12 = landmarks[12];
-  if (!l11 || !l12) return false;
-  const dx = Math.abs(l12.x - l11.x);
-  const dy = Math.abs(l12.y - l11.y);
-  // Only correct when the vertical separation clearly dominates -- a real
-  // frontal shoulder line should be wider than it is tall. Requiring dy to be
-  // meaningfully larger (not just marginally) avoids flipping a frame that's
-  // just noisy or a person genuinely turned near-profile.
-  return dy > 0.15 && dy > dx * 2;
-}
-
-function correctWorldLandmarkRotation(p: any) {
-  return { ...p, x: p.y, y: -p.x };
-}
-
-function correctNormalized2DLandmarkRotation(p: any) {
-  return { ...p, x: p.y, y: 1 - p.x };
-}
-
 function buildFallbackMetadata(p: Product | null | undefined): import('@/src/types/garment').GarmentMetadata {
   const cat = (p?.category || 'shirt').toLowerCase();
   return {
@@ -368,69 +321,33 @@ export default function ARTryOnScreen() {
 
   useEffect(() => {
     if (!product) return;
-    // Only 'AR_READY' means boneMap/anchorOffset/restPoseMetricWidth are actually
-    // usable for a real render -- 'NEEDS_CALIBRATION'/'NEEDS_MERCHANT_MAPPING'/
-    // 'NOT_AR_COMPATIBLE' mean ingestion is incomplete for this garment (the admin
-    // dashboard's own ingestion pipeline flags this). Previously this screen branched
-    // only on garment_metadata truthiness, so an incompletely-ingested garment was
-    // still fed through as if it were fully calibrated.
-    const rawStatus = (product.garment_metadata as any)?.ingestion_status;
-    if (product.garment_metadata && rawStatus === 'AR_READY') {
-      console.log('[AR] Using real garment_metadata from Supabase');
-      // The DB column stores snake_case keys (bone_map, rest_pose_metric_width, ...);
-      // GarmentMetadata and everything downstream (garmentFitter, GarmentRenderer,
-      // skeletalRetargeter) reads camelCase. The previous straight type-cast here did
-      // NOT convert the actual runtime object, so every calibrated field silently read
-      // as undefined -- confirmed live: restPose logged undefined and garmentMetricWidth
-      // fell back to a hardcoded 0.4 even for a product with a real bone_map and a real
-      // rest_pose_metric_width of 0.22 already set in the database.
-      const raw = product.garment_metadata as any;
-      // bone_map as stored is keyed by the GLB's actual bone name with the canonical
-      // name as the value (e.g. "_left_arm": "LeftArm") -- the runtime looks it up the
-      // other way (boneMap[canonicalName] -> actual GLB bone name), so every lookup
-      // would fail even after the case fix above. Invert it once here.
-      const invertedBoneMap: Record<string, string> = {};
-      if (raw.bone_map && typeof raw.bone_map === 'object') {
-        for (const [glbBoneName, canonicalName] of Object.entries(raw.bone_map)) {
-          if (typeof canonicalName === 'string') invertedBoneMap[canonicalName] = glbBoneName;
-        }
-      }
-      const mapped: import('@/src/types/garment').GarmentMetadata = {
-        id: raw.id,
-        category: raw.category,
-        calibrationVersion: raw.calibration_version,
-        ingestionStatus: raw.ingestion_status,
-        anatomicalAnchorOffset: raw.anatomical_anchor_offset,
-        anchorConfidence: raw.anchor_confidence,
-        anchorType: raw.anchor_type,
-        restPoseMetricWidth: raw.rest_pose_metric_width,
-        boneMap: invertedBoneMap,
-        restPose: raw.rest_pose,
-      };
+    // The snake_case->camelCase conversion, the bone-map inversion and the
+    // calibration sanity guard all live in garmentMetadataAdapter now (roadmap
+    // Phase 3). Each of the three has shipped a silent live bug from being inline
+    // here; see that module's header. This screen is orchestration for the path.
+    const adapted = adaptGarmentMetadata(product.garment_metadata, () =>
+      buildFallbackMetadata(product)
+    );
 
-      // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): AR_READY in the DB
-      // is not proof of calibration -- see ar-system-contract.md section 9. Tailored
-      // Blazer sat AR_READY with anatomicalAnchorOffset.y = 1.304 (should be ~0.1) and
-      // rendered visibly broken live before anyone caught it manually. This is a coarse
-      // last-line check, not a replacement for real ingestion validation: it only
-      // catches grossly implausible values, not subtly wrong ones (see
-      // garmentCalibrationGuard.ts's own doc comment for what it does not catch).
-      const plausibility = checkCalibrationPlausibility(mapped);
-      if (!plausibility.plausible) {
+    switch (adapted.source) {
+      case 'calibrated':
+        console.log('[AR] Using real garment_metadata from Supabase');
+        break;
+      case 'failed-plausibility':
         console.warn(
           '[AR] garment_metadata is AR_READY but failed the calibration sanity guard -- ' +
-          'using fallback (demo rig) instead of trusting it: ' + plausibility.reasons.join('; ')
+          'using fallback (demo rig) instead of trusting it: ' + (adapted.reasons ?? []).join('; ')
         );
-        setGarmentMetadata(buildFallbackMetadata(product));
-      } else {
-        setGarmentMetadata(mapped);
-      }
-    } else {
-      console.log(product.garment_metadata
-        ? '[AR] garment_metadata not AR_READY (' + rawStatus + ') — using fallback (demo rig)'
-        : '[AR] No garment_metadata — using fallback (demo rig)');
-      setGarmentMetadata(buildFallbackMetadata(product));
+        break;
+      case 'not-ar-ready':
+        console.log('[AR] garment_metadata not AR_READY (' + adapted.rawStatus + ') — using fallback (demo rig)');
+        break;
+      case 'no-metadata':
+        console.log('[AR] No garment_metadata — using fallback (demo rig)');
+        break;
     }
+
+    setGarmentMetadata(adapted.metadata);
   }, [product]);
 
   // Biometric consent check on mount
@@ -689,14 +606,18 @@ export default function ARTryOnScreen() {
   // the root instead of patching each downstream symptom separately.
   const onNativePoseResults = useCallback(
     (result: any) => {
-      let landmarks = result.results?.[0]?.landmarks?.[0];
-      let worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
+      // The permanent native device-compat layer -- see
+      // src/utils/nativePoseCompatibility.ts for why it exists and why it is not a
+      // removable workaround. Extracted there (roadmap Phase 3) so its guard can be
+      // tested against synthetic landmark sets rather than only through a camera.
+      const compat = applyNativePoseCompatibility(
+        result.results?.[0]?.landmarks?.[0],
+        result.results?.[0]?.worldLandmarks?.[0]
+      );
+      let landmarks = compat.normalizedLandmarks as any;
+      let worldLandmarks = compat.worldLandmarks as any;
+      const compGuardTriggered = compat.triggered;
 
-      const compGuardTriggered = !!(landmarks && landmarks.length > 0 && shouldCorrectNativeLandmarkRotation(landmarks));
-      if (compGuardTriggered) {
-        landmarks = landmarks.map(correctNormalized2DLandmarkRotation);
-        if (worldLandmarks) worldLandmarks = worldLandmarks.map(correctWorldLandmarkRotation);
-      }
       compGuardLogCounter.current += 1;
       if (compGuardLogCounter.current % 15 === 0) {
         const rawL11 = result.results?.[0]?.landmarks?.[0]?.[11];
