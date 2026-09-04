@@ -344,10 +344,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 uJoints2D: { value: new Array(33).fill(null).map(()=>new THREE.Vector2()) },
                 uJoints3D: { value: new Array(33).fill(null).map(()=>new THREE.Vector3()) },
                 // Phase 2 Tier 1: capsule proximity radius in normalized [0,1]
-                // landmark-space units (same space as uJoints2D/vUv). Starting value
-                // only -- the roadmap explicitly calls for tuning this against Test D
-                // (crossed-arms) screenshots, not treating it as a fixed constant.
-                uCapsuleRadius: { value: 0.06 },
+                // landmark-space units (same space as uJoints2D/vUv), i.e. half the
+                // width of an arm capsule. Tuned on-device against the debug colour
+                // pass: 0.06 drew an arm band roughly double the wearer's actual arm
+                // width, which for a depth occluder is actively harmful -- it carves
+                // away garment pixels that should stay visible. 0.035 tracks the real
+                // limb closely. An occluder that is slightly too NARROW just misses a
+                // sliver of a real occlusion; one that is too WIDE eats the garment.
+                uCapsuleRadius: { value: 0.035 },
               },
               vertexShader: \`
                 varying vec2 vUv;
@@ -371,6 +375,27 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
                   t = h;
                   return length(pa - ba * h);
+                }
+
+                // Signed area of the triangle abc; its sign says which side of ab c is on.
+                float crossZ(vec2 a, vec2 b, vec2 c) {
+                  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+                }
+
+                // The torso is a filled quad (shoulders + hips), not a wireframe. Measuring
+                // only distance-to-the-four-edges left the whole chest interior outside the
+                // capsule radius -- visible in the debug colour pass as two vertical bands
+                // down the sides with an uncovered gap between them, exactly where a
+                // forearm crossing the chest most needs to occlude. A point inside the quad
+                // is distance 0; outside, it falls back to the nearest edge.
+                bool insideQuad(vec2 p, vec2 a, vec2 b, vec2 c, vec2 d) {
+                  float s1 = crossZ(a, b, p);
+                  float s2 = crossZ(b, c, p);
+                  float s3 = crossZ(c, d, p);
+                  float s4 = crossZ(d, a, p);
+                  bool allPos = (s1 >= 0.0 && s2 >= 0.0 && s3 >= 0.0 && s4 >= 0.0);
+                  bool allNeg = (s1 <= 0.0 && s2 <= 0.0 && s3 <= 0.0 && s4 <= 0.0);
+                  return allPos || allNeg;
                 }
 
                 void main() {
@@ -408,6 +433,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   float dTorsoLeft = lineDist(pt, uJoints2D[11], uJoints2D[23], tTorsoLeft);
                   float dTorsoRight = lineDist(pt, uJoints2D[12], uJoints2D[24], tTorsoRight);
                   float dTorso = min(min(dTorsoTop, dTorsoBot), min(dTorsoLeft, dTorsoRight));
+                  // Fill the quad interior (see insideQuad above): shoulders then hips,
+                  // in ring order, so the chest is covered rather than just its outline.
+                  if (insideQuad(pt, uJoints2D[11], uJoints2D[12], uJoints2D[24], uJoints2D[23])) {
+                    dTorso = 0.0;
+                  }
 
                   vec3 posTorsoTop = mix(uJoints3D[11], uJoints3D[12], tTorsoTop);
                   vec3 posTorsoBot = mix(uJoints3D[23], uJoints3D[24], tTorsoBot);
@@ -419,22 +449,29 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   else if (dTorsoLeft < dTorsoTop && dTorsoLeft < dTorsoBot && dTorsoLeft < dTorsoRight) posTorso = posTorsoLeft;
                   else if (dTorsoRight < dTorsoTop && dTorsoRight < dTorsoBot && dTorsoRight < dTorsoLeft) posTorso = posTorsoRight;
 
-                  // 4. Determine authoritative body part region (Test D, I)
-                  float minDist = min(dLeftArm, min(dRightArm, dTorso));
+                  // 4. Which body parts does this pixel actually belong to?
+                  // Phase 2 Tier 1: no real segmentation mask exists yet (that's Tier 2,
+                  // gated on measured frame rate per the roadmap), so coverage is decided
+                  // purely by proximity to the capsule skeleton. Without a radius cutoff
+                  // every pixel on screen resolves to whichever body part is nearest --
+                  // including pixels nowhere near the wearer -- which would occlude the
+                  // whole frame. The torso needs only a small margin beyond its quad now
+                  // that the quad interior is filled (see insideQuad above).
+                  float armRadius = uCapsuleRadius;
+                  // The torso quad is filled, so this is only a margin around it. It is
+                  // deliberately small but non-zero: MediaPipe's shoulder/hip landmarks
+                  // sit at the joints, inside the body's real silhouette, so the quad
+                  // alone under-covers the deltoids and flanks. 1.2x (before the quad
+                  // was filled) pushed the region well past the wearer's outline.
+                  float torsoRadius = uCapsuleRadius * 0.6;
+                  bool inLeftArm = dLeftArm <= armRadius;
+                  bool inRightArm = dRightArm <= armRadius;
+                  bool inTorso = dTorso <= torsoRadius;
 
-                  // Phase 2 Tier 1: no real segmentation mask exists yet (that's Tier
-                  // 2, gated on measured frame rate per the roadmap) -- gate purely on
-                  // proximity to the capsule skeleton instead. Without this, every
-                  // pixel on screen resolves to WHICHEVER body part is nearest (arm or
-                  // torso), even pixels nowhere near the wearer, occluding the entire
-                  // frame. The torso capsule gets a wider radius since it approximates
-                  // a whole chest quad, not a single limb line.
-                  float radius = (minDist == dTorso) ? uCapsuleRadius * 1.6 : uCapsuleRadius;
-
-                  // TEMP DEBUG: joint markers must survive the radius discard below,
-                  // otherwise they can only ever appear inside a region that is already
-                  // being drawn -- which tells us nothing about where the joints
-                  // actually are when the capsules land in the wrong place.
+                  // TEMP DEBUG: joint markers must survive the discard below, otherwise
+                  // they can only ever appear inside a region that is already being
+                  // drawn -- which tells us nothing about where the joints actually are
+                  // when the capsules land in the wrong place.
                   bool isJointMarker = false;
                   for (int ji = 0; ji < 33; ji++) {
                     if (ji == 11 || ji == 12 || ji == 13 || ji == 14 || ji == 15 || ji == 16 || ji == 23 || ji == 24) {
@@ -442,28 +479,49 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     }
                   }
 
-                  if (minDist > radius && !isJointMarker) {
+                  if (!inLeftArm && !inRightArm && !inTorso && !isJointMarker) {
                     discard;
                   }
 
-                  vec3 best3DPos = posTorso;
-                  if (minDist == dLeftArm) best3DPos = posLeftArm;
-                  else if (minDist == dRightArm) best3DPos = posRightArm;
+                  // 5. Of the parts covering this pixel, the one NEAREST THE CAMERA is
+                  // what the viewer actually sees, so its depth is what belongs in the
+                  // buffer. Picking by smallest 2D distance instead (the previous rule)
+                  // gets the crossed-arms case backwards: once the torso quad is filled,
+                  // a forearm lying across the chest is at distance 0 from the torso too,
+                  // so the torso would always win and the arm would never occlude the
+                  // garment -- the exact case Test D exists to check.
+                  float bestNdcZ = 1.0e9;
+                  int winner = 2; // 0 = left arm, 1 = right arm, 2 = torso
+                  if (inLeftArm) {
+                    vec4 cs = uViewProj * vec4(posLeftArm, 1.0);
+                    float z = cs.z / cs.w;
+                    if (z < bestNdcZ) { bestNdcZ = z; winner = 0; }
+                  }
+                  if (inRightArm) {
+                    vec4 cs = uViewProj * vec4(posRightArm, 1.0);
+                    float z = cs.z / cs.w;
+                    if (z < bestNdcZ) { bestNdcZ = z; winner = 1; }
+                  }
+                  if (inTorso) {
+                    vec4 cs = uViewProj * vec4(posTorso, 1.0);
+                    float z = cs.z / cs.w;
+                    if (z < bestNdcZ) { bestNdcZ = z; winner = 2; }
+                  }
 
-                  // 5. Camera Space Projection! (Strict requirement: Never write raw world Z)
-                  vec4 clipSpace = uViewProj * vec4(best3DPos, 1.0);
-                  float ndcZ = clipSpace.z / clipSpace.w;
+                  // A joint marker outside every capsule has no real depth to write;
+                  // park it behind everything so it stays a pure debug overlay.
+                  if (bestNdcZ > 1.0e8) bestNdcZ = 1.0;
 
                   // WebGL expects gl_FragDepth to be [0, 1]
-                  gl_FragDepthEXT = (ndcZ + 1.0) * 0.5;
+                  gl_FragDepthEXT = (bestNdcZ + 1.0) * 0.5;
 
                   // TEMP DEBUG: only visible when the material has colorWrite enabled
                   // (OCCLUSION_DEBUG_VISIBLE). Colour-codes which capsule region won,
                   // so misplacement is obvious rather than inferred: red = left arm,
                   // green = right arm, blue = torso.
                   vec3 dbg = vec3(0.0, 0.0, 1.0);
-                  if (minDist == dLeftArm) dbg = vec3(1.0, 0.0, 0.0);
-                  else if (minDist == dRightArm) dbg = vec3(0.0, 1.0, 0.0);
+                  if (winner == 0) dbg = vec3(1.0, 0.0, 0.0);
+                  else if (winner == 1) dbg = vec3(0.0, 1.0, 0.0);
                   // White dots mark exactly where the shader believes each tracked
                   // joint is. If these don't land on the wearer's real joints, the
                   // 2D coordinate mapping is wrong -- which is faster to see than to
