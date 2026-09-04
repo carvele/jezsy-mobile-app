@@ -694,7 +694,7 @@ export default function OutfitBuilderScreen() {
       {/* Processing overlay: background removal runs after the picker closes,
           which otherwise looks frozen for a few seconds with no feedback. */}
       {(saving || shuffling) && !saveVisible && (
-        <View style={styles.processingOverlay} pointerEvents="auto">
+        <View style={[styles.processingOverlay, { pointerEvents: 'auto' }]}>
           <View style={[styles.processingCard, { backgroundColor: colors.card }]}>
             <ActivityIndicator size="large" color={colors.tint} />
             <Text style={[styles.processingText, { color: colors.text }]}>

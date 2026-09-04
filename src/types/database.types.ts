@@ -1061,6 +1061,7 @@ export type Database = {
           gender: string | null
           id: string
           is_blocked: boolean | null
+          is_wardrobe_shared: boolean | null
           last_name: string | null
           phone: string | null
           province: string | null
@@ -1083,6 +1084,7 @@ export type Database = {
           gender?: string | null
           id: string
           is_blocked?: boolean | null
+          is_wardrobe_shared?: boolean | null
           last_name?: string | null
           phone?: string | null
           province?: string | null
@@ -1105,6 +1107,7 @@ export type Database = {
           gender?: string | null
           id?: string
           is_blocked?: boolean | null
+          is_wardrobe_shared?: boolean | null
           last_name?: string | null
           phone?: string | null
           province?: string | null

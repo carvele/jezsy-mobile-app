@@ -93,7 +93,7 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
             onPress={() => router.push(`/product/${item.product.id}`)}
             activeOpacity={0.8}
           >
-            <Image source={{ uri: item.product.image_url }} style={styles.image} />
+            <Image source={{ uri: item.product.image_url }} style={styles.image} resizeMode="cover" />
             <View style={styles.cardContent}>
               <View style={[styles.harmonyBadge, { backgroundColor: colors.tint + "20" }]}>
                 <IconSymbol name="sparkles" size={12} color={colors.tint} />
@@ -153,7 +153,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     width: 140,
     height: 160,
     backgroundColor: colors.imagePlaceholder,
-    resizeMode: "cover",
   },
   cardContent: {
     padding: 8,

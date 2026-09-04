@@ -706,11 +706,16 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#C9A96E",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#C9A96E",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      web: { boxShadow: '0 4px 8px rgba(201,169,110,0.3)' },
+    }),
   },
   primaryActionText: { ...Type.bodyLargeStrong },
 });

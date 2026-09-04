@@ -794,7 +794,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   arButton: {
     position: "absolute", bottom: 60, right: 20, flexDirection: "row", alignItems: "center",
     paddingHorizontal: Spacing.lg, paddingVertical: 10, borderRadius: 20, gap: Spacing.sm,
-    shadowColor: colors.text, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
+    elevation: 4,
+    ...Platform.select({
+      ios: { shadowColor: colors.text, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 },
+      web: { boxShadow: `0 2px 4px rgba(0,0,0,0.3)` },
+    }),
   },
   arButtonText: { fontWeight: "700", fontSize: 14 },
   contentContainer: { padding: Spacing.xxl, borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30 },
@@ -891,7 +895,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   iconAction: { width: 56, height: 56, borderRadius: 28, borderWidth: 1, justifyContent: "center", alignItems: "center" },
   primaryAction: {
     flex: 1, height: 56, borderRadius: 28, justifyContent: "center", alignItems: "center",
-    shadowColor: colors.tint, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+    elevation: 5,
+    ...Platform.select({
+      ios: { shadowColor: colors.tint, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      web: { boxShadow: `0 4px 8px rgba(0,0,0,0.3)` },
+    }),
   },
   primaryActionText: { ...Type.subtitle },
   addedToast: {

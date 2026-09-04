@@ -495,7 +495,13 @@ export default function ProfileSetupScreen() {
               icon={step < TOTAL_STEPS - 1
                 ? <ArrowRight size={18} color={colors.onTint} />
                 : <Check size={18} color={colors.onTint} />}
-              style={[styles.nextBtnGlow, { shadowColor: colors.tint }]}
+              style={[
+                styles.nextBtnGlow,
+                Platform.select({
+                  ios: { shadowColor: colors.tint },
+                  web: { boxShadow: '0 4px 10px rgba(201,169,110,0.35)' },
+                }),
+              ]}
             />
 
             {/* Address slide can be skipped */}
@@ -664,10 +670,14 @@ const styles = StyleSheet.create({
   // Geometry and colour now live in PrimaryButton; only the gold glow is
   // specific to this screen. Not an Elevation token -- those cast black.
   nextBtnGlow: {
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
     elevation: 6,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+      },
+    }),
   },
   skipBtn: { alignSelf: 'center', paddingVertical: 6 },
   skipText: { fontSize: 13 },

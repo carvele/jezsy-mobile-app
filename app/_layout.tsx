@@ -271,8 +271,7 @@ function InitialLayout() {
       {/* Covers the Stack rather than replacing it only during cold bootstrap before routeSettled */}
       {!routeSettled && (
         <View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, zIndex: 999 }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, zIndex: 999, pointerEvents: 'none' }]}
         />
       )}
       {routeSettled && pendingDeletionId && !deletionNoticeDismissed && (

@@ -14,6 +14,7 @@ import {
     ActivityIndicator,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -298,9 +299,8 @@ export function TimeSlotPicker({
         animationType="slide"
         onRequestClose={() => setPickerOpen(false)}
       >
-        <TouchableOpacity
+        <Pressable
           style={styles.modalOverlay}
-          activeOpacity={1}
           onPress={() => setPickerOpen(false)}
           accessibilityRole="button"
           accessibilityLabel="Close time picker"
@@ -364,7 +364,7 @@ export function TimeSlotPicker({
               })}
             </ScrollView>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </Pressable>
       </Modal>
     </>
   );

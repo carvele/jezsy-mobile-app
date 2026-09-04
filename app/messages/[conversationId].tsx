@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, KeyboardAvoidingView, Platform, Image, Modal
+  TouchableOpacity, Pressable, KeyboardAvoidingView, Platform, Image, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -551,10 +551,9 @@ export default function ChatScreen() {
             ]}
           >
             {productPreview ? (
-              <TouchableOpacity
-                style={[styles.productCard, { backgroundColor: isMe ? 'rgba(0,0,0,0.10)' : colors.background, borderColor: isMe ? 'rgba(0,0,0,0.12)' : colors.border }]}
+              <Pressable
+                style={({ pressed }) => [styles.productCard, { backgroundColor: isMe ? 'rgba(0,0,0,0.10)' : colors.background, borderColor: isMe ? 'rgba(0,0,0,0.12)' : colors.border, opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => router.push(`/product/${productRef}`)}
-                activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel={`Question about ${productPreview.name}. Opens the product page.`}
               >
@@ -575,7 +574,7 @@ export default function ChatScreen() {
                   </Text>
                 </View>
                 <IconSymbol name="chevron.right" size={14} color={isMe ? 'rgba(0,0,0,0.4)' : colors.secondaryText} />
-              </TouchableOpacity>
+              </Pressable>
             ) : isReservationContext ? (
               <TouchableOpacity
                 style={[styles.contextChip, { backgroundColor: isMe ? 'rgba(0,0,0,0.12)' : colors.background, borderColor: isMe ? 'transparent' : colors.border, flexDirection: 'row', alignItems: 'center' }]}
