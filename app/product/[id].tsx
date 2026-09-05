@@ -425,6 +425,24 @@ export default function ProductDetailScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
                 {colorsList.map((color) => {
                   const isSelected = selectedColor === color;
+                  
+                  // Check if this color has any stock for the current size (or any size if none selected)
+                  const isAvailable = (() => {
+                    if (selectedSize) {
+                      const stock = getStockInfo(selectedSize, color);
+                      return stock === null || stock > 0;
+                    }
+                    if (!product.sizes || product.sizes.length === 0) {
+                      const stock = getStockInfo("", color);
+                      return stock === null || stock > 0;
+                    }
+                    return product.sizes.some(s => {
+                      const stock = getStockInfo(s, color);
+                      return stock === null || stock > 0;
+                    });
+                  })();
+                  const isOutOfStock = !isAvailable;
+
                   return (
                     <TouchableOpacity
                       key={color}
@@ -432,13 +450,15 @@ export default function ProductDetailScreen() {
                         styles.colorOptionButton,
                         { borderColor: isSelected ? colors.tint : colors.border },
                         isSelected && { backgroundColor: colors.card },
+                        isOutOfStock && { opacity: 0.4 }
                       ]}
                       onPress={() => { tapLight(); setSelectedColor(color); }}
                       accessibilityRole="radio"
                       accessibilityLabel={`Select colour ${color}`}
+                      accessibilityHint={isOutOfStock ? `Colour ${color} is out of stock${selectedSize ? ` in size ${selectedSize}` : ''}` : `Selects ${color} as the colour option`}
                       accessibilityState={{ selected: isSelected }}
                     >
-                      <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{color}</Text>
+                      <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }, isOutOfStock && { textDecorationLine: 'line-through' }]}>{color}</Text>
                     </TouchableOpacity>
                   );
                 })}

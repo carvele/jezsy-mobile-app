@@ -16,6 +16,10 @@ interface OutfitItem {
   scale?: number;
   rotation?: number;
   z_index?: number;
+  // Normalized drag offset saved from the Outfit Builder canvas (0-1 fraction
+  // of canvas dimensions). Applied as an extra translate on top of default placement.
+  drag_x?: number;
+  drag_y?: number;
 }
 
 interface Props {
@@ -65,6 +69,10 @@ export function MannequinOutfitPreview({
         const posY = typeof item.y === 'number' ? item.y * canvasHeight : (placement.yPercent || 0.2) * canvasHeight;
         const itemScale = typeof item.scale === 'number' ? item.scale : 1.0;
         const itemRotation = typeof item.rotation === 'number' ? item.rotation : 0;
+        // Drag offsets saved from the Outfit Builder canvas; zero for items that
+        // were never repositioned or were saved from advisor/suggestions.
+        const dragOffsetX = (item.drag_x ?? 0) * canvasWidth;
+        const dragOffsetY = (item.drag_y ?? 0) * canvasHeight;
 
         return (
           <View
@@ -82,6 +90,8 @@ export function MannequinOutfitPreview({
                   { translateY: posY },
                   { scale: itemScale },
                   { rotate: `${itemRotation}deg` },
+                  { translateX: dragOffsetX },
+                  { translateY: dragOffsetY },
                 ],
               },
             ]}

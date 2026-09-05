@@ -24,7 +24,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
   const { showToast } = useToast();
   const theme = useColorScheme();
   const colors = Colors[theme];
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -59,26 +59,16 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
 
     setSubmitting(true);
     try {
-      const uploadedUrls: string[] = [];
-      for (const img of images) {
+      const uploadPromises = images.map(async (img) => {
         const filePath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${img.ext}`;
         const { error: uploadError } = await supabase.storage
           .from('review-images')
           .upload(filePath, decode(img.base64), { contentType: img.contentType });
         if (uploadError) throw uploadError;
         const { data: publicUrl } = supabase.storage.from('review-images').getPublicUrl(filePath);
-        uploadedUrls.push(publicUrl.publicUrl);
-      }
-
-      // profiles' read policy only lets a customer see their own row, so
-      // ReviewsList can't resolve another reviewer's name via an embed --
-      // denormalize the display name here, at the one point where the
-      // author's own profile is guaranteed readable.
-      const reviewerName = profile?.first_name
-        ? [profile.first_name, profile.last_name ? `${profile.last_name[0]}.` : null]
-            .filter(Boolean)
-            .join(' ')
-        : null;
+        return publicUrl.publicUrl;
+      });
+      const uploadedUrls = await Promise.all(uploadPromises);
 
       const { error } = await supabase.from('reviews').insert({
         product_id: productId,
@@ -86,7 +76,6 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
         rating,
         comment: comment.trim() || null,
         images: uploadedUrls,
-        reviewer_name: reviewerName,
       });
 
       if (error) throw error;

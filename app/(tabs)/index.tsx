@@ -91,16 +91,17 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!session?.user?.id) return;
     let isCancelled = false;
+    let timer: NodeJS.Timeout;
     hasSeenSystemTour(session.user.id).then((seen) => {
       if (!seen && !isCancelled) {
-        const timer = setTimeout(() => {
+        timer = setTimeout(() => {
           if (!isCancelled) setShowTour(true);
         }, 800);
-        return () => clearTimeout(timer);
       }
     });
     return () => {
       isCancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [session?.user?.id]);
 
@@ -137,20 +138,17 @@ export default function HomeScreen() {
       }
     }
     try {
-      const [productsRes, categoriesRes] = await Promise.all([
+      const [productsRes, trendingRes, categoriesRes] = await Promise.all([
         supabase
           .from('products')
           .select(`*, ${CATEGORY_SELECT}`)
           .eq('visibility', 'public')
           .eq('deleted', false)
-          // id as a tiebreak: rows seeded in the same batch share one
-          // created_at, and Postgres does not promise a stable order for
-          // ties on that alone -- the hero section could silently swap
-          // which of two featured products got the large slot between
-          // loads. id is unique per row, so this makes every consumer of
-          // `data` (hero pool, trending sort, search) deterministic.
           .order('created_at', { ascending: false })
-          .order('id', { ascending: true }),
+          .order('id', { ascending: true })
+          .limit(20),
+        (supabase.rpc as any)('get_trending_products', { limit_count: 6 })
+          .select(`*, ${CATEGORY_SELECT}`),
         supabase
           .from('categories')
           .select('*')
@@ -159,6 +157,7 @@ export default function HomeScreen() {
       ]);
 
       if (productsRes.error) throw productsRes.error;
+      if (trendingRes.error) throw trendingRes.error;
       if (categoriesRes.error) throw categoriesRes.error;
 
       const data = productsRes.data;
@@ -171,28 +170,15 @@ export default function HomeScreen() {
         const sellable = data.filter(isInStock);
         const featuredInStock = sellable.filter((p) => p.is_featured);
 
-        // The hero is the largest thing on the app's first screen, so it must
-        // never be a product nobody can reserve. Prefer featured and in stock,
-        // then anything in stock; fall back to the raw list only so the
-        // section does not vanish if the whole catalog is sold out.
         const heroPool =
           featuredInStock.length >= 2 ? featuredInStock
           : sellable.length >= 2 ? sellable
           : data;
         setFeaturedProducts(heroPool.slice(0, HERO_MAX_CARDS));
 
-        // Real popularity signal (same one Explore's "Most Popular" sort
-        // trusts), not just "newest" mislabeled as trending. Sold-out items
-        // sort last rather than being removed: they still carry browse value
-        // and feed the back-in-stock notify flow.
-        const byPopularity = [...data].sort((a, b) => {
-          const stockDiff = Number(isInStock(b)) - Number(isInStock(a));
-          if (stockDiff !== 0) return stockDiff;
-          const reviewDiff = (b.review_count || 0) - (a.review_count || 0);
-          if (reviewDiff !== 0) return reviewDiff;
-          return (b.rating || 0) - (a.rating || 0);
-        });
-        setTrendingProducts(byPopularity.slice(0, 6));
+        if (trendingRes.data) {
+          setTrendingProducts(trendingRes.data as any[]);
+        }
       }
       if (categoriesRes.data) {
         // Ordered by what this device actually opens, falling back to the

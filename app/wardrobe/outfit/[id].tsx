@@ -129,14 +129,18 @@ export default function OutfitDetailScreen() {
         .filter((wId): wId is string => Boolean(wId));
 
       if (wardrobeItemIds.length > 0) {
-        // Increment wear count on all referenced wardrobe items
-        await Promise.all(
-          wardrobeItemIds.map(async (itemId) => {
-            try {
-              await supabase.rpc('increment_wear_count' as any, { item_id: itemId });
-            } catch {}
-          })
+        // Collect errors rather than swallowing them so a failed RPC
+        // (expired session, RLS denial) surfaces a real error toast.
+        const results = await Promise.allSettled(
+          wardrobeItemIds.map((itemId) =>
+            supabase.rpc('increment_wear_count' as any, { item_id: itemId })
+          )
         );
+        const failures = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error));
+        if (failures.length > 0) {
+          console.error('increment_wear_count partial failure:', failures);
+          throw new Error('One or more wear counts could not be updated.');
+        }
       }
 
       showToast(`Outfit wear logged! 🔥 Looking sharp today.`, 'success');

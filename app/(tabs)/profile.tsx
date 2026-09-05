@@ -6,7 +6,6 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
-import { Database } from '@/src/types/database.types';
 import { useRouter } from 'expo-router';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { useCart } from '@/src/context/CartContext';
@@ -14,8 +13,6 @@ import { StreakBadge } from '@/src/components/StreakBadge';
 import { useToast } from '@/src/context/ToastContext';
 import { statusBucket } from '@/src/utils/reservationStatus';
 import { SystemTourModal } from '@/src/components/SystemTourModal';
-
-type Profile = Database['public']['Tables']['profiles']['Row'];
 
 export default function ProfileScreen() {
   const { showToast } = useToast();

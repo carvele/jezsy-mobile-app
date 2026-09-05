@@ -39,7 +39,11 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [onlineUsers, setOnlineUsers] = useState<Record<string, string>>({});
 
-  const unreadCount = conversations.reduce((sum, conv) => sum + (conv.unread_count || 0), 0);
+  const isStaff = profile?.role === 'staff' || profile?.role === 'owner';
+  const unreadCount = conversations.reduce(
+    (sum, conv) => sum + (isStaff ? (conv.unread_staff || 0) : (conv.unread_customer || 0)),
+    0
+  );
 
   const isStaffOnline = Object.values(onlineUsers).some(
     (role) => role === 'staff' || role === 'owner'
@@ -243,9 +247,12 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
   const markAsRead = useCallback(async (conversationId: string) => {
     try {
+      // Only the current side's unread count clears -- a staff member
+      // reading a conversation shouldn't silently mark it read for the
+      // customer, and vice versa.
       await supabase
         .from('conversations')
-        .update({ unread_count: 0 })
+        .update(isStaff ? { unread_staff: 0 } : { unread_customer: 0 })
         .eq('id', conversationId);
 
       const nowIso = new Date().toISOString();
@@ -272,7 +279,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error('Error marking as read:', error);
     }
-  }, [session?.user.id]);
+  }, [session?.user.id, isStaff]);
 
   // Bulk catch-up for messages that arrived while this app was fully closed
   // (so no realtime INSERT could have marked them) -- called when the chat
@@ -306,7 +313,8 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
         .from('conversations')
         .insert({
           customer_id: session.user.id,
-          unread_count: 0,
+          unread_customer: 0,
+          unread_staff: 0,
         })
         .select()
         .single();
@@ -321,7 +329,8 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
           .from('conversations')
           .insert({
             customer_id: session?.user.id,
-            unread_count: 0,
+            unread_customer: 0,
+            unread_staff: 0,
           })
           .select()
           .single();

@@ -38,6 +38,7 @@ async function deleteChunked(key: string) {
 export async function setSecureValue(key: string, value: string) {
   if (value.length > 2048) {
     await SecureStore.deleteItemAsync(key);
+    await deleteChunked(key);
     await setChunked(key, value);
   } else {
     await deleteChunked(key);

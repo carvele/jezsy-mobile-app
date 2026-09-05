@@ -98,12 +98,9 @@ export async function submitDeletionRequest(userId: string, reason?: string): Pr
   }
 
   const { data, error } = await supabase
-    .from('account_deletion_requests')
-    .insert({ user_id: userId, reason: reason || 'Requested by customer' })
-    .select('id')
-    .single();
+    .rpc('request_account_deletion', { _reason: reason || 'Requested by customer' });
   if (error) throw error;
-  return data.id;
+  return data;
 }
 
 export async function withdrawDeletionRequest(requestId: string): Promise<void> {

@@ -27,8 +27,6 @@ import { recordCategoryVisit } from '@/src/utils/categoryAffinity';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
 import { GRID_GUTTER, GRID_COLUMN_GAP, useGridCardWidth } from '@/src/utils/layout';
-import { isInStock } from '@/src/utils/stock';
-import { isNewArrival } from '@/src/utils/newArrival';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
@@ -239,30 +237,46 @@ export default function ExploreScreen() {
     }
   };
 
-  // Fetch search results from Supabase
+  // Fetch search results from Supabase via search_catalog RPC.
+  // All standard filters (size, color, price, fit, material, tags, sale, AR, new arrivals)
+  // are pushed server-side. Only the fit-aware My Size filter remains client-side.
   const fetchSearchResults = useCallback(async (text: string) => {
     if (!text.trim()) {
       setSearchResults([]);
       return;
     }
     try {
-      // Matches by product name directly, or by category/subcategory name
-      // via the FK (a match on a main category, e.g. "dress", expands to
-      // every subcategory under it — broader and more useful than the old
-      // text-column match, which only ever compared against products'
-      // own denormalized copy of the category name).
-      const matchingCategoryIds = subCategoryIdsMatching(text);
-      let orClause = `name.ilike.%${text}%`;
-      if (matchingCategoryIds.length > 0) {
-        orClause += `,category_id.in.(${matchingCategoryIds.join(',')})`;
+      const safeText = text.replace(/[,()\"]/g, ' ').trim();
+      if (!safeText) {
+        setSearchResults([]);
+        return;
       }
+      // Expand category-name matches to their subcategory IDs server-side.
+      const matchingCategoryIds = subCategoryIdsMatching(safeText);
+      const categoryIds = matchingCategoryIds.length > 0 ? matchingCategoryIds : null;
 
-      const { data, error } = await supabase
-        .from('products')
-        .select(PRODUCT_SELECT)
-        .eq('deleted', false)
-        .eq('visibility', 'public')
-        .or(orClause);
+      let minPrice: number | null = customMinPrice ? parseFloat(customMinPrice) : null;
+      let maxPrice: number | null = customMaxPrice ? parseFloat(customMaxPrice) : null;
+      if (selectedPriceRange === 'under1000') { maxPrice = 999.99; }
+      else if (selectedPriceRange === '1000to2000') { minPrice = 1000; maxPrice = 2000; }
+      else if (selectedPriceRange === '2000to4000') { minPrice = 2000; maxPrice = 4000; }
+      else if (selectedPriceRange === 'over4000') { minPrice = 4000.01; }
+
+      const { data, error } = await (supabase.rpc as any)('search_catalog', {
+        search_query: safeText,
+        category_ids: categoryIds,
+        size_filters: selectedSizes.length > 0 ? selectedSizes : null,
+        color_filters: selectedColors.length > 0 ? selectedColors : null,
+        fit_filters: selectedFits.length > 0 ? selectedFits : null,
+        material_filters: selectedMaterials.length > 0 ? selectedMaterials : null,
+        tag_filters: selectedTags.length > 0 ? selectedTags : null,
+        on_sale_only: selectedSaleOnly,
+        new_arrivals_only: selectedNewArrivalsOnly,
+        ar_only: selectedArOnly,
+        min_price: isNaN(minPrice as number) ? null : minPrice,
+        max_price: isNaN(maxPrice as number) ? null : maxPrice,
+        sort_by: selectedSort,
+      }).select(PRODUCT_SELECT);
 
       if (error) {
         console.error('Error fetching search results:', error);
@@ -270,12 +284,15 @@ export default function ExploreScreen() {
         setSearchResults(data);
       }
     } catch (err) {
-      // No screen-level indication a search had failed vs. genuinely returned
-      // nothing -- both rendered as an empty results list.
       console.error(err);
       showToast('Search failed. Please try again.', 'error');
     }
-  }, [subCategoryIdsMatching, showToast]);
+  }, [
+    subCategoryIdsMatching, showToast,
+    selectedSizes, selectedColors, selectedFits, selectedMaterials, selectedTags,
+    selectedSaleOnly, selectedNewArrivalsOnly, selectedArOnly,
+    customMinPrice, customMaxPrice, selectedPriceRange, selectedSort,
+  ]);
 
   // Trigger search on query change
   useEffect(() => {
@@ -284,47 +301,56 @@ export default function ExploreScreen() {
     }
   }, [searchQuery, isSearchActive, fetchSearchResults]);
 
-  // Builds the base query for whichever mode is active (category/subcategory
-  // drill-down or "Shop All"), shared by the initial fetch and loadMore so
-  // the two can never drift out of sync on filters or ordering.
+  // Builds the filtered/sorted RPC call for browse mode (category drill-down or Shop All).
+  // Shared by the initial fetch, pull-to-refresh, and infinite scroll load-more so they
+  // can never drift out of sync on filters or ordering. All standard filters are
+  // pushed server-side; only the fit-aware My Size filter stays client-side.
   const buildProductsQuery = useCallback(() => {
+    let categoryIds: string[] | null = null;
+
     if (showAllProducts) {
-      return supabase
-        .from('products')
-        .select(PRODUCT_SELECT)
-        .eq('deleted', false)
-        .eq('visibility', 'public')
-        // id as a tiebreak. This query pages by range(), and without a
-        // unique secondary key Postgres does not promise the same order
-        // for rows tied on created_at across separate calls -- a tied row
-        // could land on two pages (duplicate card) or neither (a product
-        // silently missing from infinite scroll).
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: true });
-    }
-    if (!selectedCategory || !selectedSubCategory) return null;
-
-    let query = supabase
-      .from('products')
-      .select(PRODUCT_SELECT)
-      .eq('deleted', false)
-      .eq('visibility', 'public');
-
-    if (selectedSubCategory === 'View All') {
-      // category_id always points at a subcategory row, so "every
-      // product in this main category" means "in any of its subs".
-      const subIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
-      query = query.in('category_id', subIds);
+      // null = no category constraint; RPC returns all public products.
+      categoryIds = null;
+    } else if (selectedCategory && selectedSubCategory) {
+      if (selectedSubCategory === 'View All') {
+        categoryIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
+      } else {
+        const subId = subCategoryIdByName[selectedSubCategory];
+        if (!subId) return null;
+        categoryIds = [subId];
+      }
     } else {
-      const subId = subCategoryIdByName[selectedSubCategory];
-      if (!subId) return null;
-      query = query.eq('category_id', subId);
+      return null;
     }
 
-    // Same tiebreak reasoning as the "Shop All" branch above -- this query
-    // pages too.
-    return query.order('created_at', { ascending: false }).order('id', { ascending: true });
-  }, [showAllProducts, selectedCategory, selectedSubCategory, subCategoriesByParent, subCategoryIdByName]);
+    let minPrice: number | null = customMinPrice ? parseFloat(customMinPrice) : null;
+    let maxPrice: number | null = customMaxPrice ? parseFloat(customMaxPrice) : null;
+    if (selectedPriceRange === 'under1000') { maxPrice = 999.99; }
+    else if (selectedPriceRange === '1000to2000') { minPrice = 1000; maxPrice = 2000; }
+    else if (selectedPriceRange === '2000to4000') { minPrice = 2000; maxPrice = 4000; }
+    else if (selectedPriceRange === 'over4000') { minPrice = 4000.01; }
+
+    return (supabase.rpc as any)('search_catalog', {
+      search_query: null,
+      category_ids: categoryIds,
+      size_filters: selectedSizes.length > 0 ? selectedSizes : null,
+      color_filters: selectedColors.length > 0 ? selectedColors : null,
+      fit_filters: selectedFits.length > 0 ? selectedFits : null,
+      material_filters: selectedMaterials.length > 0 ? selectedMaterials : null,
+      tag_filters: selectedTags.length > 0 ? selectedTags : null,
+      on_sale_only: selectedSaleOnly,
+      new_arrivals_only: selectedNewArrivalsOnly,
+      ar_only: selectedArOnly,
+      min_price: isNaN(minPrice as number) ? null : minPrice,
+      max_price: isNaN(maxPrice as number) ? null : maxPrice,
+      sort_by: selectedSort,
+    }).select(PRODUCT_SELECT);
+  }, [
+    showAllProducts, selectedCategory, selectedSubCategory, subCategoriesByParent, subCategoryIdByName,
+    selectedSizes, selectedColors, selectedFits, selectedMaterials, selectedTags,
+    selectedSaleOnly, selectedNewArrivalsOnly, selectedArOnly,
+    customMinPrice, customMaxPrice, selectedPriceRange, selectedSort,
+  ]);
 
   // Fetch page 0 whenever the active category/subcategory/"Shop All" mode
   // changes.
@@ -339,7 +365,7 @@ export default function ExploreScreen() {
 
     // Rendered as "no products in this category" indistinguishable from an
     // actually empty subcategory without the toast below.
-    query.range(0, PAGE_SIZE - 1).then(({ data, error }) => {
+    query.range(0, PAGE_SIZE - 1).then(({ data, error }: { data: any; error: any }) => {
       if (cancelled) return;
       if (error) {
         console.error('Error fetching products:', error);
@@ -411,150 +437,22 @@ export default function ExploreScreen() {
     return map;
   }, [products, searchResults, isSearchActive, sizingMeasurements, fitPreference, sizingReady]);
 
-  // Real-Time Client-Side Filtering
-  const filteredProducts = useMemo(() => {
-    const listToFilter = isSearchActive ? searchResults : products;
+  // F-001: All standard filters and sorting are now handled server-side by the
+  // search_catalog RPC. The only client-side work remaining is the fit-aware
+  // "My Size" filter, which relies on personal body measurements that cannot
+  // be expressed in SQL.
+  const processedProducts = useMemo(() => {
+    const source = isSearchActive ? searchResults : products;
+    if (!selectedMySizeOnly) return source;
 
-    return listToFilter.filter((product) => {
-      // 1. Size filter
-      if (selectedSizes.length > 0) {
-        const productSizes = product.sizes || [];
-        const hasSize = selectedSizes.some((size) => productSizes.includes(size));
-        if (!hasSize) return false;
-      }
-
-      // 2. Color filter
-      if (selectedColors.length > 0) {
-        const productColors = (product.color || '')
-          .split(',')
-          .map((c) => c.trim().toLowerCase())
-          .filter(Boolean);
-        const hasColor = selectedColors.some((color) =>
-          productColors.includes(color.toLowerCase())
-        );
-        if (!hasColor) return false;
-      }
-
-      // 3. Price Filter (Effective Price)
-      const price = product.on_sale && product.sale_price ? product.sale_price : (product.price || 0);
-
-      // Preset Price Range
-      if (selectedPriceRange) {
-        if (selectedPriceRange === 'under1000' && price >= 1000) return false;
-        if (selectedPriceRange === '1000to2000' && (price < 1000 || price > 2000)) return false;
-        if (selectedPriceRange === '2000to4000' && (price < 2000 || price > 4000)) return false;
-        if (selectedPriceRange === 'over4000' && price <= 4000) return false;
-      }
-
-      // Custom Price Range
-      if (customMinPrice) {
-        const minPrice = parseFloat(customMinPrice);
-        if (!isNaN(minPrice) && price < minPrice) return false;
-      }
-      if (customMaxPrice) {
-        const maxPrice = parseFloat(customMaxPrice);
-        if (!isNaN(maxPrice) && price > maxPrice) return false;
-      }
-
-      // 4. New Arrivals Filter
-      if (selectedNewArrivalsOnly && !isNewArrival(product)) {
-        return false;
-      }
-
-      // 5. On Sale Filter
-      if (selectedSaleOnly && !product.on_sale) {
-        return false;
-      }
-
-      // 5.5 AR Filter
-      if (selectedArOnly) {
-        const hasArUrl = !!product.model_3d_url;
-        const hasArTag = product.tags && product.tags.includes('AR Try-On');
-        if (!hasArUrl || !hasArTag) return false;
-      }
-
-      // 6. Fit / Cut Filter
-      if (selectedFits.length > 0) {
-        const productFit = (product.fit_and_sizing || '').trim().toLowerCase();
-        const hasFit = selectedFits.some((fit) => productFit.includes(fit.toLowerCase()));
-        if (!hasFit) return false;
-      }
-
-      // 7. Material Filter
-      if (selectedMaterials.length > 0) {
-        const productMat = (product.material || '').trim().toLowerCase();
-        const hasMat = selectedMaterials.some((mat) => productMat.includes(mat.toLowerCase()));
-        if (!hasMat) return false;
-      }
-
-      // 7.5 Tags Filter
-      if (selectedTags.length > 0) {
-        const productTags = product.tags || [];
-        const hasTag = selectedTags.some((tag) => productTags.includes(tag));
-        if (!hasTag) return false;
-      }
-
-      // 8. My Size filter (fit-aware): keep only items whose recommended size
-      // is resolvable and, when the product lists sizes, actually offered.
-      if (selectedMySizeOnly) {
-        const rec = recommendedSizes.get(product.id);
-        if (!rec) return false;
-        const sizes = product.sizes || [];
-        if (sizes.length > 0 && !sizes.includes(rec)) return false;
-      }
-
+    return source.filter((product) => {
+      const rec = recommendedSizes.get(product.id);
+      if (!rec) return false;
+      const sizes = product.sizes || [];
+      if (sizes.length > 0 && !sizes.includes(rec)) return false;
       return true;
     });
-  }, [
-    products,
-    searchResults,
-    isSearchActive,
-    selectedSizes,
-    selectedColors,
-    selectedPriceRange,
-    customMinPrice,
-    customMaxPrice,
-    selectedNewArrivalsOnly,
-    selectedSaleOnly,
-    selectedArOnly,
-    selectedMySizeOnly,
-    recommendedSizes,
-    selectedFits,
-    selectedMaterials,
-    selectedTags,
-  ]);
-
-  // Real-Time Client-Side Sorting
-  const processedProducts = useMemo(() => {
-    const result = [...filteredProducts];
-
-    if (selectedSort === 'newest') {
-      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    } else if (selectedSort === 'priceAsc') {
-      const getPrice = (p: Product) => p.on_sale && p.sale_price ? p.sale_price : (p.price || 0);
-      result.sort((a, b) => getPrice(a) - getPrice(b));
-    } else if (selectedSort === 'priceDesc') {
-      const getPrice = (p: Product) => p.on_sale && p.sale_price ? p.sale_price : (p.price || 0);
-      result.sort((a, b) => getPrice(b) - getPrice(a));
-    } else if (selectedSort === 'rating') {
-      result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    } else if (selectedSort === 'popular') {
-      result.sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
-    } else {
-      // 'recommended' -- the default -- previously did no sorting at all, so a
-      // sold-out item could outrank one the customer can actually reserve on
-      // the main browse surface. Home already demotes them; this matches it.
-      // Sort is stable, so the fetch order survives within each group.
-      //
-      // Only here: the five options above are explicit user choices, and
-      // demoting a sold-out item below a cheaper one would contradict what
-      // "Price: Low to High" says it does. Sold out is shown, not hidden --
-      // those items still feed the back-in-stock notify flow.
-      result.sort((a, b) => Number(isInStock(b)) - Number(isInStock(a)));
-    }
-
-    return result;
-  }, [filteredProducts, selectedSort]);
+  }, [products, searchResults, isSearchActive, selectedMySizeOnly, recommendedSizes]);
 
   // Filter Modal Actions
   const openFilterModal = () => {
