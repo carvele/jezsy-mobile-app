@@ -540,7 +540,7 @@ export default function ARTryOnScreen() {
           // negative when bending forward, roll tracks a sideways lean, yaw a twist; all
           // three should read ~0 standing upright and square to the camera.
           torsoLogCounter.current += 1;
-          if (torsoLogCounter.current % 20 === 0) {
+          if (__DEV__ && torsoLogCounter.current % 20 === 0) {
             const e = torsoEulerDegrees(canonical.torso);
             console.log('[AR-DEBUG-TORSO] valid=' + canonical.torso.valid
               + ' pitch=' + e.pitch.toFixed(1)
@@ -560,8 +560,10 @@ export default function ARTryOnScreen() {
           transportRateCountRef.current += 1;
           const rateElapsedMs = rateNow - transportRateWindowStartRef.current;
           if (rateElapsedMs >= 1000) {
-            const ratePerSec = (transportRateCountRef.current / rateElapsedMs) * 1000;
-            console.log('[AR-TRANSPORT-RATE] updateTransform calls/sec=' + ratePerSec.toFixed(1));
+            if (__DEV__) {
+              const ratePerSec = (transportRateCountRef.current / rateElapsedMs) * 1000;
+              console.log('[AR-TRANSPORT-RATE] updateTransform calls/sec=' + ratePerSec.toFixed(1));
+            }
             transportRateCountRef.current = 0;
             transportRateWindowStartRef.current = rateNow;
           }

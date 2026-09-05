@@ -670,7 +670,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // TEMP DEBUG: resolve the actual anchor bone (Spine2, the DB's current
               // anatomicalAnchorOffset source) once, for per-frame world-position logging.
               anchorDebugBone = skeletonBones[resolveBindBoneName('Spine2')] || null;
-              console.log('[AR-DEBUG-ANCHOR-SETUP] anchorDebugBone resolved=' + (anchorDebugBone ? anchorDebugBone.name : 'NOT FOUND'));
+              if (__DEV__) {
+                console.log('[AR-DEBUG-ANCHOR-SETUP] anchorDebugBone resolved=' + (anchorDebugBone ? anchorDebugBone.name : 'NOT FOUND'));
+              }
               // Product of every bind rotation from garmentGroup down to and including this
               // node -- i.e. the node bind orientation in the same space the retargeter
               // deltas are expressed in. Includes non-Bone ancestors (see above).
@@ -743,8 +745,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             renderFrameCount++;
             const renderRateElapsedMs = renderRateNow - renderRateWindowStart;
             if (renderRateElapsedMs >= 1000) {
-              const renderFps = (renderFrameCount / renderRateElapsedMs) * 1000;
-              console.log('[AR-RENDER-FPS] fps=' + renderFps.toFixed(1));
+              if (__DEV__) {
+                const renderFps = (renderFrameCount / renderRateElapsedMs) * 1000;
+                console.log('[AR-RENDER-FPS] fps=' + renderFps.toFixed(1));
+              }
               renderFrameCount = 0;
               renderRateWindowStart = renderRateNow;
             }
@@ -798,8 +802,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 transportRateCount++;
                 const rateElapsedMs = rateNow - transportRateWindowStart;
                 if (rateElapsedMs >= 1000) {
-                  const ratePerSec = (transportRateCount / rateElapsedMs) * 1000;
-                  console.log('[AR-TRANSPORT-RATE-WEBVIEW] processed/sec=' + ratePerSec.toFixed(1));
+                  if (__DEV__) {
+                    const ratePerSec = (transportRateCount / rateElapsedMs) * 1000;
+                    console.log('[AR-TRANSPORT-RATE-WEBVIEW] processed/sec=' + ratePerSec.toFixed(1));
+                  }
                   transportRateCount = 0;
                   transportRateWindowStart = rateNow;
                 }
@@ -1105,22 +1111,24 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // TEMP DEBUG: throttled diagnostic dump -- remove once the wrong-arm /
                       // disappearing-garment issues are root-caused. Logs every ~20 frames.
                       if (shouldLog) {
-                        console.log('[AR-DEBUG-FRAME] transformValid=' + transformValid
-                          + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
-                          + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
-                          + ' exactScale=' + exactScale.toFixed(4)
-                          + ' yawCosCorrection=' + yawCosCorrection.toFixed(4)
-                          + ' smoothedCosYaw=' + (smoothedCosYaw != null ? smoothedCosYaw.toFixed(4) : 'n/a')
-                          + ' calibrated=' + !!CAMERA_CALIBRATION
-                          + ' cameraDistanceM=' + (smoothedCameraDistance != null ? smoothedCameraDistance.toFixed(3) : 'n/a')
-                          + ' verticalFovDeg=' + camera.fov.toFixed(1)
-                          + ' l11(raw)=' + JSON.stringify(l11)
-                          + ' l12(raw)=' + JSON.stringify(l12)
-                          // Phase 2 Tier 1: confirms the occluder's capsule uniforms are
-                          // actually being written (they silently were not before the
-                          // scope fix -- see the occlusion uniform block above).
-                          + ' uJ2D11=' + (occlusionMaterial ? JSON.stringify(occlusionMaterial.uniforms.uJoints2D.value[11]) : 'n/a')
-                          + ' boneRotations=' + JSON.stringify(boneRotations));
+                        if (__DEV__) {
+                          console.log('[AR-DEBUG-FRAME] transformValid=' + transformValid
+                            + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
+                            + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
+                            + ' exactScale=' + exactScale.toFixed(4)
+                            + ' yawCosCorrection=' + yawCosCorrection.toFixed(4)
+                            + ' smoothedCosYaw=' + (smoothedCosYaw != null ? smoothedCosYaw.toFixed(4) : 'n/a')
+                            + ' calibrated=' + !!CAMERA_CALIBRATION
+                            + ' cameraDistanceM=' + (smoothedCameraDistance != null ? smoothedCameraDistance.toFixed(3) : 'n/a')
+                            + ' verticalFovDeg=' + camera.fov.toFixed(1)
+                            + ' l11(raw)=' + JSON.stringify(l11)
+                            + ' l12(raw)=' + JSON.stringify(l12)
+                            // Phase 2 Tier 1: confirms the occluder's capsule uniforms are
+                            // actually being written (they silently were not before the
+                            // scope fix -- see the occlusion uniform block above).
+                            + ' uJ2D11=' + (occlusionMaterial ? JSON.stringify(occlusionMaterial.uniforms.uJoints2D.value[11]) : 'n/a')
+                            + ' boneRotations=' + JSON.stringify(boneRotations));
+                        }
                         // TEMP DEBUG: remove once blazer visibility is root-caused.
                         showDebug('valid=' + transformValid + ' width=' + targetWorldWidth.toFixed(3)
                           + ' metricW=' + garmentMetricWidth.toFixed(3) + ' scale=' + exactScale.toFixed(3)
@@ -1133,7 +1141,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         // is never retargeted per-frame (only the 4 arm bones are), so it
                         // should sit at its exact bind-pose position; this should land very
                         // close to targetPos/groupPos if the anchor math is correct.
-                        if (anchorDebugBone) {
+                        if (anchorDebugBone && __DEV__) {
                           const anchorBoneWorldPos = new THREE.Vector3();
                           anchorDebugBone.getWorldPosition(anchorBoneWorldPos);
                           const anchorDelta = anchorBoneWorldPos.clone().sub(garmentGroup.position);
@@ -1144,13 +1152,17 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         }
                       }
                     } else if (shouldLog) {
-                      console.log('[AR-DEBUG-FRAME] SKIPPED: targetPos/targetL/targetR unprojection failed (likely NaN camera/vector math)');
+                      if (__DEV__) {
+                        console.log('[AR-DEBUG-FRAME] SKIPPED: targetPos/targetL/targetR unprojection failed (likely NaN camera/vector math)');
+                      }
                       showDebug('unprojection FAILED (likely NaN camera/vector math)');
                     }
                   } catch(e) { console.error('Projection Math Error', e); showDebug('Projection Math Error: ' + e.message); }
                 } else {
                   // Fallback
-                  console.log('[AR-DEBUG-FRAME] FALLBACK PATH: normalizedLandmarks[11]/[12] missing or camera not ready');
+                  if (__DEV__ && shouldLog) {
+                    console.log('[AR-DEBUG-FRAME] FALLBACK PATH: normalizedLandmarks[11]/[12] missing or camera not ready');
+                  }
                   if (shouldLog) showDebug('FALLBACK PATH: no shoulder landmarks / camera not ready, pos=' + JSON.stringify(pos) + ' scl=' + scl);
                   garmentGroup.position.set(pos.x, pos.y, pos.z);
                   // Same NaN guard as the main path above -- see its comment.
