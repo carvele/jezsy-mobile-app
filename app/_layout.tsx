@@ -186,10 +186,10 @@ function InitialLayout() {
       hasAuthenticated.current = false;
     }
     const pathSegments = segments as string[];
-    const inAuthGroup = pathSegments[0] === '(auth)';
-    const inTabsGroup = pathSegments[0] === '(tabs)';
-    const onProfileSetup = inAuthGroup && pathSegments[1] === 'profile-setup';
-    const onResetPassword = inAuthGroup && pathSegments[1] === 'reset-password';
+    const AUTH_SCREENS = ['(auth)', 'welcome', 'auth', 'onboarding', 'profile-setup', 'reset-password'];
+    const inAuthGroup = pathSegments.some((s) => AUTH_SCREENS.includes(s));
+    const onProfileSetup = pathSegments.includes('profile-setup');
+    const onResetPassword = pathSegments.includes('reset-password');
 
     // Helper: Safely replace route without issuing duplicate navigations
     const safeRedirect = (target: string) => {
@@ -200,7 +200,7 @@ function InitialLayout() {
 
     // CRITICAL: Once fully authenticated AND confirmed settled in tabs, skip ALL
     // future re-evaluations during normal tab switches.
-    if (routeSettled && hasAuthenticated.current && inTabsGroup && !isPasswordRecovery && !profile?.deleted) {
+    if (routeSettled && hasAuthenticated.current && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
       return;
     }
 
@@ -250,13 +250,13 @@ function InitialLayout() {
       return;
     }
 
-    // 5b. Complete Profile: User must be in tabs navigator
-    if (!inTabsGroup) {
+    // 5b. Complete Profile: User must be in tabs navigator (outside auth)
+    if (inAuthGroup) {
       safeRedirect('/(tabs)');
       return;
     }
 
-    // Destination observed: user is confirmed inside tabs
+    // Destination observed: user is confirmed in the app (outside auth)
     hasAuthenticated.current = true;
     lastRedirectTargetRef.current = null;
     setRouteSettled(true);
