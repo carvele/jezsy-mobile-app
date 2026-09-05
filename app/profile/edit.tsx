@@ -46,6 +46,7 @@ export default function EditProfileScreen() {
 
   const [data, setData] = useState<ProfileData>({
     firstName: '',
+    username: '',
     lastName: '',
     phone: '',
     gender: '',
@@ -68,6 +69,7 @@ export default function EditProfileScreen() {
 
     setData({
       firstName: profile.first_name || '',
+        username: profile.username || '',
       lastName: profile.last_name || '',
       phone: localPhone ? formatPhoneForCountry(localPhone, fmtCountry) : '',
       gender: profile.gender || '',
@@ -131,6 +133,7 @@ export default function EditProfileScreen() {
           id: user.id,
           email: user.email ?? null,
           first_name: data.firstName.trim(),
+          username: data.username.trim() || null,
           last_name: data.lastName.trim(),
           phone: fullPhone,
           gender: data.gender || null,

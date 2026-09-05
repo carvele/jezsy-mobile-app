@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      connections: {
+        Row: {
+          id: string
+          user_id_1: string
+          user_id_2: string
+          status: string
+          action_user_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: any
+        Update: any
+        Relationships: any[]
+      }
+      direct_chats: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: any
+        Update: any
+        Relationships: any[]
+      }
+      direct_chat_participants: {
+        Row: {
+          chat_id: string
+          user_id: string
+          created_at: string
+        }
+        Insert: any
+        Update: any
+        Relationships: any[]
+      }
+      direct_messages: {
+        Row: {
+          id: string
+          chat_id: string
+          sender_id: string | null
+          content: string
+          created_at: string
+          read_at: string | null
+        }
+        Insert: any
+        Update: any
+        Relationships: any[]
+      }
+
       account_deletion_requests: {
         Row: {
           created_at: string
@@ -788,7 +836,11 @@ export type Database = {
           read_at: string | null
           sender_id: string | null
           sender_name: string | null
-          sender_role: string | null
+          sender_role: string
+          username: string | null
+          wardrobe_privacy: string | null | null
+            wishlist_privacy: string | null
+            wishlist_privacy: string | null
           sender_type: string | null
           text: string | null
         }
@@ -807,7 +859,11 @@ export type Database = {
           read_at?: string | null
           sender_id?: string | null
           sender_name?: string | null
-          sender_role?: string | null
+          sender_role?: string
+          username?: string | null
+          wardrobe_privacy?: string | null | null
+            wishlist_privacy?: string | null
+            wishlist_privacy?: string | null
           sender_type?: string | null
           text?: string | null
         }
@@ -826,7 +882,11 @@ export type Database = {
           read_at?: string | null
           sender_id?: string | null
           sender_name?: string | null
-          sender_role?: string | null
+          sender_role?: string
+          username?: string | null
+          wardrobe_privacy?: string | null | null
+            wishlist_privacy?: string | null
+            wishlist_privacy?: string | null
           sender_type?: string | null
           text?: string | null
         }
@@ -1295,9 +1355,14 @@ export type Database = {
           profile_visibility: string
           province: string | null
           role: string
+          username: string | null
+          wardrobe_privacy: string | null
+            wishlist_privacy: string | null
+            wishlist_privacy: string | null
           updated_at: string
           username: string | null
           wardrobe_privacy: string | null
+            wishlist_privacy: string | null
           wishlist_privacy: string | null
           zip_code: string | null
         }
@@ -1324,9 +1389,14 @@ export type Database = {
           profile_visibility?: string
           province?: string | null
           role?: string
+          username?: string | null
+          wardrobe_privacy?: string | null
+            wishlist_privacy?: string | null
+            wishlist_privacy?: string | null
           updated_at?: string
           username?: string | null
           wardrobe_privacy?: string | null
+            wishlist_privacy?: string | null
           wishlist_privacy?: string | null
           zip_code?: string | null
         }
@@ -1353,9 +1423,14 @@ export type Database = {
           profile_visibility?: string
           province?: string | null
           role?: string
+          username?: string | null
+          wardrobe_privacy?: string | null
+            wishlist_privacy?: string | null
+            wishlist_privacy?: string | null
           updated_at?: string
           username?: string | null
           wardrobe_privacy?: string | null
+            wishlist_privacy?: string | null
           wishlist_privacy?: string | null
           zip_code?: string | null
         }
@@ -2160,6 +2235,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+        get_product_loved_by: {
+          Args: { p_product_id: string }
+          Returns: {
+            total_count: number
+            public_users: any
+          }[]
+        }
+
+        get_suggested_connections: {
+          Args: Record<PropertyKey, never>
+          Returns: {
+            id: string
+            username: string | null
+            first_name: string | null
+            last_name: string | null
+            mutual_count: number
+          }[]
+        }
+
       adjust_inventory_stock: {
         Args: {
           p_available_delta?: number
@@ -2531,7 +2625,11 @@ export type Database = {
       }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
       update_staff_role: {
-        Args: { new_role: string; target_user_id: string }
+        Args: { new_role: string
+          username: string | null
+          wardrobe_privacy: string | null
+            wishlist_privacy: string | null
+            wishlist_privacy: string | null; target_user_id: string }
         Returns: undefined
       }
       update_staff_status: {

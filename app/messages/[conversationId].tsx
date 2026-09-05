@@ -540,7 +540,7 @@ export default function ChatScreen() {
             onLongPress={() => canAct(item) && setActionTarget(item)}
             delayLongPress={300}
             disabled={!canAct(item)}
-            accessibilityRole={canAct(item) ? 'button' : undefined}
+            accessibilityRole={Platform.OS === 'web' ? undefined : (canAct(item) ? 'button' : undefined)}
             accessibilityHint={
               canAct(item)
                 ? canEdit(item)

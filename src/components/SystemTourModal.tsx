@@ -119,7 +119,7 @@ const TOUR_STEPS: TourStep[] = [
         description: 'Message support directly for order adjustments, sizing advice, and custom fittings.',
       },
     ],
-    actionRoute: '/(tabs)/inbox',
+    actionRoute: '/(tabs)/messages',
     actionLabel: 'Open Inbox',
   },
 ];

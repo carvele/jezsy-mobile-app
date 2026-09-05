@@ -61,6 +61,7 @@ export default function ProfileSetupScreen() {
 
   const [data, setData] = useState<ProfileData>({
     firstName: '',
+    username: '',
     lastName: '',
     phone: '',
     gender: '',
@@ -99,6 +100,7 @@ export default function ProfileSetupScreen() {
 
     setData(prev => ({
       firstName:   prev.firstName   || profile?.first_name || nameParts[0] || '',
+        username:    prev.username    || profile?.username || '',
       lastName:    prev.lastName    || profile?.last_name  || nameParts.slice(1).join(' ') || '',
       phone:       prev.phone       || (localPhone ? formatPhoneForCountry(localPhone, fmtCountry) : ''),
       gender:      prev.gender      || profile?.gender || '',
@@ -225,6 +227,7 @@ export default function ProfileSetupScreen() {
           id:            user.id,
           email:         user.email ?? null,
           first_name:    data.firstName.trim(),
+            username:      data.username.trim() || null,
           last_name:     data.lastName.trim(),
           phone:         fullPhone,
           gender:        data.gender || null,

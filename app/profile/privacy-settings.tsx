@@ -1,22 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Switch, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, Switch, ScrollView, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
-
-type OutfitPrivacy = 'private' | 'connections' | 'public';
-type ProfileVisibility = 'private' | 'public';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function PrivacySettingsScreen() {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const colors = Colors.light;
+  const theme = useColorScheme();
+  const colors = Colors[theme];
+  const router = useRouter();
 
   const [isShared, setIsShared] = useState(false);
-  const [outfitPrivacy, setOutfitPrivacy] = useState<OutfitPrivacy>('private');
-  const [profileVisibility, setProfileVisibility] = useState<ProfileVisibility>('public');
+  const [wardrobePrivacy, setWardrobePrivacy] = useState<'private' | 'connections' | 'public'>('private');
+  const [wishlistPrivacy, setWishlistPrivacy] = useState<'private' | 'connections' | 'public'>('private');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
@@ -28,15 +30,15 @@ export default function PrivacySettingsScreen() {
         if (!user) return;
         const { data, error } = await supabase
           .from('profiles')
-          .select('is_wardrobe_shared, outfit_privacy, profile_visibility')
+          .select('is_wardrobe_shared, wardrobe_privacy, wishlist_privacy')
           .eq('id', user.id)
           .single();
-
+        
         if (error) throw error;
         if (mounted && data) {
           setIsShared(!!data.is_wardrobe_shared);
-          setOutfitPrivacy((data.outfit_privacy as OutfitPrivacy) || 'private');
-          setProfileVisibility((data.profile_visibility as ProfileVisibility) || 'public');
+          setWardrobePrivacy((data.wardrobe_privacy as any) || 'private');
+          setWishlistPrivacy((data.wishlist_privacy as any) || 'private');
         }
       } catch (err: any) {
         console.log('Error loading privacy settings:', err.message);
@@ -49,44 +51,9 @@ export default function PrivacySettingsScreen() {
     return () => { mounted = false; };
   }, [user]);
 
-  const handleOutfitPrivacyChange = async (value: OutfitPrivacy) => {
-    if (!user || outfitPrivacy === value) return;
-    setUpdating(true);
-    const prev = outfitPrivacy;
-    setOutfitPrivacy(value);
-    try {
-      const { error } = await supabase.from('profiles').update({ outfit_privacy: value }).eq('id', user.id);
-      if (error) throw error;
-      showToast('Outfit privacy updated', 'success');
-    } catch {
-      setOutfitPrivacy(prev);
-      showToast('Failed to update privacy settings', 'error');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleProfileVisibilityChange = async (value: ProfileVisibility) => {
-    if (!user || profileVisibility === value) return;
-    setUpdating(true);
-    const prev = profileVisibility;
-    setProfileVisibility(value);
-    try {
-      const { error } = await supabase.from('profiles').update({ profile_visibility: value }).eq('id', user.id);
-      if (error) throw error;
-      showToast('Profile visibility updated', 'success');
-    } catch {
-      setProfileVisibility(prev);
-      showToast('Failed to update privacy settings', 'error');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
   const handleToggle = async (nextValue: boolean) => {
     if (!user) return;
     setUpdating(true);
-    // Optimistic update
     setIsShared(nextValue);
 
     try {
@@ -95,13 +62,9 @@ export default function PrivacySettingsScreen() {
         .update({ is_wardrobe_shared: nextValue })
         .eq('id', user.id);
 
-      if (error) {
-        throw error;
-      }
-      
+      if (error) throw error;
       showToast(nextValue ? 'Wardrobe shared with stylists' : 'Wardrobe is now private', 'success');
     } catch {
-      // Revert on error
       setIsShared(!nextValue);
       showToast('Failed to update privacy settings', 'error');
     } finally {
@@ -109,17 +72,64 @@ export default function PrivacySettingsScreen() {
     }
   };
 
-  const renderOutfitOption = (value: OutfitPrivacy, title: string, description: string) => {
-    const isSelected = outfitPrivacy === value;
+  const handlePrivacyChange = async (type: 'wardrobe' | 'wishlist', value: 'private' | 'connections' | 'public') => {
+    if (!user) return;
+    
+    if (type === 'wardrobe' && wardrobePrivacy === value) return;
+    if (type === 'wishlist' && wishlistPrivacy === value) return;
+
+    setUpdating(true);
+    const prevWardrobe = wardrobePrivacy;
+    const prevWishlist = wishlistPrivacy;
+
+    if (type === 'wardrobe') setWardrobePrivacy(value);
+    if (type === 'wishlist') setWishlistPrivacy(value);
+
+    try {
+      const updatePayload = type === 'wardrobe' 
+        ? { wardrobe_privacy: value }
+        : { wishlist_privacy: value };
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(updatePayload)
+        .eq('id', user.id);
+
+      if (error) throw error;
+      showToast('Privacy updated', 'success');
+    } catch {
+      if (type === 'wardrobe') setWardrobePrivacy(prevWardrobe);
+      if (type === 'wishlist') setWishlistPrivacy(prevWishlist);
+      showToast('Failed to update privacy settings', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const renderRadioOption = (
+    type: 'wardrobe' | 'wishlist',
+    value: 'private' | 'connections' | 'public',
+    title: string,
+    description: string
+  ) => {
+    const isSelected = type === 'wardrobe' ? wardrobePrivacy === value : wishlistPrivacy === value;
     return (
-      <TouchableOpacity
-        style={[styles.radioOption, { borderColor: isSelected ? colors.tint : colors.border }]}
-        onPress={() => handleOutfitPrivacyChange(value)}
+      <TouchableOpacity 
+        style={[
+          styles.radioOption, 
+          { borderColor: isSelected ? colors.tint : colors.border }
+        ]}
+        onPress={() => handlePrivacyChange(type, value)}
         disabled={updating}
       >
         <View style={styles.radioHeader}>
-          <Text style={[styles.radioTitle, { color: isSelected ? colors.text : colors.secondaryText }]}>{title}</Text>
-          <View style={[styles.radioCircle, { borderColor: isSelected ? colors.tint : colors.border }]}>
+          <Text style={[styles.radioTitle, { color: isSelected ? colors.text : colors.secondaryText }]}>
+            {title}
+          </Text>
+          <View style={[
+            styles.radioCircle, 
+            { borderColor: isSelected ? colors.tint : colors.border }
+          ]}>
             {isSelected && <View style={[styles.radioInner, { backgroundColor: colors.tint }]} />}
           </View>
         </View>
@@ -129,27 +139,65 @@ export default function PrivacySettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <IconSymbol name="chevron.left" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Privacy Settings</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.headerTitle, { color: colors.text, marginBottom: Spacing.xl }]}>
-          Privacy Settings
-        </Text>
-
-        <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Digital Wardrobe Access</Text>
+        
+        {/* Wishlist Privacy Card */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Wishlist Privacy</Text>
           </View>
-
           <View style={styles.settingRow}>
             <View style={styles.settingTextContainer}>
               <Text style={[styles.settingTitle, { color: colors.text }]}>
-                Share Wardrobe with Stylists
+                Who can see what you saved?
+              </Text>
+              <Text style={[styles.settingDesc, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
+                Control who can see your saved items and if you appear in "Loved By" on product pages.
+              </Text>
+              
+              {loading ? (
+                <ActivityIndicator color={colors.tint} />
+              ) : (
+                <View style={styles.optionsContainer}>
+                  {renderRadioOption('wishlist', 'private', 'Private', 'Only you can see your saved items.')}
+                  {renderRadioOption('wishlist', 'connections', 'My Network', 'Your accepted connections can see your saved items.')}
+                  {renderRadioOption('wishlist', 'public', 'Public', 'Anyone can view your wishlist, and you may appear as someone who saved an item on public product pages.')}
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {/* Wardrobe Privacy Card */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Digital Wardrobe Access</Text>
+          </View>
+
+          <View style={[styles.settingRow, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+            <View style={styles.settingTextContainer}>
+              <Text style={[styles.settingTitle, { color: colors.text }]}>
+                Share with Stylists
               </Text>
               <Text style={[styles.settingDesc, { color: colors.secondaryText }]}>
-                Allow JezSy Couture stylists to view your digital wardrobe to recommend outfits and provide better styling advice.
+                Allow JezSy Couture stylists to view your digital wardrobe to recommend outfits.
               </Text>
             </View>
-
+            
             {loading ? (
               <ActivityIndicator color={colors.tint} />
             ) : (
@@ -159,64 +207,32 @@ export default function PrivacySettingsScreen() {
                 disabled={updating}
                 trackColor={{ false: '#767577', true: colors.tint }}
                 accessibilityRole="switch"
-                accessibilityLabel="Share Wardrobe with Stylists"
               />
             )}
           </View>
-        </View>
 
-        <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Outfit Privacy</Text>
-          </View>
           <View style={styles.settingRow}>
             <View style={styles.settingTextContainer}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>Who can see your saved outfits?</Text>
-              <Text style={[styles.settingDesc, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
-                Controls whether other users can view the looks you have saved in your wardrobe.
+              <Text style={[styles.settingTitle, { color: colors.text }]}>
+                Who can see your wardrobe?
               </Text>
+              <Text style={[styles.settingDesc, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
+                Control which other users can view your digital closet items.
+              </Text>
+              
               {loading ? (
                 <ActivityIndicator color={colors.tint} />
               ) : (
                 <View style={styles.optionsContainer}>
-                  {renderOutfitOption('private', 'Private', 'Only you can see your saved outfits.')}
-                  {renderOutfitOption('connections', 'My Network', 'Your accepted connections can see your saved outfits.')}
-                  {renderOutfitOption('public', 'Public', 'Anyone on the app can view your saved outfits.')}
+                  {renderRadioOption('wardrobe', 'private', 'Private', 'Only you (and stylists if enabled) can see your wardrobe.')}
+                  {renderRadioOption('wardrobe', 'connections', 'My Network', 'Your accepted connections can browse your wardrobe.')}
+                  {renderRadioOption('wardrobe', 'public', 'Public', 'Anyone on the app can view your wardrobe.')}
                 </View>
               )}
             </View>
           </View>
         </View>
 
-        <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Profile Visibility</Text>
-          </View>
-          <View style={styles.settingRow}>
-            <View style={styles.settingTextContainer}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>Make my profile discoverable</Text>
-              <Text style={[styles.settingDesc, { color: colors.secondaryText }]}>
-                When off, your profile is hidden from search and your profile link will not work for people you have not connected with.
-              </Text>
-            </View>
-            {loading ? (
-              <ActivityIndicator color={colors.tint} />
-            ) : (
-              <Switch
-                value={profileVisibility === 'public'}
-                onValueChange={(next) => handleProfileVisibilityChange(next ? 'public' : 'private')}
-                disabled={updating}
-                trackColor={{ false: '#767577', true: colors.tint }}
-                accessibilityRole="switch"
-                accessibilityLabel="Make my profile discoverable"
-              />
-            )}
-          </View>
-        </View>
-
-        <Text style={[styles.footnote, { color: colors.secondaryText }]}>
-          Your personal closet items are private by default under Data Privacy regulations until explicit consent is granted.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -226,51 +242,64 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    padding: Spacing.xl,
-    paddingBottom: 40,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  backBtn: {
+    padding: Spacing.xs,
+    marginLeft: -Spacing.xs,
   },
   headerTitle: {
-    ...Type.display,
+    ...Type.title,
+  },
+  content: {
+    padding: Spacing.lg,
   },
   card: {
     borderRadius: Radius.lg,
-    overflow: 'hidden',
-    marginBottom: Spacing.lg,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    overflow: 'hidden',
+    marginBottom: Spacing.xl,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      web: { boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
+    }),
   },
   cardHeader: {
     padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
   },
   cardTitle: {
-    ...Type.subtitle,
+    ...Type.title,
+    fontSize: 18,
   },
   settingRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     padding: Spacing.lg,
   },
   settingTextContainer: {
     flex: 1,
-    paddingRight: Spacing.lg,
+    paddingRight: Spacing.md,
   },
   settingTitle: {
-    ...Type.bodyLarge,
+    ...Type.body,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   settingDesc: {
     ...Type.caption,
-    lineHeight: 18,
-  },
-  footnote: {
-    ...Type.caption,
-    textAlign: 'center',
-    marginTop: Spacing.lg,
-    paddingHorizontal: Spacing.md,
+    lineHeight: 20,
   },
   optionsContainer: {
     gap: Spacing.sm,
@@ -306,5 +335,5 @@ const styles = StyleSheet.create({
   radioDesc: {
     fontSize: 13,
     lineHeight: 18,
-  },
+  }
 });
