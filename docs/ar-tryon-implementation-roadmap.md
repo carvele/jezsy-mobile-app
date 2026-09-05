@@ -118,9 +118,9 @@ Tasks:
 3. Step H (second-device guard): stays open until a second Android device
    exists. Do not fake it.
 4. Housekeeping outside this repo: push `admin-dashboard@a3eef9c`
-   manually; re-ingest Tailored Blazer in admin-dashboard against the
-   Mixamo source and only then return it to `AR_READY`. Never guess the
-   anchor offset.
+   manually (**done** — confirmed on `origin/main`); re-ingest Tailored
+   Blazer in admin-dashboard against the Mixamo source and only then
+   return it to `AR_READY`. Never guess the anchor offset.
 
 Exit: contract doc merged; #28/#29/#17 recorded as pass or as a demonstrated
 regression; Step H status honest.
@@ -163,22 +163,28 @@ This phase decides the priorities of Phases 2 to 4. No architectural code
 changes; instrumentation only.
 
 Instrumentation (small, low risk, ship first):
-- Effective update rate: count `updateTransform` calls per second on the
-  native side and frames rendered per second inside the WebView; log both.
-- Make the tracking pill honest. It latches true on the first frame and
-  never reflects `pose.trackingState`. Correction to an earlier draft of
-  this roadmap: `TrackingState` *declares* seven members but
-  `poseConstructor.ts` only ever produces three — `GOOD_FIT`,
-  `TURN_TOO_FAR` (at `abs(yaw) >= 25°`), and `TRACKING_LOST` (shoulder
-  visibility `< 0.35`). `INITIALIZING`, `STEP_BACK`, `FULL_BODY_REQUIRED`
-  and `LOW_LIGHT` are declared and never assigned. Surfacing the three real
-  states is wiring; the other four need detection written first (see
-  Phase 5).
-- Client-side calibration sanity guard in the metadata path: if
-  `anatomical_anchor_offset` magnitude or `rest_pose_metric_width` fall
-  outside plausible garment bounds, treat the record as
-  `NEEDS_CALIBRATION` regardless of what the DB says. Defense in depth
-  against the Blazer class of data; log loudly.
+- **Done** (`b51e479`) — Make the tracking pill honest. `TrackingState`
+  *declares* seven members but `poseConstructor.ts` only ever produces
+  three — `GOOD_FIT`, `TURN_TOO_FAR` (at `abs(yaw) >= 25°`), and
+  `TRACKING_LOST` (shoulder visibility `< 0.35`). The pill now hides on
+  `TRACKING_LOST`, shows an amber "Turn to Face the Camera" on
+  `TURN_TOO_FAR`, and cyan "AI Body Tracking Active" on `GOOD_FIT`
+  (`app/ar-tryon/[id].tsx:1233-1242`). `INITIALIZING`, `STEP_BACK`,
+  `FULL_BODY_REQUIRED` and `LOW_LIGHT` are still declared and never
+  assigned; that part needs detection written first (see Phase 5).
+- **Done** (`3c8f626`) — Client-side calibration sanity guard in the
+  metadata path: if `anatomical_anchor_offset` magnitude or
+  `rest_pose_metric_width` fall outside plausible garment bounds, the
+  record is treated as `NEEDS_CALIBRATION` regardless of what the DB
+  says. Defense in depth against the Blazer class of data; logs loudly.
+- **Done** (`3a46127`, extended same day) — effective update rate: native
+  side counts `updateTransform` calls/sec, and the WebView's own render
+  loop now separately counts frames rendered/sec (`[AR-RENDER-FPS]`,
+  `GarmentRenderer.tsx`) — a genuinely different number from the
+  transport-call count, since `requestAnimationFrame` keeps drawing every
+  compositor tick regardless of whether fresh transform data arrived.
+  Both live-verified on-device (Tailored Blazer, Live Camera AR,
+  ~55-60fps render / variable transport rate).
 
 Test protocol, two calibrated garments minimum (Black tee plus one
 long-sleeve; the Blazer once re-ingested), two people (one poses, one
@@ -201,17 +207,50 @@ intersection, occlusion, frame rate. Write
 Exit: report exists with scores for both garments; Phases 2-4 are re-ordered
 from its findings, not from this document's guesses.
 
+**Phase 1 status as of 2026-09-04**: all three instrumentation items are
+done. The Test protocol (A-E) has now also been run, solo (device on a
+stand, remote-ADB screenshot capture standing in for a second capturer),
+on both garments, with two poses retested for reproducibility. Full
+results, scored screenshots, and re-ordering recommendations are in
+`docs/ar-tryon-garment-reality-report.md`. Headline finding: a severe,
+reproducible pose-orientation breakdown past ~45° yaw on both garments,
+plus an asymmetric left/right arm-deformation bug — both rank above
+Phase 2's occlusion gap in the report's own recommended re-ordering.
+**Phase 1 is exited.** Phase 2-4 sequencing should be revisited against
+the report before resuming that work, per the ordering rule below.
+
 ## Phase 2 — Occlusion (the biggest gap)
 
 Goal: the wearer's arms and hands read as in front of the garment when they
 are. Tiered so the capstone can stop at a defensible level.
 
-- Tier 1, no new dependencies: finish what exists. Add the occlusion quad to
-  the scene with depth-write on and colour-write off, feed it the joint
-  uniforms already being updated, and tune capsule radii against Test D
-  screenshots. Accept that it is skeletal approximation and say so in the
-  contract doc. Also stop sending `worldLandmarks` when the occluder is
-  disabled; it is dead payload today.
+- **Tier 1 — DONE 2026-09-04** (`04656a2`, `97da54c`), live-verified: a bare
+  forearm crossing the chest now cuts through the garment instead of the
+  garment drawing over it (the Phase 1 report's Test D failure), at
+  54-57fps — above the Phase 1 floor, so the exit criterion below is met.
+  This was **not** "uncomment `scene.add(occlusionMesh)`". Five independent
+  defects each individually prevented it from working, none of which had
+  ever surfaced because the mesh was never in the scene, so Three.js never
+  compiled the shader: missing `extensions.fragDepth` (program could not
+  compile at all); `uViewProj` declared and never assigned (depth projected
+  through an identity matrix); raw MediaPipe `worldLandmarks` fed to a
+  matrix expecting scene coordinates (the documented reason it was
+  disabled); `vUv` (origin bottom-left) compared against `uJoints2D`
+  (origin top-left); and the uniform-population block sitting outside
+  `targetPos`'s scope, throwing a `ReferenceError` that an empty
+  `catch(e){}` swallowed every frame so the uniforms stayed at (0,0)
+  forever. Then three quality fixes found by driving a temporary debug
+  colour pass on-device (retained behind `OCCLUSION_DEBUG_VISIBLE`, off):
+  the torso was a wireframe of four edge lines rather than a filled quad,
+  leaving the chest interior uncovered; region selection by smallest 2D
+  distance made the torso always beat an arm lying across it once the quad
+  was filled (now picks whichever covering part is nearest the camera); and
+  the radii were roughly double life-size, which for a depth occluder
+  carves away garment pixels that should stay visible.
+  Remaining Tier 1 limits, accepted by design: straight capsule bands
+  rather than a real limb silhouette, and one radius for the whole arm
+  rather than tapering upper arm to wrist. `worldLandmarks` are no longer
+  dead payload — the occluder consumes them.
 - Tier 2, no new dependencies: carry the real segmentation mask, bounded.
   Populate the frame's `width`/`height` from the active camera format,
   downsample the mask on the native side to a small single-channel grid
@@ -227,33 +266,72 @@ are. Tiered so the capstone can stop at a defensible level.
 Exit for M2: Test D scores at least 1 on occlusion with Tier 1 or 2, and
 frame rate stays above the Phase 1 floor.
 
+**Met 2026-09-04 with Tier 1.** Test D's occlusion score moves 0 -> 2 (the
+forearm reads as genuinely in front of the garment, not merely partially),
+at 54-57fps against a Phase 1 floor of ~53fps. Tier 2 is therefore not
+required for M2 and stays unscheduled; it remains the route to per-pixel
+accuracy if the capsule approximation's straight-band edges prove
+insufficient in the recorded Phase 6 run. Scores for the rest of the A-E
+protocol have NOT been re-run since these fixes -- the Phase 1 report's
+table still reflects pre-fix behaviour for every other test.
+
 ## Phase 3 — Fit semantics and data-contract hardening
 
 Goal: "fit" means one thing, and bad data cannot masquerade as calibrated.
 
 Tasks:
-- Add `DEMO_RIG` to `IngestionStatus` (`src/types/garment.ts`) and have
-  the fallback use it; downstream checks for `AR_READY` then mean
-  calibrated only. Small, safe, do early.
-- Extract `src/utils/garmentMetadataAdapter.ts`: snake_case to camelCase,
-  bone-map inversion, and the Phase 1 sanity guard, with unit tests. The
-  screen becomes orchestration for this path.
-- Extract `src/utils/nativePoseCompatibility.ts`: the rotation
-  compensation, its plausibility gate, and the `[COMP-GUARD]` telemetry,
-  with unit tests for the gate on synthetic frontal, yawed, and stacked
-  landmark sets. This is the permanent device-compat layer; isolate it.
-- Length fit signal: compare the selected size's chart length to the
-  tracked torso length (shoulder midpoint to hip midpoint, already
-  available in world landmarks) and surface "runs long/short" as fit
-  feedback. Keep the mesh scale uniform; do not stretch geometry until
-  Phase 1 evidence says non-uniform scaling helps more than it distorts.
-- Keep `STATURE_CORRECTION` explicitly provisional: name it as such in the
-  contract, and add a single owner note that sizing must not grow to
-  depend on it. Replace only with real calibration data or actual user
-  measurements.
+- **DONE 2026-09-04** — Added `DEMO_RIG` to `IngestionStatus`
+  (`src/types/garment.ts`); the fallback marks itself with it instead of
+  stamping `AR_READY`, so downstream checks for `AR_READY` now mean
+  calibrated only. Also derived `isDemoRig` from the metadata rather than
+  keeping it as separate React state -- a second source of truth for the
+  same fact could only drift, and that drift was the original defect.
+  `DEMO_RIG` is client-only and never written to the DB. Retires the
+  standing rule in `ar-system-contract.md` section 9.
+- **DONE 2026-09-04** (`364171d`) — Extracted
+  `src/utils/garmentMetadataAdapter.ts`: snake_case to camelCase, bone-map
+  inversion, and the Phase 1 sanity guard, with 13 unit tests pinning each
+  of the three silent live bugs this logic has shipped from being inline.
+  Also pins that `isDemoRig` can never disagree with the metadata's own
+  `ingestionStatus`.
+- **DONE 2026-09-04** (`364171d`) — Extracted
+  `src/utils/nativePoseCompatibility.ts`: the rotation compensation and its
+  plausibility gate, with 15 unit tests covering the gate on synthetic
+  frontal, near-profile-yawed, leaning, sub-noise-floor and stacked
+  landmark sets. Worth noting what this buys: the gate is the only safety
+  net for a real native-library defect and its no-op behaviour on hardware
+  *without* that defect is unverifiable here (Step H, blocked on a second
+  device) — these tests are the closest deterministic substitute, pinning
+  that it must NOT fire on legitimate poses that superficially resemble the
+  bug. `[COMP-GUARD]` telemetry stays at the call site, since it logs raw
+  pre-correction values the module never sees.
+  Screen drops 1534 -> 1463 lines across both extractions.
+- **DONE 2026-09-05** (`59b3aed`) — Length fit signal:
+  `computeLengthFitSignal()` in `sizeRecommender.ts` compares the selected
+  size's chart length to the tracked torso length (shoulder midpoint to hip
+  midpoint, live from world landmarks). Mesh scale stays uniform -- this is
+  feedback only, not deformation. 14 tests, notably pinning that a naive
+  zero-centered comparison would misclassify nearly every real garment as
+  "runs_long" (garments are supposed to hang past the hip) -- bucketed
+  around an explicit, named "expected hip drop" baseline instead, same
+  provisional-constant honesty as `STATURE_CORRECTION`. **Not yet
+  physically verified on-device.**
+- **Already satisfied, doc-only correction** — `STATURE_CORRECTION`'s
+  provisionality note already existed in `ar-system-contract.md` section 10
+  and invariant #8 before this roadmap line was written; this task was
+  stale from the start, not something that needed doing. No code or doc
+  change required beyond noting it here.
 
 Exit: `AR_READY` is unambiguous; adapter and compat layer have tests;
 sizing feedback reflects length, not just width.
+
+**Phase 3 status as of 2026-09-05**: all three exit conditions are
+code-complete. `AR_READY` is unambiguous (`DEMO_RIG` exists, `b37f90c`);
+the adapter and compat layer have tests (`364171d`); sizing feedback
+reflects length via the signal above (`59b3aed`). Per this project's own
+verification rule (nothing is verified because it compiles), Phase 3 is
+**not yet exited** until the length signal gets a real on-device pass --
+tsc/tests passing is not the same claim as a physical device pass.
 
 ## Phase 4 — Deformation quality and the garment library
 
@@ -296,6 +374,14 @@ Tasks:
 - Transport diet: drop `worldLandmarks` from the payload when the occluder
   is off; throttle `updateTransform` to the WebView's measured render rate
   instead of the detector rate; measure before and after.
+- Thermal throttling / adaptive performance: currently zero handling.
+  Three concrete strategies from the industry-research comparison below:
+  inference decoupling (skip frames, interpolate the skeleton between),
+  hardware delegation (already done — GPU delegate), dynamic resolution
+  scaling via VisionCamera's Constraints API on rising temperature. Only
+  the first and third are unimplemented. Not yet observed on-device but
+  not instrumented for either — Phase 1 Test A-E ran short holds, not
+  sustained load, so this is unverified either way, not confirmed absent.
 - Second device (Step H) plus one more if available: orientation guard,
   calibration, frame rate. Record per-device results in the checklist.
 
@@ -315,9 +401,110 @@ Tasks:
 
 Exit: M2 declared, with the report and recording as proof.
 
+## Industry-research context (2026-09-04)
+
+A general industry survey of real-time AR-on-mobile approaches
+(`docs/research/ar-industry-survey-2026-09-04.md`, saved verbatim as
+received — external source, author/publisher unknown) was reviewed against
+this project's own architecture and this session's bug history. The
+comparison is worth recording because it explains, rather than merely
+coincides with, findings already in this document:
+
+- **Stack choice validated.** `react-native-vision-camera` +
+  `react-native-worklets-core` + MediaPipe pose detection matches the
+  "Nitro Modules / Frame Processor" pattern the survey describes as the
+  standard approach for real-time camera ML in React Native. Not a
+  coincidence worth re-litigating — this is confirmation, not a signal to
+  change course.
+- **The WebView-hosted renderer is the architecturally fragile part, and
+  this is a known industry pattern, not something this project got wrong
+  in isolation.** Direct quote from the source: "rendering inside a
+  web-view context often introduces unacceptable latency for live AR."
+  `react-native-filament` — a React Native wrapper around Google's
+  Filament, exposing its C++ rendering core so `.glb` loading, PBR
+  materials, and skeletal animation run on the native UI thread in sync
+  with VisionCamera's frame delivery — is the named real-time-grade
+  alternative. Two of this session's worst bugs trace directly to the
+  WebView/Three.js r128 choice:
+  - The frustum-culling bug (§1 of `ar-tryon-audit-implementation-plan.md`
+    finding #25) — a stale bind-pose bounding sphere never updated for a
+    posed `SkinnedMesh` — is specific to that Three.js version and the
+    GPU-only-skinning constraint it operates under.
+  - The WebView/`<video>` z-order compositing risk this project's own audit
+    already flagged (finding #25's "lower-confidence candidates" list) is
+    exactly the latency/synchronization failure class the survey warns
+    about.
+  Citable in the thesis defense as a documented, known limitation of the
+  WebView-rendering approach generally, not evidence of an implementation
+  mistake specific to this codebase. `expo-gl`/native renderer transport
+  (already scoped to M3 below) is the industry-recommended fix; not
+  attempted before M3 for the reasons already stated in this document.
+- **The GLB rest-pose mismatch bug has a named professional-pipeline
+  analogue.** The survey's CLO3D section (rest-pose grading, blend shapes,
+  standardized avatar rigging) describes, at production scale, the same
+  consistency problem this project root-caused by hand: DB
+  `rest_pose = "A_POSE"` disagreeing with a GLB's actual T-pose bind. A
+  real pipeline enforces that consistency at ingestion; this project
+  currently relies on per-garment manual calibration, which is exactly why
+  it drifted. Ties directly to Phase 4's ingestion-hardening task above
+  (measure `rest_pose_metric_width` from GLB geometry instead of trusting a
+  typed number) — that task is this project's version of what the survey
+  describes as standard practice, not a novel idea.
+- **MediaPipe-vs-SMPL tradeoff, now precisely citable.** The survey names
+  SMPL (Skinned Multi-Person Linear model, 6,890-vertex mesh, shape + pose
+  parameters) as the academic/industry-standard full body representation,
+  but explicitly frames it as computationally prohibitive for real-time
+  mobile and names MediaPipe's 33-landmark BlazePose 3D as the practical
+  substitute, supplying "sufficient anchor points and rotational vectors to
+  align a pre-rigged 3D digital garment to the user's skeleton" — this
+  project's exact approach, described almost verbatim. Useful thesis
+  citation for *why* MediaPipe over a full mesh model, not just that this
+  project chose it.
+- **The "loose clothing" failure mode has a name, and it explains more than
+  just occlusion.** The survey's own framing: baggy/loose garments obscure
+  the visible body contours that pose/segmentation algorithms rely on,
+  causing "misaligned digital garments, severe Z-fighting... and a total
+  breakdown of the AR illusion" — cites `ClothHMR`'s two-stage fix
+  (clothing-tailoring silhouette trim, then mesh recovery on the trimmed
+  result) and `MuNet`'s joint body/clothing optimization loop as the
+  research-stage answers. Relevant beyond Test D's already-expected
+  occlusion failure: the Tailored Blazer (a looser-fitting garment than the
+  Black tee) showing worse instability in several of this session's tests
+  may be this same failure class, not purely the pose-orientation bug
+  tracked as finding #1 above — worth re-examining findings #1/#2 with this
+  lens before assuming pure Euler-math causation. Neither `ClothHMR` nor
+  `MuNet` are implementable at capstone scope; cite as context for why the
+  problem is hard, not as a fix to attempt.
+- **Environmental lighting adaptation — a gap this roadmap didn't previously
+  track.** The survey describes ARKit/ARCore ambient light estimation
+  (colour temperature, intensity, light vector) feeding a PBR renderer's
+  directional/ambient lights, so digital garments visually match the room.
+  This project's renderer uses fixed lighting (`GarmentRenderer.tsx`, plus
+  the Light +/- manual controls in 3D Studio mode) — no camera-derived
+  light estimation exists. Not scoped into any phase above; flagging here
+  as a known, real gap rather than silently absent. Low priority relative
+  to findings #1/#2 above, but cheap to name in the thesis as a recognized
+  limitation.
+- **Thermal throttling / adaptive performance — now with concrete
+  mitigation strategies, not just a named risk.** The survey lists three:
+  (1) inference decoupling — run pose detection every Nth frame,
+  interpolate the skeleton on the frames between; (2) hardware delegation —
+  keep all inference on the GPU delegate, never fall back to CPU (this
+  project already does this — MediaPipe's `usePoseDetection` runs a GPU
+  delegate per `ar-system-contract.md`); (3) dynamic resolution scaling via
+  VisionCamera's Constraints API when the OS reports rising temperature.
+  (1) and (3) are genuinely unimplemented here and are the concrete Phase 5
+  task, not just "add thermal handling" in the abstract.
+- **Not actionable for this project, cite only:** enterprise AR SDKs
+  (ZERO10, Snap Camera Kit, DeepAR) and 3D Gaussian Splatting are real
+  approaches the survey covers, but licensing cost and infrastructure rule
+  them out for a capstone. Worth a one-line "known industry alternatives"
+  mention in the thesis, not a scoping candidate.
+
 ## What is deliberately not in scope before M3
 
-- Native renderer transport (`expo-gl` or similar).
+- Native renderer transport (`expo-gl` or `react-native-filament` — the
+  latter is the industry-survey-named alternative, see above).
 - A physically-based fitting model (body model + garment construction +
   pose deformation). The current scale model is its foundation, not its
   replacement.

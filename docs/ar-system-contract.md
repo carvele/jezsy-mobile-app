@@ -264,14 +264,21 @@ bone map (`boneMap[canonical] -> glbBoneName`) inline today.
 | `NEEDS_MERCHANT_MAPPING` | gated to demo rig |
 | `NOT_AR_COMPATIBLE` | gated to demo rig |
 | `NEEDS_CALIBRATION` | gated to demo rig |
+| `DEMO_RIG` | client-only, never stored: this metadata is invented defaults |
 
-**Known ambiguity.** Only `AR_READY` takes the real path, which is correct.
-But the demo-rig fallback writes `ingestionStatus: 'AR_READY'` into its own
-synthetic metadata (`app/ar-tryon/[id].tsx:327`), and only React state
-(`isDemoRig`) distinguishes them. `AR_READY` therefore means either
-"calibrated" or "invented defaults" depending on invisible context. Until
-roadmap Phase 3 adds `DEMO_RIG`, **no code may treat
-`ingestionStatus === 'AR_READY'` as proof of calibration.**
+**Ambiguity resolved 2026-09-04 (roadmap Phase 3).** This section previously
+carried a standing rule that no code may treat `ingestionStatus ===
+'AR_READY'` as proof of calibration, because the demo-rig fallback stamped
+itself `AR_READY` and only React state (`isDemoRig`) told them apart --
+so the value meant either "calibrated" or "invented defaults" depending on
+context nothing downstream could see. `DEMO_RIG` now exists and the
+fallback marks itself with it, so **`AR_READY` does mean calibrated** and
+that rule is retired. `isDemoRig` is derived from the metadata rather than
+tracked separately, so the two cannot drift apart.
+
+Note `DEMO_RIG` is a client-side value only. It is never written to
+`products.garment_metadata`; the admin ingestion pipeline neither produces
+nor consumes it. A DB row will never carry it.
 
 `anchorConfidence` is `detected` | `inferred` | `merchant_confirmed`.
 `merchant_confirmed` was historically stamped by unrelated field edits and
@@ -323,7 +330,9 @@ undetected rows are roadmap Phase 1 and 6 work.
 2. `CanonicalTorso.quaternion` is the only owner of garment global rotation.
 3. Mirroring happens once, in CSS, after rendering.
 4. The native rotation compensation is permanent and native-only.
-5. `AR_READY` is not proof of calibration until `DEMO_RIG` exists.
+5. `AR_READY` means calibrated. The demo-rig fallback marks itself
+   `DEMO_RIG` (client-only, never stored), and `isDemoRig` is derived from
+   the metadata rather than tracked as separate state.
 6. Rigid skeletal deformation, four arm bones, Spine at bind.
 7. Occlusion means capsule approximation, and is currently inactive.
 8. `STATURE_CORRECTION` is provisional.
