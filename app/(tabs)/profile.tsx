@@ -145,13 +145,19 @@ export default function ProfileScreen() {
         </View>
 
                   <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Shopping & Wardrobe</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Shopping & Social</Text>
             <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
               {renderSettingItem(
                   'heart.fill',
                   'Wishlist',
                   `${wishlistIds.size} saved items`,
                   () => router.push('/wishlist' as any),
+                )}
+              {renderSettingItem(
+                  'person.2.fill',
+                  'My Network',
+                  'Find and connect with friends',
+                  () => router.push('/network' as any),
                 )}
               {renderSettingItem(
                   'lock.fill',
