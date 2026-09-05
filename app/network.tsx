@@ -11,6 +11,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 
 type SuggestedUser = UserProfile & { mutual_count: number };
 
+type SuggestedUser = UserProfile & { mutual_count: number };
+
 type UserProfile = {
   id: string;
   username: string | null;
@@ -42,6 +44,8 @@ export default function NetworkScreen() {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
+  const [suggestedLoading, setSuggestedLoading] = useState(false);
   const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
   const [suggestedLoading, setSuggestedLoading] = useState(false);
 
@@ -449,6 +453,12 @@ const styles = StyleSheet.create({
     ...Type.caption,
     fontWeight: '600',
     color: '#fff',
+  },
+  sectionTitle: {
+    ...Type.title,
+    fontSize: 18,
+    marginBottom: Spacing.md,
+    marginLeft: Spacing.md,
   },
   sectionTitle: {
     ...Type.title,
