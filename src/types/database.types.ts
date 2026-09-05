@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      connections: {
+        Row: {
+          id: string
+          user_id_1: string
+          user_id_2: string
+          status: string
+          action_user_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: any
+        Update: any
+        Relationships: any[]
+      }
+      direct_chats: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: any
+        Update: any
+        Relationships: any[]
+      }
+      direct_chat_participants: {
+        Row: {
+          chat_id: string
+          user_id: string
+          created_at: string
+        }
+        Insert: any
+        Update: any
+        Relationships: any[]
+      }
+      direct_messages: {
+        Row: {
+          id: string
+          chat_id: string
+          sender_id: string | null
+          content: string
+          created_at: string
+          read_at: string | null
+        }
+        Insert: any
+        Update: any
+        Relationships: any[]
+      }
+
       account_deletion_requests: {
         Row: {
           created_at: string
@@ -444,7 +492,6 @@ export type Database = {
           id: string
           last_message: string | null
           last_message_time: string | null
-          unread_count: number | null
           unread_customer: number
           unread_staff: number
           updated_at: string | null
@@ -455,7 +502,6 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_time?: string | null
-          unread_count?: number | null
           unread_customer?: number
           unread_staff?: number
           updated_at?: string | null
@@ -466,7 +512,6 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_time?: string | null
-          unread_count?: number | null
           unread_customer?: number
           unread_staff?: number
           updated_at?: string | null
@@ -791,7 +836,11 @@ export type Database = {
           read_at: string | null
           sender_id: string | null
           sender_name: string | null
-          sender_role: string | null
+          sender_role: string
+          username: string | null
+          wardrobe_privacy: string | null | null
+            wishlist_privacy: string | null
+            wishlist_privacy: string | null
           sender_type: string | null
           text: string | null
         }
@@ -810,7 +859,11 @@ export type Database = {
           read_at?: string | null
           sender_id?: string | null
           sender_name?: string | null
-          sender_role?: string | null
+          sender_role?: string
+          username?: string | null
+          wardrobe_privacy?: string | null | null
+            wishlist_privacy?: string | null
+            wishlist_privacy?: string | null
           sender_type?: string | null
           text?: string | null
         }
@@ -829,7 +882,11 @@ export type Database = {
           read_at?: string | null
           sender_id?: string | null
           sender_name?: string | null
-          sender_role?: string | null
+          sender_role?: string
+          username?: string | null
+          wardrobe_privacy?: string | null | null
+            wishlist_privacy?: string | null
+            wishlist_privacy?: string | null
           sender_type?: string | null
           text?: string | null
         }
@@ -1298,9 +1355,14 @@ export type Database = {
           profile_visibility: string
           province: string | null
           role: string
+          username: string | null
+          wardrobe_privacy: string | null
+            wishlist_privacy: string | null
+            wishlist_privacy: string | null
           updated_at: string
           username: string | null
           wardrobe_privacy: string | null
+            wishlist_privacy: string | null
           wishlist_privacy: string | null
           zip_code: string | null
         }
@@ -1327,9 +1389,14 @@ export type Database = {
           profile_visibility?: string
           province?: string | null
           role?: string
+          username?: string | null
+          wardrobe_privacy?: string | null
+            wishlist_privacy?: string | null
+            wishlist_privacy?: string | null
           updated_at?: string
           username?: string | null
           wardrobe_privacy?: string | null
+            wishlist_privacy?: string | null
           wishlist_privacy?: string | null
           zip_code?: string | null
         }
@@ -1356,9 +1423,14 @@ export type Database = {
           profile_visibility?: string
           province?: string | null
           role?: string
+          username?: string | null
+          wardrobe_privacy?: string | null
+            wishlist_privacy?: string | null
+            wishlist_privacy?: string | null
           updated_at?: string
           username?: string | null
           wardrobe_privacy?: string | null
+            wishlist_privacy?: string | null
           wishlist_privacy?: string | null
           zip_code?: string | null
         }
@@ -1598,6 +1670,48 @@ export type Database = {
           {
             foreignKeyName: "reservations_staff_id_fkey"
             columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_votes: {
+        Row: {
+          created_at: string
+          id: string
+          review_id: string
+          updated_at: string
+          user_id: string
+          vote_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          review_id: string
+          updated_at?: string
+          user_id: string
+          vote_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          review_id?: string
+          updated_at?: string
+          user_id?: string
+          vote_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_votes_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "reviews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_votes_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2121,6 +2235,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+        get_product_loved_by: {
+          Args: { p_product_id: string }
+          Returns: {
+            total_count: number
+            public_users: any
+          }[]
+        }
+
+        get_suggested_connections: {
+          Args: Record<PropertyKey, never>
+          Returns: {
+            id: string
+            username: string | null
+            first_name: string | null
+            last_name: string | null
+            mutual_count: number
+          }[]
+        }
+
       adjust_inventory_stock: {
         Args: {
           p_available_delta?: number
@@ -2215,6 +2348,13 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_reviews_with_user_vote: {
+        Args: { p_product_id: string }
+        Returns: {
+          review: Database["public"]["Tables"]["reviews"]["Row"]
+          user_vote: string
+        }[]
+      }
       get_slot_booked_counts: {
         Args: { _date: string }
         Returns: {
@@ -2287,6 +2427,8 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_wardrobe_privacy: { Args: { p_user_id: string }; Returns: string }
+      get_wishlist_privacy: { Args: { p_user_id: string }; Returns: string }
       is_admin_or_owner: { Args: never; Returns: boolean }
       is_awaiting_payment_status: {
         Args: { _status: string }
@@ -2483,7 +2625,11 @@ export type Database = {
       }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
       update_staff_role: {
-        Args: { new_role: string; target_user_id: string }
+        Args: { new_role: string
+          username: string | null
+          wardrobe_privacy: string | null
+            wishlist_privacy: string | null
+            wishlist_privacy: string | null; target_user_id: string }
         Returns: undefined
       }
       update_staff_status: {
@@ -2497,6 +2643,10 @@ export type Database = {
       }
       update_user_streak: { Args: never; Returns: undefined }
       verify_pickup: { Args: { _pickup_token: string }; Returns: Json }
+      vote_on_review: {
+        Args: { p_review_id: string; p_vote_type?: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

@@ -8,7 +8,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import ProductCard from '@/src/components/ProductCard';
+import { ProductCard } from '@/src/components/ProductCard';
 
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
