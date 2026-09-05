@@ -25,6 +25,8 @@ import { PoseLandmarkOverlay } from "@/src/components/PoseLandmarkOverlay";
 import { SilhouetteOverlay } from "@/src/components/SilhouetteOverlay";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FirstUseHintModal } from "@/src/components/FirstUseHintModal";
+import { useAuth } from "@/src/context/AuthContext";
+import { hasSeenHint, markHintSeen } from "@/src/utils/firstUseHints";
 import { ScanPrep } from "@/src/components/ScanPrep";
 import { PoseLandmarkFilter } from "@/src/utils/oneEuroFilter";
 import {
@@ -54,6 +56,7 @@ const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
 export default function BodyScanScreen() {
   const { showToast } = useToast();
   const theme = useColorScheme() ?? "dark";
+  const { session } = useAuth();
   const colors = Colors[theme];
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -92,14 +95,14 @@ export default function BodyScanScreen() {
   const [showScanHint, setShowScanHint] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem("body_scan_hint_seen").then((seen) => {
+    hasSeenHint(session?.user?.id, 'body_scan:v1').then((seen) => {
       if (!seen) setShowScanHint(true);
     });
-  }, []);
+  }, [session?.user?.id]);
 
   const handleAcknowledgeScanHint = () => {
     setShowScanHint(false);
-    AsyncStorage.setItem("body_scan_hint_seen", "true");
+    markHintSeen(session?.user?.id, 'body_scan:v1');
   };
 
   const lastSpokenRef = useRef<string>("");
@@ -573,7 +576,7 @@ export default function BodyScanScreen() {
         visible={showScanHint}
         icon="figure.stand"
         title="Body Scan Guidance"
-        message="Stand about 2 meters from your camera in form-fitting clothing. Keep your phone upright and follow the audio instructions."
+        message="Create an accurate digital profile by performing a quick body scan. Your measurements are calculated securely on your device to recommend your perfect size."
         onAcknowledge={handleAcknowledgeScanHint}
       />
     </View>

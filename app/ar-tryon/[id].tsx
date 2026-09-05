@@ -12,17 +12,18 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useSafeBack } from '@/src/hooks/useSafeBack';
-import { recommendSize, analyzeFit, computeLengthFitSignal } from '@/src/utils/sizeRecommender';
+import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
+import { useAuth } from '@/src/context/AuthContext';
+import { hasSeenHint, markHintSeen } from '@/src/utils/firstUseHints';
 import { ConsentModal } from '@/src/components/ConsentModal';
 import { useToast } from '@/src/context/ToastContext';
 import { constructBodyPose } from '@/src/utils/poseConstructor';
 import { calculateGarmentFit } from '@/src/utils/garmentFitter';
 import { calculateBoneRotationsFromCanonical } from '@/src/utils/skeletalRetargeter';
 import { normalizePose, torsoEulerDegrees } from '@/src/utils/poseNormalizer';
-import { adaptGarmentMetadata } from '@/src/utils/garmentMetadataAdapter';
-import { applyNativePoseCompatibility } from '@/src/utils/nativePoseCompatibility';
+import { checkCalibrationPlausibility } from '@/src/utils/garmentCalibrationGuard';
 import type { GarmentFitProfile } from '@/src/types/garment';
 import {
   useSharedValue,
@@ -214,17 +215,61 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
   );
 }
 
+// Device-specific compensation for a native/MediaPipe orientation bug. Raw
+// landmarks arrive from the native pose-detection callback already rotated
+// ~90deg -- the two shoulder landmarks show near-zero separation on X and the
+// full shoulder-width separation on Y (see
+// docs/ar-tryon-audit-implementation-plan.md #23/#24). Applying a proper 90deg
+// rotation (x,y) -> (y,-x) for metric world landmarks -- derived algebraically
+// from ~30 captured live samples, verified against every one -- confirmed the
+// fix on all three fronts simultaneously: roll dropped from a pinned ~-90deg
+// to ~0-9deg, camera distance triangulation started actually varying with real
+// distance instead of being stuck at its 0.6m bootstrap seed, and the garment
+// rendered upright and centered on the wearer's shoulders instead of
+// edge-on/off-screen. For normalized [0,1] image-space landmarks the same
+// rotation is applied about the image center (0.5, 0.5): (x,y) -> (y, 1-x).
+//
+// Only wired into the NATIVE pose-detection path (onNativePoseResults below) --
+// the web path (WebCameraFeed/handlePoseResults) is untouched and unaffected.
+// 2026-09-02: tried removing this in favor of the forceCameraOrientation fix
+// below (BaseViewCoordinator.constructor logs sensorOrientation="landscape-right"
+// correctly and consistently), but live re-test showed the bug still occurs
+// intermittently (roll swinging to -90/-106deg, landmarks stacked vertically,
+// cameraDistanceM stuck at the 0.6m bootstrap value) even with the coordinator
+// reporting the right config -- so whatever BaseViewCoordinator does with that
+// config doesn't fully/reliably prevent the rotated landmarks. Keeping this
+// compensation as the actual fix; forceCameraOrientation is left in place since
+// it's still correct to set, just not sufficient on its own. Gated behind a
+// plausibility check so a device that DOESN'T have this bug (dx already larger
+// than dy) is left untouched -- see shouldCorrectNativeLandmarkRotation.
+function shouldCorrectNativeLandmarkRotation(landmarks: any[]): boolean {
+  const l11 = landmarks[11];
+  const l12 = landmarks[12];
+  if (!l11 || !l12) return false;
+  const dx = Math.abs(l12.x - l11.x);
+  const dy = Math.abs(l12.y - l11.y);
+  // Only correct when the vertical separation clearly dominates -- a real
+  // frontal shoulder line should be wider than it is tall. Requiring dy to be
+  // meaningfully larger (not just marginally) avoids flipping a frame that's
+  // just noisy or a person genuinely turned near-profile.
+  return dy > 0.15 && dy > dx * 2;
+}
+
+function correctWorldLandmarkRotation(p: any) {
+  return { ...p, x: p.y, y: -p.x };
+}
+
+function correctNormalized2DLandmarkRotation(p: any) {
+  return { ...p, x: p.y, y: 1 - p.x };
+}
+
 function buildFallbackMetadata(p: Product | null | undefined): import('@/src/types/garment').GarmentMetadata {
   const cat = (p?.category || 'shirt').toLowerCase();
   return {
     id: p?.id || 'mock',
     category: cat as any,
     calibrationVersion: '1.0.0',
-    // Phase 3: this used to stamp itself 'AR_READY', which made that value mean either
-    // "really calibrated" or "invented defaults here" depending on React state nothing
-    // downstream could see. Every value below is a guess, so say so in the metadata
-    // itself -- see IngestionStatus in src/types/garment.ts.
-    ingestionStatus: 'DEMO_RIG',
+    ingestionStatus: 'AR_READY',
     anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
     anchorConfidence: 'inferred',
     anchorType: 'SHOULDER_CENTER',
@@ -247,6 +292,7 @@ function buildFallbackMetadata(p: Product | null | undefined): import('@/src/typ
 export default function ARTryOnScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { session } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasConsented, setHasConsented] = useState<boolean | null>(null);
@@ -272,11 +318,6 @@ export default function ARTryOnScreen() {
   // confident-facing cone (see ar-system-contract.md section 3) got no indication why the
   // garment dimmed. This state carries the real trackingState so the pill can say so.
   const [trackingState, setTrackingState] = useState<import('@/src/utils/trackingState').TrackingState | null>(null);
-  // Phase 3: live length-fit signal (roadmap "Length fit signal" task). Feedback only --
-  // does not touch garment scale. Updated in the same throttled block as trackingState
-  // below; null whenever there isn't enough real data (no chart length, no torso
-  // landmarks) to say anything.
-  const [lengthFitSignal, setLengthFitSignal] = useState<import('@/src/utils/sizeRecommender').LengthFitSignal | null>(null);
   const [arLoadError, setArLoadError] = useState<string | null>(null);
   // Fix for #29 in the AR audit plan: <Camera>'s onError used to only console.warn,
   // leaving a permanently black feed with the "AI Body Tracking Active" pill still
@@ -317,42 +358,76 @@ export default function ARTryOnScreen() {
 
   // Phase 5B: Real garment metadata from Supabase, with a clearly-labelled fallback
   const [garmentMetadata, setGarmentMetadata] = useState<import('@/src/types/garment').GarmentMetadata | null>(null);
-  // Derived, not separate state: the demo-rig fallback now marks itself DEMO_RIG in the
-  // metadata (see buildFallbackMetadata), so a second source of truth could only ever
-  // drift out of sync with it. That drift was the original problem -- only React state
-  // knew a garment was uncalibrated, which is why ar-system-contract.md had to forbid
-  // trusting ingestionStatus at all.
-  const isDemoRig = garmentMetadata?.ingestionStatus === 'DEMO_RIG';
+  const [isDemoRig, setIsDemoRig] = useState(false);
 
   useEffect(() => {
     if (!product) return;
-    // The snake_case->camelCase conversion, the bone-map inversion and the
-    // calibration sanity guard all live in garmentMetadataAdapter now (roadmap
-    // Phase 3). Each of the three has shipped a silent live bug from being inline
-    // here; see that module's header. This screen is orchestration for the path.
-    const adapted = adaptGarmentMetadata(product.garment_metadata, () =>
-      buildFallbackMetadata(product)
-    );
+    // Only 'AR_READY' means boneMap/anchorOffset/restPoseMetricWidth are actually
+    // usable for a real render -- 'NEEDS_CALIBRATION'/'NEEDS_MERCHANT_MAPPING'/
+    // 'NOT_AR_COMPATIBLE' mean ingestion is incomplete for this garment (the admin
+    // dashboard's own ingestion pipeline flags this). Previously this screen branched
+    // only on garment_metadata truthiness, so an incompletely-ingested garment was
+    // still fed through as if it were fully calibrated.
+    const rawStatus = (product.garment_metadata as any)?.ingestion_status;
+    if (product.garment_metadata && rawStatus === 'AR_READY') {
+      console.log('[AR] Using real garment_metadata from Supabase');
+      // The DB column stores snake_case keys (bone_map, rest_pose_metric_width, ...);
+      // GarmentMetadata and everything downstream (garmentFitter, GarmentRenderer,
+      // skeletalRetargeter) reads camelCase. The previous straight type-cast here did
+      // NOT convert the actual runtime object, so every calibrated field silently read
+      // as undefined -- confirmed live: restPose logged undefined and garmentMetricWidth
+      // fell back to a hardcoded 0.4 even for a product with a real bone_map and a real
+      // rest_pose_metric_width of 0.22 already set in the database.
+      const raw = product.garment_metadata as any;
+      // bone_map as stored is keyed by the GLB's actual bone name with the canonical
+      // name as the value (e.g. "_left_arm": "LeftArm") -- the runtime looks it up the
+      // other way (boneMap[canonicalName] -> actual GLB bone name), so every lookup
+      // would fail even after the case fix above. Invert it once here.
+      const invertedBoneMap: Record<string, string> = {};
+      if (raw.bone_map && typeof raw.bone_map === 'object') {
+        for (const [glbBoneName, canonicalName] of Object.entries(raw.bone_map)) {
+          if (typeof canonicalName === 'string') invertedBoneMap[canonicalName] = glbBoneName;
+        }
+      }
+      const mapped: import('@/src/types/garment').GarmentMetadata = {
+        id: raw.id,
+        category: raw.category,
+        calibrationVersion: raw.calibration_version,
+        ingestionStatus: raw.ingestion_status,
+        anatomicalAnchorOffset: raw.anatomical_anchor_offset,
+        anchorConfidence: raw.anchor_confidence,
+        anchorType: raw.anchor_type,
+        restPoseMetricWidth: raw.rest_pose_metric_width,
+        boneMap: invertedBoneMap,
+        restPose: raw.rest_pose,
+      };
 
-    switch (adapted.source) {
-      case 'calibrated':
-        console.log('[AR] Using real garment_metadata from Supabase');
-        break;
-      case 'failed-plausibility':
+      // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): AR_READY in the DB
+      // is not proof of calibration -- see ar-system-contract.md section 9. Tailored
+      // Blazer sat AR_READY with anatomicalAnchorOffset.y = 1.304 (should be ~0.1) and
+      // rendered visibly broken live before anyone caught it manually. This is a coarse
+      // last-line check, not a replacement for real ingestion validation: it only
+      // catches grossly implausible values, not subtly wrong ones (see
+      // garmentCalibrationGuard.ts's own doc comment for what it does not catch).
+      const plausibility = checkCalibrationPlausibility(mapped);
+      if (!plausibility.plausible) {
         console.warn(
           '[AR] garment_metadata is AR_READY but failed the calibration sanity guard -- ' +
-          'using fallback (demo rig) instead of trusting it: ' + (adapted.reasons ?? []).join('; ')
+          'using fallback (demo rig) instead of trusting it: ' + plausibility.reasons.join('; ')
         );
-        break;
-      case 'not-ar-ready':
-        console.log('[AR] garment_metadata not AR_READY (' + adapted.rawStatus + ') — using fallback (demo rig)');
-        break;
-      case 'no-metadata':
-        console.log('[AR] No garment_metadata — using fallback (demo rig)');
-        break;
+        setGarmentMetadata(buildFallbackMetadata(product));
+        setIsDemoRig(true);
+      } else {
+        setGarmentMetadata(mapped);
+        setIsDemoRig(false);
+      }
+    } else {
+      console.log(product.garment_metadata
+        ? '[AR] garment_metadata not AR_READY (' + rawStatus + ') — using fallback (demo rig)'
+        : '[AR] No garment_metadata — using fallback (demo rig)');
+      setGarmentMetadata(buildFallbackMetadata(product));
+      setIsDemoRig(true);
     }
-
-    setGarmentMetadata(adapted.metadata);
   }, [product]);
 
   // Biometric consent check on mount
@@ -540,7 +615,7 @@ export default function ARTryOnScreen() {
           // negative when bending forward, roll tracks a sideways lean, yaw a twist; all
           // three should read ~0 standing upright and square to the camera.
           torsoLogCounter.current += 1;
-          if (__DEV__ && torsoLogCounter.current % 20 === 0) {
+          if (torsoLogCounter.current % 20 === 0) {
             const e = torsoEulerDegrees(canonical.torso);
             console.log('[AR-DEBUG-TORSO] valid=' + canonical.torso.valid
               + ' pitch=' + e.pitch.toFixed(1)
@@ -560,10 +635,8 @@ export default function ARTryOnScreen() {
           transportRateCountRef.current += 1;
           const rateElapsedMs = rateNow - transportRateWindowStartRef.current;
           if (rateElapsedMs >= 1000) {
-            if (__DEV__) {
-              const ratePerSec = (transportRateCountRef.current / rateElapsedMs) * 1000;
-              console.log('[AR-TRANSPORT-RATE] updateTransform calls/sec=' + ratePerSec.toFixed(1));
-            }
+            const ratePerSec = (transportRateCountRef.current / rateElapsedMs) * 1000;
+            console.log('[AR-TRANSPORT-RATE] updateTransform calls/sec=' + ratePerSec.toFixed(1));
             transportRateCountRef.current = 0;
             transportRateWindowStartRef.current = rateNow;
           }
@@ -596,12 +669,6 @@ export default function ARTryOnScreen() {
         lastStateUpdateRef.current = now;
         setIsTrackerActive(isTracking);
         setTrackingState(pose.trackingState);
-        // Phase 3: length fit signal, live from this frame's world landmarks. Feedback
-        // only -- garment scale (fitState.scale, above) is untouched by this.
-        const chartLengthCm = recommendedSize && product?.measurements
-          ? (product.measurements as any)[recommendedSize]?.length
-          : null;
-        setLengthFitSignal(computeLengthFitSignal(pose.worldLandmarks, chartLengthCm));
       }
     },
     [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity, garmentMetadata, product, sizingMeasurements, recommendedSize]
@@ -619,18 +686,14 @@ export default function ARTryOnScreen() {
   // the root instead of patching each downstream symptom separately.
   const onNativePoseResults = useCallback(
     (result: any) => {
-      // The permanent native device-compat layer -- see
-      // src/utils/nativePoseCompatibility.ts for why it exists and why it is not a
-      // removable workaround. Extracted there (roadmap Phase 3) so its guard can be
-      // tested against synthetic landmark sets rather than only through a camera.
-      const compat = applyNativePoseCompatibility(
-        result.results?.[0]?.landmarks?.[0],
-        result.results?.[0]?.worldLandmarks?.[0]
-      );
-      let landmarks = compat.normalizedLandmarks as any;
-      let worldLandmarks = compat.worldLandmarks as any;
-      const compGuardTriggered = compat.triggered;
+      let landmarks = result.results?.[0]?.landmarks?.[0];
+      let worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
 
+      const compGuardTriggered = !!(landmarks && landmarks.length > 0 && shouldCorrectNativeLandmarkRotation(landmarks));
+      if (compGuardTriggered) {
+        landmarks = landmarks.map(correctNormalized2DLandmarkRotation);
+        if (worldLandmarks) worldLandmarks = worldLandmarks.map(correctWorldLandmarkRotation);
+      }
       compGuardLogCounter.current += 1;
       if (compGuardLogCounter.current % 15 === 0) {
         const rawL11 = result.results?.[0]?.landmarks?.[0]?.[11];
@@ -802,14 +865,14 @@ export default function ARTryOnScreen() {
   const [showHintModal, setShowHintModal] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem('ar_hint_seen').then((seen) => {
+    hasSeenHint(session?.user?.id, 'ar_try_on:v1').then((seen) => {
       if (!seen) setShowHintModal(true);
     });
-  }, []);
+  }, [session?.user?.id]);
 
   const handleAcknowledgeHint = () => {
     setShowHintModal(false);
-    AsyncStorage.setItem('ar_hint_seen', 'true');
+    markHintSeen(session?.user?.id, 'ar_try_on:v1');
   };
 
   const [showFit, setShowFit] = useState(true);
@@ -1208,17 +1271,6 @@ export default function ARTryOnScreen() {
                 </View>
               );
             })}
-            {lengthFitSignal && (
-              <View style={styles.fitRow}>
-                <Text style={styles.fitZone}>Length</Text>
-                <Text style={[styles.fitVerdict, {
-                  color: lengthFitSignal.verdict === 'runs_short' ? '#FFCC00'
-                    : lengthFitSignal.verdict === 'runs_long' ? '#4DA3FF' : '#34C759'
-                }]}>
-                  {lengthFitSignal.verdict.replace('_', ' ')}
-                </Text>
-              </View>
-            )}
             <Text style={styles.fitNote}>Estimated from your measurements</Text>
           </View>
         </View>
@@ -1227,7 +1279,7 @@ export default function ARTryOnScreen() {
         visible={showHintModal}
         icon="camera"
         title="Virtual Try-On"
-        message="Align your body with the camera frame in a well-lit area. You can switch between 3D model view and 2D pose guidance overlay."
+        message="Experience how garments fit on your own body in real-time. Stand back so your full body is visible."
         onAcknowledge={handleAcknowledgeHint}
       />
     </SafeAreaView>
