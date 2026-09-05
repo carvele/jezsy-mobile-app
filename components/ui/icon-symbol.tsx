@@ -34,6 +34,7 @@ const MAPPING = {
   'arrow.up.circle.fill': 'send',
   'envelope.fill': 'email',
   'bubble.left.and.bubble.right': 'forum',
+  'message.fill': 'chat',
 
   // Commerce & Shopping
   'bag': 'shopping-bag',

@@ -37,7 +37,7 @@ import { StyleGallery } from '@/components/StyleGallery';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { SystemTourModal } from '@/src/components/SystemTourModal';
-import { hasSeenSystemTour, markSystemTourSeen } from '@/src/utils/tutorial';
+import { hasSeenHint } from '@/src/utils/firstUseHints';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -92,7 +92,7 @@ export default function HomeScreen() {
     if (!session?.user?.id) return;
     let isCancelled = false;
     let timer: NodeJS.Timeout;
-    hasSeenSystemTour(session.user.id).then((seen) => {
+    hasSeenHint(session.user.id, 'welcome:v1').then((seen) => {
       if (!seen && !isCancelled) {
         timer = setTimeout(() => {
           if (!isCancelled) setShowTour(true);
@@ -105,12 +105,7 @@ export default function HomeScreen() {
     };
   }, [session?.user?.id]);
 
-  const handleCloseTour = useCallback(() => {
-    setShowTour(false);
-    if (session?.user?.id) {
-      markSystemTourSeen(session.user.id);
-    }
-  }, [session?.user?.id]);
+  const handleCloseTour = useCallback(() => setShowTour(false), []);
 
   const fetchProducts = useCallback(async (fromCache = false) => {
     // Immediately seed UI from cache so there's something to look at before the

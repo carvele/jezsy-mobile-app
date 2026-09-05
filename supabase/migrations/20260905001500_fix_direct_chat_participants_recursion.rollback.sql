@@ -5,4 +5,5 @@ DROP POLICY IF EXISTS "Users can read their direct messages" ON public.direct_me
 DROP POLICY IF EXISTS "Users can send messages to connections" ON public.direct_messages;
 DROP POLICY IF EXISTS "Users can mark messages as read" ON public.direct_messages;
 
+DROP FUNCTION IF EXISTS public.mark_direct_message_read(uuid);
 DROP FUNCTION IF EXISTS public.is_chat_participant(uuid, uuid);

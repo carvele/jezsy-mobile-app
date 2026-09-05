@@ -17,7 +17,7 @@ export default function PrivacySettingsScreen() {
   const router = useRouter();
 
   const [isShared, setIsShared] = useState(false);
-  const [wardrobePrivacy, setWardrobePrivacy] = useState<'private' | 'connections' | 'public'>('private');
+  const [wardrobePrivacy, setWardrobePrivacy] = useState<'private' | 'connections'>('private');
   const [wishlistPrivacy, setWishlistPrivacy] = useState<'private' | 'connections' | 'public'>('private');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -82,7 +82,7 @@ export default function PrivacySettingsScreen() {
     const prevWardrobe = wardrobePrivacy;
     const prevWishlist = wishlistPrivacy;
 
-    if (type === 'wardrobe') setWardrobePrivacy(value);
+    if (type === 'wardrobe') setWardrobePrivacy(value as 'private' | 'connections');
     if (type === 'wishlist') setWishlistPrivacy(value);
 
     try {
@@ -226,7 +226,6 @@ export default function PrivacySettingsScreen() {
                 <View style={styles.optionsContainer}>
                   {renderRadioOption('wardrobe', 'private', 'Private', 'Only you (and stylists if enabled) can see your wardrobe.')}
                   {renderRadioOption('wardrobe', 'connections', 'My Network', 'Your accepted connections can browse your wardrobe.')}
-                  {renderRadioOption('wardrobe', 'public', 'Public', 'Anyone on the app can view your wardrobe.')}
                 </View>
               )}
             </View>

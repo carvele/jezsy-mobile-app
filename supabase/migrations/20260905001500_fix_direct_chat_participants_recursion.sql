@@ -66,15 +66,44 @@ WITH CHECK (
   )
 );
 
--- Fix direct_messages UPDATE policy
+-- The previous "Users can mark messages as read" UPDATE policy's WITH CHECK
+-- compared each new-row column to itself (sender_id = sender_id, etc), which
+-- is always true and placed no real restriction: any participant could
+-- rewrite another user's message content, not just stamp read_at. RLS
+-- WITH CHECK can't compare against the OLD row's values directly, so the
+-- write is moved behind a SECURITY DEFINER RPC that only ever touches
+-- read_at, matching this project's vote_on_review/request_account_deletion
+-- pattern for narrowing a write to a single trusted mutation.
 DROP POLICY IF EXISTS "Users can mark messages as read" ON public.direct_messages;
 
-CREATE POLICY "Users can mark messages as read"
-ON public.direct_messages FOR UPDATE
-TO public
-USING (
-  public.is_chat_participant(chat_id, auth.uid())
-)
-WITH CHECK (
-  sender_id = sender_id AND content = content AND chat_id = chat_id
-);
+CREATE OR REPLACE FUNCTION public.mark_direct_message_read(p_message_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_chat_id uuid;
+  v_sender_id uuid;
+BEGIN
+  SELECT chat_id, sender_id INTO v_chat_id, v_sender_id
+  FROM public.direct_messages WHERE id = p_message_id;
+
+  IF v_chat_id IS NULL THEN
+    RAISE EXCEPTION 'Message not found';
+  END IF;
+  IF NOT public.is_chat_participant(v_chat_id, auth.uid()) THEN
+    RAISE EXCEPTION 'Not a participant of this chat';
+  END IF;
+  IF v_sender_id = auth.uid() THEN
+    RETURN;
+  END IF;
+
+  UPDATE public.direct_messages
+  SET read_at = now()
+  WHERE id = p_message_id AND read_at IS NULL;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.mark_direct_message_read(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.mark_direct_message_read(uuid) TO authenticated;

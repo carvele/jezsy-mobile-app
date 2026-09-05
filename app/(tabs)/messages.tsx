@@ -51,7 +51,7 @@ export default function InboxScreen() {
         .from('direct_chat_participants')
         .select(`
           chat_id,
-          profiles!inner ( id, username, first_name, last_name ),
+          user_id,
           direct_chats!inner ( updated_at )
         `)
         .in('chat_id', chatIds)
@@ -59,9 +59,16 @@ export default function InboxScreen() {
 
       if (err2) throw err2;
 
+      // profiles' own RLS only allows a row's owner or staff to read it, so
+      // the other participant's row must go through this accessor -- an
+      // embedded `profiles!inner(...)` join here silently drops every row.
+      const otherUserIds = (otherParticipants || []).map(p => p.user_id);
+      const { data: profiles } = await supabase.rpc('get_public_profiles', { p_user_ids: otherUserIds });
+      const profileById = new Map((profiles || []).map((p: any) => [p.id, p]));
+
       const formatted = (otherParticipants || []).map(p => ({
         id: p.chat_id,
-        other_user: p.profiles,
+        other_user: profileById.get(p.user_id) || null,
         updated_at: (p.direct_chats as any)?.updated_at || new Date().toISOString()
       })).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 

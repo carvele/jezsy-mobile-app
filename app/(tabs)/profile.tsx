@@ -76,7 +76,7 @@ export default function ProfileScreen() {
     return () => { isMounted = false; };
   }, [user?.id]);
 
-  const handleShareProfile = async () => { if (!profile?.username) return; try { const url = Linking.createURL("user/@${profile.username}"); await Share.share({ message: "Check out my digital wardrobe on JezSy! ${url}", url, }); } catch (error) { console.log('Error sharing:', error); } };
+  const handleShareProfile = async () => { if (!profile?.username) return; try { const url = Linking.createURL(`user/@${profile.username}`); await Share.share({ message: `Check out my digital wardrobe on JezSy! ${url}`, url, }); } catch (error) { console.log('Error sharing:', error); } };
 
   const handleSignOut = async () => {
     try {
@@ -228,7 +228,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      <SystemTourModal visible={showTour} onClose={() => setShowTour(false)} />
+      <SystemTourModal visible={showTour} onClose={() => setShowTour(false)} isReplay={true} />
     </SafeAreaView>
   );
 }

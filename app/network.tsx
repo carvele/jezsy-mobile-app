@@ -66,23 +66,23 @@ export default function NetworkScreen() {
 
       if (error) throw error;
 
-      // Manually join profiles because the RLS might restrict direct joins depending on how it's set up
-      // Or we can just join profiles
-      const formattedConnections = await Promise.all(
-        (data || []).map(async (conn) => {
-          const otherUserId = conn.user_id_1 === user.id ? conn.user_id_2 : conn.user_id_1;
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('id, username, first_name, last_name')
-            .eq('id', otherUserId)
-            .single();
-
-          return {
-            ...conn,
-            other_user: profile || { id: otherUserId, username: 'Unknown', first_name: '', last_name: '' }
-          } as Connection;
-        })
+      // profiles' own RLS only allows a row's owner or staff to read it, so
+      // other users' rows must go through this SECURITY DEFINER accessor.
+      const otherUserIds = (data || []).map((conn) =>
+        conn.user_id_1 === user.id ? conn.user_id_2 : conn.user_id_1
       );
+      const { data: profiles } = await supabase.rpc('get_public_profiles', { p_user_ids: otherUserIds });
+      const profileById = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+      const formattedConnections = (data || []).map((conn) => {
+        const otherUserId = conn.user_id_1 === user.id ? conn.user_id_2 : conn.user_id_1;
+        const profile = profileById.get(otherUserId);
+
+        return {
+          ...conn,
+          other_user: profile || { id: otherUserId, username: 'Unknown', first_name: '', last_name: '' }
+        } as Connection;
+      });
 
       setConnections(formattedConnections);
     } catch (err: any) { console.log(err);
@@ -97,11 +97,7 @@ export default function NetworkScreen() {
     setSearchLoading(true);
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, username, first_name, last_name')
-        .or(`username.ilike.%${searchQuery.trim()}%,first_name.ilike.%${searchQuery.trim()}%,last_name.ilike.%${searchQuery.trim()}%`)
-        .neq('id', user.id)
-        .limit(20);
+        .rpc('search_public_profiles', { p_query: searchQuery.trim(), p_exclude_id: user.id });
 
       if (error) throw error;
       setSearchResults(data || []);
@@ -173,7 +169,7 @@ export default function NetworkScreen() {
           user_id_2: u2,
           status: 'blocked',
           action_user_id: user.id
-        });
+        }, { onConflict: 'user_id_1,user_id_2' });
 
       if (error) throw error;
       showToast('User blocked', 'success');

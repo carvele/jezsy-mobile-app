@@ -38,24 +38,18 @@ export default function UserProfileScreen() {
       // Resolve @username to UUID
       if (id?.startsWith('@')) {
         const username = id.substring(1).toLowerCase();
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('username', username)
-          .single();
-        if (error || !data) throw new Error('User not found');
-        targetId = data.id;
+        const { data: resolvedId, error } = await supabase.rpc('resolve_username', { p_username: username });
+        if (error || !resolvedId) throw new Error('User not found');
+        targetId = resolvedId;
       }
 
-      // Load Profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, username, first_name, last_name, wardrobe_privacy')
-        .eq('id', targetId)
-        .single();
-      
-      if (profileError) throw profileError;
-      setProfile(profileData);
+      // profiles' own RLS only allows a row's owner or staff to read it, so
+      // another user's row must go through this SECURITY DEFINER accessor.
+      const { data: profileRows, error: profileError } = await supabase
+        .rpc('get_public_profiles', { p_user_ids: [targetId] });
+
+      if (profileError || !profileRows?.[0]) throw profileError || new Error('User not found');
+      setProfile(profileRows[0]);
 
       // Load Connection
       const u1 = user!.id < targetId! ? user!.id : targetId!;
@@ -73,7 +67,7 @@ export default function UserProfileScreen() {
       if (connData?.status === 'blocked') {
         setAccessDenied(true);
       } else {
-        loadWardrobe(targetId!, profileData.wardrobe_privacy as string, connData?.status);
+        loadWardrobe(targetId!, profileRows[0].wardrobe_privacy as string, connData?.status);
       }
     } catch (err: any) {
       console.log('Error loading profile:', err.message);
@@ -117,7 +111,7 @@ export default function UserProfileScreen() {
       const u2 = user!.id < profile.id ? profile.id : user!.id;
       const { error } = await supabase
         .from('connections')
-        .upsert({ user_id_1: u1, user_id_2: u2, status: 'pending', action_user_id: user!.id });
+        .upsert({ user_id_1: u1, user_id_2: u2, status: 'pending', action_user_id: user!.id }, { onConflict: 'user_id_1,user_id_2' });
       if (error) throw error;
       showToast('Connection request sent', 'success');
       loadProfileAndConnection();

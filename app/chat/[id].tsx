@@ -56,13 +56,11 @@ export default function P2PChatScreen() {
     try {
       setLoading(true);
 
-      // Load Profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', id)
-        .single();
-      setOtherUser(profile);
+      // profiles' own RLS only allows a row's owner or staff to read it, so
+      // the other participant's row must go through this accessor.
+      const { data: profileRows } = await supabase
+        .rpc('get_public_profiles', { p_user_ids: [id] });
+      setOtherUser(profileRows?.[0] ?? null);
 
       // Check Connection
       const u1 = user!.id < id! ? user!.id : id!;
@@ -135,7 +133,7 @@ export default function P2PChatScreen() {
   };
 
   const markRead = async (msgId: string) => {
-    await supabase.from('direct_messages').update({ read_at: new Date().toISOString() }).eq('id', msgId);
+    await supabase.rpc('mark_direct_message_read', { p_message_id: msgId });
   };
 
   const handleSend = async () => {
