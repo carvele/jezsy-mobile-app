@@ -456,12 +456,35 @@ export default function OutfitBuilderScreen() {
 
     setSaving(true);
     try {
-      const { error } = await supabase.from('saved_outfits').insert({
-        user_id: session.user.id,
-        name,
-        items,
-      });
+      const { data: outfit, error } = await supabase
+        .from('saved_outfits')
+        .insert({
+          user_id: session.user.id,
+          name,
+          items,
+        })
+        .select('id')
+        .single();
       if (error) throw error;
+
+      // Relational mirror of `items` for "Styled By" product-page lookups
+      // (see get_public_outfits_for_product). Best-effort: a failure here
+      // shouldn't undo an outfit the user already successfully saved.
+      if (outfit) {
+        const { error: itemsError } = await supabase.from('outfit_items').insert(
+          items.map((item) => ({
+            outfit_id: outfit.id,
+            product_id: item.product_id,
+            slot: item.slot,
+            image_url: item.image_url,
+            name: item.name,
+            color_tags: item.color_tags,
+            owned: item.owned,
+          }))
+        );
+        if (itemsError) console.error('Error saving outfit items (relational):', itemsError);
+      }
+
       setSaveVisible(false);
       setOutfitName('');
       Alert.alert('Outfit Saved', `"${name}" added to your wardrobe.`, [
@@ -713,7 +736,7 @@ export default function OutfitBuilderScreen() {
       {/* Processing overlay: background removal runs after the picker closes,
           which otherwise looks frozen for a few seconds with no feedback. */}
       {(saving || shuffling) && !saveVisible && (
-        <View style={styles.processingOverlay} pointerEvents="auto">
+        <View style={[styles.processingOverlay, { pointerEvents: 'auto' }]}>
           <View style={[styles.processingCard, { backgroundColor: colors.card }]}>
             <ActivityIndicator size="large" color={colors.tint} />
             <Text style={[styles.processingText, { color: colors.text }]}>
