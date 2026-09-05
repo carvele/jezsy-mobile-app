@@ -306,24 +306,32 @@ Tasks:
   bug. `[COMP-GUARD]` telemetry stays at the call site, since it logs raw
   pre-correction values the module never sees.
   Screen drops 1534 -> 1463 lines across both extractions.
-- Length fit signal: compare the selected size's chart length to the
-  tracked torso length (shoulder midpoint to hip midpoint, already
-  available in world landmarks) and surface "runs long/short" as fit
-  feedback. Keep the mesh scale uniform; do not stretch geometry until
-  Phase 1 evidence says non-uniform scaling helps more than it distorts.
-- Keep `STATURE_CORRECTION` explicitly provisional: name it as such in the
-  contract, and add a single owner note that sizing must not grow to
-  depend on it. Replace only with real calibration data or actual user
-  measurements.
+- **DONE 2026-09-05** (`59b3aed`) — Length fit signal:
+  `computeLengthFitSignal()` in `sizeRecommender.ts` compares the selected
+  size's chart length to the tracked torso length (shoulder midpoint to hip
+  midpoint, live from world landmarks). Mesh scale stays uniform -- this is
+  feedback only, not deformation. 14 tests, notably pinning that a naive
+  zero-centered comparison would misclassify nearly every real garment as
+  "runs_long" (garments are supposed to hang past the hip) -- bucketed
+  around an explicit, named "expected hip drop" baseline instead, same
+  provisional-constant honesty as `STATURE_CORRECTION`. **Not yet
+  physically verified on-device.**
+- **Already satisfied, doc-only correction** — `STATURE_CORRECTION`'s
+  provisionality note already existed in `ar-system-contract.md` section 10
+  and invariant #8 before this roadmap line was written; this task was
+  stale from the start, not something that needed doing. No code or doc
+  change required beyond noting it here.
 
 Exit: `AR_READY` is unambiguous; adapter and compat layer have tests;
 sizing feedback reflects length, not just width.
 
-**Phase 3 status as of 2026-09-04**: two of the three exit conditions are
-met — `AR_READY` is unambiguous (`DEMO_RIG` exists, `b37f90c`) and both the
-adapter and compat layer have tests (`364171d`). The length fit signal and
-the `STATURE_CORRECTION` provisionality note remain open, so Phase 3 is
-**not** exited.
+**Phase 3 status as of 2026-09-05**: all three exit conditions are
+code-complete. `AR_READY` is unambiguous (`DEMO_RIG` exists, `b37f90c`);
+the adapter and compat layer have tests (`364171d`); sizing feedback
+reflects length via the signal above (`59b3aed`). Per this project's own
+verification rule (nothing is verified because it compiles), Phase 3 is
+**not yet exited** until the length signal gets a real on-device pass --
+tsc/tests passing is not the same claim as a physical device pass.
 
 ## Phase 4 — Deformation quality and the garment library
 
