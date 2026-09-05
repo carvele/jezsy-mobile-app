@@ -66,6 +66,7 @@ export default function StyleAdvisorScreen() {
 
   useEffect(() => {
     if (!session?.user?.id) return;
+    let mounted = true;
     (async () => {
       setLoading(true);
       const { data, error } = await supabase
@@ -74,9 +75,11 @@ export default function StyleAdvisorScreen() {
         .eq('user_id', session.user.id)
         .eq('deleted', false)
         .order('created_at', { ascending: false });
+      if (!mounted) return;
       if (!error) setItems(data || []);
       setLoading(false);
     })();
+    return () => { mounted = false; };
   }, [session?.user?.id]);
 
   const ranked = useMemo(() => {
@@ -120,6 +123,7 @@ export default function StyleAdvisorScreen() {
       const payload = outfit.items.map((i) => ({
         slot: (i.garment_type || 'accessory').toLowerCase(),
         product_id: i.product_id,
+        wardrobe_item_id: i.id,
         image_url: i.image_url,
         name: i.garment_type || i.category || 'Item',
         color_tags: i.color_tags,

@@ -359,7 +359,7 @@ export default function CartScreen() {
             <TouchableOpacity
               style={[
                 styles.reserveAllBtn,
-                { backgroundColor: colors.tint, opacity: selectedItems.length === 0 ? 0.5 : 1 },
+                { backgroundColor: colors.tint, opacity: selectedItems.length === 0 || selectedItems.length > 20 ? 0.5 : 1 },
               ]}
               onPress={() =>
                 router.push({
@@ -367,22 +367,28 @@ export default function CartScreen() {
                   params: { id: 'cart', itemIds: selectedItems.map((i) => i.id).join(',') },
                 })
               }
-              disabled={selectedItems.length === 0}
+              disabled={selectedItems.length === 0 || selectedItems.length > 20}
               accessibilityRole="button"
               accessibilityLabel={`Reserve selected ${selectedCount} items`}
               accessibilityHint="Books one pickup slot for the selected items in your bag"
-              accessibilityState={{ disabled: selectedItems.length === 0 }}
+              accessibilityState={{ disabled: selectedItems.length === 0 || selectedItems.length > 20 }}
             >
               <Text style={styles.reserveAllBtnText}>
                 Reserve selected ({selectedCount})
               </Text>
             </TouchableOpacity>
 
-            <Text style={[styles.footerNote, { color: colors.secondaryText }]}>
-              Collect all selected items in a single visit. Pay a 50%
-              deposit now and settle the remaining balance at pickup.
-              Reserve items individually to schedule separate visits.
-            </Text>
+            {selectedItems.length > 20 ? (
+              <Text style={[styles.footerNote, { color: colors.notification, fontWeight: '600', marginTop: Spacing.sm }]}>
+                A single reservation cannot contain more than 20 items. Please deselect some items.
+              </Text>
+            ) : (
+              <Text style={[styles.footerNote, { color: colors.secondaryText, marginTop: Spacing.sm }]}>
+                Collect all selected items in a single visit. Pay a 50%
+                deposit now and settle the remaining balance at pickup.
+                Reserve items individually to schedule separate visits.
+              </Text>
+            )}
           </View>
         </>
       )}

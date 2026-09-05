@@ -13,6 +13,7 @@ import { StreakBadge } from '@/src/components/StreakBadge';
 import { useToast } from '@/src/context/ToastContext';
 import { statusBucket } from '@/src/utils/reservationStatus';
 import { SystemTourModal } from '@/src/components/SystemTourModal';
+
 export default function ProfileScreen() {
   const { showToast } = useToast();
   const { user, profile, signOut } = useAuth();

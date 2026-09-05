@@ -65,6 +65,7 @@ export default function ReservationScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [reauthVisible, setReauthVisible] = useState(false);
+  const [liveCartPrices, setLiveCartPrices] = useState<Map<string, Partial<Product>>>(new Map());
 
   // Date and Time selection. Anchored to Asia/Manila (manilaCalendarDay), not
   // the device's own calendar day -- a customer on a phone set to a
@@ -115,9 +116,35 @@ export default function ReservationScreen() {
   const { session } = useAuth();
 
   useEffect(() => {
-    // Cart mode already has its products in context; nothing to fetch.
     if (isCartMode) {
-      setLoading(false);
+      const fetchCartPrices = async () => {
+        try {
+          const selectedIds = itemIds ? new Set(itemIds.split(",")) : null;
+          const scopedItems = selectedIds
+            ? cartItems.filter((item) => selectedIds.has(item.id))
+            : cartItems;
+
+          const productIds = [...new Set(scopedItems.map((i) => i.product.id))];
+          if (productIds.length > 0) {
+            const { data, error } = await supabase
+              .from("products")
+              .select("id, price, sale_price, on_sale")
+              .in("id", productIds);
+
+            if (error) throw error;
+            if (data) {
+              const liveMap = new Map();
+              data.forEach(p => liveMap.set(p.id, p));
+              setLiveCartPrices(liveMap);
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching live prices for cart:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchCartPrices();
       return;
     }
 
@@ -139,7 +166,7 @@ export default function ReservationScreen() {
     };
 
     fetchProduct();
-  }, [id, isCartMode]);
+  }, [id, isCartMode, itemIds, cartItems]);
 
   const lines: ReservationLine[] = useMemo(() => {
     if (isCartMode) {
@@ -150,13 +177,17 @@ export default function ReservationScreen() {
       const scopedItems = selectedIds
         ? cartItems.filter((item) => selectedIds.has(item.id))
         : cartItems;
-      return scopedItems.map((item) => ({
-        key: item.id,
-        product: item.product,
-        size: item.selectedSize || undefined,
-        color: item.selectedColor || undefined,
-        quantity: item.quantity,
-      }));
+      return scopedItems.map((item) => {
+        const liveInfo = liveCartPrices.get(item.product.id);
+        const effectiveProduct = liveInfo ? { ...item.product, ...liveInfo } : item.product;
+        return {
+          key: item.id,
+          product: effectiveProduct,
+          size: item.selectedSize || undefined,
+          color: item.selectedColor || undefined,
+          quantity: item.quantity,
+        };
+      });
     }
     if (!product) return [];
     return [{
@@ -166,7 +197,7 @@ export default function ReservationScreen() {
       color: color || undefined,
       quantity: 1,
     }];
-  }, [isCartMode, cartItems, product, size, color, itemIds]);
+  }, [isCartMode, cartItems, product, size, color, itemIds, liveCartPrices]);
 
 
   // Gate, not the submit itself: validates preconditions and steps up
@@ -253,9 +284,9 @@ export default function ReservationScreen() {
       if (isCartMode) {
         await removeItems(lines.map((line) => line.key).filter((itemId): itemId is string => Boolean(itemId)));
       } else if (id) {
-        const matchingCartItems = cartItems.filter((ci) => ci.product.id === id);
-        if (matchingCartItems.length > 0) {
-          await removeItems(matchingCartItems.map((ci) => ci.id));
+        const expectedCartItemId = `${id}-${size || ''}-${color || ''}`;
+        if (cartItems.some(ci => ci.id === expectedCartItemId)) {
+          await removeItems([expectedCartItemId]);
         }
       }
 

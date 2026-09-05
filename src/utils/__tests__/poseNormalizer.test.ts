@@ -162,6 +162,21 @@ describe('poseNormalizer: torso basis', () => {
     expect(torso.quaternion.w).toBe(1);
   });
 
+  it('reports an invalid torso when the 3D shoulder distance is physically implausible', () => {
+    // Simulates the deep-profile-turn failure mode (Phase 1 report finding #1):
+    // MediaPipe's depth estimate for the far shoulder collapses near profile view,
+    // producing a 3D shoulder-to-shoulder distance far outside any real human's.
+    const wTooNarrow = uprightPose();
+    wTooNarrow[LM.leftShoulder] = { x: 0.02, y: -0.4, z: 0, visibility: 1 };
+    wTooNarrow[LM.rightShoulder] = { x: -0.02, y: -0.4, z: 0, visibility: 1 };
+    expect(normalizePose(wTooNarrow).torso.valid).toBe(false);
+
+    const wTooWide = uprightPose();
+    wTooWide[LM.leftShoulder] = { x: 1.5, y: -0.4, z: 0, visibility: 1 };
+    wTooWide[LM.rightShoulder] = { x: -1.5, y: -0.4, z: 0, visibility: 1 };
+    expect(normalizePose(wTooWide).torso.valid).toBe(false);
+  });
+
   it('reports an invalid torso rather than NaN when the basis is degenerate', () => {
     const w = makeWorld(); // every landmark collapsed onto the origin
     const { torso } = normalizePose(w);

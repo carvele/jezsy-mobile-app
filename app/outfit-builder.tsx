@@ -32,7 +32,7 @@ import { evaluateColors } from '@/src/utils/colorMatcher';
 
 import { useToast } from '@/src/context/ToastContext';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, ZoomIn, FadeOut } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, ZoomIn, FadeOut, runOnJS } from 'react-native-reanimated';
 import { MannequinSilhouette } from '@/src/components/MannequinSilhouette';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
@@ -47,7 +47,7 @@ type SlotKey = 'top' | 'bottom' | 'outerwear' | 'shoes' | 'accessory';
 // the user cannot actually wear yet, so it has to be visually distinct from
 // something already hanging in their wardrobe.
 type ItemSource = 'wardrobe' | 'catalog' | 'wishlist';
-type SlotItem = { product_id: string | null; image_url: string; original_image_url: string; name: string; color_tags?: string[] | null; source: ItemSource };
+type SlotItem = { product_id: string | null; wardrobe_item_id?: string | null; image_url: string; original_image_url: string; name: string; color_tags?: string[] | null; source: ItemSource; transform?: { x: number, y: number } };
 type Slots = Record<SlotKey, SlotItem | null>;
 
 const SLOT_LABELS: Record<SlotKey, string> = {
@@ -81,13 +81,13 @@ const EMPTY_SLOTS: Slots = {
   top: null, bottom: null, outerwear: null, shoes: null, accessory: null,
 };
 
-// Canvas items previously rendered at fixed percentage positions with no way
-// to move them, so a customer couldn't nudge an item into a more natural
-// spot to actually judge how the look reads together. baseStyle supplies the
-// starting position/size (unchanged); the pan gesture only adds a transform
-// on top, so layout math stays untouched and ViewShot still captures the
-// result correctly (transforms are part of the native render, not layout).
-function DraggableCanvasItem({ uri, baseStyle, resetKey }: { uri: string; baseStyle: any; resetKey: string }) {
+function DraggableCanvasItem({ uri, baseStyle, resetKey, slotKey, onDragEnd }: {
+  uri: string;
+  baseStyle: any;
+  resetKey: string;
+  slotKey: SlotKey;
+  onDragEnd: (slot: SlotKey, x: number, y: number) => void;
+}) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const startX = useSharedValue(0);
@@ -112,6 +112,8 @@ function DraggableCanvasItem({ uri, baseStyle, resetKey }: { uri: string; baseSt
     .onEnd(() => {
       startX.value = translateX.value;
       startY.value = translateY.value;
+      // Bridge final offsets from worklet thread to JS so parent can persist them.
+      runOnJS(onDragEnd)(slotKey, translateX.value, translateY.value);
     });
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -201,7 +203,7 @@ export default function OutfitBuilderScreen() {
         .eq('user_id', session.user.id)
         .eq('deleted', false)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(200);
       if (!error) setWardrobeItems(data || []);
     } finally {
       setPickerLoading(false);
@@ -304,6 +306,7 @@ export default function OutfitBuilderScreen() {
 
         const slotItem: SlotItem = {
           product_id: item.product_id,
+          wardrobe_item_id: item.id,
           image_url: finalImageUrl,
           original_image_url: item.image_url || '',
           name: item.category || 'Item',
@@ -358,6 +361,7 @@ export default function OutfitBuilderScreen() {
         ...prev,
         [activeSlot]: {
           product_id: item.product_id,
+          wardrobe_item_id: item.id,
           image_url:  finalImageUrl,
           original_image_url: item.image_url || '',
           name:       item.category || 'Item',
@@ -409,11 +413,21 @@ export default function OutfitBuilderScreen() {
     setSlots((prev) => ({ ...prev, [slot]: null }));
   }, []);
 
+  // Receives the final Reanimated pixel offsets from DraggableCanvasItem so they
+  // can be persisted into the slot's transform field and emitted on save.
+  const handleTransformChange = useCallback((slot: SlotKey, x: number, y: number) => {
+    setSlots((prev) => {
+      const current = prev[slot];
+      if (!current) return prev;
+      return { ...prev, [slot]: { ...current, transform: { x, y } } };
+    });
+  }, []);
+
   const handleSave = async () => {
     if (!session?.user?.id) return;
     const name = outfitName.trim() || 'My Outfit';
     // Persist the original remote URL (not the possibly background-removed,
-    // device-local preview URL) so the saved outfit renders on any device.
+    const canvasStageHeight = canvasStageWidth * (4 / 3);
     const items = SLOT_KEYS
       .filter((k) => slots[k] !== null)
       .map((k) => {
@@ -421,9 +435,14 @@ export default function OutfitBuilderScreen() {
         return {
           slot: k,
           product_id: s.product_id,
+          wardrobe_item_id: s.wardrobe_item_id ?? null,
           image_url: s.original_image_url || s.image_url,
           name: s.name,
           color_tags: s.color_tags,
+          // Normalized drag offset (0-1 relative to canvas) so MannequinOutfitPreview
+          // can reconstruct the user's repositioning at any canvas size.
+          drag_x: (s.transform?.x ?? 0) / canvasStageWidth,
+          drag_y: (s.transform?.y ?? 0) / canvasStageHeight,
           // Persisted so a saved look still shows which pieces the user would
           // have to buy to actually wear it.
           owned: s.source !== 'wishlist',
@@ -437,12 +456,35 @@ export default function OutfitBuilderScreen() {
 
     setSaving(true);
     try {
-      const { error } = await supabase.from('saved_outfits').insert({
-        user_id: session.user.id,
-        name,
-        items,
-      });
+      const { data: outfit, error } = await supabase
+        .from('saved_outfits')
+        .insert({
+          user_id: session.user.id,
+          name,
+          items,
+        })
+        .select('id')
+        .single();
       if (error) throw error;
+
+      // Relational mirror of `items` for "Styled By" product-page lookups
+      // (see get_public_outfits_for_product). Best-effort: a failure here
+      // shouldn't undo an outfit the user already successfully saved.
+      if (outfit) {
+        const { error: itemsError } = await supabase.from('outfit_items').insert(
+          items.map((item) => ({
+            outfit_id: outfit.id,
+            product_id: item.product_id,
+            slot: item.slot,
+            image_url: item.image_url,
+            name: item.name,
+            color_tags: item.color_tags,
+            owned: item.owned,
+          }))
+        );
+        if (itemsError) console.error('Error saving outfit items (relational):', itemsError);
+      }
+
       setSaveVisible(false);
       setOutfitName('');
       Alert.alert('Outfit Saved', `"${name}" added to your wardrobe.`, [
@@ -678,11 +720,11 @@ export default function OutfitBuilderScreen() {
         <GestureScrollView contentContainerStyle={styles.canvasContainer} showsVerticalScrollIndicator={false}>
           <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={[styles.canvasStage, { width: canvasStageWidth, backgroundColor: colors.background }]}>
             <MannequinSilhouette color={colors.secondaryText} opacity={isDark ? 0.35 : 0.25} />
-            {slots.shoes && <DraggableCanvasItem uri={slots.shoes.image_url} baseStyle={styles.canvasShoes} resetKey={slots.shoes.image_url} />}
-            {slots.bottom && <DraggableCanvasItem uri={slots.bottom.image_url} baseStyle={styles.canvasBottom} resetKey={slots.bottom.image_url} />}
-            {slots.top && <DraggableCanvasItem uri={slots.top.image_url} baseStyle={styles.canvasTop} resetKey={slots.top.image_url} />}
-            {slots.outerwear && <DraggableCanvasItem uri={slots.outerwear.image_url} baseStyle={styles.canvasOuterwear} resetKey={slots.outerwear.image_url} />}
-            {slots.accessory && <DraggableCanvasItem uri={slots.accessory.image_url} baseStyle={styles.canvasAccessory} resetKey={slots.accessory.image_url} />}
+            {slots.shoes && <DraggableCanvasItem uri={slots.shoes.image_url} baseStyle={styles.canvasShoes} resetKey={slots.shoes.image_url} slotKey="shoes" onDragEnd={handleTransformChange} />}
+            {slots.bottom && <DraggableCanvasItem uri={slots.bottom.image_url} baseStyle={styles.canvasBottom} resetKey={slots.bottom.image_url} slotKey="bottom" onDragEnd={handleTransformChange} />}
+            {slots.top && <DraggableCanvasItem uri={slots.top.image_url} baseStyle={styles.canvasTop} resetKey={slots.top.image_url} slotKey="top" onDragEnd={handleTransformChange} />}
+            {slots.outerwear && <DraggableCanvasItem uri={slots.outerwear.image_url} baseStyle={styles.canvasOuterwear} resetKey={slots.outerwear.image_url} slotKey="outerwear" onDragEnd={handleTransformChange} />}
+            {slots.accessory && <DraggableCanvasItem uri={slots.accessory.image_url} baseStyle={styles.canvasAccessory} resetKey={slots.accessory.image_url} slotKey="accessory" onDragEnd={handleTransformChange} />}
           </ViewShot>
           {filledCount > 0 && (
             <Text style={[styles.canvasHint, { color: colors.secondaryText }]}>Drag items to reposition</Text>

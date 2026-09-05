@@ -1,11 +1,10 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, useWindowDimensions, TouchableOpacity, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { ArrowRight } from 'lucide-react-native';
 import { markOnboardingSeen } from '@/src/utils/onboarding';
-import { useAuth } from '@/src/context/AuthContext';
 
 const SLIDES = [
   {
@@ -30,7 +29,6 @@ const SLIDES = [
 
 export default function Onboarding() {
   const router = useRouter();
-  const { session, isPasswordRecovery, isLoading } = useAuth();
   const { width, height } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
@@ -67,10 +65,6 @@ export default function Onboarding() {
     offset: width * index,
     index,
   }), [width]);
-
-  if (!isLoading && session && !isPasswordRecovery) {
-    return <Redirect href="/(tabs)" />;
-  }
 
   return (
     <View style={styles.container}>

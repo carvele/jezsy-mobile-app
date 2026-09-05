@@ -480,6 +480,12 @@ export default function ChatScreen() {
     // Safely parse raw JSON strings to prevent string leak crashes on Android
     let displayText = item.text || '';
     let jsonContext: any = null;
+    
+    // Strip Admin's reservation card prefix if present
+    if (displayText.startsWith('__RES_CARD__')) {
+      displayText = displayText.replace('__RES_CARD__', '');
+    }
+
     if (displayText && displayText.trim().startsWith('{') && displayText.trim().endsWith('}')) {
       try {
         const parsed = JSON.parse(displayText.trim());

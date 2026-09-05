@@ -6,11 +6,17 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
+import { useToast } from '@/src/context/ToastContext';
+import { Database } from '@/src/types/database.types';
 import { ReviewModal } from './ReviewModal';
 
 interface ReviewsListProps {
   productId: string;
 }
+
+type ReviewRow = Database['public']['Tables']['reviews']['Row'];
+type VoteType = 'like' | 'dislike';
+type ReviewWithVote = ReviewRow & { user_vote: VoteType | null };
 
 type SortKey = 'recent' | 'highest' | 'lowest';
 
@@ -24,8 +30,10 @@ export function ReviewsList({ productId }: ReviewsListProps) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { user } = useAuth();
+  const { showToast } = useToast();
 
-  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<ReviewWithVote[]>([]);
+  const [votingIds, setVotingIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [stats, setStats] = useState({ average: 0, count: 0, breakdown: [0,0,0,0,0] });
@@ -59,18 +67,17 @@ export function ReviewsList({ productId }: ReviewsListProps) {
   const fetchReviews = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error, count } = await supabase
-        .from('reviews')
-        .select('*', { count: 'exact' })
-        .eq('product_id', productId)
-        .order('created_at', { ascending: false })
-        .limit(10);
-        
+      const { data, error } = await supabase
+        .rpc('get_reviews_with_user_vote', { p_product_id: productId });
+
       if (error) throw error;
-      
-      const items = data || [];
+
+      const items: ReviewWithVote[] = (data || []).map(row => ({
+        ...row.review,
+        user_vote: (row.user_vote as VoteType | null) ?? null,
+      }));
       setReviews(items);
-      
+
       if (items.length > 0) {
         let sum = 0;
         const bd = [0,0,0,0,0];
@@ -82,7 +89,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
         });
         setStats({
           average: sum / items.length,
-          count: count ?? items.length,
+          count: items.length,
           breakdown: bd
         });
       } else {
@@ -117,6 +124,53 @@ export function ReviewsList({ productId }: ReviewsListProps) {
     () => reviews.filter(r => r.images && r.images.length > 0).length,
     [reviews]
   );
+
+  const handleVote = useCallback(async (review: ReviewWithVote, voteType: VoteType) => {
+    if (!user) {
+      showToast('Log in to vote on reviews', 'info');
+      return;
+    }
+    if (votingIds.has(review.id)) return;
+
+    const nextVote: VoteType | null = review.user_vote === voteType ? null : voteType;
+    const previous = { likes: review.likes, dislikes: review.dislikes, user_vote: review.user_vote };
+
+    setVotingIds(prev => new Set(prev).add(review.id));
+    setReviews(prev => prev.map(r => {
+      if (r.id !== review.id) return r;
+      let likes = r.likes ?? 0;
+      let dislikes = r.dislikes ?? 0;
+      if (previous.user_vote === 'like') likes -= 1;
+      if (previous.user_vote === 'dislike') dislikes -= 1;
+      if (nextVote === 'like') likes += 1;
+      if (nextVote === 'dislike') dislikes += 1;
+      return { ...r, likes: Math.max(0, likes), dislikes: Math.max(0, dislikes), user_vote: nextVote };
+    }));
+
+    try {
+      const { data, error } = await supabase.rpc('vote_on_review', {
+        p_review_id: review.id,
+        p_vote_type: nextVote ?? undefined,
+      });
+      if (error) throw error;
+      const result = data as { likes: number; dislikes: number; user_vote: VoteType | null } | null;
+      if (result) {
+        setReviews(prev => prev.map(r => r.id === review.id
+          ? { ...r, likes: result.likes, dislikes: result.dislikes, user_vote: result.user_vote }
+          : r));
+      }
+    } catch (err) {
+      console.error('Error voting on review:', err);
+      setReviews(prev => prev.map(r => r.id === review.id ? { ...r, ...previous } : r));
+      showToast('Could not record your vote. Please try again.', 'error');
+    } finally {
+      setVotingIds(prev => {
+        const next = new Set(prev);
+        next.delete(review.id);
+        return next;
+      });
+    }
+  }, [user, votingIds, showToast]);
 
   const renderStars = (rating: number) => {
     return (
@@ -246,20 +300,34 @@ export function ReviewsList({ productId }: ReviewsListProps) {
                   <Text style={{ fontSize: 13, color: colors.secondaryText, lineHeight: 18 }}>{review.admin_reply}</Text>
                 </View>
               )}
-              {(review.likes > 0 || review.dislikes > 0) && (
+              {review.user_id !== user?.id && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md, gap: Spacing.lg }}>
-                  {review.likes > 0 && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <IconSymbol name="hand.thumbsup.fill" size={12} color={colors.secondaryText} />
-                      <Text style={{ fontSize: 12, color: colors.secondaryText }}>{review.likes}</Text>
-                    </View>
-                  )}
-                  {review.dislikes > 0 && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <IconSymbol name="hand.thumbsdown.fill" size={12} color={colors.secondaryText} />
-                      <Text style={{ fontSize: 12, color: colors.secondaryText }}>{review.dislikes}</Text>
-                    </View>
-                  )}
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    onPress={() => handleVote(review, 'like')}
+                    disabled={votingIds.has(review.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Helpful"
+                    accessibilityState={{ selected: review.user_vote === 'like' }}
+                  >
+                    <IconSymbol name="hand.thumbsup.fill" size={12} color={review.user_vote === 'like' ? colors.tint : colors.secondaryText} />
+                    <Text style={{ fontSize: 12, color: review.user_vote === 'like' ? colors.tint : colors.secondaryText }}>
+                      Helpful{(review.likes ?? 0) > 0 ? ` (${review.likes})` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    onPress={() => handleVote(review, 'dislike')}
+                    disabled={votingIds.has(review.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Not helpful"
+                    accessibilityState={{ selected: review.user_vote === 'dislike' }}
+                  >
+                    <IconSymbol name="hand.thumbsdown.fill" size={12} color={review.user_vote === 'dislike' ? colors.tint : colors.secondaryText} />
+                    <Text style={{ fontSize: 12, color: review.user_vote === 'dislike' ? colors.tint : colors.secondaryText }}>
+                      Not helpful{(review.dislikes ?? 0) > 0 ? ` (${review.dislikes})` : ''}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
