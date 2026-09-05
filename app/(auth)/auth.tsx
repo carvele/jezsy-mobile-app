@@ -739,11 +739,16 @@ const styles = StyleSheet.create({
     borderColor: GLASS_BORDER,
     padding: Spacing.xxl,
     gap: 18,
-    shadowColor: 'black',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
     elevation: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: 'black',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.25,
+        shadowRadius: 20,
+      },
+      web: { boxShadow: '0 8px 20px rgba(0,0,0,0.25)' },
+    }),
   },
   fieldGroup: {
     gap: 6,
@@ -795,12 +800,17 @@ const styles = StyleSheet.create({
   // remains is this screen's gold glow, which is not an Elevation token
   // because those cast black.
   primaryBtnGlow: {
-    shadowColor: c.tint,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
     elevation: 6,
     marginTop: Spacing.xs,
+    ...Platform.select({
+      ios: {
+        shadowColor: c.tint,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+      },
+      web: { boxShadow: '0 4px 10px rgba(0,0,0,0.4)' },
+    }),
   },
   toggleRow: {
     flexDirection: 'row',

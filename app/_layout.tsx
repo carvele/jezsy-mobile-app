@@ -279,7 +279,6 @@ function InitialLayout() {
       {/* Branded loading overlay: covers the Stack during cold bootstrap until routeSettled is confirmed */}
       {!routeSettled && (
         <View
-          pointerEvents="none"
           style={[
             StyleSheet.absoluteFill,
             {
@@ -287,6 +286,7 @@ function InitialLayout() {
               zIndex: 999,
               justifyContent: 'center',
               alignItems: 'center',
+              pointerEvents: 'none',
             },
           ]}
         >

@@ -1148,13 +1148,13 @@ export default function ARTryOnScreen() {
           )}
 
           {arLoadError && (
-            <View style={styles.arLoadErrorBanner} pointerEvents="none">
+            <View style={[styles.arLoadErrorBanner, { pointerEvents: 'none' }]}>
               <Text style={styles.arLoadErrorText}>Garment failed to load. Try again shortly.</Text>
             </View>
           )}
 
           {cameraError && (
-            <View style={styles.arLoadErrorBanner} pointerEvents="box-none">
+            <View style={[styles.arLoadErrorBanner, { pointerEvents: 'box-none' }]}>
               <Text style={styles.arLoadErrorText}>Camera unavailable. This can happen after switching apps -- try again.</Text>
               <TouchableOpacity
                 onPress={() => {
@@ -1168,7 +1168,7 @@ export default function ARTryOnScreen() {
             </View>
           )}
 
-          <View style={styles.overlayContainer} pointerEvents="box-none">
+          <View style={[styles.overlayContainer, { pointerEvents: 'box-none' }]}>
             {/* AI Tracking Status Pill */}
             {isTrackerActive && (
               <View style={styles.trackingPill}>
@@ -1184,7 +1184,7 @@ export default function ARTryOnScreen() {
       )}
 
       {sizingReady && recommendedSize && fitZones.length > 0 && showFit && (
-        <View style={styles.fitPanel} pointerEvents="box-none">
+        <View style={[styles.fitPanel, { pointerEvents: 'box-none' }]}>
           <View style={[styles.fitCard, { borderColor: colors.tint }]}>
             <View style={styles.fitHeader}>
               <Text style={styles.fitTitle}>Your fit · Size {recommendedSize}</Text>

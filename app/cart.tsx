@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/src/lib/supabase";
 import {
     FlatList,
+    Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -446,11 +447,16 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: Spacing.xxxl,
     paddingVertical: Spacing.lg,
     borderRadius: 30,
-    shadowColor: colors.tint,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.tint,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      web: { boxShadow: '0 4px 8px rgba(0,0,0,0.3)' },
+    }),
   },
   shopBtnText: {
     fontWeight: "800",
@@ -554,11 +560,16 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderTopWidth: 1,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
     elevation: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.text,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      web: { boxShadow: '0 -4px 12px rgba(0,0,0,0.1)' },
+    }),
   },
   summaryRow: {
     flexDirection: "row",

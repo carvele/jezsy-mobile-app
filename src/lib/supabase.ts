@@ -76,11 +76,32 @@ const hasAuthCallbackInUrl =
     window.location.search.includes('code=') ||
     window.location.search.includes('token='));
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: Platform.OS === 'web' ? (typeof window !== 'undefined' ? window.localStorage : undefined) : ExpoSecureStoreAdapter as any,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: hasAuthCallbackInUrl,
-  },
-});
+declare global {
+  var __jezsy_supabase__: ReturnType<typeof createClient<Database>> | undefined;
+}
+
+function initSupabase() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (!window.__jezsy_supabase__) {
+      window.__jezsy_supabase__ = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          storage: window.localStorage,
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: hasAuthCallbackInUrl,
+        },
+      });
+    }
+    return window.__jezsy_supabase__;
+  }
+  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      storage: ExpoSecureStoreAdapter as any,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+export const supabase = initSupabase();

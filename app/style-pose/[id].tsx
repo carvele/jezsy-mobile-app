@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -234,7 +235,20 @@ export default function StylePoseDetailScreen() {
       {/* Sticky Bottom CTA Bar */}
       {products.length > 0 && (
         <View style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-          <TouchableOpacity style={[styles.ctaButton, { backgroundColor: colors.tint, shadowColor: colors.tint }]} activeOpacity={0.88} onPress={handleTryInAR}>
+          <TouchableOpacity
+            style={[
+              styles.ctaButton,
+              {
+                backgroundColor: colors.tint,
+                ...Platform.select({
+                  ios: { shadowColor: colors.tint },
+                  web: { boxShadow: '0 4px 8px rgba(0,0,0,0.3)' },
+                }),
+              },
+            ]}
+            activeOpacity={0.88}
+            onPress={handleTryInAR}
+          >
             <IconSymbol name="sparkles" size={20} color={colors.onTint} />
             <Text style={[styles.ctaButtonText, { color: colors.onTint }]}>Try This Look in AR</Text>
           </TouchableOpacity>
@@ -325,11 +339,16 @@ const styles = StyleSheet.create({
     marginTop: -24,
     borderRadius: 16,
     padding: Spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
     elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      web: { boxShadow: '0 4px 12px rgba(0,0,0,0.08)' },
+    }),
   },
   titleRow: {
     flexDirection: 'row',
@@ -440,10 +459,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+    }),
   },
   ctaButtonText: {
     fontSize: 16,

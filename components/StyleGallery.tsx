@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Platform,
   Dimensions,
   useWindowDimensions,
 } from 'react-native';
@@ -253,11 +254,16 @@ const createStyles = (colors: any) => StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
     elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+      },
+      web: { boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
+    }),
   },
   imageContainer: {
     width: '100%',
