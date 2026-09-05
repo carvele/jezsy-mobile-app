@@ -444,7 +444,6 @@ export type Database = {
           id: string
           last_message: string | null
           last_message_time: string | null
-          unread_count: number | null
           unread_customer: number
           unread_staff: number
           updated_at: string | null
@@ -455,7 +454,6 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_time?: string | null
-          unread_count?: number | null
           unread_customer?: number
           unread_staff?: number
           updated_at?: string | null
@@ -466,7 +464,6 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_time?: string | null
-          unread_count?: number | null
           unread_customer?: number
           unread_staff?: number
           updated_at?: string | null
