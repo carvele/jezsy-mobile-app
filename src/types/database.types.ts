@@ -1604,6 +1604,48 @@ export type Database = {
           },
         ]
       }
+      review_votes: {
+        Row: {
+          created_at: string
+          id: string
+          review_id: string
+          updated_at: string
+          user_id: string
+          vote_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          review_id: string
+          updated_at?: string
+          user_id: string
+          vote_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          review_id?: string
+          updated_at?: string
+          user_id?: string
+          vote_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_votes_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "reviews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_votes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reviews: {
         Row: {
           admin_reply: string | null
@@ -2215,6 +2257,13 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_reviews_with_user_vote: {
+        Args: { p_product_id: string }
+        Returns: {
+          review: Database["public"]["Tables"]["reviews"]["Row"]
+          user_vote: string
+        }[]
+      }
       get_slot_booked_counts: {
         Args: { _date: string }
         Returns: {
@@ -2287,6 +2336,8 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_wardrobe_privacy: { Args: { p_user_id: string }; Returns: string }
+      get_wishlist_privacy: { Args: { p_user_id: string }; Returns: string }
       is_admin_or_owner: { Args: never; Returns: boolean }
       is_awaiting_payment_status: {
         Args: { _status: string }
@@ -2497,6 +2548,10 @@ export type Database = {
       }
       update_user_streak: { Args: never; Returns: undefined }
       verify_pickup: { Args: { _pickup_token: string }; Returns: Json }
+      vote_on_review: {
+        Args: { p_review_id: string; p_vote_type?: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

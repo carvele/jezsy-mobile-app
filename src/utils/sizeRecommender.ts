@@ -113,6 +113,90 @@ export function analyzeFit(
   return zones;
 }
 
+// --- Length fit signal (roadmap Phase 3) ---------------------------------
+// Feedback only: does not affect garment scale, which stays uniform (see
+// ar-system-contract.md's fit-model boundary -- "this garment worn on this
+// body" is explicitly out of model). Compares the selected size's chart
+// length against the wearer's own torso length, tracked live from the
+// current AR frame's world landmarks (shoulder midpoint to hip midpoint) --
+// the same midpoint pair poseNormalizer.ts already computes for the torso
+// basis, reused here rather than a new measurement model.
+//
+// Torso length (shoulder-to-hip) is a proxy for garment length, not the
+// garment's own collar-to-hem span -- there is no tracked collar or hem
+// point, so a garment is EXPECTED to exceed pure torso length by some
+// margin just to cover the hip. LENGTH_TYPICAL_HIP_DROP_CM names that
+// expected margin explicitly, the same way STATURE_CORRECTION in
+// poseDetector.ts names its own generic, not-measured-on-this-app's-users
+// constant -- replace with real reference data if it becomes available,
+// not by silently tuning the number.
+export type LengthFitVerdict = 'runs_short' | 'appropriate' | 'runs_long';
+
+export interface LengthFitSignal {
+  verdict: LengthFitVerdict;
+  deltaCm: number;
+  chartLengthCm: number;
+  trackedTorsoLengthCm: number;
+}
+
+/** Rough allowance: a garment is expected to extend past the shoulder-to-hip
+ * torso span by about this much to cover the hip. Not measured on this
+ * catalog or this app's users -- a placeholder in the same spirit as
+ * STATURE_CORRECTION until real reference data exists. */
+const LENGTH_TYPICAL_HIP_DROP_CM = 20;
+/** Width of the "appropriate" band around that expected drop. Deliberately
+ * wide: torso length is a proxy, not the garment's own measured dimension,
+ * so a tight band would read as noise-sensitive rather than informative. */
+const LENGTH_EASE_CM = 15;
+
+const LM_LEFT_SHOULDER = 11;
+const LM_RIGHT_SHOULDER = 12;
+const LM_LEFT_HIP = 23;
+const LM_RIGHT_HIP = 24;
+
+/**
+ * Live length-fit signal from the current AR frame's world landmarks.
+ * Returns null whenever there isn't enough real data to say anything --
+ * never a guessed verdict.
+ */
+export function computeLengthFitSignal(
+  worldLandmarks: readonly ({ x: number; y: number; z?: number } | null | undefined)[] | null | undefined,
+  chartLengthCm: number | null | undefined
+): LengthFitSignal | null {
+  const chartLength = toNumeric(chartLengthCm);
+  if (chartLength === null || chartLength <= 0) return null;
+  if (!worldLandmarks || worldLandmarks.length <= LM_RIGHT_HIP) return null;
+
+  const lS = worldLandmarks[LM_LEFT_SHOULDER];
+  const rS = worldLandmarks[LM_RIGHT_SHOULDER];
+  const lH = worldLandmarks[LM_LEFT_HIP];
+  const rH = worldLandmarks[LM_RIGHT_HIP];
+  if (!lS || !rS || !lH || !rH) return null;
+
+  const midShoulder = { x: (lS.x + rS.x) / 2, y: (lS.y + rS.y) / 2, z: ((lS.z ?? 0) + (rS.z ?? 0)) / 2 };
+  const midHip = { x: (lH.x + rH.x) / 2, y: (lH.y + rH.y) / 2, z: ((lH.z ?? 0) + (rH.z ?? 0)) / 2 };
+  const dx = midShoulder.x - midHip.x;
+  const dy = midShoulder.y - midHip.y;
+  const dz = midShoulder.z - midHip.z;
+  const torsoLengthM = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (!Number.isFinite(torsoLengthM) || torsoLengthM <= 0) return null;
+
+  const trackedTorsoLengthCm = torsoLengthM * 100;
+  const targetLengthCm = trackedTorsoLengthCm + LENGTH_TYPICAL_HIP_DROP_CM;
+  const deltaCm = Math.round((chartLength - targetLengthCm) * 10) / 10;
+
+  let verdict: LengthFitVerdict = 'appropriate';
+  if (deltaCm < -LENGTH_EASE_CM) verdict = 'runs_short';
+  else if (deltaCm > LENGTH_EASE_CM) verdict = 'runs_long';
+
+  return {
+    verdict,
+    deltaCm,
+    chartLengthCm: Math.round(chartLength * 10) / 10,
+    trackedTorsoLengthCm: Math.round(trackedTorsoLengthCm * 10) / 10,
+  };
+}
+
 /**
  * Recommends the optimal garment size based on user measurements, garment category, and fit preference.
  */

@@ -49,6 +49,36 @@ export const MIN_JOINT_VISIBILITY = 0.3;
  */
 const MIN_BASIS_SEPARATION = 0.05;
 
+/**
+ * Real-world shoulder-to-shoulder distance (from worldLandmarks, MediaPipe's own
+ * metric-space estimate) outside this range means the 3D estimate itself is
+ * untrustworthy, not that the wearer has an implausible build. MediaPipe's monocular
+ * depth (Z) estimate for the shoulder facing away from the camera degrades sharply
+ * near profile view -- a known limitation (see
+ * docs/research/ar-industry-survey-2026-09-04.md's LiDAR-vs-monocular-depth section).
+ * The 2D image can look fine while this 3D distance is nonsense, which corrupts xAxis
+ * and therefore the whole torso basis and quaternion -- root-caused live during the
+ * Phase 1 garment-reality report's deep-turn tests (finding #1): garment collapses
+ * into an unrecognizable twisted shape past ~45deg yaw, reproducibly, on both
+ * calibrated garments, with pitch/roll dominating a supposedly pure-yaw pose in the
+ * diagnostic Euler readout. Bounds are deliberately generous (not a tight
+ * anthropometric fit) so a legitimately narrow- or broad-shouldered wearer at a
+ * normal angle is never falsely gated.
+ */
+const MIN_PLAUSIBLE_SHOULDER_WIDTH_M = 0.15;
+const MAX_PLAUSIBLE_SHOULDER_WIDTH_M = 0.70;
+
+// A tighter, Z-specific companion bound was attempted and reverted 2026-09-04: the
+// magnitude bound above did not catch every corrupted deep-turn frame (a bad Z
+// estimate for one shoulder can be compensated by X/Y enough that the total 3D
+// distance still looks plausible), but a naive "chest depth" bound on |lS.z - rS.z|
+// is physically wrong -- that quantity is shoulderWidth * sin(yaw), not chest depth,
+// so it scales with genuine deep turns too. A ~0.35m bound would have risked
+// rejecting the already-confirmed-good ~59.5deg yaw case from the #17 retest in
+// ar-tryon-audit-implementation-plan.md (shoulderWidth*sin(59.5deg) ≈ 0.345m for a
+// ~0.4m-shouldered wearer -- right against the bound). Not shipped without live data
+// to calibrate a threshold that doesn't regress that already-verified case.
+
 export interface CanonicalJoint extends Vec3 {
   confidence: number;
 }
@@ -256,6 +286,19 @@ export function normalizePose(
   const xRaw = subVec(lS, rS);
   const upRaw = subVec(midShoulder, midHip);
   if (lengthVec(xRaw) < 1e-6 || lengthVec(upRaw) < 1e-6) {
+    return {
+      space: CANONICAL_SPACE_VERSION,
+      joints,
+      torso: { ...INVALID_TORSO, origin: midShoulder },
+      confidence,
+    };
+  }
+
+  // See MIN/MAX_PLAUSIBLE_SHOULDER_WIDTH_M above: reject an untrustworthy 3D depth
+  // estimate here, before it corrupts xAxis, rather than trying to compute a
+  // "correct" basis from data that is not usable at all near profile view.
+  const shoulderWidthM = lengthVec(xRaw);
+  if (shoulderWidthM < MIN_PLAUSIBLE_SHOULDER_WIDTH_M || shoulderWidthM > MAX_PLAUSIBLE_SHOULDER_WIDTH_M) {
     return {
       space: CANONICAL_SPACE_VERSION,
       joints,
