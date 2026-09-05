@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     ...Type.h2,
   },
   name: {
-    ...Type.h3,
+    ...Type.h2,
     marginBottom: Spacing.md,
   },
   connectButton: {
@@ -248,13 +248,13 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
   },
   connectButtonText: {
-    ...Type.button,
+    ...Type.label,
   },
   wardrobeSection: {
     flex: 1,
   },
   sectionTitle: {
-    ...Type.h3,
+    ...Type.h2,
     paddingHorizontal: Spacing.md,
     marginBottom: Spacing.md,
   },
