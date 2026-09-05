@@ -1,35 +1,52 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const HINTS_SEEN_KEY = '@jezsy_seen_hints';
+const HINTS_SEEN_KEY_PREFIX = '@jezsy_feature_hint:';
 
 /**
- * One AsyncStorage key holding every seen hint id, not one key per hint --
- * matches the empty-state-hints pattern (contextual, shown once at the
- * moment a feature is first reached) rather than a scripted upfront tour.
- * See docs/onboarding decision: NN/g "just-in-time over just-in-case"
- * learning is the reason this is per-feature and reactive, not a sequenced
- * walkthrough.
+ * Checks if a specific feature hint has been seen by the user.
+ * Supports versioning through the featureId (e.g., 'ar_try_on:v2').
+ * 
+ * Note on unauthenticated behavior: If `userId` is missing, this returns `true`.
+ * Unauthenticated users are ineligible for feature hints (and typically cannot access
+ * these features anyway), so we suppress the modal by treating the hint as already seen.
  */
-async function getSeenHints(): Promise<string[]> {
+export async function hasSeenHint(userId: string | null | undefined, featureId: string): Promise<boolean> {
+  if (!userId) return true;
+  
   try {
-    const raw = await AsyncStorage.getItem(HINTS_SEEN_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
+    const key = `${HINTS_SEEN_KEY_PREFIX}${userId}:${featureId}`;
+    const val = await AsyncStorage.getItem(key);
+    return val === 'true';
+  } catch (err) {
+    console.error('Failed to read seen hint:', err);
+    return false;
   }
 }
 
-export async function hasSeenHint(id: string): Promise<boolean> {
-  return (await getSeenHints()).includes(id);
-}
-
-export async function markHintSeen(id: string): Promise<void> {
+/**
+ * Marks a feature hint as seen for the specified user.
+ */
+export async function markHintSeen(userId: string | null | undefined, featureId: string): Promise<void> {
+  if (!userId) return;
+  
   try {
-    const seen = await getSeenHints();
-    if (!seen.includes(id)) {
-      await AsyncStorage.setItem(HINTS_SEEN_KEY, JSON.stringify([...seen, id]));
-    }
+    const key = `${HINTS_SEEN_KEY_PREFIX}${userId}:${featureId}`;
+    await AsyncStorage.setItem(key, 'true');
   } catch (err) {
     console.error('Failed to persist seen hint:', err);
+  }
+}
+
+/**
+ * Resets a feature hint so it can be seen again (useful for testing or re-learning).
+ */
+export async function resetHint(userId: string | null | undefined, featureId: string): Promise<void> {
+  if (!userId) return;
+  
+  try {
+    const key = `${HINTS_SEEN_KEY_PREFIX}${userId}:${featureId}`;
+    await AsyncStorage.removeItem(key);
+  } catch (err) {
+    console.error('Failed to reset seen hint:', err);
   }
 }

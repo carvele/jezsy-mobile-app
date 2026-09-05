@@ -9,19 +9,23 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PrimaryButton } from './PrimaryButton';
+import { markHintSeen } from '@/src/utils/firstUseHints';
+import { useAuth } from '@/src/context/AuthContext';
 
 interface SystemTourModalProps {
   visible: boolean;
   onClose: () => void;
+  isReplay?: boolean;
 }
 
-interface TourStep {
-  id: string;
-  badge: string;
+type PrimerId = 'discover' | 'ar' | 'wardrobe' | 'concierge';
+
+interface PrimerDefinition {
+  id: PrimerId;
   icon: string;
   title: string;
   subtitle: string;
@@ -30,17 +34,17 @@ interface TourStep {
     title: string;
     description: string;
   }[];
-  actionRoute?: string;
-  actionLabel?: string;
+  actionRoute: string;
+  actionLabel: string;
+  hintKey: string;
 }
 
-const TOUR_STEPS: TourStep[] = [
-  {
-    id: 'welcome',
-    badge: 'STEP 1 OF 4 • DISCOVER',
-    icon: 'sparkles',
-    title: 'Welcome to JezSy Atelier',
-    subtitle: 'Your personal luxury fashion destination with virtual styling and instant reservations.',
+const PRIMERS: Record<PrimerId, PrimerDefinition> = {
+  discover: {
+    id: 'discover',
+    icon: 'magnifyingglass',
+    title: 'Discover Styles',
+    subtitle: 'Explore our curated catalog of luxury fashion.',
     highlights: [
       {
         icon: 'house.fill',
@@ -48,19 +52,40 @@ const TOUR_STEPS: TourStep[] = [
         description: 'Explore trending haute couture, premium rentals, and seasonal edits.',
       },
       {
-        icon: 'magnifyingglass',
-        title: 'Smart Size & Color Filters',
-        description: 'Find garments tailored specifically to your body measurements and palette.',
+        icon: 'slider.horizontal.3',
+        title: 'Smart Filters',
+        description: 'Find garments tailored to your measurements and palette.',
       },
     ],
     actionRoute: '/(tabs)/explore',
-    actionLabel: 'Browse Explore Catalog',
+    actionLabel: 'Browse Catalog',
+    hintKey: 'discover_primer:v1',
   },
-  {
+  ar: {
+    id: 'ar',
+    icon: 'cube.fill',
+    title: 'AR Fitting Room',
+    subtitle: 'Experience how luxury garments look and fit before reserving.',
+    highlights: [
+      {
+        icon: 'camera.fill',
+        title: 'Real-Time Body Fitting',
+        description: 'Use your camera for live pose tracking and 3D simulations.',
+      },
+      {
+        icon: 'figure.stand',
+        title: 'Calibrated Body Scan',
+        description: 'Get tailored sizing recommendations based on your unique shape.',
+      },
+    ],
+    actionRoute: '/(tabs)/explore',
+    actionLabel: 'Browse Catalog',
+    hintKey: 'ar_primer:v1',
+  },
+  wardrobe: {
     id: 'wardrobe',
-    badge: 'STEP 2 OF 4 • DIGITAL WARDROBE',
     icon: 'tshirt',
-    title: 'Digitize & Style Outfits',
+    title: 'Digital Wardrobe',
     subtitle: 'Turn your physical closet into an intelligent digital wardrobe powered by AI.',
     highlights: [
       {
@@ -70,103 +95,105 @@ const TOUR_STEPS: TourStep[] = [
       },
       {
         icon: 'square.grid.2x2.fill',
-        title: 'AI Capsule Wardrobes',
-        description: 'Build cohesive 30-piece capsule collections and generate daily outfit pairings.',
-      },
-      {
-        icon: 'flame.fill',
-        title: 'Wear & Streak Tracking',
-        description: 'Log what you wear to earn streak badges and revive neglected pieces.',
+        title: 'Outfit Builder',
+        description: 'Generate daily outfit pairings from your wardrobe and wishlist.',
       },
     ],
     actionRoute: '/(tabs)/wardrobe',
     actionLabel: 'Go to Digital Wardrobe',
+    hintKey: 'wardrobe_primer:v1',
   },
-  {
-    id: 'ar_tryon',
-    badge: 'STEP 3 OF 4 • AR FITTING ROOM',
-    icon: 'cube.fill',
-    title: '3D AR Virtual Try-On',
-    subtitle: 'Experience how luxury garments look and fit on you before reserving or ordering.',
+  concierge: {
+    id: 'concierge',
+    icon: 'sparkles',
+    title: 'Concierge & Support',
+    subtitle: 'Get help with reservations, styling, and returns.',
     highlights: [
       {
-        icon: 'camera.fill',
-        title: 'Real-Time Body Fitting',
-        description: 'Use your camera for live pose tracking and 3D garment drape simulations.',
+        icon: 'message.fill',
+        title: 'Direct Chat',
+        description: 'Chat directly with our luxury styling and support team.',
       },
       {
-        icon: 'checkmark.circle.fill',
-        title: 'Perfect Fit Guarantee',
-        description: 'Calibrate your sizing with our interactive body silhouette guide.',
+        icon: 'bell.fill',
+        title: 'Instant Updates',
+        description: 'Receive notifications about your reservations and wishlist items.',
       },
     ],
-  },
-  {
-    id: 'advisor_inbox',
-    badge: 'STEP 4 OF 4 • CONCIERGE & SUPPORT',
-    icon: 'envelope.fill',
-    title: 'Style Advisor & Concierge',
-    subtitle: 'Get automated AI styling recommendations or chat live with boutique consultants.',
-    highlights: [
-      {
-        icon: 'sparkles',
-        title: 'Ask the Style Advisor',
-        description: 'Tell AI your upcoming occasion to get head-to-toe look recommendations.',
-      },
-      {
-        icon: 'envelope.fill',
-        title: 'Direct Boutique Chat',
-        description: 'Message support directly for order adjustments, sizing advice, and custom fittings.',
-      },
-    ],
-    actionRoute: '/(tabs)/inbox',
-    actionLabel: 'Open Inbox',
-  },
-];
+    actionRoute: '/(tabs)/messages',
+    actionLabel: 'Message Concierge',
+    hintKey: 'concierge_primer:v1',
+  }
+};
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
-export function SystemTourModal({ visible, onClose }: SystemTourModalProps) {
-  const theme = useColorScheme();
-  const colors = Colors[theme];
-  const isDark = theme === 'dark';
+export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTourModalProps) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const { user } = useAuth();
 
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [activePrimer, setActivePrimer] = useState<PrimerId | null>(null);
 
-  const step = TOUR_STEPS[currentStepIndex];
-  const isLastStep = currentStepIndex === TOUR_STEPS.length - 1;
-
-  const handleNext = () => {
-    if (isLastStep) {
-      onClose();
-    } else {
-      setCurrentStepIndex((prev) => prev + 1);
+  const handleSkipForNow = async () => {
+    if (!isReplay && user) {
+      await markHintSeen(user.id, 'welcome:v1');
     }
-  };
-
-  const handlePrevious = () => {
-    if (currentStepIndex > 0) {
-      setCurrentStepIndex((prev) => prev - 1);
-    }
-  };
-
-  const handleActionClick = (route?: string) => {
     onClose();
-    if (route) {
-      router.push(route as any);
-    }
   };
 
-  // On web, React Native Web keeps the Modal mounted in the DOM with
-  // aria-hidden="true" when visible=false. Any focusable children (buttons,
-  // links) inside the hidden container trigger a WCAG/ARIA violation:
-  // "aria-hidden element must not contain focusable elements". Guard here so
-  // we simply don't render anything when the modal is closed.
+  const handleDontShowAgain = async () => {
+    if (!isReplay && user) {
+      await markHintSeen(user.id, 'welcome:v1');
+    }
+    onClose();
+  };
+
+  const selectPath = async (primerId: PrimerId) => {
+    if (!isReplay && user) {
+      await markHintSeen(user.id, 'welcome:v1');
+    }
+    // If they choose discover, it skips the primer and routes straight to catalog.
+    if (primerId === 'discover') {
+      onClose();
+      router.push('/(tabs)/explore' as any);
+      return;
+    }
+    setActivePrimer(primerId);
+  };
+
+  const handlePrimerAction = async () => {
+    if (!activePrimer) return;
+    const primer = PRIMERS[activePrimer];
+    
+    if (!isReplay && user) {
+      await markHintSeen(user.id, primer.hintKey);
+    }
+    
+    onClose();
+    // small delay to allow modal to close before navigating
+    setTimeout(() => {
+      router.push(primer.actionRoute as any);
+      // Reset state for next time modal opens
+      setActivePrimer(null);
+    }, 100);
+  };
+  
+  const handleBackToMenu = () => {
+    setActivePrimer(null);
+  };
+
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <View style={styles.overlay}>
         <View
           style={[
@@ -177,121 +204,153 @@ export function SystemTourModal({ visible, onClose }: SystemTourModalProps) {
             },
           ]}
         >
-          {/* Header Bar */}
-          <View style={styles.headerBar}>
-            <Text style={[styles.badgeText, { color: colors.tint }]}>{step.badge}</Text>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.skipBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Skip tutorial"
-            >
-              <Text style={[styles.skipText, { color: colors.secondaryText }]}>Skip</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            {/* Step Icon */}
-            <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
-              <IconSymbol name={step.icon as any} size={32} color={colors.tint} />
-            </View>
-
-            {/* Title & Subtitle */}
-            <Text style={[styles.title, { color: colors.text }]}>{step.title}</Text>
-            <Text style={[styles.subtitle, { color: colors.secondaryText }]}>{step.subtitle}</Text>
-
-            {/* Feature Highlights */}
-            <View style={styles.highlightsContainer}>
-              {step.highlights.map((h, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.highlightCard,
-                    {
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                    },
-                  ]}
-                >
-                  <View style={[styles.highlightIconBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
-                    <IconSymbol name={h.icon as any} size={18} color={colors.tint} />
-                  </View>
-                  <View style={styles.highlightTextContainer}>
-                    <Text style={[styles.highlightTitle, { color: colors.text }]}>{h.title}</Text>
-                    <Text style={[styles.highlightDescription, { color: colors.secondaryText }]}>
-                      {h.description}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-
-          {/* Footer Controls */}
-          <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
-            {/* Step Dots */}
-            <View style={styles.dotsContainer}>
-              {TOUR_STEPS.map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor:
-                        i === currentStepIndex
-                          ? colors.tint
-                          : isDark
-                          ? 'rgba(255,255,255,0.2)'
-                          : 'rgba(0,0,0,0.15)',
-                      width: i === currentStepIndex ? 22 : 6,
-                    },
-                  ]}
-                />
-              ))}
-            </View>
-
-            {/* Action or Next Row */}
-            <View style={styles.buttonsRow}>
-              {currentStepIndex > 0 && (
-                <TouchableOpacity
-                  onPress={handlePrevious}
-                  style={[styles.prevBtn, { borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)' }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Previous tutorial step"
-                >
-                  <Text style={[styles.prevBtnText, { color: colors.text }]}>Back</Text>
-                </TouchableOpacity>
-              )}
-
-              <View style={{ flex: 1 }}>
-                {step.actionLabel && step.actionRoute ? (
-                  <PrimaryButton
-                    label={step.actionLabel}
-                    onPress={() => handleActionClick(step.actionRoute)}
-                    dark={isDark}
-                  />
-                ) : (
-                  <PrimaryButton
-                    label={isLastStep ? 'Finish Tour' : 'Next Step'}
-                    onPress={handleNext}
-                    dark={isDark}
-                  />
+          {activePrimer === null ? (
+            // Welcome & Intent Screen
+            <>
+              <View style={styles.headerBar}>
+                <Text style={[styles.badgeText, { color: colors.tint }]}>JEZSY DISCOVERY</Text>
+                {!isReplay && (
+                  <TouchableOpacity
+                    onPress={handleSkipForNow}
+                    style={styles.skipBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip for now"
+                  >
+                    <Text style={[styles.skipText, { color: colors.secondaryText }]}>Skip</Text>
+                  </TouchableOpacity>
+                )}
+                {isReplay && (
+                  <TouchableOpacity
+                    onPress={onClose}
+                    style={styles.skipBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                  >
+                    <IconSymbol name="xmark" size={20} color={colors.icon} />
+                  </TouchableOpacity>
                 )}
               </View>
-            </View>
-            
-            {/* If there's an action button, we should still allow them to just continue the tour */}
-            {step.actionLabel && step.actionRoute && !isLastStep && (
-              <TouchableOpacity
-                onPress={handleNext}
-                style={{ alignSelf: 'center', marginTop: Spacing.lg }}
-              >
-                <Text style={{ color: colors.secondaryText, fontSize: 14, fontWeight: '500' }}>
-                  Or continue tour
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                <Text style={[styles.title, { color: colors.text, marginTop: Spacing.md }]}>Welcome to JezSy</Text>
+                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>Your personal luxury fashion destination.</Text>
+                
+                <Text style={[styles.questionText, { color: colors.text }]}>What would you like to do first?</Text>
+
+                <View style={styles.optionsContainer}>
+                  <TouchableOpacity 
+                    style={[styles.optionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
+                    onPress={() => selectPath('discover')}
+                  >
+                    <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
+                      <IconSymbol name="magnifyingglass" size={20} color={colors.tint} />
+                    </View>
+                    <Text style={[styles.optionText, { color: colors.text }]}>Discover styles</Text>
+                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.optionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
+                    onPress={() => selectPath('ar')}
+                  >
+                    <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
+                      <IconSymbol name="cube.fill" size={20} color={colors.tint} />
+                    </View>
+                    <Text style={[styles.optionText, { color: colors.text }]}>Try something on</Text>
+                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.optionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
+                    onPress={() => selectPath('wardrobe')}
+                  >
+                    <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
+                      <IconSymbol name="tshirt" size={20} color={colors.tint} />
+                    </View>
+                    <Text style={[styles.optionText, { color: colors.text }]}>Explore my wardrobe</Text>
+                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.optionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
+                    onPress={() => selectPath('concierge')}
+                  >
+                    <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
+                      <IconSymbol name="message.fill" size={20} color={colors.tint} />
+                    </View>
+                    <Text style={[styles.optionText, { color: colors.text }]}>Get help</Text>
+                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+              
+              {!isReplay && (
+                <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+                  <TouchableOpacity
+                    onPress={handleDontShowAgain}
+                    style={styles.dontShowBtn}
+                  >
+                    <Text style={[styles.dontShowText, { color: colors.secondaryText }]}>Don&apos;t show again</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          ) : (
+            // Path-Specific Primer Screen
+            <>
+              <View style={styles.headerBar}>
+                <TouchableOpacity onPress={handleBackToMenu} style={styles.backBtn}>
+                  <IconSymbol name="arrow.left" size={20} color={colors.icon} />
+                  <Text style={[styles.backText, { color: colors.secondaryText }]}>Back</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={onClose} style={styles.skipBtn}>
+                  <IconSymbol name="xmark" size={20} color={colors.icon} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
+                  <IconSymbol name={PRIMERS[activePrimer].icon as any} size={32} color={colors.tint} />
+                </View>
+
+                <Text style={[styles.title, { color: colors.text }]}>{PRIMERS[activePrimer].title}</Text>
+                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>{PRIMERS[activePrimer].subtitle}</Text>
+
+                <View style={styles.highlightsContainer}>
+                  {PRIMERS[activePrimer].highlights.map((h, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.highlightCard,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                        },
+                      ]}
+                    >
+                      <View style={[styles.highlightIconBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+                        <IconSymbol name={h.icon as any} size={18} color={colors.tint} />
+                      </View>
+                      <View style={styles.highlightTextContainer}>
+                        <Text style={[styles.highlightTitle, { color: colors.text }]}>{h.title}</Text>
+                        <Text style={[styles.highlightDescription, { color: colors.secondaryText }]}>
+                          {h.description}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+
+              <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+                <PrimaryButton
+                  label={PRIMERS[activePrimer].actionLabel}
+                  onPress={handlePrimerAction}
+                  dark={isDark}
+                />
+              </View>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -322,6 +381,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.xl,
     paddingBottom: Spacing.sm,
+    height: 60,
   },
   badgeText: {
     fontSize: 11,
@@ -332,8 +392,19 @@ const styles = StyleSheet.create({
     padding: Spacing.xs,
   },
   skipText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.xs,
+    marginLeft: -Spacing.xs,
+  },
+  backText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   scrollContent: {
     paddingHorizontal: Spacing.xl,
@@ -362,6 +433,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: Spacing.lg,
     paddingHorizontal: Spacing.sm,
+  },
+  questionText: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
+    alignSelf: 'flex-start',
+  },
+  optionsContainer: {
+    width: '100%',
+    gap: Spacing.md,
+  },
+  optionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  optionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  optionText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
   },
   highlightsContainer: {
     width: '100%',
@@ -396,36 +498,18 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
+    paddingTop: Spacing.lg,
     paddingBottom: Spacing.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: Spacing.md,
-  },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
   },
-  dot: {
-    height: 6,
-    borderRadius: 3,
-  },
-  buttonsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  prevBtn: {
-    height: 54,
+  dontShowBtn: {
+    paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.xl,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  prevBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
+  dontShowText: {
+    fontSize: 14,
+    fontWeight: '500',
+    textDecorationLine: 'underline',
   },
 });

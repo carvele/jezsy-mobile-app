@@ -57,6 +57,8 @@ export default function ProductDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
+  const [lovedByCount, setLovedByCount] = useState(0);
+  const [lovedByUsers, setLovedByUsers] = useState<any[]>([]);
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
@@ -103,18 +105,10 @@ export default function ProductDetailScreen() {
               setInventory(invRes.data);
             }
 
-            // Default selections
-            if (data.sizes && data.sizes.length > 0) {
-              const initColor = data.color ? data.color.split(",")[0].trim() : undefined;
-              const availableSize = data.sizes.find(s => {
-                const inv = invRes.data?.find((i: any) =>
-                  i.size === s && (!initColor || !i.color || i.color === initColor)
-                );
-                return !inv || (inv.available || 0) > 0;
-              });
-              setSelectedSize((prev) => prev || availableSize || data.sizes?.[0] || "");
-            }
-            if (data.color) setSelectedColor((prev) => prev || (data.color ? data.color.split(",")[0].trim() : ""));
+            // Auto-select first color only; size requires explicit user choice.
+            // The AI recommendation path below will pre-select a size when
+            // body scan data is available — that case is intentionally personalized.
+            if (data.color) setSelectedColor((prev) => prev || data.color!.split(",")[0].trim());
 
             // Compute size recommendation if user is logged in
             if (user?.id && data.measurements) {
@@ -392,15 +386,106 @@ export default function ProductDetailScreen() {
 
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{product.name}</Text>
 
-          {product.rating && product.review_count ? (
+                                        {product.rating && product.review_count ? (
             <View style={styles.ratingRow}>
               <IconSymbol name="star.fill" size={13} color={colors.tint} />
               <Text style={[styles.ratingValue, { color: colors.text }]}>{product.rating.toFixed(1)}</Text>
-              <Text style={[styles.ratingCount, { color: colors.secondaryText }]}>
-                ({product.review_count} review{product.review_count === 1 ? '' : 's'})
-              </Text>
+              <Text style={[styles.ratingCount, { color: colors.secondaryText }]}>({product.review_count} reviews)</Text>
             </View>
           ) : null}
+
+          {/* Social Proof: Loved By */}
+          {lovedByCount > 0 && (
+            <TouchableOpacity 
+              style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.sm }}
+              onPress={() => {
+                if (lovedByUsers.length > 0) {
+                  const firstUser = lovedByUsers[0];
+                  router.push(`/user/@${firstUser.username}` as any);
+                }
+              }}
+              disabled={lovedByUsers.length === 0}
+            >
+              <View style={{ flexDirection: 'row', marginRight: Spacing.sm }}>
+                {lovedByUsers.map((u, i) => (
+                  <View key={u.id} style={{
+                    width: 24, height: 24, borderRadius: 12, backgroundColor: colors.border,
+                    justifyContent: 'center', alignItems: 'center',
+                    marginLeft: i > 0 ? -8 : 0, borderWidth: 2, borderColor: colors.background
+                  }}>
+                    <IconSymbol name="person.fill" size={14} color={colors.secondaryText} />
+                  </View>
+                ))}
+              </View>
+              <Text style={{ ...Type.caption, color: colors.secondaryText }}>
+                {lovedByUsers.length > 0 
+                  ? `${lovedByUsers[0].first_name}${lovedByCount > 1 ? ` and ${lovedByCount - 1} other${lovedByCount > 2 ? 's' : ''}` : ''} saved this`
+                  : `${lovedByCount} people saved this`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Social Proof: Loved By */}
+          {lovedByCount > 0 && (
+            <TouchableOpacity 
+              style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.sm }}
+              onPress={() => {
+                if (lovedByUsers.length > 0) {
+                  const firstUser = lovedByUsers[0];
+                  router.push(`/user/@${firstUser.username}` as any);
+                }
+              }}
+              disabled={lovedByUsers.length === 0}
+            >
+              <View style={{ flexDirection: 'row', marginRight: Spacing.sm }}>
+                {lovedByUsers.map((u, i) => (
+                  <View key={u.id} style={{
+                    width: 24, height: 24, borderRadius: 12, backgroundColor: colors.border,
+                    justifyContent: 'center', alignItems: 'center',
+                    marginLeft: i > 0 ? -8 : 0, borderWidth: 2, borderColor: colors.background
+                  }}>
+                    <IconSymbol name="person.fill" size={14} color={colors.secondaryText} />
+                  </View>
+                ))}
+              </View>
+              <Text style={{ ...Type.caption, color: colors.secondaryText }}>
+                {lovedByUsers.length > 0 
+                  ? `${lovedByUsers[0].first_name}${lovedByCount > 1 ? ` and ${lovedByCount - 1} other${lovedByCount > 2 ? 's' : ''}` : ''} saved this`
+                  : `${lovedByCount} people saved this`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Social Proof: Loved By */}
+          {lovedByCount > 0 && (
+            <TouchableOpacity 
+              style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.sm }}
+              onPress={() => {
+                if (lovedByUsers.length > 0) {
+                  const firstUser = lovedByUsers[0];
+                  router.push(`/user/@${firstUser.username}` as any);
+                }
+              }}
+              disabled={lovedByUsers.length === 0}
+            >
+              <View style={{ flexDirection: 'row', marginRight: Spacing.sm }}>
+                {lovedByUsers.map((u, i) => (
+                  <View key={u.id} style={{
+                    width: 24, height: 24, borderRadius: 12, backgroundColor: colors.border,
+                    justifyContent: 'center', alignItems: 'center',
+                    marginLeft: i > 0 ? -8 : 0, borderWidth: 2, borderColor: colors.background
+                  }}>
+                    <IconSymbol name="person.fill" size={14} color={colors.secondaryText} />
+                  </View>
+                ))}
+              </View>
+              <Text style={{ ...Type.caption, color: colors.secondaryText }}>
+                {lovedByUsers.length > 0 
+                  ? `${lovedByUsers[0].first_name}${lovedByCount > 1 ? ` and ${lovedByCount - 1} other${lovedByCount > 2 ? 's' : ''}` : ''} saved this`
+                  : `${lovedByCount} people saved this`}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.priceRow}>
             {product.on_sale && product.sale_price ? (
@@ -472,6 +557,11 @@ export default function ProductDetailScreen() {
               <View style={styles.sizeHeader}>
                 <View style={styles.sizeTitleRow}>
                   <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Size</Text>
+                  {!selectedSize && !recommendedSize && (
+                    <Text style={[Type.caption, { color: colors.warning, fontWeight: '600', marginLeft: Spacing.sm }]}>
+                      — select one
+                    </Text>
+                  )}
                   {recommendedSize && (
                     <View style={[styles.recBadge, { backgroundColor: colors.tint + "18", borderColor: colors.tint + "45" }]}>
                       <IconSymbol name="sparkles" size={11} color={colors.tint} />
@@ -746,7 +836,11 @@ export default function ProductDetailScreen() {
             accessibilityState={{ disabled: !canPurchase }}
           >
             <Text style={styles.primaryActionText}>
-              {selectedSizeOutOfStock ? "Out of Stock" : "Reserve Now"}
+              {selectedSizeOutOfStock
+                ? "Out of Stock"
+                : needsSize && !selectedSize
+                  ? "Choose a Size"
+                  : "Reserve Now"}
             </Text>
           </TouchableOpacity>
         </View>

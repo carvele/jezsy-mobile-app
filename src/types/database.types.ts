@@ -2254,6 +2254,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_public_profiles: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          first_name: string
+          id: string
+          last_name: string
+          username: string
+          wardrobe_privacy: string
+        }[]
+      }
       get_reviews_with_user_vote: {
         Args: { p_product_id: string }
         Returns: {
@@ -2344,7 +2354,15 @@ export type Database = {
         Args: { p_user_a: string; p_user_b: string }
         Returns: boolean
       }
+      is_chat_participant: {
+        Args: { p_chat_id: string; p_user_id: string }
+        Returns: boolean
+      }
       is_staff_or_admin: { Args: never; Returns: boolean }
+      mark_direct_message_read: {
+        Args: { p_message_id: string }
+        Returns: undefined
+      }
       merge_message_reaction: {
         Args: { p_emoji: string; p_message_id: string; p_user_id: string }
         Returns: Json
@@ -2380,6 +2398,7 @@ export type Database = {
         Args: { _approve: boolean; _reservation_id: string }
         Returns: Json
       }
+      resolve_username: { Args: { p_username: string }; Returns: string }
       search_catalog: {
         Args: {
           ar_only?: boolean
@@ -2503,6 +2522,15 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      search_public_profiles: {
+        Args: { p_exclude_id: string; p_query: string }
+        Returns: {
+          first_name: string
+          id: string
+          last_name: string
+          username: string
+        }[]
       }
       send_customer_notification: {
         Args: { _body: string; _title: string; _user_id: string }

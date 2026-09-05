@@ -28,11 +28,9 @@ ALTER TABLE public.outfit_items ENABLE ROW LEVEL SECURITY;
 DELETE FROM public.outfit_items
 WHERE outfit_id IN (SELECT id FROM public.saved_outfits WHERE items IS NOT NULL);
 
--- Some saved outfits reference a product_id whose row has since been hard-
--- deleted (or never existed) -- the FK would otherwise reject the whole
--- backfill for one bad row. Only carry the reference through when it
--- resolves to a real product; otherwise the piece still gets its own
--- outfit_items row (name/image/slot preserved), just with no product link.
+-- Some saved outfits reference a product_id whose row has since been
+-- hard-deleted (or never existed) -- the FK would otherwise reject the
+-- whole backfill for one bad row.
 INSERT INTO public.outfit_items (outfit_id, product_id, slot, image_url, name, color_tags, owned)
 SELECT
   so.id,

@@ -217,7 +217,7 @@ export default function ReservationsScreen() {
                 >
                   {label}
                 </Text>
-                {count > 0 && (
+                {count > 0 && ['pending', 'toPay', 'preparing', 'ready'].includes(filter) && (
                   <View
                     style={[
                       styles.countBadge,

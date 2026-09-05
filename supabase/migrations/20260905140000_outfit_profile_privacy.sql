@@ -11,46 +11,25 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS profile_visibility text NOT NULL DEFAULT 'public'
     CHECK (profile_visibility IN ('public', 'private'));
 
--- profiles' own SELECT policy is "own row or staff/admin" -- a plain
--- customer cannot read another customer's row at all, which means a
--- correlated subquery straight against profiles from inside another
--- table's RLS (e.g. `(SELECT outfit_privacy FROM profiles WHERE id = ...)`)
--- silently returns NULL for every non-owner, non-staff viewer, so
--- `NULL = 'public'` is never true and the policy can never actually grant
--- access to the audience it exists for. Confirmed live via adversarial
--- role-impersonation testing (SET LOCAL ROLE authenticated + a real
--- non-staff profile id): the direct-subquery version of this policy showed
--- 0 rows for a stranger even with outfit_privacy = 'public'. A SECURITY
--- DEFINER accessor, mirroring is_staff_or_admin()'s existing pattern, is
--- the fix -- it reads the single column on the caller's behalf without
--- being subject to profiles' own row-level restriction.
+-- profiles' own SELECT policy only allows a row's owner or staff to read it,
+-- so a policy elsewhere that reads profiles.outfit_privacy via a plain
+-- correlated subquery gets NULL for any other viewer and silently fails
+-- closed. SECURITY DEFINER accessors bypass that, matching the same fix
+-- already applied to wishlist_privacy/wardrobe_privacy.
 CREATE OR REPLACE FUNCTION public.get_outfit_privacy(p_user_id uuid)
 RETURNS text
 LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_temp
+STABLE SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
 AS $$
   SELECT outfit_privacy FROM public.profiles WHERE id = p_user_id;
 $$;
 
-REVOKE ALL ON FUNCTION public.get_outfit_privacy(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_outfit_privacy(uuid) TO authenticated, anon;
-
--- connections' own SELECT policy ("Users can view their non-blocked
--- connections") deliberately hides a 'blocked' row from the party who got
--- blocked -- correct for "don't tell D that A blocked them" as a UI matter,
--- but it means a plain EXISTS(...) lookup against connections, run as D,
--- can never find the very row it needs to see D is blocked. Confirmed live:
--- the direct-EXISTS version of the public-outfits policy let a blocked
--- viewer straight through. Same SECURITY DEFINER fix as get_outfit_privacy,
--- applied to the relationship check instead of a column read.
 CREATE OR REPLACE FUNCTION public.is_blocked_between(p_user_a uuid, p_user_b uuid)
 RETURNS boolean
 LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_temp
+STABLE SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.connections c
@@ -63,29 +42,22 @@ AS $$
   );
 $$;
 
-REVOKE ALL ON FUNCTION public.is_blocked_between(uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_blocked_between(uuid, uuid) TO authenticated, anon;
-
 -- saved_outfits already has "Enable all access for own saved outfits or
 -- admin" (ALL, owner + admin) -- these are additive SELECT policies for
--- everyone else. The connections policy's status = 'accepted' condition
--- already excludes a 'blocked' relationship on its own, but "public" is
--- global (no relationship check at all otherwise), so it needs its own
--- explicit blocked-pair exclusion -- unlike wardrobe_items/wishlists'
--- equivalent public policies, which have this same gap.
+-- everyone else.
 DROP POLICY IF EXISTS "Public outfits are viewable" ON public.saved_outfits;
 CREATE POLICY "Public outfits are viewable" ON public.saved_outfits FOR SELECT TO public
 USING (
   COALESCE(deleted, false) = false
-  AND public.get_outfit_privacy(saved_outfits.user_id) = 'public'
-  AND NOT public.is_blocked_between((select auth.uid()), saved_outfits.user_id)
+  AND public.get_outfit_privacy(user_id) = 'public'
+  AND NOT public.is_blocked_between((select auth.uid()), user_id)
 );
 
 DROP POLICY IF EXISTS "Connections can view outfits" ON public.saved_outfits;
 CREATE POLICY "Connections can view outfits" ON public.saved_outfits FOR SELECT TO public
 USING (
   COALESCE(deleted, false) = false
-  AND public.get_outfit_privacy(saved_outfits.user_id) = 'connections'
+  AND public.get_outfit_privacy(user_id) = 'connections'
   AND EXISTS (
     SELECT 1 FROM public.connections c
     WHERE c.status = 'accepted'

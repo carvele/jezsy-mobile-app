@@ -4,6 +4,7 @@
 
 export type ProfileData = {
   firstName: string;
+  username: string;
   lastName: string;
   phone: string;
   gender: string;
@@ -77,7 +78,8 @@ export const MONTH_NAMES = [
 ];
 
 const currentYear = new Date().getFullYear();
-export const YEARS = Array.from({ length: currentYear - 1939 }, (_, i) => currentYear - i);
+const maxBirthYear = currentYear - 13;
+export const YEARS = Array.from({ length: maxBirthYear - 1939 }, (_, i) => maxBirthYear - i);
 export const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 
 export const getDaysInMonth = (month: number, year: number): number =>

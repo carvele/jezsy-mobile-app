@@ -6,7 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Dimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -20,11 +20,9 @@ import { useWishlist } from '@/src/context/WishlistContext';
 import { Database } from '@/src/types/database.types';
 import { useToast } from '@/src/context/ToastContext';
 import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
+import { useGridCardWidth, GRID_COLUMN_GAP } from '@/src/utils/layout';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 2;
 
 export default function WishlistScreen() {
   const theme = useColorScheme();
@@ -33,6 +31,7 @@ export default function WishlistScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { wishlistIds, toggleWishlist } = useWishlist();
+  const { cardWidth, columns } = useGridCardWidth();
 
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,10 +70,10 @@ export default function WishlistScreen() {
 
   const renderItem = useCallback(({ item }: { item: Product }) => (
     <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card }]}
+      style={[styles.card, { backgroundColor: colors.card, width: cardWidth }]}
       onPress={() => router.push(`/product/${item.id}`)}
       activeOpacity={0.85}
-      accessibilityRole="button"
+      accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
       accessibilityLabel={`${item.name}, ₱${(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}${item.on_sale ? ', on sale' : ''}`}
       accessibilityHint="Opens product details"
     >
@@ -113,7 +112,7 @@ export default function WishlistScreen() {
         </Text>
       </View>
     </TouchableOpacity>
-  ), [colors, router, toggleWishlist]);
+  ), [colors, router, toggleWishlist, cardWidth]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -147,12 +146,13 @@ export default function WishlistScreen() {
         </View>
       ) : (
         <FlatList
+          key={columns}
           data={items}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          numColumns={2}
+          numColumns={columns}
           contentContainerStyle={styles.list}
-          columnWrapperStyle={styles.row}
+          columnWrapperStyle={[styles.row, { gap: GRID_COLUMN_GAP, justifyContent: 'flex-start' }]}
           initialNumToRender={6}
           maxToRenderPerBatch={4}
           windowSize={5}
@@ -191,10 +191,9 @@ const styles = StyleSheet.create({
   },
   browseBtnText: { fontWeight: '800', fontSize: 15 },
   list: { paddingHorizontal: Spacing.lg, paddingBottom: 100 },
-  row: { justifyContent: 'space-between', marginBottom: Spacing.lg },
+  row: { marginBottom: Spacing.lg },
   countText: { ...Type.caption, marginBottom: Spacing.md, marginTop: Spacing.xs },
   card: {
-    width: CARD_WIDTH,
     borderRadius: 14,
     overflow: 'hidden',
   },

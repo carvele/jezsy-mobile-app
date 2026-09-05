@@ -33,8 +33,81 @@ LogBox.ignoreLogs([
   'FunctionsHttpError',
   'setLayoutAnimationEnabledExperimental is currently a no-op',
   '"shadow*" style props are deprecated. Use "boxShadow".',
-  'props.pointerEvents is deprecated. Use style.pointerEvents'
+  'props.pointerEvents is deprecated. Use style.pointerEvents',
+  'React does not recognize the `accessibilityElementsHidden` prop',
+  'React does not recognize the `importantForAccessibility` prop',
+  'Image: style.resizeMode is deprecated. Please use props.resizeMode.',
 ]);
+
+// react-native-web and React DOM emit known harmless dev notices on web that bypass LogBox.
+// Patch console.warn and console.error on web to filter out these platform translation warnings.
+if (Platform.OS === 'web' && typeof console !== 'undefined') {
+  const IGNORED_PATTERNS = [
+    'props.pointerEvents is deprecated',
+    '"shadow*" style props are deprecated',
+    'accessibilityElementsHidden',
+    'importantForAccessibility',
+    'cannot be a descendant of <button>',
+    'cannot contain a nested <button>',
+    'style.resizeMode is deprecated',
+  ];
+
+  const shouldSuppress = (...args: unknown[]) => {
+    const combined = args.map((a) => (typeof a === 'string' ? a : '')).join(' ');
+    return IGNORED_PATTERNS.some((pattern) => combined.includes(pattern));
+  };
+
+  const _origWarn = console.warn.bind(console);
+  console.warn = (...args: unknown[]) => {
+    if (shouldSuppress(...args)) return;
+    _origWarn(...args);
+  };
+
+  const _origError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    if (shouldSuppress(...args)) return;
+    _origError(...args);
+  };
+
+  // Automatically blur focused elements when their ancestor container is marked aria-hidden
+  // (e.g. during screen/tab transitions in React Navigation) to prevent browser a11y warnings.
+  if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (
+          mutation.type === 'attributes' &&
+          mutation.attributeName === 'aria-hidden' &&
+          (mutation.target as HTMLElement).getAttribute('aria-hidden') === 'true'
+        ) {
+          const target = mutation.target as HTMLElement;
+          if (document.activeElement && target.contains(document.activeElement)) {
+            (document.activeElement as HTMLElement).blur?.();
+          }
+        }
+      }
+    });
+
+    const initObserver = () => {
+      if (document.body) {
+        observer.observe(document.body, {
+          attributes: true,
+          subtree: true,
+          attributeFilter: ['aria-hidden'],
+        });
+      } else {
+        setTimeout(initObserver, 50);
+      }
+    };
+    initObserver();
+  }
+
+  // Suppress uncaught errors injected by browser extensions (e.g. Web Vitals / performance profilers)
+  window.addEventListener('error', (event) => {
+    if (event.message?.includes("reading 'startTime'") || event.message?.includes('reportAllChanges')) {
+      event.preventDefault();
+    }
+  });
+}
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -88,6 +161,12 @@ function InitialLayout() {
   const themeLoaded = useThemeContext()?.loaded ?? false;
 
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      (document.activeElement as HTMLElement)?.blur?.();
+    }
+  }, [segments]);
 
   // Latches to true the first time we confirm a fully authenticated + profiled
   // session. Never resets to false within a mount â€” protects against transient

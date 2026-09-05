@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
@@ -83,7 +83,7 @@ export function ProductCard({
     <Link href={`/product/${product.id}`} asChild>
       <TouchableOpacity
         activeOpacity={0.85}
-        accessibilityRole="button"
+        accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
         accessibilityLabel={accessibilityLabel}
         accessibilityHint="Opens product details"
       >

@@ -21,7 +21,69 @@ export default function InboxScreen() {
   const colors = Colors[theme];
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'messages' | 'notifications'>('messages');
+  const [activeTab, setActiveTab] = useState<'shop' | 'friends' | 'notifications'>('shop');
+  const [directChats, setDirectChats] = useState<any[]>([]);
+  const [directChatsLoading, setDirectChatsLoading] = useState(true);
+
+  const fetchDirectChats = useCallback(async () => {
+    if (!user) {
+      setDirectChats([]);
+      setDirectChatsLoading(false);
+      return;
+    }
+    try {
+      const { data: myParticipants, error: err1 } = await supabase
+        .from('direct_chat_participants')
+        .select('chat_id')
+        .eq('user_id', user.id);
+      
+      if (err1) throw err1;
+
+      if (!myParticipants || myParticipants.length === 0) {
+        setDirectChats([]);
+        setDirectChatsLoading(false);
+        return;
+      }
+
+      const chatIds = myParticipants.map(p => p.chat_id);
+      
+      const { data: otherParticipants, error: err2 } = await supabase
+        .from('direct_chat_participants')
+        .select(`
+          chat_id,
+          user_id,
+          direct_chats!inner ( updated_at )
+        `)
+        .in('chat_id', chatIds)
+        .neq('user_id', user.id);
+
+      if (err2) throw err2;
+
+      // profiles' own RLS only allows a row's owner or staff to read it, so
+      // the other participant's row must go through this accessor -- an
+      // embedded `profiles!inner(...)` join here silently drops every row.
+      const otherUserIds = (otherParticipants || []).map(p => p.user_id);
+      const { data: profiles } = await supabase.rpc('get_public_profiles', { p_user_ids: otherUserIds });
+      const profileById = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+      const formatted = (otherParticipants || []).map(p => ({
+        id: p.chat_id,
+        other_user: profileById.get(p.user_id) || null,
+        updated_at: (p.direct_chats as any)?.updated_at || new Date().toISOString()
+      })).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+
+      setDirectChats(formatted);
+    } catch (err) {
+      console.error('Error fetching direct chats:', err);
+    } finally {
+      setDirectChatsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchDirectChats();
+  }, [fetchDirectChats]);
+
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
 
@@ -161,6 +223,39 @@ export default function InboxScreen() {
     );
   };
 
+
+  const renderDirectChatItem = ({ item }: { item: any }) => {
+    return (
+      <TouchableOpacity 
+        style={[styles.conversationItem, { borderBottomColor: colors.border }]}
+        onPress={() => router.push(`/chat/${item.other_user.id}` as any)}
+      >
+        <View style={styles.avatarContainer}>
+          <View style={[styles.avatar, { backgroundColor: colors.tint }]}>
+            <Text style={[styles.avatarText, { color: colors.onTint }]}>
+              {item.other_user?.first_name ? item.other_user.first_name[0].toUpperCase() : 'U'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.itemContent}>
+          <View style={styles.itemHeader}>
+            <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+              {item.other_user?.first_name} {item.other_user?.last_name}
+            </Text>
+            <Text style={[styles.time, { color: colors.secondaryText }]}>
+              {formatPHDate(item.updated_at)}
+            </Text>
+          </View>
+          <View style={styles.footer}>
+            <Text style={[styles.lastMessage, { color: colors.secondaryText }]} numberOfLines={1}>
+              @{item.other_user?.username}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderNotificationItem = ({ item }: { item: any }) => {
     const isAnnouncement = item.kind === 'announcement';
     return (
@@ -169,12 +264,13 @@ export default function InboxScreen() {
         onPress={() => {
           if (!isAnnouncement) {
             markAsRead(item.id);
-            if (item.reservation_id) {
-              router.push(`/reservations/${item.reservation_id}`);
-            } else if (item.product_id) {
-              router.push(`/product/${item.product_id}`);
-            } else if (item.conversation_id) {
-              router.push(`/messages/${item.conversation_id}`);
+            const payload = item.data as any;
+            if (payload?.reservation_id) {
+              router.push(`/reservations/${payload.reservation_id}`);
+            } else if (payload?.product_id) {
+              router.push(`/product/${payload.product_id}`);
+            } else if (payload?.conversation_id) {
+              router.push(`/messages/${payload.conversation_id}`);
             }
           }
         }}
@@ -215,14 +311,23 @@ export default function InboxScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <Text style={[styles.title, { color: colors.text }]}>Inbox</Text>
       
+
       {/* Segmented Control */}
       <View style={[styles.segmentedControl, { backgroundColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.segment, activeTab === 'messages' && [styles.activeSegment, { backgroundColor: colors.card }]]}
-          onPress={() => setActiveTab('messages')}
+          style={[styles.segment, activeTab === 'shop' && [styles.activeSegment, { backgroundColor: colors.card }]]}
+          onPress={() => setActiveTab('shop')}
         >
-          <Text style={[styles.segmentText, { color: activeTab === 'messages' ? colors.text : colors.secondaryText }]}>
-            Messages
+          <Text style={[styles.segmentText, { color: activeTab === 'shop' ? colors.text : colors.secondaryText }]}>
+            Shop
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segment, activeTab === 'friends' && [styles.activeSegment, { backgroundColor: colors.card }]]}
+          onPress={() => setActiveTab('friends')}
+        >
+          <Text style={[styles.segmentText, { color: activeTab === 'friends' ? colors.text : colors.secondaryText }]}>
+            Friends
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -235,8 +340,8 @@ export default function InboxScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Messages Tab */}
-      {activeTab === 'messages' && (
+      {/* Shop Tab */}
+      {activeTab === 'shop' && (
         messagesLoading ? (
           <View style={{ paddingHorizontal: Spacing.lg }}>
             <SkeletonList count={5}><ListRowSkeleton /></SkeletonList>
@@ -254,6 +359,30 @@ export default function InboxScreen() {
             data={conversations}
             keyExtractor={(item) => item.id}
             renderItem={renderMessageItem}
+            contentContainerStyle={styles.list}
+          />
+        )
+      )}
+
+      {/* Friends Tab */}
+      {activeTab === 'friends' && (
+        directChatsLoading ? (
+          <View style={{ paddingHorizontal: Spacing.lg }}>
+            <SkeletonList count={5}><ListRowSkeleton /></SkeletonList>
+          </View>
+        ) : directChats.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <IconSymbol name="person.fill" size={48} color={colors.border} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No friends yet</Text>
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+              Connect with mutuals in the My Network tab to chat!
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={directChats}
+            keyExtractor={(item) => item.id}
+            renderItem={renderDirectChatItem}
             contentContainerStyle={styles.list}
           />
         )
