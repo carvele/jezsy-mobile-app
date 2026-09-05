@@ -191,7 +191,7 @@ export default function UserProfileScreen() {
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
               <View style={styles.cardContainer}>
-                <ProductCard product={item.product} onPress={() => router.push(`/product/${item.product.id}`)} />
+                <ProductCard product={item.product} />
               </View>
             )}
           />
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     padding: Spacing.xs,
   },
   title: {
-    ...Type.h3,
+    ...Type.title,
   },
   profileInfo: {
     alignItems: 'center',
@@ -236,25 +236,25 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   avatarText: {
-    ...Type.h2,
+    ...Type.headline,
   },
   name: {
-    ...Type.h2,
+    ...Type.title,
     marginBottom: Spacing.md,
   },
   connectButton: {
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
+    borderRadius: Radius.pill,
   },
   connectButtonText: {
-    ...Type.label,
+    ...Type.bodyLargeStrong,
   },
   wardrobeSection: {
     flex: 1,
   },
   sectionTitle: {
-    ...Type.h2,
+    ...Type.title,
     paddingHorizontal: Spacing.md,
     marginBottom: Spacing.md,
   },

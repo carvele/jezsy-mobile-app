@@ -59,10 +59,6 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [lovedByCount, setLovedByCount] = useState(0);
   const [lovedByUsers, setLovedByUsers] = useState<any[]>([]);
-  const [lovedByCount, setLovedByCount] = useState(0);
-  const [lovedByUsers, setLovedByUsers] = useState<any[]>([]);
-  const [lovedByCount, setLovedByCount] = useState(0);
-  const [lovedByUsers, setLovedByUsers] = useState<any[]>([]);
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
