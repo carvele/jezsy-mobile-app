@@ -166,7 +166,7 @@ export default function PrivacySettingsScreen() {
                 Who can see what you saved?
               </Text>
               <Text style={[styles.settingDesc, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
-                Control who can see your saved items and if you appear in "Loved By" on product pages.
+                Control who can see your saved items and if you appear in &ldquo;Loved By&rdquo; on product pages.
               </Text>
               
               {loading ? (

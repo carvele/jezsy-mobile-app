@@ -175,7 +175,7 @@ export default function UserProfileScreen() {
           <ActivityIndicator color={colors.tint} style={{ marginTop: Spacing.xl }} />
         ) : accessDenied ? (
           <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-            This user's wardrobe is private.
+            This user&apos;s wardrobe is private.
           </Text>
         ) : wardrobe.length > 0 ? (
           <FlatList
