@@ -254,8 +254,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          await syncProfile(session.user);
+          if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+            await syncProfile(session.user);
+          }
         } else {
+          syncedUsersRef.current.clear();
           setProfile(null);
           setIsProfileLoading(false);
         }

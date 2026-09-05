@@ -385,6 +385,58 @@ export type Database = {
         }
         Relationships: []
       }
+      connections: {
+        Row: {
+          action_user_id: string
+          created_at: string | null
+          id: string
+          status: string
+          updated_at: string | null
+          user_id_1: string
+          user_id_2: string
+        }
+        Insert: {
+          action_user_id: string
+          created_at?: string | null
+          id?: string
+          status: string
+          updated_at?: string | null
+          user_id_1: string
+          user_id_2: string
+        }
+        Update: {
+          action_user_id?: string
+          created_at?: string | null
+          id?: string
+          status?: string
+          updated_at?: string | null
+          user_id_1?: string
+          user_id_2?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connections_action_user_id_fkey"
+            columns: ["action_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connections_user_id_1_fkey"
+            columns: ["user_id_1"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connections_user_id_2_fkey"
+            columns: ["user_id_2"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string | null
@@ -392,6 +444,7 @@ export type Database = {
           id: string
           last_message: string | null
           last_message_time: string | null
+          unread_count: number | null
           unread_customer: number
           unread_staff: number
           updated_at: string | null
@@ -402,6 +455,7 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_time?: string | null
+          unread_count?: number | null
           unread_customer?: number
           unread_staff?: number
           updated_at?: string | null
@@ -412,6 +466,7 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_time?: string | null
+          unread_count?: number | null
           unread_customer?: number
           unread_staff?: number
           updated_at?: string | null
@@ -470,6 +525,99 @@ export type Database = {
           user_agent?: string | null
         }
         Relationships: []
+      }
+      direct_chat_participants: {
+        Row: {
+          chat_id: string
+          created_at: string | null
+          user_id: string
+        }
+        Insert: {
+          chat_id: string
+          created_at?: string | null
+          user_id: string
+        }
+        Update: {
+          chat_id?: string
+          created_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "direct_chat_participants_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "direct_chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "direct_chat_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      direct_chats: {
+        Row: {
+          created_at: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      direct_messages: {
+        Row: {
+          chat_id: string | null
+          content: string
+          created_at: string | null
+          id: string
+          read_at: string | null
+          sender_id: string | null
+        }
+        Insert: {
+          chat_id?: string | null
+          content: string
+          created_at?: string | null
+          id?: string
+          read_at?: string | null
+          sender_id?: string | null
+        }
+        Update: {
+          chat_id?: string | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          read_at?: string | null
+          sender_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "direct_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "direct_chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "direct_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       feedback: {
         Row: {
@@ -745,6 +893,57 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outfit_items: {
+        Row: {
+          color_tags: string[] | null
+          created_at: string
+          id: string
+          image_url: string | null
+          name: string | null
+          outfit_id: string
+          owned: boolean
+          product_id: string | null
+          slot: string | null
+        }
+        Insert: {
+          color_tags?: string[] | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          name?: string | null
+          outfit_id: string
+          owned?: boolean
+          product_id?: string | null
+          slot?: string | null
+        }
+        Update: {
+          color_tags?: string[] | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          name?: string | null
+          outfit_id?: string
+          owned?: boolean
+          product_id?: string | null
+          slot?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outfit_items_outfit_id_fkey"
+            columns: ["outfit_id"]
+            isOneToOne: false
+            referencedRelation: "saved_outfits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outfit_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]
@@ -1088,15 +1287,21 @@ export type Database = {
           expo_push_token: string | null
           first_name: string | null
           fit_preference: string | null
+          full_name: string | null
           gender: string | null
           id: string
           is_blocked: boolean | null
           is_wardrobe_shared: boolean | null
           last_name: string | null
+          outfit_privacy: string
           phone: string | null
+          profile_visibility: string
           province: string | null
           role: string
           updated_at: string
+          username: string | null
+          wardrobe_privacy: string | null
+          wishlist_privacy: string | null
           zip_code: string | null
         }
         Insert: {
@@ -1111,15 +1316,21 @@ export type Database = {
           expo_push_token?: string | null
           first_name?: string | null
           fit_preference?: string | null
+          full_name?: string | null
           gender?: string | null
           id: string
           is_blocked?: boolean | null
           is_wardrobe_shared?: boolean | null
           last_name?: string | null
+          outfit_privacy?: string
           phone?: string | null
+          profile_visibility?: string
           province?: string | null
           role?: string
           updated_at?: string
+          username?: string | null
+          wardrobe_privacy?: string | null
+          wishlist_privacy?: string | null
           zip_code?: string | null
         }
         Update: {
@@ -1134,15 +1345,21 @@ export type Database = {
           expo_push_token?: string | null
           first_name?: string | null
           fit_preference?: string | null
+          full_name?: string | null
           gender?: string | null
           id?: string
           is_blocked?: boolean | null
           is_wardrobe_shared?: boolean | null
           last_name?: string | null
+          outfit_privacy?: string
           phone?: string | null
+          profile_visibility?: string
           province?: string | null
           role?: string
           updated_at?: string
+          username?: string | null
+          wardrobe_privacy?: string | null
+          wishlist_privacy?: string | null
           zip_code?: string | null
         }
         Relationships: []
@@ -1381,6 +1598,48 @@ export type Database = {
           {
             foreignKeyName: "reservations_staff_id_fkey"
             columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      review_votes: {
+        Row: {
+          created_at: string
+          id: string
+          review_id: string
+          updated_at: string
+          user_id: string
+          vote_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          review_id: string
+          updated_at?: string
+          user_id: string
+          vote_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          review_id?: string
+          updated_at?: string
+          user_id?: string
+          vote_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_votes_review_id_fkey"
+            columns: ["review_id"]
+            isOneToOne: false
+            referencedRelation: "reviews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_votes_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1968,11 +2227,58 @@ export type Database = {
       expire_all_stale_reservations: { Args: never; Returns: number }
       expire_stale_payments: { Args: never; Returns: number }
       expire_unpaid_reservations: { Args: never; Returns: number }
+      get_most_wishlisted_products: {
+        Args: never
+        Returns: {
+          image_url: string
+          product_id: string
+          product_name: string
+          wishlist_count: number
+        }[]
+      }
+      get_or_create_direct_chat: {
+        Args: { other_user_id: string }
+        Returns: string
+      }
+      get_outfit_privacy: { Args: { p_user_id: string }; Returns: string }
+      get_product_loved_by: {
+        Args: { p_product_id: string }
+        Returns: {
+          public_users: Json
+          total_count: number
+        }[]
+      }
+      get_public_outfits_for_product: {
+        Args: { p_product_id: string }
+        Returns: {
+          created_at: string
+          outfit_id: string
+          outfit_name: string
+          user_id: string
+        }[]
+      }
+      get_reviews_with_user_vote: {
+        Args: { p_product_id: string }
+        Returns: {
+          review: Database["public"]["Tables"]["reviews"]["Row"]
+          user_vote: string
+        }[]
+      }
       get_slot_booked_counts: {
         Args: { _date: string }
         Returns: {
           booked_count: number
           slot_time: string
+        }[]
+      }
+      get_suggested_connections: {
+        Args: never
+        Returns: {
+          first_name: string
+          id: string
+          last_name: string
+          mutual_count: number
+          username: string
         }[]
       }
       get_trending_products: {
@@ -2030,9 +2336,15 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_wardrobe_privacy: { Args: { p_user_id: string }; Returns: string }
+      get_wishlist_privacy: { Args: { p_user_id: string }; Returns: string }
       is_admin_or_owner: { Args: never; Returns: boolean }
       is_awaiting_payment_status: {
         Args: { _status: string }
+        Returns: boolean
+      }
+      is_blocked_between: {
+        Args: { p_user_a: string; p_user_b: string }
         Returns: boolean
       }
       is_staff_or_admin: { Args: never; Returns: boolean }
@@ -2236,6 +2548,10 @@ export type Database = {
       }
       update_user_streak: { Args: never; Returns: undefined }
       verify_pickup: { Args: { _pickup_token: string }; Returns: Json }
+      vote_on_review: {
+        Args: { p_review_id: string; p_vote_type?: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

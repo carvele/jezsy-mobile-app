@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, Platform, LogBox } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform, LogBox, ActivityIndicator } from 'react-native';
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -46,7 +46,7 @@ initWebUpdateChecker();
 // know the correct first screen to land on.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-// ── Offline Banner ────────────────────────────────────────────────────────────
+// â”€â”€ Offline Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function OfflineBanner() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
@@ -74,7 +74,7 @@ function OfflineBanner() {
         { backgroundColor: colors.warning, transform: [{ translateY: slideAnim }] },
       ]}
     >
-      <Text style={styles.offlineBannerText}>⚡ No internet — browsing cached content</Text>
+      <Text style={styles.offlineBannerText}>âš¡ No internet â€” browsing cached content</Text>
     </Animated.View>
   );
 }
@@ -90,7 +90,7 @@ function InitialLayout() {
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
 
   // Latches to true the first time we confirm a fully authenticated + profiled
-  // session. Never resets to false within a mount — protects against transient
+  // session. Never resets to false within a mount â€” protects against transient
   // null profile/session states from silent token refreshes kicking the user
   // out of the tabs they are actively navigating.
   const hasAuthenticated = useRef(false);
@@ -158,102 +158,110 @@ function InitialLayout() {
     if (flagsReady && !hasBootstrapped) setHasBootstrapped(true);
   }, [flagsReady, hasBootstrapped]);
 
-  // Safety fallback: Ensure routeSettled flips to true after at most 300ms on cold start
-  // so the overlay never traps the user on a blank white screen on slow network/web.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setRouteSettled(true);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Flips once the redirect effect has picked a route. Latches true so a later
-  // refreshProfile cannot drop the cover back over a screen the user is on.
+  // Latches to true once the destination route required by the authentication
+  // state is confirmed mounted, removing the branded bootstrap loader.
   const [routeSettled, setRouteSettled] = useState(false);
 
+  // Tracks the last replacement destination to prevent re-firing router.replace
+  // across consecutive render passes before segments updates.
+  const lastRedirectTargetRef = useRef<string | null>(null);
+
+  // Development diagnostic to detect any stuck routing states.
   useEffect(() => {
+    if (!__DEV__) return;
+    const timer = setTimeout(() => {
+      if (!routeSettled) {
+        console.warn('[RootLayout] Routing has remained unsettled for over 10s.', {
+          hasSession: !!session,
+          flagsReady,
+          segments,
+        });
+      }
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [routeSettled, session, flagsReady, segments]);
+
+  useEffect(() => {
+    if (!session) {
+      hasAuthenticated.current = false;
+    }
     const pathSegments = segments as string[];
-    const inAuthGroup = pathSegments[0] === '(auth)';
-    const onProfileSetup = pathSegments[1] === 'profile-setup';
-    const onResetPassword = pathSegments[1] === 'reset-password';
+    const AUTH_SCREENS = ['(auth)', 'welcome', 'auth', 'onboarding', 'profile-setup', 'reset-password'];
+    const inAuthGroup = pathSegments.some((s) => AUTH_SCREENS.includes(s));
+    const onProfileSetup = pathSegments.includes('profile-setup');
+    const onResetPassword = pathSegments.includes('reset-password');
 
-    // Snapshot BEFORE this run can mutate it below. Root-caused live: this effect
-    // lists `routeSettled` in its own dependency array and sets it at its own end,
-    // so confirming auth self-triggers one more run of this same effect. `segments`
-    // (from useSegments()) updates asynchronously relative to router.replace() --
-    // on that self-triggered re-run it can still read the OLD segment for a tick,
-    // so `inAuthGroup` is stale-true even though the replace() to /(tabs) already
-    // fired. That breaks the guards below (both require `!inAuthGroup`) and the
-    // branch logic re-issues router.replace('/(tabs)') a second time, which React
-    // Navigation treats as a real navigation, not a no-op -- remounting the tabs
-    // screen and producing exactly the "flashes Welcome then Home" symptom
-    // reported live, confirmed via mountId logging in (tabs)/_layout.tsx showing
-    // two distinct mount ids moments apart. wasAlreadyAuthenticated distinguishes
-    // "confirming auth for the first time this mount" from "re-running because our
-    // own state change re-triggered us", so the tabs redirect below can never fire
-    // twice regardless of how stale `segments` is on that second pass.
-    const wasAlreadyAuthenticated = hasAuthenticated.current;
+    // Helper: Safely replace route without issuing duplicate navigations
+    const safeRedirect = (target: string) => {
+      if (lastRedirectTargetRef.current === target) return;
+      lastRedirectTargetRef.current = target;
+      router.replace(target as any);
+    };
 
-    // CRITICAL: Once we have confirmed a fully authenticated session AND the route
-    // has already settled, skip ALL future re-evaluations. Tab navigation changes
-    // `segments` which re-fires this effect — but we must never re-run the overlay
-    // cover logic or redirects while the user is simply switching tabs.
+    // CRITICAL: Once fully authenticated AND confirmed settled in tabs, skip ALL
+    // future re-evaluations during normal tab switches.
     if (routeSettled && hasAuthenticated.current && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
       return;
     }
 
-    // CRITICAL: If we've already confirmed a fully authenticated session at
-    // least once this mount, AND the user is inside the app (not in auth), skip ALL
-    // redirects. Supabase silent token refreshes and syncProfile() calls
-    // temporarily set isProfileLoading=true (making flagsReady=false) and can
-    // transiently null out profile — which would otherwise redirect the user
-    // back to auth/home while they're navigating anywhere in the app.
-    if (hasAuthenticated.current && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
-      setRouteSettled(true);
+    // 1. Password Recovery Mode
+    if (isPasswordRecovery) {
+      if (!onResetPassword) {
+        safeRedirect('/(auth)/reset-password');
+      } else {
+        lastRedirectTargetRef.current = null;
+        setRouteSettled(true);
+      }
       return;
     }
 
-    // For the initial bootstrap, wait until all async flags are resolved.
-    if (!flagsReady) return;
-
-    // A recovery session is a real session, so without this the emailed reset
-    // link would function as a full login: satisfy the branches below, reach
-    // the tabs, and never require a new password. Pin the user here until
-    // updateUser succeeds (or they sign out from the screen itself).
-    if (isPasswordRecovery) {
-      if (!onResetPassword) {
-        router.replace('/(auth)/reset-password' as any);
-      }
-    } else if (profile?.deleted) {
+    // 2. Profile Deletion
+    if (profile?.deleted) {
       signOut();
-    } else if (!session) {
-      // Require authentication — guests must create an account or sign in.
-      if (!inAuthGroup) {
-        router.replace((onboardingSeen ? '/(auth)/welcome' : '/(auth)/onboarding') as any);
-      }
-    } else {
-      // User is logged in
-      if (!profile || !profile.first_name) {
-        if (!onProfileSetup) {
-          router.replace('/(auth)/profile-setup');
-        }
-      } else {
-        // Fully authenticated with a complete profile — latch the flag so
-        // future tab switches and token refreshes never trigger a redirect.
-        hasAuthenticated.current = true;
-        if (inAuthGroup && !wasAlreadyAuthenticated) {
-          router.replace('/(tabs)');
-        }
-      }
+      return;
     }
 
-    // Whichever branch ran, the correct route is now committed.
+    // 3. For the initial bootstrap, wait until all async flags are resolved
+    if (!flagsReady) return;
+
+    // 4. Unauthenticated (Guests)
+    if (!session) {
+      if (!inAuthGroup) {
+        const dest = onboardingSeen ? '/(auth)/welcome' : '/(auth)/onboarding';
+        safeRedirect(dest);
+      } else {
+        // Destination observed: user is inside auth group
+        lastRedirectTargetRef.current = null;
+        setRouteSettled(true);
+      }
+      return;
+    }
+
+    // 5. Authenticated Users
+    // 5a. Incomplete Profile: First name required before entering the app
+    if (!profile || !profile.first_name) {
+      if (!onProfileSetup) {
+        safeRedirect('/(auth)/profile-setup');
+      } else {
+        // Destination observed: user is on profile-setup screen
+        lastRedirectTargetRef.current = null;
+        setRouteSettled(true);
+      }
+      return;
+    }
+
+    // 5b. Complete Profile: User must be in tabs navigator (outside auth)
+    if (inAuthGroup) {
+      safeRedirect('/(tabs)');
+      return;
+    }
+
+    // Destination observed: user is confirmed in the app (outside auth)
+    hasAuthenticated.current = true;
+    lastRedirectTargetRef.current = null;
     setRouteSettled(true);
-    // routeSettled is deliberately excluded: this effect reads and sets it, so
-    // listing it self-triggers a re-run on confirm -- see the stale-`segments`
-    // comment above for the exact double-navigation bug that caused.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut]);
+  }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut, routeSettled]);
 
   useEffect(() => {
     if (hasBootstrapped) {
@@ -268,12 +276,22 @@ function InitialLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
       </Stack>
-      {/* Covers the Stack rather than replacing it only during cold bootstrap before routeSettled */}
+      {/* Branded loading overlay: covers the Stack during cold bootstrap until routeSettled is confirmed */}
       {!routeSettled && (
         <View
           pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, zIndex: 999 }]}
-        />
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: colors.background,
+              zIndex: 999,
+              justifyContent: 'center',
+              alignItems: 'center',
+            },
+          ]}
+        >
+          <ActivityIndicator size="large" color={colors.tint} />
+        </View>
       )}
       {routeSettled && pendingDeletionId && !deletionNoticeDismissed && (
         <PendingDeletionNoticeModal

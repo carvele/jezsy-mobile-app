@@ -1,6 +1,6 @@
-import { Redirect, Tabs } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { Platform, useWindowDimensions } from 'react-native';
+import { Tabs } from 'expo-router';
+import React from 'react';
+import { ActivityIndicator, Platform, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
@@ -15,29 +15,7 @@ export default function TabLayout() {
   const colors = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
   const { unreadCount } = useMessages();
-  const { session, isPasswordRecovery, isLoading } = useAuth();
-  // Debounces the sign-out redirect below rather than firing on the first
-  // falsy `session`. A permanent latch ("ever seen a session, never redirect
-  // again") was tried and rejected: signOut() (profile.tsx) does not itself
-  // navigate anywhere, and app/_layout.tsx's own redirect effect ALSO can't
-  // fire here -- profile nulls out alongside session on sign-out, so its
-  // `!profile?.deleted` guard condition stays true and it skips redirecting
-  // too (confirmed by reading both). This <Redirect> is the ONLY thing that
-  // navigates away on a real sign-out, so it can't be permanently suppressed.
-  // What it CAN safely ignore is a single-frame blip -- confirmed live this
-  // session: any momentary falsy `session` (e.g. mid silent-token-refresh)
-  // rendered this Redirect for one frame, then the real tabs again once
-  // session caught up, flashing Welcome-then-Home from every screen. A short
-  // debounce absorbs that without delaying a real sign-out redirect by more
-  // than the same fraction of a second.
-  const [confirmedSignedOut, setConfirmedSignedOut] = useState(false);
-  useEffect(() => {
-    if (!session && !isLoading) {
-      const timer = setTimeout(() => setConfirmedSignedOut(true), 400);
-      return () => clearTimeout(timer);
-    }
-    setConfirmedSignedOut(false);
-  }, [session, isLoading]);
+  const { isLoading } = useAuth();
 
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -114,21 +92,14 @@ export default function TabLayout() {
     },
   }), [colors.tint, isDark, barBottom, horizontalMargin, barHeight, isCompact]);
 
-  // While auth is still initializing from storage/network, render nothing so we don't prematurely redirect
+  // While auth is still initializing from storage/network, render a branded loading spinner
+  // instead of null to prevent white-screen flashes.
   if (isLoading) {
-    return null;
-  }
-
-  // Defence in depth for password recovery and non-authenticated users
-  if (isPasswordRecovery) {
-    return <Redirect href="/(auth)/reset-password" />;
-  }
-
-  if (!session) {
-    // Redirect only once the debounce above confirms this isn't a single-frame
-    // blip; render nothing in between, same as the isLoading case above, so a
-    // blip never shows the Welcome screen even for one frame.
-    return confirmedSignedOut ? <Redirect href="/(auth)/welcome" /> : null;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.tint} />
+      </View>
+    );
   }
 
   return (
