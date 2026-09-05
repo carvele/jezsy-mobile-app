@@ -12,7 +12,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useSafeBack } from '@/src/hooks/useSafeBack';
-import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
+import { recommendSize, analyzeFit, computeLengthFitSignal } from '@/src/utils/sizeRecommender';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { ConsentModal } from '@/src/components/ConsentModal';
@@ -272,6 +272,11 @@ export default function ARTryOnScreen() {
   // confident-facing cone (see ar-system-contract.md section 3) got no indication why the
   // garment dimmed. This state carries the real trackingState so the pill can say so.
   const [trackingState, setTrackingState] = useState<import('@/src/utils/trackingState').TrackingState | null>(null);
+  // Phase 3: live length-fit signal (roadmap "Length fit signal" task). Feedback only --
+  // does not touch garment scale. Updated in the same throttled block as trackingState
+  // below; null whenever there isn't enough real data (no chart length, no torso
+  // landmarks) to say anything.
+  const [lengthFitSignal, setLengthFitSignal] = useState<import('@/src/utils/sizeRecommender').LengthFitSignal | null>(null);
   const [arLoadError, setArLoadError] = useState<string | null>(null);
   // Fix for #29 in the AR audit plan: <Camera>'s onError used to only console.warn,
   // leaving a permanently black feed with the "AI Body Tracking Active" pill still
@@ -589,6 +594,12 @@ export default function ARTryOnScreen() {
         lastStateUpdateRef.current = now;
         setIsTrackerActive(isTracking);
         setTrackingState(pose.trackingState);
+        // Phase 3: length fit signal, live from this frame's world landmarks. Feedback
+        // only -- garment scale (fitState.scale, above) is untouched by this.
+        const chartLengthCm = recommendedSize && product?.measurements
+          ? (product.measurements as any)[recommendedSize]?.length
+          : null;
+        setLengthFitSignal(computeLengthFitSignal(pose.worldLandmarks, chartLengthCm));
       }
     },
     [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity, garmentMetadata, product, sizingMeasurements, recommendedSize]
@@ -1195,6 +1206,17 @@ export default function ARTryOnScreen() {
                 </View>
               );
             })}
+            {lengthFitSignal && (
+              <View style={styles.fitRow}>
+                <Text style={styles.fitZone}>Length</Text>
+                <Text style={[styles.fitVerdict, {
+                  color: lengthFitSignal.verdict === 'runs_short' ? '#FFCC00'
+                    : lengthFitSignal.verdict === 'runs_long' ? '#4DA3FF' : '#34C759'
+                }]}>
+                  {lengthFitSignal.verdict.replace('_', ' ')}
+                </Text>
+              </View>
+            )}
             <Text style={styles.fitNote}>Estimated from your measurements</Text>
           </View>
         </View>
