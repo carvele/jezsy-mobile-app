@@ -13,6 +13,9 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useSafeBack } from '@/src/hooks/useSafeBack';
 import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
+import { computeLiveLengthFit } from '@/src/utils/liveLengthFit';
+import { useARTrackingSession } from '@/src/hooks/useARTrackingSession';
+import { AR_TRACKING_GUIDANCE } from '@/src/utils/arTrackingSession';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { useAuth } from '@/src/context/AuthContext';
@@ -23,7 +26,7 @@ import { constructBodyPose } from '@/src/utils/poseConstructor';
 import { calculateGarmentFit } from '@/src/utils/garmentFitter';
 import { calculateBoneRotationsFromCanonical } from '@/src/utils/skeletalRetargeter';
 import { normalizePose, torsoEulerDegrees } from '@/src/utils/poseNormalizer';
-import { checkCalibrationPlausibility } from '@/src/utils/garmentCalibrationGuard';
+import { adaptGarmentMetadata } from '@/src/utils/garmentMetadataAdapter';
 import type { GarmentFitProfile } from '@/src/types/garment';
 import {
   useSharedValue,
@@ -33,28 +36,30 @@ import {
 import { WebPoseTracker } from '@/src/utils/webPoseDetection';
 import { PoseLandmarkFilter } from '@/src/utils/oneEuroFilter';
 import type { PoseFrame } from '@/src/types/pose';
-import { GarmentRenderer } from '@/src/components/AR/GarmentRenderer';
+import { GarmentRenderer, type GarmentRendererRef } from '@/src/components/AR/GarmentRenderer';
 type Product = Database['public']['Tables']['products']['Row'];
 
 interface WebCameraFeedProps {
+  active: boolean;
   onPoseResults?: (poseFrame: PoseFrame) => void;
-  onTrackerReady?: (ready: boolean) => void;
+  onTrackingLost?: () => void;
 }
 
-function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
+function WebCameraFeed({ active, onPoseResults, onTrackingLost }: WebCameraFeedProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const occlusionCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const trackerRef = React.useRef<WebPoseTracker | null>(null);
   const animFrameRef = React.useRef<number | null>(null);
   const onPoseResultsRef = React.useRef(onPoseResults);
-  const onTrackerReadyRef = React.useRef(onTrackerReady);
+  const onTrackingLostRef = React.useRef(onTrackingLost);
 
   React.useEffect(() => {
     onPoseResultsRef.current = onPoseResults;
-    onTrackerReadyRef.current = onTrackerReady;
+    onTrackingLostRef.current = onTrackingLost;
   });
 
   React.useEffect(() => {
+    if (!active) return;
     let stream: MediaStream | null = null;
     let isMounted = true;
     const tracker = new WebPoseTracker();
@@ -96,10 +101,10 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
 
         // Initialize MediaPipe WASM pose detector
         const ready = await tracker.init();
-        if (isMounted) {
-          onTrackerReadyRef.current?.(ready);
+        if (!isMounted) {
+          tracker.close();
+          return;
         }
-
         if (!ready) return;
 
         // Continuous pose detection loop with ~20 FPS inference budget
@@ -138,6 +143,7 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                 }
               } else {
                 filter.reset();
+                onTrackingLostRef.current?.();
                 // Tracking lost: clear occlusion canvas immediately to prevent stale cutouts
                 if (canvas) {
                   const ctx = canvas.getContext('2d');
@@ -145,6 +151,7 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
                 }
               }
             } catch (err) {
+              onTrackingLostRef.current?.();
               console.warn('Frame processing error:', err);
             } finally {
               isProcessing = false;
@@ -171,7 +178,7 @@ function WebCameraFeed({ onPoseResults, onTrackerReady }: WebCameraFeedProps) {
       }
       tracker.close();
     };
-  }, []);
+  }, [active]);
 
   return (
     <>
@@ -269,7 +276,7 @@ function buildFallbackMetadata(p: Product | null | undefined): import('@/src/typ
     id: p?.id || 'mock',
     category: cat as any,
     calibrationVersion: '1.0.0',
-    ingestionStatus: 'AR_READY',
+    ingestionStatus: 'DEMO_RIG',
     anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
     anchorConfidence: 'inferred',
     anchorType: 'SHOULDER_CENTER',
@@ -307,17 +314,6 @@ export default function ARTryOnScreen() {
   // resolution as long as format and the values read from it agree.
   const format = useCameraFormat(device, [{ videoResolution: { width: 1280, height: 720 } }]);
 
-  const [isTrackerActive, setIsTrackerActive] = useState(false);
-  // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): isTrackerActive only
-  // ever answers "is the pill visible at all" -- it already correctly reflects
-  // GOOD_FIT/TURN_TOO_FAR -> true and TRACKING_LOST -> false via the throttled setter in
-  // handlePoseResults below, contrary to an earlier (corrected) claim in the roadmap that
-  // it "latches once and never updates". The real gap is narrower: whenever the pill IS
-  // visible, its TEXT never distinguished GOOD_FIT from TURN_TOO_FAR -- both showed the
-  // identical "AI Body Tracking Active" label, so a wearer who had turned past the
-  // confident-facing cone (see ar-system-contract.md section 3) got no indication why the
-  // garment dimmed. This state carries the real trackingState so the pill can say so.
-  const [trackingState, setTrackingState] = useState<import('@/src/utils/trackingState').TrackingState | null>(null);
   const [arLoadError, setArLoadError] = useState<string | null>(null);
   // Fix for #29 in the AR audit plan: <Camera>'s onError used to only console.warn,
   // leaving a permanently black feed with the "AI Body Tracking Active" pill still
@@ -329,15 +325,23 @@ export default function ARTryOnScreen() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraRetryKey, setCameraRetryKey] = useState(0);
 
+  const [isFocused, setIsFocused] = useState(false);
+  useFocusEffect(useCallback(() => {
+    setIsFocused(true);
+    return () => setIsFocused(false);
+  }, []));
+  const [isAppActive, setIsAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => setIsAppActive(state === 'active'));
+    return () => sub.remove();
+  }, []);
+
   // Reanimated SharedValues for 60FPS UI-thread smooth garment positioning
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
   const rotateDeg = useSharedValue(0);
   const opacity = useSharedValue(0.9);
-  const lostFramesRef = React.useRef(0);
-  const hasTrackedRef = React.useRef(false);
-  const lastStateUpdateRef = React.useRef(0);
   const torsoLogCounter = React.useRef(0);
   const compGuardLogCounter = React.useRef(0);
   // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): the roadmap's own
@@ -350,85 +354,16 @@ export default function ARTryOnScreen() {
   // not guarantee the WebView processed it before the next one arrived.
   const transportRateCountRef = React.useRef(0);
   const transportRateWindowStartRef = React.useRef(0);
-  const garmentRendererRef = React.useRef<any>(null);
+  const garmentRendererRef = React.useRef<GarmentRendererRef>(null);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const stageWidth = stageLayout.width || Math.min(winWidth || 390, 480);
   const stageHeight = stageLayout.height || Math.min(winHeight || 844, 900);
 
-  // Phase 5B: Real garment metadata from Supabase, with a clearly-labelled fallback
-  const [garmentMetadata, setGarmentMetadata] = useState<import('@/src/types/garment').GarmentMetadata | null>(null);
-  const [isDemoRig, setIsDemoRig] = useState(false);
-
-  useEffect(() => {
-    if (!product) return;
-    // Only 'AR_READY' means boneMap/anchorOffset/restPoseMetricWidth are actually
-    // usable for a real render -- 'NEEDS_CALIBRATION'/'NEEDS_MERCHANT_MAPPING'/
-    // 'NOT_AR_COMPATIBLE' mean ingestion is incomplete for this garment (the admin
-    // dashboard's own ingestion pipeline flags this). Previously this screen branched
-    // only on garment_metadata truthiness, so an incompletely-ingested garment was
-    // still fed through as if it were fully calibrated.
-    const rawStatus = (product.garment_metadata as any)?.ingestion_status;
-    if (product.garment_metadata && rawStatus === 'AR_READY') {
-      console.log('[AR] Using real garment_metadata from Supabase');
-      // The DB column stores snake_case keys (bone_map, rest_pose_metric_width, ...);
-      // GarmentMetadata and everything downstream (garmentFitter, GarmentRenderer,
-      // skeletalRetargeter) reads camelCase. The previous straight type-cast here did
-      // NOT convert the actual runtime object, so every calibrated field silently read
-      // as undefined -- confirmed live: restPose logged undefined and garmentMetricWidth
-      // fell back to a hardcoded 0.4 even for a product with a real bone_map and a real
-      // rest_pose_metric_width of 0.22 already set in the database.
-      const raw = product.garment_metadata as any;
-      // bone_map as stored is keyed by the GLB's actual bone name with the canonical
-      // name as the value (e.g. "_left_arm": "LeftArm") -- the runtime looks it up the
-      // other way (boneMap[canonicalName] -> actual GLB bone name), so every lookup
-      // would fail even after the case fix above. Invert it once here.
-      const invertedBoneMap: Record<string, string> = {};
-      if (raw.bone_map && typeof raw.bone_map === 'object') {
-        for (const [glbBoneName, canonicalName] of Object.entries(raw.bone_map)) {
-          if (typeof canonicalName === 'string') invertedBoneMap[canonicalName] = glbBoneName;
-        }
-      }
-      const mapped: import('@/src/types/garment').GarmentMetadata = {
-        id: raw.id,
-        category: raw.category,
-        calibrationVersion: raw.calibration_version,
-        ingestionStatus: raw.ingestion_status,
-        anatomicalAnchorOffset: raw.anatomical_anchor_offset,
-        anchorConfidence: raw.anchor_confidence,
-        anchorType: raw.anchor_type,
-        restPoseMetricWidth: raw.rest_pose_metric_width,
-        boneMap: invertedBoneMap,
-        restPose: raw.rest_pose,
-      };
-
-      // Phase 1 instrumentation (ar-tryon-implementation-roadmap.md): AR_READY in the DB
-      // is not proof of calibration -- see ar-system-contract.md section 9. Tailored
-      // Blazer sat AR_READY with anatomicalAnchorOffset.y = 1.304 (should be ~0.1) and
-      // rendered visibly broken live before anyone caught it manually. This is a coarse
-      // last-line check, not a replacement for real ingestion validation: it only
-      // catches grossly implausible values, not subtly wrong ones (see
-      // garmentCalibrationGuard.ts's own doc comment for what it does not catch).
-      const plausibility = checkCalibrationPlausibility(mapped);
-      if (!plausibility.plausible) {
-        console.warn(
-          '[AR] garment_metadata is AR_READY but failed the calibration sanity guard -- ' +
-          'using fallback (demo rig) instead of trusting it: ' + plausibility.reasons.join('; ')
-        );
-        setGarmentMetadata(buildFallbackMetadata(product));
-        setIsDemoRig(true);
-      } else {
-        setGarmentMetadata(mapped);
-        setIsDemoRig(false);
-      }
-    } else {
-      console.log(product.garment_metadata
-        ? '[AR] garment_metadata not AR_READY (' + rawStatus + ') — using fallback (demo rig)'
-        : '[AR] No garment_metadata — using fallback (demo rig)');
-      setGarmentMetadata(buildFallbackMetadata(product));
-      setIsDemoRig(true);
-    }
-  }, [product]);
+  const { metadata: garmentMetadata, isDemoRig } = useMemo(
+    () => adaptGarmentMetadata(product?.garment_metadata, () => buildFallbackMetadata(product)),
+    [product]
+  );
 
   // Biometric consent check on mount
   useEffect(() => {
@@ -454,6 +389,14 @@ export default function ARTryOnScreen() {
       : null),
     [sizingReady, sizingMeasurements, fitPreference, product?.measurements, product?.category]
   );
+  const cameraActive = mode === '2d' && isFocused && isAppActive && hasConsented === true
+    && !loading && product?.id === id && (Platform.OS === 'web' || (hasPermission && !!device));
+  const trackingEnabled = cameraActive && !cameraError && !arLoadError;
+  const trackingSessionKey = JSON.stringify([id, product?.id, product?.model_3d_url, recommendedSize,
+    product?.measurements, cameraRetryKey, device?.id, stageWidth, stageHeight]);
+  const { status: trackingStatus, lengthFit, report: reportTracking, isActive: isTrackingSessionActive } = useARTrackingSession(trackingEnabled, trackingSessionKey);
+  const isTrackerActive = trackingStatus === 'tracking' || trackingStatus === 'turned';
+  const handleTrackingLost = useCallback(() => { reportTracking('TRACKING_LOST'); }, [reportTracking]);
   const fitZones = useMemo(
     () => {
       if (!recommendedSize || !product?.measurements || !sizingMeasurements) return [];
@@ -495,14 +438,6 @@ export default function ARTryOnScreen() {
   // triangulate against, calibration data is withheld entirely and
   // GarmentRenderer falls back to its existing uncalibrated behavior.
   const cameraCalibration = useMemo(() => {
-    // TEMP DEBUG: remove once Phase 3 calibration-not-activating is root-caused.
-    console.log('[CAL-DEBUG] platform=' + Platform.OS
-      + ' hasFormat=' + !!format
-      + ' fieldOfView=' + (format ? format.fieldOfView : 'n/a')
-      + ' videoWidth=' + (format ? format.videoWidth : 'n/a')
-      + ' videoHeight=' + (format ? format.videoHeight : 'n/a')
-      + ' sizingMeasurements=' + JSON.stringify(sizingMeasurements)
-      + ' shoulderWidth=' + (sizingMeasurements ? sizingMeasurements.shoulderWidth : 'n/a'));
     if (Platform.OS === 'web' || !format || !format.fieldOfView) return undefined;
     const wearerShoulderWidthM = sizingMeasurements?.shoulderWidth
       ? sizingMeasurements.shoulderWidth / 100
@@ -546,7 +481,12 @@ export default function ARTryOnScreen() {
 
   const handlePoseResults = useCallback(
     (poseFrame: PoseFrame) => {
+      if (!isTrackingSessionActive()) return;
       const { normalizedLandmarks: landmarks, worldLandmarks, segmentation } = poseFrame;
+      if (!landmarks || landmarks.length < 33) {
+        handleTrackingLost();
+        return;
+      }
 
       // 1. Construct canonical BodyPose
       const transformCtx = {
@@ -572,9 +512,6 @@ export default function ARTryOnScreen() {
         }
       };
 
-      // Null-guard: garmentMetadata is async state — skip this frame if not yet loaded
-      if (!garmentMetadata) return;
-
       // Normalize once per frame: the fitter (garment orientation) and the retargeter
       // (bone deltas) must agree on the same torso frame, or they fight each other --
       // see poseNormalizer for the full write-up.
@@ -591,10 +528,11 @@ export default function ARTryOnScreen() {
       );
       
       const isTracking = pose.trackingState === 'GOOD_FIT' || pose.trackingState === 'TURN_TOO_FAR';
-
-
+      const chartLength = recommendedSize && product?.measurements
+        ? (product.measurements as any)[recommendedSize]?.length : undefined;
+      if (!reportTracking(pose.trackingState, pose.trackingState === 'GOOD_FIT'
+        ? computeLiveLengthFit(poseFrame, chartLength, product?.category) : null)) return;
       if (isTracking) {
-        lostFramesRef.current = 0;
 
         // Phase 2: Direct filter binding. We bypass withSpring because One Euro already smoothes the coordinate frame!
         translateX.value = fitState.anchor.x;
@@ -651,33 +589,16 @@ export default function ARTryOnScreen() {
             worldLandmarks
           );
         }
-      } else {
-        lostFramesRef.current += 1;
-        // Debounced hysteresis
-        if (lostFramesRef.current > 6) {
-          translateX.value = withTiming(0, { duration: 250 });
-          translateY.value = withTiming(0, { duration: 250 });
-          scale.value = withTiming(1, { duration: 250 });
-          rotateDeg.value = withTiming(0, { duration: 250 });
-          opacity.value = withTiming(0.85, { duration: 200 });
-        }
-      }
-
-      // 3. Throttled React state updates (every 200ms)
-      const now = performance.now();
-      if (now - lastStateUpdateRef.current > 200) {
-        lastStateUpdateRef.current = now;
-        setIsTrackerActive(isTracking);
-        setTrackingState(pose.trackingState);
       }
     },
-    [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity, garmentMetadata, product, sizingMeasurements, recommendedSize]
+    [stageWidth, stageHeight, translateX, translateY, scale, rotateDeg, opacity, garmentMetadata, product, sizingMeasurements, recommendedSize, isTrackingSessionActive, handleTrackingLost, reportTracking]
   );
   
   const nativeFilterRef = React.useRef<PoseLandmarkFilter | null>(null);
   if (!nativeFilterRef.current) {
     nativeFilterRef.current = new PoseLandmarkFilter(1.2, 0.015, 1.0);
   }
+  useEffect(() => { nativeFilterRef.current?.reset(); }, [reportTracking]);
 
   // onResults/onError used to be inline literals recreated every render; the library
   // chains them through several layers of useMemo/useCallback that all transitively
@@ -686,8 +607,22 @@ export default function ARTryOnScreen() {
   // the root instead of patching each downstream symptom separately.
   const onNativePoseResults = useCallback(
     (result: any) => {
+      if (!isTrackingSessionActive()) return;
       let landmarks = result.results?.[0]?.landmarks?.[0];
       let worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
+
+      if (!Array.isArray(landmarks) || landmarks.length < 33
+        || !landmarks.every((point: any) => point && Number.isFinite(point.x) && Number.isFinite(point.y)
+          && (point.z === undefined || Number.isFinite(point.z)))) {
+        nativeFilterRef.current?.reset();
+        handleTrackingLost();
+        return;
+      }
+      if (!Array.isArray(worldLandmarks) || worldLandmarks.length < 33
+        || !worldLandmarks.every((point: any) => point && Number.isFinite(point.x)
+          && Number.isFinite(point.y) && Number.isFinite(point.z))) {
+        worldLandmarks = [];
+      }
 
       const compGuardTriggered = !!(landmarks && landmarks.length > 0 && shouldCorrectNativeLandmarkRotation(landmarks));
       if (compGuardTriggered) {
@@ -708,45 +643,6 @@ export default function ARTryOnScreen() {
           + ' worldL11=(' + wl11?.x?.toFixed(3) + ',' + wl11?.y?.toFixed(3) + ',' + wl11?.z?.toFixed(3) + ')'
           + ' worldL12=(' + wl12?.x?.toFixed(3) + ',' + wl12?.y?.toFixed(3) + ',' + wl12?.z?.toFixed(3) + ')');
       }
-
-      if (!landmarks || landmarks.length === 0) {
-        // Zero landmarks (person left frame, camera covered, poor lighting) used to
-        // early-return here without ever calling handlePoseResults, so isTrackerActive
-        // and the garment's SharedValues froze at their last value indefinitely instead
-        // of reflecting that tracking actually stopped. Apply the same debounced-loss
-        // decay handlePoseResults' else-branch runs, without touching pose math.
-        nativeFilterRef.current?.reset();
-        lostFramesRef.current += 1;
-        if (lostFramesRef.current > 6) {
-          translateX.value = withTiming(0, { duration: 250 });
-          translateY.value = withTiming(0, { duration: 250 });
-          scale.value = withTiming(1, { duration: 250 });
-          rotateDeg.value = withTiming(0, { duration: 250 });
-          opacity.value = withTiming(0.85, { duration: 200 });
-          setIsTrackerActive(false);
-          setTrackingState('TRACKING_LOST');
-        }
-        return;
-      }
-
-      // The web path sets this via WebCameraFeed's onTrackerReady prop; the native
-      // <Camera> branch had no equivalent at all, so the "AI Body Tracking Active"
-      // pill could never show on native regardless of whether tracking was actually
-      // working -- confirmed live this session. First successful frame with real
-      // landmarks is the same signal web already uses to mean "ready".
-      //
-      // Latched to fire exactly once, matching onTrackerReady's one-shot semantics.
-      // Setting it every frame instead would run at ~30-60Hz against the throttled
-      // ~5Hz setter below that writes real pose fitness, so the pill would win/lose
-      // by whichever wrote last and visibly strobe whenever tracking was degraded.
-      if (!hasTrackedRef.current) {
-        hasTrackedRef.current = true;
-        setIsTrackerActive(true);
-      }
-      // A real landmark frame means the camera is genuinely producing output --
-      // clear any stale error banner even if the user hasn't tapped Retry yet
-      // (e.g. a transient error that self-resolved on this same <Camera> instance).
-      setCameraError((prev) => (prev ? null : prev));
 
       // Evaluate pose
       const normalizedLandmarks = landmarks.map((p: any) => ({
@@ -782,10 +678,13 @@ export default function ARTryOnScreen() {
         timestamp
       });
     },
-    [handlePoseResults, translateX, translateY, scale, rotateDeg, opacity]
+    [handlePoseResults, handleTrackingLost, isTrackingSessionActive]
   );
 
-  const onNativePoseError = useCallback((e: any) => console.error(e), []);
+  const onNativePoseError = useCallback((e: any) => {
+    handleTrackingLost();
+    console.error(e);
+  }, [handleTrackingLost]);
 
   const poseDetectionCallbacks = useMemo(
     () => ({ onResults: onNativePoseResults, onError: onNativePoseError }),
@@ -883,26 +782,6 @@ export default function ARTryOnScreen() {
   const goBack = useSafeBack('/');
   const handleBack = goBack;
 
-  const [isFocused, setIsFocused] = useState(false);
-  useFocusEffect(
-    useCallback(() => {
-      setIsFocused(true);
-      return () => setIsFocused(false);
-    }, [])
-  );
-
-  // isActive only gated on nav focus (above) never stopped the camera/GPU pose
-  // inference when the app itself backgrounds while this screen stays focused --
-  // vision-camera drives its capture session purely off the isActive prop, not
-  // the host Activity lifecycle. Privacy- and battery-relevant since this reads
-  // live camera frames.
-  const [isAppActive, setIsAppActive] = useState(AppState.currentState === 'active');
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      setIsAppActive(state === 'active');
-    });
-    return () => sub.remove();
-  }, []);
   if (hasConsented === false) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -922,7 +801,7 @@ export default function ARTryOnScreen() {
     );
   }
 
-  if (loading) {
+  if (loading || hasConsented === null) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.tint} />
@@ -1172,8 +1051,10 @@ export default function ARTryOnScreen() {
         >
           {Platform.OS === 'web' ? (
             <WebCameraFeed
+              key={trackingSessionKey}
+              active={cameraActive}
               onPoseResults={handlePoseResults}
-              onTrackerReady={(ready) => setIsTrackerActive(ready)}
+              onTrackingLost={handleTrackingLost}
             />
           ) : device ? (
             <Camera
@@ -1181,7 +1062,7 @@ export default function ARTryOnScreen() {
               style={styles.camera}
               device={device}
               format={format}
-              isActive={mode === '2d' && isFocused && isAppActive}
+              isActive={cameraActive && !cameraError}
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
               onLayout={poseDetection.cameraViewLayoutChangeHandler}
@@ -1189,9 +1070,7 @@ export default function ARTryOnScreen() {
               onError={(e: any) => {
                 console.warn('Camera Error:', e);
                 setCameraError(e?.message || 'Camera error');
-                hasTrackedRef.current = false;
-                setIsTrackerActive(false);
-                setTrackingState(null);
+                handleTrackingLost();
               }}
             />
           ) : (
@@ -1204,6 +1083,7 @@ export default function ARTryOnScreen() {
           {garmentMetadata && (
             <GarmentRenderer
               ref={garmentRendererRef}
+              visible={trackingEnabled && isTrackerActive}
               modelUrl={validatedUrl}
               metadata={garmentMetadata}
               fitModifier={fitModifier}
@@ -1235,11 +1115,11 @@ export default function ARTryOnScreen() {
 
           <View style={[styles.overlayContainer, { pointerEvents: 'box-none' }]}>
             {/* AI Tracking Status Pill */}
-            {isTrackerActive && (
+            {trackingEnabled && (
               <View style={styles.trackingPill}>
-                <View style={[styles.statusDot, { backgroundColor: trackingState === 'TURN_TOO_FAR' ? '#FFB800' : '#00E5FF' }]} />
+                <View style={[styles.statusDot, { backgroundColor: trackingStatus === 'tracking' ? '#00E5FF' : '#FFB800' }]} />
                 <Text style={styles.trackingPillText}>
-                  {trackingState === 'TURN_TOO_FAR' ? 'Turn to Face the Camera' : 'AI Body Tracking Active'}
+                  {AR_TRACKING_GUIDANCE[trackingStatus]}
                 </Text>
               </View>
             )}
@@ -1248,7 +1128,7 @@ export default function ARTryOnScreen() {
         </View>
       )}
 
-      {sizingReady && recommendedSize && fitZones.length > 0 && showFit && (
+      {sizingReady && recommendedSize && (fitZones.length > 0 || lengthFit) && showFit && (
         <View style={[styles.fitPanel, { pointerEvents: 'box-none' }]}>
           <View style={[styles.fitCard, { borderColor: colors.tint }]}>
             <View style={styles.fitHeader}>
@@ -1263,7 +1143,7 @@ export default function ARTryOnScreen() {
               </TouchableOpacity>
             </View>
             {fitZones.map((z) => {
-              const vColor = z.verdict === 'snug' ? '#FFCC00' : z.verdict === 'roomy' ? '#4DA3FF' : '#34C759';
+              const vColor = z.verdict === 'too_tight' ? '#FF6B6B' : z.verdict === 'snug' ? '#FFCC00' : z.verdict === 'roomy' ? '#4DA3FF' : '#34C759';
               return (
                 <View key={z.zone} style={styles.fitRow}>
                   <Text style={styles.fitZone}>{z.zone}</Text>
@@ -1271,7 +1151,18 @@ export default function ARTryOnScreen() {
                 </View>
               );
             })}
-            <Text style={styles.fitNote}>Estimated from your measurements</Text>
+            {lengthFit && (
+              <View style={styles.fitRow}>
+                <Text style={styles.fitZone}>Length</Text>
+                <Text style={[styles.fitVerdict, { color: lengthFit.verdict === 'appropriate' ? '#34C759' : '#FFCC00' }]}>
+                  {lengthFit.verdict === 'appropriate' ? 'Typical' : lengthFit.verdict === 'runs_short' ? 'Shorter' : 'Longer'}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.fitNote}>
+              {lengthFit ? 'Length: rough camera estimate for a hip-covering top. Other fit: saved measurements. Not a fit guarantee.'
+                : 'Estimated from your measurements'}
+            </Text>
           </View>
         </View>
       )}
@@ -1279,7 +1170,7 @@ export default function ARTryOnScreen() {
         visible={showHintModal}
         icon="camera"
         title="Virtual Try-On"
-        message="Experience how garments fit on your own body in real-time. Stand back so your full body is visible."
+        message="Preview clothing on your body. Face the camera in good light with your shoulders and hips visible. Fit guidance is approximate, not a fit guarantee."
         onAcknowledge={handleAcknowledgeHint}
       />
     </SafeAreaView>
@@ -1449,6 +1340,7 @@ const styles = StyleSheet.create({
       : {}),
   },
   trackingPill: {
+    maxWidth: '90%',
     position: 'absolute',
     top: 16,
     right: 16,
@@ -1469,6 +1361,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   trackingPillText: {
+    flexShrink: 1,
     color: '#F8FAFC',
     fontSize: 11,
     fontWeight: '700',
