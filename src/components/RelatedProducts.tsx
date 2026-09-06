@@ -1,3 +1,4 @@
+import type { Database } from '@/src/types/database.types';
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { Colors, Type, Spacing } from '@/constants/theme';
@@ -27,7 +28,7 @@ export function RelatedProducts({
   currentProductId: string;
   currentSubCategoryId?: string | null;
 }) {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<(Database['public']['Tables']['products']['Row'] & { categories?: any, category?: any })[]>([]);
   const { wishlistIds } = useWishlist();
   const { user } = useAuth();
   const theme = useColorScheme();
@@ -111,7 +112,7 @@ export function RelatedProducts({
         data={products}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => <ProductCard product={item} variant="rail" />}
+        renderItem={({ item }: { item: any }) => <ProductCard product={item} variant="rail" />}
       />
     </View>
   );

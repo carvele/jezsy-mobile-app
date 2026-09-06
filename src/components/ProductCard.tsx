@@ -1,3 +1,4 @@
+import type { Database } from '@/src/types/database.types';
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Pressable, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -21,7 +22,7 @@ const RAIL_WIDTH = 150;
 const LOW_STOCK_THRESHOLD = 5;
 
 type Props = {
-  product: any;
+  product: Database['public']['Tables']['products']['Row'] & { categories?: any, category?: any };
   variant?: ProductCardVariant;
   /** Shown as a "Your size" chip when the fit recommender has a match. */
   recommendedSize?: string | null;

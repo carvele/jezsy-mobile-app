@@ -242,6 +242,8 @@ export default function ExploreScreen() {
   };
 
   // Back button handler
+  const searchReqId = useRef(0);
+
   const handleBack = () => {
     if (isSearchActive) {
       setIsSearchActive(false);
@@ -260,6 +262,7 @@ export default function ExploreScreen() {
   // All standard filters (size, color, price, fit, material, tags, sale, AR, new arrivals)
   // are pushed server-side. Only the fit-aware My Size filter remains client-side.
   const fetchSearchResults = useCallback(async (text: string) => {
+    const currentReqId = ++searchReqId.current;
     if (!text.trim()) {
       setSearchResults([]);
       setSearchError(null);
@@ -321,6 +324,7 @@ export default function ExploreScreen() {
           .limit(PAGE_SIZE);
 
         if (!fbError && fbData) {
+          if (currentReqId !== searchReqId.current) return;
           setSearchResults(fbData);
           setSearchError(null);
           return;
@@ -330,6 +334,7 @@ export default function ExploreScreen() {
         setSearchError(error.message || 'Search failed');
         showToast('Search encountered an error. Please try again.', 'error');
       } else if (data) {
+        if (currentReqId !== searchReqId.current) return;
         setSearchResults(data);
         setSearchError(null);
       }
@@ -351,7 +356,10 @@ export default function ExploreScreen() {
   // Trigger search on query change
   useEffect(() => {
     if (isSearchActive) {
-      fetchSearchResults(searchQuery);
+      const timeoutId = setTimeout(() => {
+        fetchSearchResults(searchQuery);
+      }, 300);
+      return () => clearTimeout(timeoutId);
     }
   }, [searchQuery, isSearchActive, fetchSearchResults]);
 
