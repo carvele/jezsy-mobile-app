@@ -38,6 +38,7 @@ export default function TabLayout() {
     tabBarInactiveTintColor: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)',
     headerShown: false,
     tabBarButton: HapticTab,
+    detachInactiveScreens: Platform.OS !== 'web',
     tabBarShowLabel: true,
     tabBarLabelStyle: {
       fontSize: isCompact ? 10 : 11,
