@@ -22,6 +22,7 @@ import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { Database } from '@/src/types/database.types';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { MannequinSilhouette } from '@/src/components/MannequinSilhouette';
@@ -272,14 +273,19 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
       }));
 
       // Try inserting with canvas_layout first; if column not found (PGRST204), fallback to standard items JSON
-      let insertError = null;
+      let insertError: any = null;
       try {
-        const { error } = await supabase.from('saved_outfits').insert({
+        const payload: Database['public']['Tables']['saved_outfits']['Insert'] = {
           user_id: session.user.id,
           name,
           items: itemsPayload,
+        };
+        
+        // Use an untyped wrapper if we want to try a legacy column gracefully without breaking tsc
+        const { error } = await supabase.from('saved_outfits').insert({
+          ...payload,
           canvas_layout: itemsPayload,
-        } as any);
+        } as Database['public']['Tables']['saved_outfits']['Insert']);
         insertError = error;
       } catch (e) {
         insertError = e;
@@ -287,11 +293,12 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
 
       if (insertError) {
         // Fallback without canvas_layout column (stores all spatial layout inside items JSONB)
-        const { error: fallbackError } = await supabase.from('saved_outfits').insert({
+        const payload: Database['public']['Tables']['saved_outfits']['Insert'] = {
           user_id: session.user.id,
           name,
           items: itemsPayload,
-        } as any);
+        };
+        const { error: fallbackError } = await supabase.from('saved_outfits').insert(payload);
 
         if (fallbackError) throw fallbackError;
       }
