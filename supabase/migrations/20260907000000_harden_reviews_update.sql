@@ -2,7 +2,7 @@
 -- This trigger ensures that only staff can update privileged fields.
 
 CREATE OR REPLACE FUNCTION public.harden_reviews_update_trigger()
-RETURNS TRIGGER AS 
+RETURNS TRIGGER AS $$
 BEGIN
   -- If the user is staff or admin, allow all changes
   IF public.is_staff_or_admin() THEN
@@ -20,7 +20,7 @@ BEGIN
 
   RETURN NEW;
 END;
- LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS tr_harden_reviews_update ON public.reviews;
 CREATE TRIGGER tr_harden_reviews_update

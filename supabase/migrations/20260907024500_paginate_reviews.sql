@@ -11,14 +11,14 @@ LANGUAGE sql
 STABLE
 SECURITY INVOKER
 SET search_path = public, pg_temp
-AS 
+AS $$
   SELECT r, rv.vote_type
   FROM public.reviews r
   LEFT JOIN public.review_votes rv ON rv.review_id = r.id AND rv.user_id = (select auth.uid())
   WHERE r.product_id = p_product_id
   ORDER BY r.is_pinned DESC NULLS LAST, r.created_at DESC
   LIMIT p_limit OFFSET p_offset;
-;
+$$;
 
 REVOKE ALL ON FUNCTION public.get_reviews_with_user_vote(uuid, int, int) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_reviews_with_user_vote(uuid, int, int) TO authenticated, anon;
@@ -27,7 +27,7 @@ CREATE OR REPLACE FUNCTION public.get_review_stats(p_product_id uuid)
 RETURNS json
 LANGUAGE sql
 STABLE
-AS 
+AS $$
   SELECT json_build_object(
     'count', COUNT(*),
     'average', COALESCE(AVG(rating), 0),
@@ -41,5 +41,5 @@ AS
   )
   FROM public.reviews
   WHERE product_id = p_product_id;
-;
+$$;
 GRANT EXECUTE ON FUNCTION public.get_review_stats(uuid) TO authenticated, anon;
