@@ -47,23 +47,29 @@ export default function ResetPasswordScreen() {
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
+    } catch (err: any) {
+      showToast(translatePasswordServerError(err.message ?? 'Could not update your password.'), 'error');
+      setSubmitting(false);
+      return;
+    }
 
+    try {
       // A password reset is often "I think I was compromised" -- revoke any
       // session on other devices, not just this one.
       await supabase.auth.signOut({ scope: 'others' });
-
-      // Only now does the recovery session stop being a recovery session, so
-      // routing may release the user into the app.
-      endPasswordRecovery();
-
-      Alert.alert('Password Updated', 'Your password has been reset.', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') },
-      ]);
     } catch (err: any) {
-      showToast(translatePasswordServerError(err.message ?? 'Could not update your password.'), 'error');
-    } finally {
-      setSubmitting(false);
+      // Soft failure: password was changed, but we couldn't revoke other sessions.
+      console.warn('Failed to revoke other sessions after password reset', err);
     }
+
+    // Only now does the recovery session stop being a recovery session, so
+    // routing may release the user into the app.
+    endPasswordRecovery();
+
+    Alert.alert('Password Updated', 'Your password has been reset.', [
+      { text: 'OK', onPress: () => router.replace('/(tabs)') },
+    ]);
+    setSubmitting(false);
   };
 
   // Routing pins the user to this screen while a recovery session is active,
