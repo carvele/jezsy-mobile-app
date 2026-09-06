@@ -487,6 +487,7 @@ export type Database = {
           lockout_until: string | null
           login_history: Json | null
           name: string | null
+          session_id: string | null
           staff_email: string | null
           staff_name: string | null
           status: string | null
@@ -501,6 +502,7 @@ export type Database = {
           lockout_until?: string | null
           login_history?: Json | null
           name?: string | null
+          session_id?: string | null
           staff_email?: string | null
           staff_name?: string | null
           status?: string | null
@@ -515,6 +517,7 @@ export type Database = {
           lockout_until?: string | null
           login_history?: Json | null
           name?: string | null
+          session_id?: string | null
           staff_email?: string | null
           staff_name?: string | null
           status?: string | null
@@ -658,6 +661,7 @@ export type Database = {
         Row: {
           adjusted_score: number | null
           available: number | null
+          cascade_deleted_at: string | null
           category: string | null
           color: string
           created_at: string | null
@@ -680,6 +684,7 @@ export type Database = {
         Insert: {
           adjusted_score?: number | null
           available?: number | null
+          cascade_deleted_at?: string | null
           category?: string | null
           color?: string
           created_at?: string | null
@@ -702,6 +707,7 @@ export type Database = {
         Update: {
           adjusted_score?: number | null
           available?: number | null
+          cascade_deleted_at?: string | null
           category?: string | null
           color?: string
           created_at?: string | null
@@ -854,6 +860,7 @@ export type Database = {
           data: Json | null
           id: string
           is_read: boolean | null
+          push_expired_at: string | null
           pushed_at: string | null
           title: string
           type: string
@@ -866,6 +873,7 @@ export type Database = {
           data?: Json | null
           id?: string
           is_read?: boolean | null
+          push_expired_at?: string | null
           pushed_at?: string | null
           title: string
           type: string
@@ -878,6 +886,7 @@ export type Database = {
           data?: Json | null
           id?: string
           is_read?: boolean | null
+          push_expired_at?: string | null
           pushed_at?: string | null
           title?: string
           type?: string
@@ -1385,6 +1394,7 @@ export type Database = {
           created_at: string
           id: string
           image_url: string | null
+          inventory_id: string | null
           product_id: string | null
           product_name: string | null
           quantity: number
@@ -1397,6 +1407,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          inventory_id?: string | null
           product_id?: string | null
           product_name?: string | null
           quantity?: number
@@ -1409,6 +1420,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string | null
+          inventory_id?: string | null
           product_id?: string | null
           product_name?: string | null
           quantity?: number
@@ -1417,6 +1429,13 @@ export type Database = {
           unit_price?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "reservation_items_inventory_id_fkey"
+            columns: ["inventory_id"]
+            isOneToOne: false
+            referencedRelation: "inventory"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reservation_items_product_id_fkey"
             columns: ["product_id"]
@@ -2177,6 +2196,11 @@ export type Database = {
           prev_total: number
         }[]
       }
+      admin_manage_device: {
+        Args: { _action: string; _fingerprint: string; _value?: string }
+        Returns: undefined
+      }
+      admin_prune_devices: { Args: { _cutoff: string }; Returns: number }
       assert_bookable_slot: {
         Args: {
           _appointment: string
@@ -2197,6 +2221,25 @@ export type Database = {
         Returns: boolean
       }
       check_unattended_reservations: { Args: never; Returns: undefined }
+      complete_reservation_pickup: {
+        Args: {
+          _method?: string
+          _pickup_token?: string
+          _reservation_id: string
+        }
+        Returns: Json
+      }
+      create_admin_reservation: {
+        Args: {
+          _appointment_time: string
+          _color: string
+          _customer_id: string
+          _payment_status?: string
+          _product_id: string
+          _size: string
+        }
+        Returns: Json
+      }
       create_reservation: {
         Args: {
           _appointment_time: string
@@ -2264,8 +2307,9 @@ export type Database = {
           wardrobe_privacy: string
         }[]
       }
+      get_review_stats: { Args: { p_product_id: string }; Returns: Json }
       get_reviews_with_user_vote: {
-        Args: { p_product_id: string }
+        Args: { p_limit?: number; p_offset?: number; p_product_id: string }
         Returns: {
           review: Database["public"]["Tables"]["reviews"]["Row"]
           user_vote: string
@@ -2358,6 +2402,8 @@ export type Database = {
         Args: { p_chat_id: string; p_user_id: string }
         Returns: boolean
       }
+      is_device_approved: { Args: never; Returns: boolean }
+      is_owner: { Args: never; Returns: boolean }
       is_staff_or_admin: { Args: never; Returns: boolean }
       mark_direct_message_read: {
         Args: { p_message_id: string }
@@ -2369,6 +2415,16 @@ export type Database = {
       }
       process_account_deletion: { Args: { _request_id: string }; Returns: Json }
       recalculate_inventory_stock: { Args: never; Returns: Json }
+      record_boutique_sale: {
+        Args: {
+          p_inventory_id: string
+          p_quantity: number
+          p_sale_price?: number
+          p_staff_id?: string
+          p_staff_name?: string
+        }
+        Returns: Json
+      }
       reject_account_deletion_request: {
         Args: { _request_id: string }
         Returns: Json
