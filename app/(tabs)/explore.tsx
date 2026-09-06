@@ -302,6 +302,30 @@ export default function ExploreScreen() {
       }).select(PRODUCT_SELECT);
 
       if (error) {
+        console.warn('[Explore] search_catalog RPC failed on search, trying direct query fallback:', error);
+        let fbQuery = supabase
+          .from('products')
+          .select(PRODUCT_SELECT)
+          .eq('deleted', false)
+          .eq('visibility', 'public');
+
+        if (matchingCategoryIds.length > 0) {
+          fbQuery = fbQuery.or(`name.ilike.%${safeText}%,category_id.in.(${matchingCategoryIds.join(',')})`);
+        } else {
+          fbQuery = fbQuery.ilike('name', `%${safeText}%`);
+        }
+
+        const { data: fbData, error: fbError } = await fbQuery
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .limit(PAGE_SIZE);
+
+        if (!fbError && fbData) {
+          setSearchResults(fbData);
+          setSearchError(null);
+          return;
+        }
+
         console.error('Error fetching search results:', error);
         setSearchError(error.message || 'Search failed');
         showToast('Search encountered an error. Please try again.', 'error');
@@ -330,6 +354,56 @@ export default function ExploreScreen() {
       fetchSearchResults(searchQuery);
     }
   }, [searchQuery, isSearchActive, fetchSearchResults]);
+
+  // Fallback direct PostgREST products query if search_catalog RPC fails (e.g. DB migration not yet applied)
+  const buildDirectProductsQuery = useCallback(() => {
+    let query = supabase
+      .from('products')
+      .select(PRODUCT_SELECT)
+      .eq('deleted', false)
+      .eq('visibility', 'public');
+
+    if (showAllProducts) {
+      // null = all products
+    } else if (selectedCategory && selectedSubCategory) {
+      if (selectedSubCategory === 'View All') {
+        const subIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
+        if (subIds.length > 0) {
+          query = query.in('category_id', subIds);
+        }
+      } else {
+        const subId = subCategoryIdByName[selectedSubCategory];
+        if (!subId) return null;
+        query = query.eq('category_id', subId);
+      }
+    } else {
+      return null;
+    }
+
+    if (selectedSaleOnly) {
+      query = query.eq('on_sale', true);
+    }
+    if (selectedNewArrivalsOnly) {
+      query = query.eq('is_new_arrival', true);
+    }
+
+    if (selectedSort === 'priceAsc') {
+      query = query.order('price', { ascending: true });
+    } else if (selectedSort === 'priceDesc') {
+      query = query.order('price', { ascending: false });
+    } else if (selectedSort === 'rating') {
+      query = query.order('rating', { ascending: false });
+    } else if (selectedSort === 'popular') {
+      query = query.order('review_count', { ascending: false });
+    } else {
+      query = query.order('created_at', { ascending: false });
+    }
+
+    return query.order('id', { ascending: true });
+  }, [
+    showAllProducts, selectedCategory, selectedSubCategory, subCategoriesByParent, subCategoryIdByName,
+    selectedSaleOnly, selectedNewArrivalsOnly, selectedSort,
+  ]);
 
   // Builds the filtered/sorted RPC call for browse mode (category drill-down or Shop All).
   // Shared by the initial fetch, pull-to-refresh, and infinite scroll load-more so they
@@ -399,8 +473,20 @@ export default function ExploreScreen() {
     query
       .range(0, PAGE_SIZE - 1)
       .then(
-        ({ data, error }: { data: any; error: any }) => {
+        async ({ data, error }: { data: any; error: any }) => {
           if (error) {
+            console.warn('[Explore] search_catalog RPC failed, falling back to direct products query:', error);
+            const fbQuery = buildDirectProductsQuery();
+            if (fbQuery) {
+              const { data: fbData, error: fbError } = await fbQuery.range(0, PAGE_SIZE - 1);
+              if (!fbError && fbData) {
+                setProducts(fbData);
+                setHasMoreProducts(fbData.length === PAGE_SIZE);
+                setProductsError(null);
+                setLoading(false);
+                return;
+              }
+            }
             console.error('Error fetching products:', error);
             setProductsError(error.message || 'Could not load products');
             showToast('Could not load products. Please try again.', 'error');
@@ -411,13 +497,25 @@ export default function ExploreScreen() {
           }
           setLoading(false);
         },
-        (err: unknown) => {
+        async (err: unknown) => {
+          console.warn('[Explore] Network/RPC error loading products, trying direct fallback:', err);
+          const fbQuery = buildDirectProductsQuery();
+          if (fbQuery) {
+            const { data: fbData, error: fbError } = await fbQuery.range(0, PAGE_SIZE - 1);
+            if (!fbError && fbData) {
+              setProducts(fbData);
+              setHasMoreProducts(fbData.length === PAGE_SIZE);
+              setProductsError(null);
+              setLoading(false);
+              return;
+            }
+          }
           console.error('Network or server error loading products:', err);
           setProductsError('Network or server error');
           setLoading(false);
         }
       );
-  }, [buildProductsQuery, showToast]);
+  }, [buildProductsQuery, buildDirectProductsQuery, showToast]);
 
   useEffect(() => {
     fetchInitialProducts();
@@ -432,6 +530,18 @@ export default function ExploreScreen() {
     try {
       const { data, error } = await query.range(0, PAGE_SIZE - 1);
       if (error) {
+        console.warn('[Explore] search_catalog RPC failed on refresh, falling back to direct query:', error);
+        const fbQuery = buildDirectProductsQuery();
+        if (fbQuery) {
+          const { data: fbData, error: fbError } = await fbQuery.range(0, PAGE_SIZE - 1);
+          if (!fbError && fbData) {
+            setProducts(fbData);
+            setProductsPage(0);
+            setHasMoreProducts(fbData.length === PAGE_SIZE);
+            setProductsError(null);
+            return;
+          }
+        }
         console.error('Error refreshing products:', error);
         setProductsError(error.message || 'Could not refresh products');
         showToast('Could not refresh products. Please try again.', 'error');
@@ -442,12 +552,24 @@ export default function ExploreScreen() {
         setProductsError(null);
       }
     } catch (err) {
+      console.warn('[Explore] Unexpected error refreshing products, trying direct query:', err);
+      const fbQuery = buildDirectProductsQuery();
+      if (fbQuery) {
+        const { data: fbData, error: fbError } = await fbQuery.range(0, PAGE_SIZE - 1);
+        if (!fbError && fbData) {
+          setProducts(fbData);
+          setProductsPage(0);
+          setHasMoreProducts(fbData.length === PAGE_SIZE);
+          setProductsError(null);
+          return;
+        }
+      }
       console.error('Unexpected error refreshing products:', err);
       setProductsError('Refresh failed');
     } finally {
       setRefreshing(false);
     }
-  }, [buildProductsQuery, showToast]);
+  }, [buildProductsQuery, buildDirectProductsQuery, showToast]);
 
   const loadMoreProducts = useCallback(async () => {
     if (loading || loadingMore || !hasMoreProducts) return;
@@ -458,8 +580,20 @@ export default function ExploreScreen() {
     setLoadingMore(true);
     try {
       const from = nextPage * PAGE_SIZE;
-      const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+      const to = from + PAGE_SIZE - 1;
+      const { data, error } = await query.range(from, to);
       if (error) {
+        console.warn('[Explore] search_catalog RPC failed on loadMore, trying direct query fallback:', error);
+        const fbQuery = buildDirectProductsQuery();
+        if (fbQuery) {
+          const { data: fbData, error: fbError } = await fbQuery.range(from, to);
+          if (!fbError && fbData) {
+            setProducts((prev) => [...prev, ...fbData]);
+            setProductsPage(nextPage);
+            setHasMoreProducts(fbData.length === PAGE_SIZE);
+            return;
+          }
+        }
         console.error('Error fetching more products:', error);
       } else if (data) {
         setProducts((prev) => [...prev, ...data]);
@@ -469,7 +603,7 @@ export default function ExploreScreen() {
     } finally {
       setLoadingMore(false);
     }
-  }, [buildProductsQuery, loading, loadingMore, hasMoreProducts, productsPage]);
+  }, [buildProductsQuery, buildDirectProductsQuery, loading, loadingMore, hasMoreProducts, productsPage]);
 
   // Fit-aware sizing: recommended size per product for the currently visible
   // list, computed from the user's stored measurements. Empty when the user
@@ -490,7 +624,67 @@ export default function ExploreScreen() {
   // "My Size" filter, which relies on personal body measurements that cannot
   // be expressed in SQL.
   const processedProducts = useMemo(() => {
-    const source = isSearchActive ? searchResults : products;
+    let source = isSearchActive ? searchResults : products;
+
+    // Direct fallback client-side filter guards in case RPC failed
+    if (selectedSizes.length > 0) {
+      source = source.filter((p) => {
+        const sizes = p.sizes || [];
+        return selectedSizes.some((s) => sizes.includes(s));
+      });
+    }
+    if (selectedColors.length > 0) {
+      source = source.filter((p) => {
+        const color = (p.color || '').toLowerCase();
+        const baseColor = (p.base_color || '').toLowerCase();
+        return selectedColors.some((c) => color.includes(c.toLowerCase()) || baseColor.includes(c.toLowerCase()));
+      });
+    }
+    if (selectedArOnly) {
+      source = source.filter((p) => !!p.model_3d_url && (p.tags || []).includes('AR Try-On'));
+    }
+    if (selectedFits.length > 0) {
+      source = source.filter((p) => {
+        const fit = (p.fit_and_sizing || '').toLowerCase();
+        return selectedFits.some((f) => fit.includes(f.toLowerCase()));
+      });
+    }
+    if (selectedMaterials.length > 0) {
+      source = source.filter((p) => {
+        const mat = (p.material || '').toLowerCase();
+        return selectedMaterials.some((m) => mat.includes(m.toLowerCase()));
+      });
+    }
+    if (selectedTags.length > 0) {
+      source = source.filter((p) => {
+        const tags = p.tags || [];
+        return selectedTags.some((t) => tags.includes(t));
+      });
+    }
+    if (customMinPrice || customMaxPrice || selectedPriceRange !== 'all') {
+      let minPrice: number | null = customMinPrice ? parseFloat(customMinPrice) : null;
+      let maxPrice: number | null = customMaxPrice ? parseFloat(customMaxPrice) : null;
+      if (selectedPriceRange === 'under1000') { maxPrice = 999.99; }
+      else if (selectedPriceRange === '1000to2000') { minPrice = 1000; maxPrice = 2000; }
+      else if (selectedPriceRange === '2000to4000') { minPrice = 2000; maxPrice = 4000; }
+      else if (selectedPriceRange === 'over4000') { minPrice = 4000.01; }
+
+      if (minPrice !== null && !isNaN(minPrice)) {
+        const minVal = minPrice;
+        source = source.filter((p) => {
+          const effectivePrice = p.on_sale && p.sale_price != null ? p.sale_price : p.price;
+          return (effectivePrice ?? 0) >= minVal;
+        });
+      }
+      if (maxPrice !== null && !isNaN(maxPrice)) {
+        const maxVal = maxPrice;
+        source = source.filter((p) => {
+          const effectivePrice = p.on_sale && p.sale_price != null ? p.sale_price : p.price;
+          return (effectivePrice ?? 0) <= maxVal;
+        });
+      }
+    }
+
     if (!selectedMySizeOnly) return source;
 
     return source.filter((product) => {
@@ -500,7 +694,11 @@ export default function ExploreScreen() {
       if (sizes.length > 0 && !sizes.includes(rec)) return false;
       return true;
     });
-  }, [products, searchResults, isSearchActive, selectedMySizeOnly, recommendedSizes]);
+  }, [
+    products, searchResults, isSearchActive, selectedMySizeOnly, recommendedSizes,
+    selectedSizes, selectedColors, selectedArOnly, selectedFits, selectedMaterials, selectedTags,
+    customMinPrice, customMaxPrice, selectedPriceRange,
+  ]);
 
   // Filter Modal Actions
   const openFilterModal = () => {
