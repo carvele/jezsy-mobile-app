@@ -95,7 +95,8 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       const { data, error } = await supabase
         .from('conversations')
         .select('*')
-        .order('last_message_time', { ascending: false });
+        .order('last_message_time', { ascending: false })
+        .limit(50);
         
       if (error) throw error;
       setConversations(data || []);
@@ -177,7 +178,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     try {
       const isStaff = profile?.role === 'staff' || profile?.role === 'owner';
       const senderName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : (isStaff ? 'Boutique Support' : 'Customer');
-      const payload: any = {
+      const payload: Database['public']['Tables']['messages']['Insert'] = {
         conversation_id: conversationId,
         sender_id: session.user.id,
         sender_name: senderName,
