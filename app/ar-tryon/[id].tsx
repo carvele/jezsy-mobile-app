@@ -16,6 +16,8 @@ import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
 import { computeLiveLengthFit } from '@/src/utils/liveLengthFit';
 import { useARTrackingSession } from '@/src/hooks/useARTrackingSession';
 import { AR_TRACKING_GUIDANCE } from '@/src/utils/arTrackingSession';
+import { FilamentExperimentRenderer } from '@/src/components/AR/FilamentExperimentRenderer';
+import { filamentReplayFrame, FILAMENT_REPLAY_INTERVAL_MS } from '@/src/utils/filamentReplay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
 import { useAuth } from '@/src/context/AuthContext';
@@ -305,6 +307,11 @@ export default function ARTryOnScreen() {
   const [hasConsented, setHasConsented] = useState<boolean | null>(null);
   const [stageLayout, setStageLayout] = useState<{ width: number; height: number }>({ width: 390, height: 600 });
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
+  const experimentEnabled = __DEV__ && Platform.OS !== 'web' && process.env.EXPO_PUBLIC_AR_FILAMENT_EXPERIMENT === '1';
+  const [experimentRenderer, setExperimentRenderer] = useState<'three' | 'filament'>('three');
+  const [replay, setReplay] = useState(false);
+  const replayActive = experimentEnabled && replay;
+  const LiveRenderer = experimentEnabled && experimentRenderer === 'filament' ? FilamentExperimentRenderer : GarmentRenderer;
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
   // Phase 3: an explicit format so fieldOfView/videoWidth/videoHeight below are
@@ -393,7 +400,7 @@ export default function ARTryOnScreen() {
     && !loading && product?.id === id && (Platform.OS === 'web' || (hasPermission && !!device));
   const trackingEnabled = cameraActive && !cameraError && !arLoadError;
   const trackingSessionKey = JSON.stringify([id, product?.id, product?.model_3d_url, recommendedSize,
-    product?.measurements, cameraRetryKey, device?.id, stageWidth, stageHeight]);
+    product?.measurements, cameraRetryKey, device?.id, stageWidth, stageHeight, experimentRenderer, replayActive]);
   const { status: trackingStatus, lengthFit, report: reportTracking, isActive: isTrackingSessionActive } = useARTrackingSession(trackingEnabled, trackingSessionKey);
   const isTrackerActive = trackingStatus === 'tracking' || trackingStatus === 'turned';
   const handleTrackingLost = useCallback(() => { reportTracking('TRACKING_LOST'); }, [reportTracking]);
@@ -595,6 +602,12 @@ export default function ARTryOnScreen() {
   );
   
   const nativeFilterRef = React.useRef<PoseLandmarkFilter | null>(null);
+  useEffect(() => {
+    if (!replayActive || !trackingEnabled) return;
+    let frame = 0;
+    const timer = setInterval(() => handlePoseResults(filamentReplayFrame(frame++)), FILAMENT_REPLAY_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [replayActive, trackingEnabled, handlePoseResults]);
   if (!nativeFilterRef.current) {
     nativeFilterRef.current = new PoseLandmarkFilter(1.2, 0.015, 1.0);
   }
@@ -607,6 +620,7 @@ export default function ARTryOnScreen() {
   // the root instead of patching each downstream symptom separately.
   const onNativePoseResults = useCallback(
     (result: any) => {
+      if (replayActive) return;
       if (!isTrackingSessionActive()) return;
       let landmarks = result.results?.[0]?.landmarks?.[0];
       let worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
@@ -678,7 +692,7 @@ export default function ARTryOnScreen() {
         timestamp
       });
     },
-    [handlePoseResults, handleTrackingLost, isTrackingSessionActive]
+    [handlePoseResults, handleTrackingLost, isTrackingSessionActive, replayActive]
   );
 
   const onNativePoseError = useCallback((e: any) => {
@@ -986,6 +1000,21 @@ export default function ARTryOnScreen() {
         </TouchableOpacity>
       </View>
 
+      {experimentEnabled && mode === '2d' && (
+        <View style={{ padding: 8, backgroundColor: '#352b16', gap: 8 }}>
+          <Text style={{ color: 'white' }}>Renderer experiment only. Filament has no body occlusion yet.</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => {
+            setExperimentRenderer((current) => current === 'three' ? 'filament' : 'three');
+            setArLoadError(null);
+          }}>
+            <Text style={{ color: 'white' }}>Renderer: {experimentRenderer === 'three' ? 'Three.js reference' : 'Filament prototype'} (switch)</Text>
+          </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setReplay((current) => !current)}>
+            <Text style={{ color: 'white' }}>Input: {replayActive ? 'synthetic replay; camera paused' : 'live camera'} (switch)</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {mode === '3d' ? (
         <View style={styles.webviewContainer}>
           {Platform.OS === 'web' ? (
@@ -1062,7 +1091,7 @@ export default function ARTryOnScreen() {
               style={styles.camera}
               device={device}
               format={format}
-              isActive={cameraActive && !cameraError}
+              isActive={cameraActive && !cameraError && !replayActive}
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
               onLayout={poseDetection.cameraViewLayoutChangeHandler}
@@ -1081,7 +1110,10 @@ export default function ARTryOnScreen() {
 
           {/* Layer 2: 3D Garment WebGL Overlay */}
           {garmentMetadata && (
-            <GarmentRenderer
+            <LiveRenderer
+              key={experimentEnabled ? trackingSessionKey : undefined}
+              stageWidth={stageWidth}
+              stageHeight={stageHeight}
               ref={garmentRendererRef}
               visible={trackingEnabled && isTrackerActive}
               modelUrl={validatedUrl}
@@ -1128,7 +1160,7 @@ export default function ARTryOnScreen() {
         </View>
       )}
 
-      {sizingReady && recommendedSize && (fitZones.length > 0 || lengthFit) && showFit && (
+      {!replayActive && sizingReady && recommendedSize && (fitZones.length > 0 || lengthFit) && showFit && (
         <View style={[styles.fitPanel, { pointerEvents: 'box-none' }]}>
           <View style={[styles.fitCard, { borderColor: colors.tint }]}>
             <View style={styles.fitHeader}>
