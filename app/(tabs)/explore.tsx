@@ -103,6 +103,11 @@ export default function ExploreScreen() {
   // Products Loading State
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   // Pagination: filters/sort below run client-side over whatever's in
   // `products` so far, not the whole catalog -- growing that set page by
   // page as the user scrolls, same as any infinite-scroll grid.
@@ -111,24 +116,38 @@ export default function ExploreScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    try {
       const { data, error } = await supabase
         .from('categories')
         .select('*')
         .order('sort_order', { ascending: true });
-      if (data && !error) {
-        const tops = data.filter(c => !c.parent_id);
+      if (error) {
+        console.error('Error fetching categories:', error);
+        setCategoriesError(error.message || 'Could not load categories');
+      } else if (data) {
+        const tops = data.filter((c) => !c.parent_id);
         setTopCategories(tops);
         const hierarchy: Record<string, Category[]> = {};
-        tops.forEach(top => {
-          hierarchy[top.name] = data.filter(c => c.parent_id === top.id);
+        tops.forEach((top) => {
+          hierarchy[top.name] = data.filter((c) => c.parent_id === top.id);
         });
         setSubCategoriesByParent(hierarchy);
+        setCategoriesError(null);
       }
-    };
-    fetchCategories();
+    } catch (err) {
+      console.error('Failed to fetch categories:', err);
+      setCategoriesError('Could not load categories');
+    } finally {
+      setCategoriesLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   useEffect(() => {
     fetchColorOptions().then(setColorOptions);
@@ -243,8 +262,12 @@ export default function ExploreScreen() {
   const fetchSearchResults = useCallback(async (text: string) => {
     if (!text.trim()) {
       setSearchResults([]);
+      setSearchError(null);
+      setIsSearching(false);
       return;
     }
+    setIsSearching(true);
+    setSearchError(null);
     try {
       const safeText = text.replace(/[,()\"]/g, ' ').trim();
       if (!safeText) {
@@ -280,12 +303,19 @@ export default function ExploreScreen() {
 
       if (error) {
         console.error('Error fetching search results:', error);
+        setSearchError(error.message || 'Search failed');
+        showToast('Search encountered an error. Please try again.', 'error');
       } else if (data) {
         setSearchResults(data);
+        setSearchError(null);
       }
     } catch (err) {
+      // Screen-level indication a search had failed vs. genuinely returned nothing
       console.error(err);
+      setSearchError('Search failed. Please try again.');
       showToast('Search failed. Please try again.', 'error');
+    } finally {
+      setIsSearching(false);
     }
   }, [
     subCategoryIdsMatching, showToast,
@@ -352,33 +382,46 @@ export default function ExploreScreen() {
     customMinPrice, customMaxPrice, selectedPriceRange, selectedSort,
   ]);
 
-  // Fetch page 0 whenever the active category/subcategory/"Shop All" mode
-  // changes.
-  useEffect(() => {
+  // Fetch page 0 whenever the active category/subcategory/"Shop All" mode changes.
+  const fetchInitialProducts = useCallback(() => {
     const query = buildProductsQuery();
-    if (!query) { setProducts([]); return; }
+    if (!query) {
+      setProducts([]);
+      setProductsError(null);
+      return;
+    }
 
-    let cancelled = false;
     setLoading(true);
+    setProductsError(null);
     setProductsPage(0);
     setHasMoreProducts(true);
 
-    // Rendered as "no products in this category" indistinguishable from an
-    // actually empty subcategory without the toast below.
-    query.range(0, PAGE_SIZE - 1).then(({ data, error }: { data: any; error: any }) => {
-      if (cancelled) return;
-      if (error) {
-        console.error('Error fetching products:', error);
-        showToast('Could not load products. Please try again.', 'error');
-      } else if (data) {
-        setProducts(data);
-        setHasMoreProducts(data.length === PAGE_SIZE);
-      }
-      setLoading(false);
-    });
-
-    return () => { cancelled = true; };
+    query
+      .range(0, PAGE_SIZE - 1)
+      .then(
+        ({ data, error }: { data: any; error: any }) => {
+          if (error) {
+            console.error('Error fetching products:', error);
+            setProductsError(error.message || 'Could not load products');
+            showToast('Could not load products. Please try again.', 'error');
+          } else if (data) {
+            setProducts(data);
+            setHasMoreProducts(data.length === PAGE_SIZE);
+            setProductsError(null);
+          }
+          setLoading(false);
+        },
+        (err: unknown) => {
+          console.error('Network or server error loading products:', err);
+          setProductsError('Network or server error');
+          setLoading(false);
+        }
+      );
   }, [buildProductsQuery, showToast]);
+
+  useEffect(() => {
+    fetchInitialProducts();
+  }, [fetchInitialProducts]);
 
   // Re-runs page 0 for whatever category is active, so a pull always reflects
   // the current filters rather than resetting the user's place.
@@ -390,12 +433,17 @@ export default function ExploreScreen() {
       const { data, error } = await query.range(0, PAGE_SIZE - 1);
       if (error) {
         console.error('Error refreshing products:', error);
+        setProductsError(error.message || 'Could not refresh products');
         showToast('Could not refresh products. Please try again.', 'error');
       } else if (data) {
         setProducts(data);
         setProductsPage(0);
         setHasMoreProducts(data.length === PAGE_SIZE);
+        setProductsError(null);
       }
+    } catch (err) {
+      console.error('Unexpected error refreshing products:', err);
+      setProductsError('Refresh failed');
     } finally {
       setRefreshing(false);
     }
@@ -650,6 +698,107 @@ export default function ExploreScreen() {
 
   const activeFiltersCount = activeFilterChips.length;
 
+  const renderQuickFilterPills = () => {
+    const isAllActive = !selectedNewArrivalsOnly && !selectedSaleOnly && !selectedArOnly && !selectedMySizeOnly;
+    return (
+      <View style={[styles.quickFiltersWrapper, { borderBottomColor: colors.border }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFiltersScroll}>
+          <TouchableOpacity
+            style={[
+              styles.quickFilterChip,
+              {
+                backgroundColor: isAllActive ? colors.tint : colors.card,
+                borderColor: isAllActive ? colors.tint : colors.border,
+              },
+            ]}
+            onPress={() => {
+              setSelectedNewArrivalsOnly(false);
+              setSelectedSaleOnly(false);
+              setSelectedArOnly(false);
+              setSelectedMySizeOnly(false);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Show all items"
+          >
+            <Text style={[styles.quickFilterChipText, { color: isAllActive ? colors.onTint : colors.text, fontWeight: isAllActive ? '700' : '500' }]}>
+              All
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.quickFilterChip,
+              {
+                backgroundColor: selectedNewArrivalsOnly ? colors.tint : colors.card,
+                borderColor: selectedNewArrivalsOnly ? colors.tint : colors.border,
+              },
+            ]}
+            onPress={() => setSelectedNewArrivalsOnly((prev) => !prev)}
+            accessibilityRole="button"
+            accessibilityLabel="Filter by New Arrivals"
+          >
+            <Text style={[styles.quickFilterChipText, { color: selectedNewArrivalsOnly ? colors.onTint : colors.text, fontWeight: selectedNewArrivalsOnly ? '700' : '500' }]}>
+              New Arrivals
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.quickFilterChip,
+              {
+                backgroundColor: selectedSaleOnly ? colors.tint : colors.card,
+                borderColor: selectedSaleOnly ? colors.tint : colors.border,
+              },
+            ]}
+            onPress={() => setSelectedSaleOnly((prev) => !prev)}
+            accessibilityRole="button"
+            accessibilityLabel="Filter by On Sale"
+          >
+            <Text style={[styles.quickFilterChipText, { color: selectedSaleOnly ? colors.onTint : colors.text, fontWeight: selectedSaleOnly ? '700' : '500' }]}>
+              On Sale
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.quickFilterChip,
+              {
+                backgroundColor: selectedArOnly ? colors.tint : colors.card,
+                borderColor: selectedArOnly ? colors.tint : colors.border,
+              },
+            ]}
+            onPress={() => setSelectedArOnly((prev) => !prev)}
+            accessibilityRole="button"
+            accessibilityLabel="Filter by AR Try-On"
+          >
+            <Text style={[styles.quickFilterChipText, { color: selectedArOnly ? colors.onTint : colors.text, fontWeight: selectedArOnly ? '700' : '500' }]}>
+              AR Try-On
+            </Text>
+          </TouchableOpacity>
+
+          {sizingReady && sizingMeasurements && (
+            <TouchableOpacity
+              style={[
+                styles.quickFilterChip,
+                {
+                  backgroundColor: selectedMySizeOnly ? colors.tint : colors.card,
+                  borderColor: selectedMySizeOnly ? colors.tint : colors.border,
+                },
+              ]}
+              onPress={() => setSelectedMySizeOnly((prev) => !prev)}
+              accessibilityRole="button"
+              accessibilityLabel="Filter by My Size"
+            >
+              <Text style={[styles.quickFilterChipText, { color: selectedMySizeOnly ? colors.onTint : colors.text, fontWeight: selectedMySizeOnly ? '700' : '500' }]}>
+                My Size
+              </Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
   // The search and browse grids render an identical header differing only in
   // their results count and sort label. It used to be copy-pasted, so every
   // edit had to be made twice or the two drifted. A local function rather than
@@ -797,31 +946,72 @@ export default function ExploreScreen() {
           ) : (
             // Search Results Grid with Filter capabilities
             <View style={styles.flexOne}>
-              <MasonryList
-                data={processedProducts}
-                renderItem={renderProductItem}
-                keyExtractor={(item) => item.id}
-                key={`grid-${columns}`}
-                numColumns={columns}
-                contentContainerStyle={styles.productList}
-                ListHeaderComponent={
-                  <View style={{ backgroundColor: colors.background }}>
-                    {renderGridHeader(
-                      `${processedProducts.length} results found for "${searchQuery}"`,
-                      'Sort',
-                      'Open sort options',
-                    )}
+              {isSearching ? (
+                <View style={styles.skeletonGrid}>
+                  <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
+                </View>
+              ) : searchError ? (
+                <View style={styles.errorContainer}>
+                  <View style={[styles.errorIconCircle, { backgroundColor: colors.notification + '15' }]}>
+                    <IconSymbol name="exclamationmark.triangle.fill" size={32} color={colors.notification} />
                   </View>
-                }
-                ListEmptyComponent={
-                  <BrandEmptyState
-                    icon="bag.fill"
-                    title="No matches"
-                    message="Nothing matches this search and filter combination. Try widening it."
-                  />
-                }
-                stickyHeaderIndices={[0]}
-              />
+                  <Text style={[styles.errorTitle, { color: colors.text }]}>Search failed</Text>
+                  <Text style={[styles.errorMessage, { color: colors.secondaryText }]}>
+                    We could not load search results. Please check your connection.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.retryButton, { backgroundColor: colors.tint }]}
+                    onPress={() => fetchSearchResults(searchQuery)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry search"
+                  >
+                    <IconSymbol name="arrow.clockwise" size={16} color={colors.onTint} />
+                    <Text style={[styles.retryButtonText, { color: colors.onTint }]}>Try Again</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <MasonryList
+                  data={processedProducts}
+                  renderItem={renderProductItem}
+                  keyExtractor={(item) => item.id}
+                  key={`grid-${columns}`}
+                  numColumns={columns}
+                  contentContainerStyle={styles.productList}
+                  ListHeaderComponent={
+                    <View style={{ backgroundColor: colors.background }}>
+                      {renderGridHeader(
+                        `${processedProducts.length} results found for "${searchQuery}"`,
+                        'Sort',
+                        'Open sort options',
+                      )}
+                      {renderQuickFilterPills()}
+                    </View>
+                  }
+                  ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                      <BrandEmptyState
+                        icon="bag.fill"
+                        title="No matches"
+                        message={activeFiltersCount > 0
+                          ? "Nothing matches this search and filter combination. Try clearing some filters."
+                          : "No products matched your search term."
+                        }
+                      />
+                      {activeFiltersCount > 0 && (
+                        <TouchableOpacity
+                          style={[styles.clearFiltersButton, { backgroundColor: colors.tint }]}
+                          onPress={clearAllFiltersDirectly}
+                          accessibilityRole="button"
+                          accessibilityLabel="Clear all filters"
+                        >
+                          <Text style={[styles.clearFiltersButtonText, { color: colors.onTint }]}>Clear All Filters</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  }
+                  stickyHeaderIndices={[0]}
+                />
+              )}
             </View>
           )}
         </View>
@@ -872,19 +1062,39 @@ export default function ExploreScreen() {
               )}
 
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories</Text>
-              <View style={styles.categoriesGrid}>
-                {topCategories.map((cat) => (
-                  <CategoryCard
-                    key={cat.id}
-                    category={cat}
-                    variant="grid"
-                    onPress={() => {
-                      recordCategoryVisit(cat.name);
-                      setSelectedCategory(cat.name);
-                    }}
-                  />
-                ))}
-              </View>
+              {categoriesLoading ? (
+                <View style={styles.skeletonGrid}>
+                  <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
+                </View>
+              ) : categoriesError ? (
+                <View style={styles.errorContainerSmall}>
+                  <Text style={[styles.errorMessage, { color: colors.secondaryText }]}>
+                    Could not load categories.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.retryButtonSmall, { backgroundColor: colors.tint }]}
+                    onPress={fetchCategories}
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry loading categories"
+                  >
+                    <Text style={[styles.retryButtonText, { color: colors.onTint }]}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.categoriesGrid}>
+                  {topCategories.map((cat) => (
+                    <CategoryCard
+                      key={cat.id}
+                      category={cat}
+                      variant="grid"
+                      onPress={() => {
+                        recordCategoryVisit(cat.name);
+                        setSelectedCategory(cat.name);
+                      }}
+                    />
+                  ))}
+                </View>
+              )}
             </ScrollView>
           )}
 
@@ -924,6 +1134,35 @@ export default function ExploreScreen() {
                 <View style={styles.skeletonGrid}>
                   <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
                 </View>
+              ) : productsError ? (
+                <View style={styles.errorContainer}>
+                  <View style={[styles.errorIconCircle, { backgroundColor: colors.notification + '15' }]}>
+                    <IconSymbol name="exclamationmark.triangle.fill" size={32} color={colors.notification} />
+                  </View>
+                  <Text style={[styles.errorTitle, { color: colors.text }]}>Unable to load products</Text>
+                  <Text style={[styles.errorMessage, { color: colors.secondaryText }]}>
+                    We encountered an issue retrieving items from the catalog. Please try again.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.retryButton, { backgroundColor: colors.tint }]}
+                    onPress={fetchInitialProducts}
+                    accessibilityRole="button"
+                    accessibilityLabel="Try loading products again"
+                  >
+                    <IconSymbol name="arrow.clockwise" size={16} color={colors.onTint} />
+                    <Text style={[styles.retryButtonText, { color: colors.onTint }]}>Try Again</Text>
+                  </TouchableOpacity>
+                  {selectedCategory && (
+                    <TouchableOpacity
+                      style={[styles.secondaryActionButton, { borderColor: colors.border }]}
+                      onPress={() => resetSelection(0)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Browse categories"
+                    >
+                      <Text style={[styles.secondaryActionText, { color: colors.text }]}>Browse Categories</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               ) : (
                 <MasonryList
                   data={processedProducts}
@@ -939,14 +1178,30 @@ export default function ExploreScreen() {
                         `Sort: ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
                         `Sort by ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
                       )}
+                      {renderQuickFilterPills()}
                     </View>
                   }
                   ListEmptyComponent={
-                    <BrandEmptyState
-                      icon="bag.fill"
-                      title="No matches"
-                      message="Nothing in this category matches your filters. Try clearing a few."
-                    />
+                    <View style={styles.emptyContainer}>
+                      <BrandEmptyState
+                        icon="bag.fill"
+                        title="No matches"
+                        message={activeFiltersCount > 0
+                          ? "Nothing in this category matches your filters. Try clearing a few."
+                          : "No products currently available in this section."
+                        }
+                      />
+                      {activeFiltersCount > 0 && (
+                        <TouchableOpacity
+                          style={[styles.clearFiltersButton, { backgroundColor: colors.tint }]}
+                          onPress={clearAllFiltersDirectly}
+                          accessibilityRole="button"
+                          accessibilityLabel="Clear all filters"
+                        >
+                          <Text style={[styles.clearFiltersButtonText, { color: colors.onTint }]}>Clear All Filters</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   }
                   onEndReached={loadMoreProducts}
                   onEndReachedThreshold={0.5}
@@ -1766,6 +2021,98 @@ const styles = StyleSheet.create({
   },
   sortOptionLabel: {
     fontSize: 15,
+  },
+  quickFiltersWrapper: {
+    borderBottomWidth: 1,
+    paddingVertical: Spacing.sm,
+  },
+  quickFiltersScroll: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  quickFilterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  quickFilterChipText: {
+    fontSize: 12,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: Spacing.xl,
+  },
+  errorContainerSmall: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap: Spacing.sm,
+  },
+  errorIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: Spacing.lg,
+    maxWidth: 300,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginBottom: Spacing.md,
+  },
+  retryButtonSmall: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  secondaryActionButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  secondaryActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingBottom: Spacing.xl,
+  },
+  clearFiltersButton: {
+    marginTop: Spacing.md,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  clearFiltersButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
 
