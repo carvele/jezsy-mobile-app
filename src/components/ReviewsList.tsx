@@ -44,6 +44,9 @@ export function ReviewsList({ productId }: ReviewsListProps) {
   // The reviews RLS policy is the real gate; this only avoids sending an
   // eligible-looking customer into a submit that the DB will reject.
   const [eligible, setEligible] = useState<boolean | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -64,43 +67,73 @@ export function ReviewsList({ productId }: ReviewsListProps) {
     return () => { active = false; };
   }, [productId, user?.id]);
 
+  const LIMIT = 20;
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_review_stats' as any, { p_product_id: productId });
+      if (!error && data) {
+        const statsData = data as any;
+        setStats({
+          count: statsData.count,
+          average: statsData.average,
+          breakdown: statsData.breakdown
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [productId]);
+
   const fetchReviews = useCallback(async () => {
     setLoading(true);
+    fetchStats();
     try {
       const { data, error } = await supabase
-        .rpc('get_reviews_with_user_vote', { p_product_id: productId });
+        .rpc('get_reviews_with_user_vote', { p_product_id: productId, p_limit: LIMIT, p_offset: 0 });
 
       if (error) throw error;
 
-      const items: ReviewWithVote[] = (data || []).map(row => ({
+      const items: ReviewWithVote[] = (data || []).map((row: any) => ({
         ...row.review,
         user_vote: (row.user_vote as VoteType | null) ?? null,
       }));
       setReviews(items);
-
-      if (items.length > 0) {
-        let sum = 0;
-        const bd = [0,0,0,0,0];
-        items.forEach(r => {
-          sum += r.rating;
-          if (r.rating >= 1 && r.rating <= 5) {
-            bd[r.rating - 1]++;
-          }
-        });
-        setStats({
-          average: sum / items.length,
-          count: items.length,
-          breakdown: bd
-        });
-      } else {
-        setStats({ average: 0, count: 0, breakdown: [0,0,0,0,0] });
-      }
+      setOffset(LIMIT);
+      setHasMore(items.length === LIMIT);
     } catch (err) {
       console.error('Error fetching reviews:', err);
     } finally {
       setLoading(false);
     }
-  }, [productId]);
+  }, [productId, fetchStats]);
+
+  const loadMoreReviews = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const { data, error } = await supabase
+        .rpc('get_reviews_with_user_vote', { p_product_id: productId, p_limit: LIMIT, p_offset: offset });
+
+      if (error) throw error;
+
+      const items: ReviewWithVote[] = (data || []).map((row: any) => ({
+        ...row.review,
+        user_vote: (row.user_vote as VoteType | null) ?? null,
+      }));
+      setReviews(prev => {
+        const existingIds = new Set(prev.map(r => r.id));
+        const newItems = items.filter(i => !existingIds.has(i.id));
+        return [...prev, ...newItems];
+      });
+      setOffset(prev => prev + LIMIT);
+      setHasMore(items.length === LIMIT);
+    } catch (err) {
+      console.error('Error loading more reviews:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [productId, offset, hasMore, loadingMore]);
 
   useEffect(() => {
     fetchReviews();
@@ -332,10 +365,24 @@ export function ReviewsList({ productId }: ReviewsListProps) {
               )}
             </View>
           ))}
-        </View>
-      )}
+          </View>
+        )}
 
-      <ReviewModal 
+        {hasMore && reviews.length > 0 && (
+          <TouchableOpacity 
+            style={[styles.writeBtn, { borderColor: colors.border, marginTop: Spacing.md, alignSelf: 'center' }]} 
+            onPress={loadMoreReviews}
+            disabled={loadingMore}
+          >
+            {loadingMore ? (
+              <ActivityIndicator size="small" color={colors.text} />
+            ) : (
+              <Text style={[styles.writeBtnText, { color: colors.text }]}>Load More Reviews</Text>
+            )}
+          </TouchableOpacity>
+        )}
+  
+        <ReviewModal 
         visible={modalVisible} 
         productId={productId} 
         onClose={() => setModalVisible(false)} 

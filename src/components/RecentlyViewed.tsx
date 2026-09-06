@@ -35,7 +35,7 @@ export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string
         if (!active) return;
         // Preserve most-recent-first order; the IN query returns arbitrary order.
         const byId = new Map((data || []).map(p => [p.id, p]));
-        setProducts(ids.map(id => byId.get(id)).filter(Boolean));
+        setProducts(ids.filter(id => byId.has(id)).map(id => byId.get(id)!));
       };
       load();
       return () => { active = false; };
