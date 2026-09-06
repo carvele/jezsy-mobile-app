@@ -43,7 +43,7 @@ The diagram has four horizontal zones:
 - PostgreSQL: 31 tables, all with RLS enabled; `create_order` RPC for atomic order creation
 - Storage buckets: `payment_receipts` (private), `wardrobe-images`, `products`
 - Realtime: `supabase_realtime` publication on `messages` and `conversations`
-- Edge Function: `notify-status` (Deno), triggered by database webhooks on `reservations`/`orders` UPDATE
+- Edge Function: `notify-status` (Deno), triggered by database webhooks on `reservations` UPDATE
 
 **Zone 4 — External services**
 - Expo Push Notification service (`exp.host/--/api/v2/push/send`) — called by the Edge Function; free
@@ -92,7 +92,7 @@ Navigation uses **Expo Router file-based routing** with a root Stack, two route 
 | `reserve/[id]` | Rental reservation: date, time slot, receipt upload |
 | `ar-tryon/[id]` | AR try-on: 3D model-viewer WebView or 2D camera overlay |
 | `cart`, `checkout` | Bag and order placement (`create_order` RPC) |
-| `orders/[id]`, `reservations` | Order detail, reservation list |
+| `reservations` | Reservation list |
 | `wishlist` | Saved products |
 | `outfit-builder` | Compose outfits, color-harmony scoring, save |
 | `wardrobe/add-item` | Photograph item, background removal, upload |
@@ -149,7 +149,7 @@ Client-side validation lives in the screens themselves (e.g. `checkout.tsx` vali
 |---|---|
 | Auth / Users | `profiles`, `user_measurements`, `devices`, `settings`, `logs`, `staff_status_history` |
 | Catalog | `products`, `categories`, `inventory`, `stock_movements`, `color_options`, `color_list`, `pattern_list` |
-| Commerce | `orders`, `order_items`, `reservations`, `wishlists`, `reviews` |
+| Commerce | `reservations`, `wishlists`, `reviews` |
 | Wardrobe / Styling | `wardrobe_items`, `saved_outfits`, `suggested_outfits`, `capsules`, `capsule_items`, `user_streaks` |
 | Messaging / Notifications | `conversations`, `messages`, `notifications`, `feedback` |
 | AR / Scan | `ar_assets`, `ar_sessions`, `pose_guides` |
@@ -159,7 +159,7 @@ Client-side validation lives in the screens themselves (e.g. `checkout.tsx` vali
 - `profiles` — public read; users update their own row; insert for authenticated; owner full access. *(Note: read is open to all users — see Recommendations.)*
 - `products`, `categories`, `inventory`, `color_options`, `color_list`, `pattern_list`, `pose_guides`, `suggested_outfits`, `ar_assets`, `settings` — public/all-user read, owner-only write.
 - `stock_movements` — public read, owner insert, updates/deletes explicitly denied (append-only ledger).
-- `orders`, `order_items`, `reservations` — owner (customer_id/user_id) read/insert/update, owner full access; reservation delete is owner-only.
+- `reservations` — owner (customer_id/user_id) read/insert/update, owner full access; reservation delete is owner-only.
 - `wishlists`, `capsules`, `capsule_items`, `user_streaks`, `notifications` — strict owner-only CRUD.
 - `user_measurements` — owner-only read/write (plus owner); 9 overlapping policies from successive migrations.
 - `wardrobe_items`, `saved_outfits` — owner-or-owner policies, but also a broader "all authenticated users" policy coexists (see Recommendations).
@@ -172,7 +172,7 @@ Client-side validation lives in the screens themselves (e.g. `checkout.tsx` vali
 
 **RPC:** `create_order(_shipping_address, _items)` — SECURITY DEFINER function (grant to `authenticated` only) that creates the order and its items atomically server-side; the client sends only product IDs and quantities, never prices.
 
-**Edge Function:** `supabase/functions/notify-status/index.ts` — invoked by database webhooks on `reservations`/`orders` UPDATE; when `status` changes it inserts an in-app `notifications` row and sends an Expo push to the user's stored `expo_push_token` using the service-role key.
+**Edge Function:** `supabase/functions/notify-status/index.ts` — invoked by database webhooks on `reservations` UPDATE; when `status` changes it inserts an in-app `notifications` row and sends an Expo push to the user's stored `expo_push_token` using the service-role key.
 
 ### 2.5 Native / Device Integration Layer
 
@@ -215,7 +215,7 @@ Two on-device pipelines exist; one is fully live, one is partially implemented.
 5. The screen inserts a `reservations` row (status `Pending`, 50% deposit, generated `display_id`); RLS ensures `customer_id = auth.uid()`. A local reminder notification is scheduled.
 6. Later, when staff change the reservation status (owner side), a database webhook fires the `notify-status` Edge Function, which inserts a `notifications` row (shown in the Inbox tab) and sends an Expo push. The user sees the reservation in `reservations.tsx`.
 
-*The purchase variant:* `product/[id]` → `CartContext.addToCart` (AsyncStorage) → `cart.tsx` → `checkout.tsx`, which validates address/date and calls the `create_order` RPC; the database creates `orders` + `order_items` atomically with server-computed prices; the client clears the cart and routes to `orders/[id]`.
+*The purchase variant:* `product/[id]` -> `reserve/[id].tsx`, which validates input and calls the `create_reservation_multi` RPC; the database creates reservations atomically with server-computed prices; the client routes to `reservations`.
 
 ### 3.2 Body Scan → Measurements → Size Recommendation
 
@@ -249,9 +249,9 @@ For development use — ordered roughly by impact.
 
 ### 4.2 Coupling and consistency
 
-6. **Screens call Supabase directly (~30 call sites).** Only auth, wishlist, and messaging are mediated by contexts; products, reservations, orders, wardrobe, reviews, and measurements queries are embedded in screen components. This duplicates query logic (e.g. `products` fetched in 8+ files) and makes schema changes ripple through the UI. Introduce a thin `src/services/` layer (or React Query) per feature area.
+6. **Screens call Supabase directly (~30 call sites).** Only auth, wishlist, and messaging are mediated by contexts; products, reservations, wardrobe, reviews, and measurements queries are embedded in screen components. This duplicates query logic (e.g. `products` fetched in 8+ files) and makes schema changes ripple through the UI. Introduce a thin `src/services/` layer (or React Query) per feature area.
 7. **Persistence pattern is inconsistent across sibling features.** Wishlist is server-persisted with optimistic updates; Cart is AsyncStorage-only (lost on device change, no cross-device sync, no stock validation until checkout). Acceptable for a capstone, but document it as a deliberate trade-off.
-8. **Redundant RLS policies from stacked migrations** — e.g. `user_measurements` has 9 overlapping policies, `orders`/`order_items` 6, and `wardrobe_items`/`saved_outfits` pair a broad "all authenticated users" policy with a stricter owner-only one (the broad one wins, since RLS policies are OR-ed — this currently makes wardrobe data readable by any authenticated user). Consolidate to one policy per operation.
+8. **Redundant RLS policies from stacked migrations** — e.g. `user_measurements` has 9 overlapping policies, `wardrobe_items`/`saved_outfits` pair a broad "all authenticated users" policy with a stricter owner-only one (the broad one wins, since RLS policies are OR-ed — this currently makes wardrobe data readable by any authenticated user). Consolidate to one policy per operation.
 9. **`AuthContext.syncProfile` upserts the profile on every auth state change**, overwriting `first_name`/`last_name` from OAuth metadata — this can clobber a user's edited name on next token refresh. Upsert only on first sign-in; otherwise just fetch.
 
 ### 4.3 Resilience / single points of failure

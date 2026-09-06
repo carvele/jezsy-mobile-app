@@ -1,3 +1,4 @@
+import type { Database } from '@/src/types/database.types';
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { useFocusEffect } from 'expo-router';
@@ -10,7 +11,7 @@ import { CATEGORY_SELECT } from '@/src/utils/categoryDisplay';
 import { useAuth } from '@/src/context/AuthContext';
 
 export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string }) {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<(Database['public']['Tables']['products']['Row'] & { categories?: any, category?: any })[]>([]);
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { user } = useAuth();
@@ -52,7 +53,7 @@ export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string
         data={products}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => <ProductCard product={item} variant="rail" />}
+        renderItem={({ item }: { item: any }) => <ProductCard product={item} variant="rail" />}
       />
     </View>
   );

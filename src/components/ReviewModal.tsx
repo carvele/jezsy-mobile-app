@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { StyleSheet, View, Text, Modal, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Dimensions, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,6 +30,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
   const [comment, setComment] = useState('');
   const [images, setImages] = useState<{ uri: string; base64: string; ext: string; contentType: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   const handlePickImage = async () => {
     if (images.length >= MAX_REVIEW_IMAGES) return;
@@ -51,12 +52,14 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
   };
 
   const handleSubmit = async () => {
+    if (isSubmittingRef.current || submitting) return;
     if (!user) {
       showToast('You must be logged in to review.', 'error');
       return;
     }
     if (rating < 1 || rating > 5) return;
 
+    isSubmittingRef.current = true;
     setSubmitting(true);
     try {
       const uploadPromises = images.map(async (img) => {
@@ -90,6 +93,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
       console.error('Error submitting review:', err);
       showToast(err.message || 'Failed to submit review.', 'error');
     } finally {
+      isSubmittingRef.current = false;
       setSubmitting(false);
     }
   };
