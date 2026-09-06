@@ -331,6 +331,12 @@ export default function ARTryOnScreen() {
   // the same error, so the underlying condition is transient, not a persistent lock.
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraRetryKey, setCameraRetryKey] = useState(0);
+  // The pose-detection model failing to load (e.g. an unsupported GPU delegate) used to
+  // be indistinguishable from ordinary "still finding your body" tracking: both left
+  // trackingStatus at 'searching' forever, so the pill kept telling the user to
+  // reposition when no repositioning could ever help. Surfaced separately so a genuine
+  // model failure gets its own message instead of masquerading as guidance.
+  const [poseModelError, setPoseModelError] = useState<string | null>(null);
 
   const [isFocused, setIsFocused] = useState(false);
   useFocusEffect(useCallback(() => {
@@ -622,6 +628,10 @@ export default function ARTryOnScreen() {
     (result: any) => {
       if (replayActive) return;
       if (!isTrackingSessionActive()) return;
+      // A real frame means the pose model is genuinely running -- clear any stale
+      // model-failure banner even if the user hasn't navigated away (e.g. a transient
+      // init error that self-resolved).
+      setPoseModelError((prev) => (prev ? null : prev));
       let landmarks = result.results?.[0]?.landmarks?.[0];
       let worldLandmarks = result.results?.[0]?.worldLandmarks?.[0];
 
@@ -697,6 +707,7 @@ export default function ARTryOnScreen() {
 
   const onNativePoseError = useCallback((e: any) => {
     handleTrackingLost();
+    setPoseModelError(e?.message || 'AI tracking is unavailable on this device.');
     console.error(e);
   }, [handleTrackingLost]);
 
@@ -1145,9 +1156,21 @@ export default function ARTryOnScreen() {
             </View>
           )}
 
+          {poseModelError && (
+            <View style={[styles.arLoadErrorBanner, { pointerEvents: 'box-none' }]}>
+              <Text style={styles.arLoadErrorText}>AI tracking is unavailable on this device. You can still view this item in 3D Studio mode.</Text>
+              <TouchableOpacity
+                onPress={() => setMode('3d')}
+                style={styles.cameraErrorRetryButton}
+              >
+                <Text style={styles.cameraErrorRetryText}>Switch to 3D Studio</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={[styles.overlayContainer, { pointerEvents: 'box-none' }]}>
             {/* AI Tracking Status Pill */}
-            {trackingEnabled && (
+            {trackingEnabled && !poseModelError && (
               <View style={styles.trackingPill}>
                 <View style={[styles.statusDot, { backgroundColor: trackingStatus === 'tracking' ? '#00E5FF' : '#FFB800' }]} />
                 <Text style={styles.trackingPillText}>
