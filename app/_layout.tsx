@@ -277,8 +277,15 @@ function InitialLayout() {
       router.replace(target as any);
     };
 
-    // CRITICAL: Once fully authenticated AND confirmed settled in tabs, skip ALL
-    // future re-evaluations during normal tab switches.
+    // CRITICAL: Once authenticated and in the app tabs, ensure settled state is latched
+    // and skip ALL re-evaluations during tab switches so the cold-boot overlay never flickers.
+    if (session && profile?.first_name && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
+      hasAuthenticated.current = true;
+      lastRedirectTargetRef.current = null;
+      if (!routeSettled) setRouteSettled(true);
+      return;
+    }
+
     if (routeSettled && hasAuthenticated.current && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
       return;
     }

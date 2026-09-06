@@ -92,9 +92,17 @@ export default function TabLayout() {
     },
   }), [colors.tint, isDark, barBottom, horizontalMargin, barHeight, isCompact]);
 
+  // Latch that tabs have mounted once auth has finished initial loading.
+  // Once the tabs navigator has mounted, NEVER unmount it or replace it with a
+  // full-screen ActivityIndicator during subsequent tab switches or background auth refreshes.
+  const hasMountedTabsRef = React.useRef(false);
+  if (!isLoading) {
+    hasMountedTabsRef.current = true;
+  }
+
   // While auth is still initializing from storage/network, render a branded loading spinner
-  // instead of null to prevent white-screen flashes.
-  if (isLoading) {
+  // instead of null to prevent white-screen flashes. Once mounted, keep Tabs stable.
+  if (isLoading && !hasMountedTabsRef.current) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.tint} />
