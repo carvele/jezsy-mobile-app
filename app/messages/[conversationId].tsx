@@ -18,6 +18,11 @@ import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
 import { formatDateSeparator, formatReceiptTime, shouldStartMessageGroup } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
+import { Database } from '@/src/types/database.types';
+
+type MessageRow = Database['public']['Tables']['messages']['Row'] & {
+  _status?: 'sending' | 'failed';
+};
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 
 // One reaction per person per message, so this is a shortlist rather than a
@@ -71,7 +76,7 @@ export default function ChatScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
 
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<MessageRow[]>([]);
   const [inputText, setInputText] = useState('');
   // Non-null while editing: the composer becomes an edit box for that message.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -165,6 +170,8 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!conversationId) return;
 
+    let cancelled = false;
+
     const fetchMessages = async () => {
       const { data, error } = await supabase
         .from('messages')
@@ -172,6 +179,8 @@ export default function ChatScreen() {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: false })
         .limit(30);
+
+      if (cancelled) return;
 
       if (!error && data) {
         // Reverse array so messages render chronologically ascending
@@ -217,6 +226,7 @@ export default function ChatScreen() {
       .subscribe();
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(messageSubscription);
     };
   }, [conversationId, markAsRead, session?.user.id]);
@@ -364,7 +374,7 @@ export default function ChatScreen() {
       context_type: contextToSend?.type ?? null,
       context_ref: contextToSend?.ref ?? null,
     };
-    setMessages(prev => [...prev, tempMsg]);
+    setMessages(prev => [...prev, tempMsg as MessageRow]);
 
     const result = await sendMessage(conversationId, textToSend, undefined, contextToSend ?? undefined);
     if (!result) {
@@ -403,7 +413,7 @@ export default function ChatScreen() {
         read_at: null,
         image_url: asset.uri // temporary local uri
       };
-      setMessages(prev => [...prev, tempMsg]);
+      setMessages(prev => [...prev, tempMsg as MessageRow]);
 
       const { contentType, ext } = resolveImageFileInfo(asset.uri);
       const fileName = `${Date.now()}.${ext}`;
@@ -419,39 +429,43 @@ export default function ChatScreen() {
       if (uploadedPath) {
         const realMsg = await sendMessage(conversationId, '', uploadedPath);
         if (realMsg) {
-           setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
-        } else {
-           setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-           showToast('Could not send that photo. Please try again.', 'error');
+          setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
         }
       } else {
         setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-        showToast('Could not upload that photo. Please try again.', 'error');
+        showToast('Failed to upload image.', 'error');
       }
-    } catch (e) {
-      console.error('Error picking/uploading image:', e);
-      showToast('Could not open your photos. Please try again.', 'error');
+    } catch (err) {
+      console.error(err);
+      showToast('An unexpected error occurred.', 'error');
     }
   };
 
-  const handleRetrySend = async (msg: any) => {
+  const handleRetrySend = async (msgToRetry: any) => {
     if (!conversationId) return;
-    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, _status: 'sending' } : m)));
+    
+    setMessages(prev => prev.map(m => (m.id === msgToRetry.id ? { ...m, _status: 'sending' } : m)));
 
-    const context = msg.context_label
-      ? { label: msg.context_label, type: msg.context_type, ref: msg.context_ref }
-      : undefined;
-    const result = await sendMessage(conversationId, msg.text, undefined, context);
+    // Re-resolve pendingContext from msgToRetry if it had one
+    let retryContext: MessageContext | undefined;
+    if (msgToRetry.context_type && msgToRetry.context_label) {
+      retryContext = {
+        type: msgToRetry.context_type,
+        label: msgToRetry.context_label,
+        ref: msgToRetry.context_ref,
+      };
+    }
 
-    setMessages(prev =>
-      prev.map(m => (m.id === msg.id ? (result ?? { ...m, _status: 'failed' }) : m)),
-    );
+    const result = await sendMessage(conversationId, msgToRetry.text, msgToRetry.image_url, retryContext);
+    if (!result) {
+      setMessages(prev => prev.map(m => (m.id === msgToRetry.id ? { ...m, _status: 'failed' } : m)));
+    } else {
+      setMessages(prev => prev.map(m => m.id === msgToRetry.id ? result : m));
+    }
   };
 
-  // Only the newest of your own messages carries a status, as in most chat
-  // apps: repeating "Sent" down the whole thread is noise. A failed message is
-  // the exception -- it stays marked wherever it sits, because it is the one
-  // state the sender has to act on.
+  // Find the last actual message from the current user (ignoring temp/failed ones unless they are truly last)
+  // This helps us display "Delivered/Read" only once on the bottom-most successful message.
   const lastOwnIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].sender_id === session?.user.id) return i;
@@ -461,10 +475,10 @@ export default function ChatScreen() {
 
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
     const isMe = item.sender_id === session?.user.id;
-    const timeString = new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeString = new Date(item.created_at || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const previous = index > 0 ? messages[index - 1] : null;
-    const showDateSeparator = shouldStartMessageGroup(previous?.created_at, item.created_at);
+    const showDateSeparator = shouldStartMessageGroup(previous?.created_at || '', item.created_at || '');
 
     // A timestamp on every single bubble is noise once several land in a
     // burst -- shown only on the last message of a consecutive run from the
@@ -473,7 +487,7 @@ export default function ChatScreen() {
     // that it would get its own date separator anyway.
     const next = index < messages.length - 1 ? messages[index + 1] : null;
     const isLastInGroup =
-      !next || next.sender_id !== item.sender_id || shouldStartMessageGroup(item.created_at, next.created_at);
+      !next || next.sender_id !== item.sender_id || shouldStartMessageGroup(item.created_at || '', next.created_at || '');
     const showMeta =
       isLastInGroup || !!item.edited_at || (isMe && (item._status || index === lastOwnIndex)) || expandedMessageId === item.id;
 

@@ -177,7 +177,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     try {
       const isStaff = profile?.role === 'staff' || profile?.role === 'owner';
       const senderName = profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : (isStaff ? 'Boutique Support' : 'Customer');
-      const payload: any = {
+      const payload: Database['public']['Tables']['messages']['Insert'] = {
         conversation_id: conversationId,
         sender_id: session.user.id,
         sender_name: senderName,

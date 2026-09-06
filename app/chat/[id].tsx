@@ -8,6 +8,9 @@ import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Database } from '@/src/types/database.types';
+
+type DirectMessageRow = Database['public']['Tables']['direct_messages']['Row'];
 
 export default function P2PChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>(); // other user id
@@ -19,17 +22,113 @@ export default function P2PChatScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   const [chatId, setChatId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<DirectMessageRow[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [canMessage, setCanMessage] = useState(false);
   const [otherUser, setOtherUser] = useState<any>(null);
 
   useEffect(() => {
-    if (user && id) {
-      initChat();
-    }
-    }, [user, id]);
+    if (!user || !id) return;
+    let cancelled = false;
+
+    const loadMessages = async (cId: string) => {
+      const { data, error } = await supabase
+        .from('direct_messages')
+        .select('*')
+        .eq('chat_id', cId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (cancelled) return;
+
+      if (error) {
+        console.log('Error loading messages', error);
+      } else {
+        setMessages(data || []);
+        // Mark unread as read
+        data?.forEach(m => {
+          if (m.sender_id !== user?.id && !m.read_at) markRead(m.id);
+        });
+      }
+    };
+
+    const initChat = async () => {
+      try {
+        setLoading(true);
+
+        // profiles' own RLS only allows a row's owner or staff to read it, so
+        // the other participant's row must go through this accessor.
+        const { data: profileRows } = await supabase
+          .rpc('get_public_profiles', { p_user_ids: [id] });
+        
+        if (cancelled) return;
+        setOtherUser(profileRows?.[0] ?? null);
+
+        // Check Connection
+        const u1 = user.id < id ? user.id : id;
+        const u2 = user.id < id ? id : user.id;
+        const { data: conn } = await supabase
+          .from('connections')
+          .select('status')
+          .eq('user_id_1', u1)
+          .eq('user_id_2', u2)
+          .single();
+        
+        if (cancelled) return;
+        setCanMessage(conn?.status === 'accepted');
+
+        if (conn?.status === 'accepted') {
+          // RPC to get or create chat
+          const { data: cId, error: rpcError } = await supabase.rpc('get_or_create_direct_chat' as any, { other_user_id: id }) as any;
+          if (rpcError) throw rpcError;
+          if (cancelled) return;
+          setChatId(cId);
+
+          if (cId) {
+            await loadMessages(cId);
+          }
+        } else {
+          // If not accepted, we might still have a past chat history
+          const { data: chats } = await supabase
+            .from('direct_chat_participants')
+            .select('chat_id')
+            .eq('user_id', user.id);
+          
+          if (cancelled) return;
+
+          if (chats && chats.length > 0) {
+            const chatIds = chats.map(c => c.chat_id);
+            const { data: otherParticipant } = await supabase
+              .from('direct_chat_participants')
+              .select('chat_id')
+              .in('chat_id', chatIds)
+              .eq('user_id', id);
+
+            if (cancelled) return;
+
+            if (otherParticipant && otherParticipant.length > 0) {
+              const historicalChatId = otherParticipant[0].chat_id;
+              setChatId(historicalChatId);
+              await loadMessages(historicalChatId);
+            }
+          }
+        }
+      } catch (err: any) { 
+        if (cancelled) return;
+        console.log('Error init chat:', err);
+        showToast('Error loading chat', 'error');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    initChat();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, id]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -42,7 +141,7 @@ export default function P2PChatScreen() {
         table: 'direct_messages',
         filter: `chat_id=eq.${chatId}`
       }, (payload) => {
-        setMessages(prev => [payload.new, ...prev]);
+        setMessages(prev => [payload.new as DirectMessageRow, ...prev]);
         markRead(payload.new.id);
       })
       .subscribe();
@@ -51,86 +150,6 @@ export default function P2PChatScreen() {
       supabase.removeChannel(channel);
     };
   }, [chatId]);
-
-  const initChat = async () => {
-    try {
-      setLoading(true);
-
-      // profiles' own RLS only allows a row's owner or staff to read it, so
-      // the other participant's row must go through this accessor.
-      const { data: profileRows } = await supabase
-        .rpc('get_public_profiles', { p_user_ids: [id] });
-      setOtherUser(profileRows?.[0] ?? null);
-
-      // Check Connection
-      const u1 = user!.id < id! ? user!.id : id!;
-      const u2 = user!.id < id! ? id! : user!.id;
-      const { data: conn } = await supabase
-        .from('connections')
-        .select('status')
-        .eq('user_id_1', u1)
-        .eq('user_id_2', u2)
-        .single();
-      
-      setCanMessage(conn?.status === 'accepted');
-
-      if (conn?.status === 'accepted') {
-        // RPC to get or create chat
-        const { data: cId, error: rpcError } = await supabase.rpc('get_or_create_direct_chat' as any, { other_user_id: id }) as any;
-        if (rpcError) throw rpcError;
-        setChatId(cId);
-
-        if (cId) {
-          loadMessages(cId);
-        }
-      } else {
-        // If not accepted, we might still have a past chat history
-        const { data: chats } = await supabase
-          .from('direct_chat_participants')
-          .select('chat_id')
-          .eq('user_id', user!.id);
-        
-        if (chats && chats.length > 0) {
-          const chatIds = chats.map(c => c.chat_id);
-          const { data: otherParticipant } = await supabase
-            .from('direct_chat_participants')
-            .select('chat_id')
-            .in('chat_id', chatIds)
-            .eq('user_id', id);
-
-          if (otherParticipant && otherParticipant.length > 0) {
-            const historicalChatId = otherParticipant[0].chat_id;
-            setChatId(historicalChatId);
-            loadMessages(historicalChatId);
-          }
-        }
-      }
-    } catch (err: any) { console.log(err);
-      console.log('Error init chat:', err);
-      showToast('Error loading chat', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMessages = async (cId: string) => {
-    const { data, error } = await supabase
-      .from('direct_messages')
-      .select('*')
-      .eq('chat_id', cId)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    
-    if (error) {
-      console.log('Error loading messages', error);
-    } else {
-      setMessages(data || []);
-      // Mark unread as read
-      data?.forEach(m => {
-        if (m.sender_id !== user?.id && !m.read_at) markRead(m.id);
-      });
-    }
-  };
 
   const markRead = async (msgId: string) => {
     await supabase.rpc('mark_direct_message_read', { p_message_id: msgId });
