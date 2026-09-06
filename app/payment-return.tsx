@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, Type } from '@/constants/theme';
@@ -31,7 +31,6 @@ export default function PaymentReturnScreen() {
   const colors = Colors[theme];
 
   const [status, setStatus] = useState<PaymentStatus | null>(null);
-  const startedAt = useRef<number | null>(null);
 
   const finish = useCallback(
     (finalStatus: PaymentStatus | null) => {
@@ -57,7 +56,26 @@ export default function PaymentReturnScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    startedAt.current = Date.now();
+    // Budget counts foreground time only: GCash completes in an external browser,
+    // and wall-clock elapsed would time out before the user even returns to the app.
+    let foregroundMs = 0;
+    let lastForegroundAt = AppState.currentState === 'active' ? Date.now() : null;
+
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        lastForegroundAt = Date.now();
+      } else {
+        if (lastForegroundAt !== null) {
+          foregroundMs += Date.now() - lastForegroundAt;
+        }
+        lastForegroundAt = null;
+      }
+    });
+
+    const foregroundElapsed = () => {
+      const extra = lastForegroundAt !== null ? Date.now() - lastForegroundAt : 0;
+      return foregroundMs + extra;
+    };
 
     const tick = async (paymentId: string) => {
       if (cancelled) return;
@@ -70,7 +88,7 @@ export default function PaymentReturnScreen() {
         finish(current);
         return;
       }
-      if (Date.now() - (startedAt.current ?? 0) > POLL_TIMEOUT_MS) {
+      if (foregroundElapsed() > POLL_TIMEOUT_MS) {
         finish(current);
         return;
       }
@@ -100,6 +118,7 @@ export default function PaymentReturnScreen() {
 
     return () => {
       cancelled = true;
+      appStateSub.remove();
     };
   }, [finish, paymentId, router]);
 

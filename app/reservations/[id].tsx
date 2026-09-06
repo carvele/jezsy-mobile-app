@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -63,6 +63,8 @@ export default function ReservationDetailScreen() {
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [receiptLoadFailed, setReceiptLoadFailed] = useState(false);
   const [payBusy, setPayBusy] = useState(false);
+  // Synchronous latch: prevents a duplicate payment initiation from a fast double-tap.
+  const payBusyRef = useRef(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
 
@@ -172,6 +174,8 @@ export default function ReservationDetailScreen() {
   // page had no way back to it, and simply lost the reservation.
   const handlePayNow = async () => {
     if (!id) return;
+    if (payBusyRef.current) return;
+    payBusyRef.current = true;
     setPayBusy(true);
     try {
       const { paymentId, checkoutUrl } = await startReservationPayment(id);
@@ -182,6 +186,7 @@ export default function ReservationDetailScreen() {
     } catch (err: any) {
       showToast(err.message || 'Could not start the payment.', 'error');
     } finally {
+      payBusyRef.current = false;
       setPayBusy(false);
     }
   };

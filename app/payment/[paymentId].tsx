@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, AppState, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -59,11 +59,32 @@ export default function PaymentScreen() {
 
   // Only the webhook can mark a payment paid, so leaving the checkout page is a
   // cue to start checking -- never proof of payment in itself.
+  // The budget only counts foreground time: GCash opens an external browser,
+  // and backgrounding the app for 90s+ would previously show a false
+  // "payment not completed" even though the user had just finished paying.
   useEffect(() => {
     if (!settling || !paymentId) return;
 
     let cancelled = false;
     startedAt.current = startedAt.current ?? Date.now();
+    let foregroundMs = 0;
+    let lastForegroundAt = AppState.currentState === 'active' ? Date.now() : null;
+
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        lastForegroundAt = Date.now();
+      } else {
+        if (lastForegroundAt !== null) {
+          foregroundMs += Date.now() - lastForegroundAt;
+        }
+        lastForegroundAt = null;
+      }
+    });
+
+    const foregroundElapsed = () => {
+      const extra = lastForegroundAt !== null ? Date.now() - lastForegroundAt : 0;
+      return foregroundMs + extra;
+    };
 
     const tick = async () => {
       if (cancelled) return;
@@ -72,14 +93,14 @@ export default function PaymentScreen() {
       if (cancelled) return;
 
       setStatus(current);
-      setSecondsElapsed(Math.round((Date.now() - (startedAt.current ?? Date.now())) / 1000));
+      setSecondsElapsed(Math.round(foregroundElapsed() / 1000));
 
       if (current && TERMINAL_PAYMENT_STATUSES.includes(current)) {
         finish(current);
         return;
       }
 
-      if (Date.now() - (startedAt.current ?? 0) > POLL_TIMEOUT_MS) {
+      if (foregroundElapsed() > POLL_TIMEOUT_MS) {
         finish(current);
         return;
       }
@@ -91,6 +112,7 @@ export default function PaymentScreen() {
 
     return () => {
       cancelled = true;
+      appStateSub.remove();
     };
   }, [settling, paymentId, finish]);
 

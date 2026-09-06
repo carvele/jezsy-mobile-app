@@ -81,11 +81,15 @@ deadline lapses unpaid.
   trigger, and probably needs its own migration for a `stock_holds` concept or a `held_quantity`
   column separate from actual stock.
 
-## Recommendation
+## Recommendation (historical)
 
-Option B is the smallest change that fixes the actual annoyance (requesting something already
-gone) without touching the staff-approval model this app deliberately kept. Option C only makes
-sense if overbooking becomes a *frequent* real problem at current volume -- worth deferring until
-there's evidence of that, per the "boutique volume" reasoning already on record.
+The analysis above recommended Option B and deferred Option C. **This recommendation is now
+outdated.** Option C (hard hold at request time) was subsequently built as
+`20260808123756_reservation_inventory_holds.sql`, which introduces an `inventory_holds` table and
+a full hold/release lifecycle tied to `payment_due_at`. The production concurrency model is
+therefore the hard-hold model, not the soft-check model described in Option B.
 
-No code changes made -- this is a decision writeup only.
+The tradeoff analysis above is kept for historical context. The "Cons" of Option C listed here
+were addressed in the migration: the hold-expiry mechanism is handled by the server-side sweep
+(`expire_all_stale_reservations`), and holds are released on cancellation and payment-deadline
+expiry.

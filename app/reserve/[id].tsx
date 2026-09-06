@@ -19,7 +19,7 @@ import { needsStepUpReauth } from "@/src/utils/stepUpAuth";
 import { StepUpAuthModal } from "@/src/components/StepUpAuthModal";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -64,6 +64,8 @@ export default function ReservationScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // Synchronous guard: blocks a second call before the setSubmitting(true) round-trip lands.
+  const submittingRef = useRef(false);
   const [reauthVisible, setReauthVisible] = useState(false);
   const [liveCartPrices, setLiveCartPrices] = useState<Map<string, Partial<Product>>>(new Map());
 
@@ -228,6 +230,10 @@ export default function ReservationScreen() {
     // narrowing across the async gap the step-up modal introduces, and it's
     // a real guard against appointmentTime clearing while that modal is open.
     if (!appointmentTime) return;
+    // Synchronous latch: prevents a second invocation from a fast double-tap
+    // before setSubmitting(true) has propagated through the render cycle.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
 
     setSubmitting(true);
     try {
@@ -321,6 +327,7 @@ export default function ReservationScreen() {
       console.error("Reservation error:", error);
       showToast(error.message || "Unable to submit reservation. Try again.", 'error');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
