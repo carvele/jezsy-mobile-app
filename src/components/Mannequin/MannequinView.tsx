@@ -155,23 +155,20 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
       }
 
       const itemWithProcessedImg = { ...wardrobeItem, image_url: finalImageUrl };
-      // maxZ is read from the functional updater's `prev`, not a closed-over
-      // canvasItems snapshot, so two adds racing across the await above (e.g.
-      // two rapid taps on web while background removal is in flight) don't
-      // both stamp the same stale z-index. The updater itself stays a pure
-      // state computation; the added item is carried out via ref for the
-      // side effects below.
-      const addedItemRef = { current: null as CanvasItemType | null };
+      // id/name/x/y/scale/rotation are deterministic from wardrobeItem alone;
+      // only zIndex depends on how many items are already on the canvas. Two
+      // adds racing across the await above (e.g. two rapid taps on web while
+      // background removal is in flight) must not both stamp the same stale
+      // z-index, so that part is resolved from the functional updater's
+      // `prev` rather than the closed-over canvasItems snapshot.
+      const baseItem = createMannequinItem(itemWithProcessedImg, 0);
       setCanvasItems((prev) => {
         const maxZ = prev.reduce((max, i) => Math.max(max, i.zIndex), 0);
-        const newItem = createMannequinItem(itemWithProcessedImg, maxZ);
-        addedItemRef.current = newItem;
-        return [...prev, newItem];
+        const placedItem = { ...baseItem, zIndex: Math.max(baseItem.zIndex, maxZ + 1) };
+        return [...prev, placedItem];
       });
-      if (addedItemRef.current) {
-        setSelectedItemId(addedItemRef.current.id);
-        showToast(`Added ${addedItemRef.current.name} to mannequin`, 'info');
-      }
+      setSelectedItemId(baseItem.id);
+      showToast(`Added ${baseItem.name} to mannequin`, 'info');
     },
     [showToast]
   );
