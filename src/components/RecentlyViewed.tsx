@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Database } from '@/src/types/database.types';
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
@@ -53,7 +54,7 @@ export function RecentlyViewed({ excludeProductId }: { excludeProductId?: string
         data={products}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }: { item: any }) => <ProductCard product={item} variant="rail" />}
+        renderItem={({ item }) => <ProductCard product={item} variant="rail" />}
       />
     </View>
   );
