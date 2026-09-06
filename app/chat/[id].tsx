@@ -128,7 +128,7 @@ export default function P2PChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [user, id]);
+  }, [user, id, showToast]);
 
   useEffect(() => {
     if (!chatId) return;

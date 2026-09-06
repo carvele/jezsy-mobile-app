@@ -19,11 +19,11 @@ import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
 import { formatDateSeparator, formatReceiptTime, shouldStartMessageGroup } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
 import { Database } from '@/src/types/database.types';
+import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 
 type MessageRow = Database['public']['Tables']['messages']['Row'] & {
   _status?: 'sending' | 'failed';
 };
-import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 
 // One reaction per person per message, so this is a shortlist rather than a
 // full picker -- matching the set the admin dashboard already offers.
@@ -429,43 +429,39 @@ export default function ChatScreen() {
       if (uploadedPath) {
         const realMsg = await sendMessage(conversationId, '', uploadedPath);
         if (realMsg) {
-          setMessages(prev => prev.map(m => m.id === tempMsg.id ? realMsg : m));
+          setMessages(prev => prev.map(m => (m.id === tempMsg.id ? realMsg : m)));
+        } else {
+          setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+          showToast('Could not send that photo. Please try again.', 'error');
         }
       } else {
         setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-        showToast('Failed to upload image.', 'error');
+        showToast('Could not upload that photo. Please try again.', 'error');
       }
-    } catch (err) {
-      console.error(err);
-      showToast('An unexpected error occurred.', 'error');
+    } catch (e) {
+      console.error('Error picking/uploading image:', e);
+      showToast('Could not open your photos. Please try again.', 'error');
     }
   };
 
-  const handleRetrySend = async (msgToRetry: any) => {
+  const handleRetrySend = async (msg: any) => {
     if (!conversationId) return;
-    
-    setMessages(prev => prev.map(m => (m.id === msgToRetry.id ? { ...m, _status: 'sending' } : m)));
+    setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, _status: 'sending' } : m)));
 
-    // Re-resolve pendingContext from msgToRetry if it had one
-    let retryContext: MessageContext | undefined;
-    if (msgToRetry.context_type && msgToRetry.context_label) {
-      retryContext = {
-        type: msgToRetry.context_type,
-        label: msgToRetry.context_label,
-        ref: msgToRetry.context_ref,
-      };
-    }
+    const context = msg.context_label
+      ? { label: msg.context_label, type: msg.context_type, ref: msg.context_ref }
+      : undefined;
+    const result = await sendMessage(conversationId, msg.text, undefined, context);
 
-    const result = await sendMessage(conversationId, msgToRetry.text, msgToRetry.image_url, retryContext);
-    if (!result) {
-      setMessages(prev => prev.map(m => (m.id === msgToRetry.id ? { ...m, _status: 'failed' } : m)));
-    } else {
-      setMessages(prev => prev.map(m => m.id === msgToRetry.id ? result : m));
-    }
+    setMessages(prev =>
+      prev.map(m => (m.id === msg.id ? (result ?? { ...m, _status: 'failed' }) : m)),
+    );
   };
 
-  // Find the last actual message from the current user (ignoring temp/failed ones unless they are truly last)
-  // This helps us display "Delivered/Read" only once on the bottom-most successful message.
+  // Only the newest of your own messages carries a status, as in most chat
+  // apps: repeating "Sent" down the whole thread is noise. A failed message is
+  // the exception -- it stays marked wherever it sits, because it is the one
+  // state the sender has to act on.
   const lastOwnIndex = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].sender_id === session?.user.id) return i;
