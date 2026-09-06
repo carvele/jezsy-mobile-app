@@ -506,9 +506,14 @@ export default function WardrobeScreen() {
         </ScrollView>
       </View>
 
-      {activeTab === 'mannequin' ? (
+      {/* Kept mounted (hidden via display:none rather than unmounted) when
+          another tab is active, so switching tabs doesn't discard an
+          in-progress mannequin styling session. */}
+      <View style={{ flex: 1, display: activeTab === 'mannequin' ? 'flex' : 'none' }}>
         <MannequinView wardrobeItems={items} onRefreshWardrobe={fetchWardrobeData} />
-      ) : loading ? (
+      </View>
+
+      {activeTab === 'mannequin' ? null : loading ? (
         // A skeleton grid keeps the layout stable while loading instead of
         // collapsing to a centred spinner and then jumping.
         <ScrollView contentContainerStyle={{ padding: Spacing.lg }} scrollEnabled={false}>
