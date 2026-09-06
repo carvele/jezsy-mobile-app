@@ -25,8 +25,17 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 function cmToUnit(cmValue: string, unit: LengthUnit): string {
   if (!cmValue) return cmValue;
   const n = parseFloat(cmValue);
-  if (isNaN(n)) return cmValue;
+  if (isNaN(n)) return '';
   return unit === 'in' ? round1(n / CM_PER_IN).toString() : round1(n).toString();
+}
+
+function toCmString(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object' && val !== null && 'valueCm' in val) {
+    const v = (val as any).valueCm;
+    return v !== null && v !== undefined ? String(v) : '';
+  }
+  return String(val);
 }
 
 function unitToCm(value: string, unit: LengthUnit): number | null {
@@ -119,15 +128,15 @@ export default function MeasurementsScreen() {
         if (!session) return;
         const scanData = session.measurements as any;
 
-        if (scanData.bust) setBust(cmToUnit(scanData.bust.toString(), unit));
-        if (scanData.waist) setWaist(cmToUnit(scanData.waist.toString(), unit));
-        if (scanData.hips) setHips(cmToUnit(scanData.hips.toString(), unit));
-        if (scanData.inseam) setInseam(cmToUnit(scanData.inseam.toString(), unit));
+        if (scanData.bust) setBust(cmToUnit(toCmString(scanData.bust), unit));
+        if (scanData.waist) setWaist(cmToUnit(toCmString(scanData.waist), unit));
+        if (scanData.hips) setHips(cmToUnit(toCmString(scanData.hips), unit));
+        if (scanData.inseam) setInseam(cmToUnit(toCmString(scanData.inseam), unit));
 
-        if (scanData.shoulderWidth) setShoulderWidth(cmToUnit(scanData.shoulderWidth.toString(), unit));
-        if (scanData.armLength) setArmLength(cmToUnit(scanData.armLength.toString(), unit));
-        if (scanData.torsoLength) setTorsoLength(cmToUnit(scanData.torsoLength.toString(), unit));
-        if (scanData.legLength) setLegLength(cmToUnit(scanData.legLength.toString(), unit));
+        if (scanData.shoulderWidth) setShoulderWidth(cmToUnit(toCmString(scanData.shoulderWidth), unit));
+        if (scanData.armLength) setArmLength(cmToUnit(toCmString(scanData.armLength), unit));
+        if (scanData.torsoLength) setTorsoLength(cmToUnit(toCmString(scanData.torsoLength), unit));
+        if (scanData.legLength) setLegLength(cmToUnit(toCmString(scanData.legLength), unit));
 
         if (scanData.overallConfidence) setScanConfidence(scanData.overallConfidence);
         if (scanData.confidence) setFieldConfidence(scanData.confidence);
@@ -183,7 +192,9 @@ export default function MeasurementsScreen() {
           // whatever was already saved instead of being wiped.
           const fillFromDb = (setter: React.Dispatch<React.SetStateAction<string>>, cmValue: unknown) => {
             if (cmValue === null || cmValue === undefined) return;
-            setter((prev) => (prev ? prev : cmToUnit(cmValue.toString(), unit)));
+            const s = toCmString(cmValue);
+            if (!s) return;
+            setter((prev) => (prev ? prev : cmToUnit(s, unit)));
           };
 
           // DB values are always cm/kg; convert for display against whatever

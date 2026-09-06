@@ -22,7 +22,17 @@ export type MaskLike = {
 
 // Landmark indices reused here rather than imported, to keep this file
 // independent of the detector's internals.
-const L = { leftShoulder: 11, rightShoulder: 12, leftHip: 23, rightHip: 24 } as const;
+const L = {
+  nose: 0,
+  leftShoulder: 11, rightShoulder: 12,
+  leftHip: 23, rightHip: 24,
+  leftAnkle: 27, rightAnkle: 28,
+} as const;
+
+// A pose passing isPoseValid/isSidePoseValid already has nose-to-ankle span
+// >= 0.5 of frame height; this just guards divide-by-zero if called on an
+// unchecked pose.
+const MIN_BODY_SPAN_FRACTION = 0.3;
 
 // A pixel counts as body above this. UINT8 masks are 0-255, FLOAT32 are 0-1;
 // both are confidences, not hard labels, so the cut sits above halfway to
@@ -88,7 +98,14 @@ export function measureExtentAt(mask: MaskLike, normalizedY: number): number | n
 }
 
 export type BodyExtents = {
-  /** All normalized to the mask's own width. */
+  /**
+   * Normalized against the subject's own nose-to-ankle span in this same frame
+   * (the same convention poseDetector.ts's BodyRatios use) -- NOT against raw
+   * mask width. This is what lets a caller multiply directly by the user's real
+   * height in cm regardless of capture distance or the camera's aspect ratio;
+   * see the scale correction in extractBodyExtents below for why a raw
+   * mask-width fraction cannot be used directly.
+   */
   bust: number;
   waist: number;
   hips: number;
@@ -120,5 +137,22 @@ export function extractBodyExtents(
   const hips = measureExtentAt(mask, hipsY);
 
   if (bust === null || waist === null || hips === null) return null;
-  return { bust, waist, hips };
+
+  // measureExtentAt returns a fraction of MASK WIDTH. The caller (body-scan.tsx)
+  // multiplies these values by the user's real height in cm, which is only valid
+  // if a width-fraction-of-frame equals a height-fraction-of-frame -- i.e. a
+  // square frame where the subject's own span fills it edge to edge. Neither
+  // holds in general: phone camera frames are not square, and isPoseValid only
+  // requires the nose-to-ankle span to cover >=50% of frame height, not ~100%.
+  // Rescale by (mask aspect ratio) / (subject's own frame-height fraction) so
+  // the result is normalized the same way poseDetector.ts's BodyRatios are
+  // (against the subject's own visible span), making a direct multiply-by-height
+  // downstream correct regardless of capture distance or aspect ratio.
+  const noseY = landmarks[L.nose].y;
+  const ankleY = (landmarks[L.leftAnkle].y + landmarks[L.rightAnkle].y) / 2;
+  const bodySpanFraction = Math.abs(ankleY - noseY);
+  if (bodySpanFraction < MIN_BODY_SPAN_FRACTION || !mask.height) return null;
+
+  const scale = (mask.width / mask.height) / bodySpanFraction;
+  return { bust: bust * scale, waist: waist * scale, hips: hips * scale };
 }

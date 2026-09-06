@@ -1376,7 +1376,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
         ) : (
           <WebView
             ref={webviewRef}
-            originWhitelist={['*']}
+            // Matches the stricter convention already used by the sibling 3D-Studio
+            // WebView in app/ar-tryon/[id].tsx -- this page never navigates anywhere
+            // (no links, GLTFLoader only fetches an already-validated https/http URL),
+            // so there is no reason to leave navigation wide open.
+            originWhitelist={['https://*', 'http://*']}
             source={{ html: htmlContent }}
             onLoadEnd={sendRuntimeConfig}
             style={{ backgroundColor: 'transparent' }}
