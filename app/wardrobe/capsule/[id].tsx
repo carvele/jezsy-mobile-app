@@ -74,8 +74,9 @@ export default function CapsuleDetailScreen() {
         supabase.from('capsules').select('*').eq('id', id).single(),
         supabase
           .from('capsule_items')
-          .select('wardrobe_items(*)')
-          .eq('capsule_id', id),
+          .select('wardrobe_items!inner(*)')
+          .eq('capsule_id', id)
+          .eq('wardrobe_items.deleted', false),
       ]);
       if (capsuleError) throw capsuleError;
       if (itemError) throw itemError;
