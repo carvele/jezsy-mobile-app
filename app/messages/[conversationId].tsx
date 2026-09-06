@@ -516,7 +516,7 @@ export default function ChatScreen() {
         ? productPreviews[productRef]
         : null;
 
-    const reservationRef = item.context_ref || jsonContext?.ref || jsonContext?.reservation_id || jsonContext?.id;
+    const reservationRef = item.context_ref || jsonContext?.ref;
     const isReservationContext =
       item.context_type === 'reservation' ||
       jsonContext?.type === 'reservation' ||

@@ -1,0 +1,2 @@
+-- Rollback for messages DELETE policy
+DROP POLICY IF EXISTS "Staff can delete messages" ON public.messages;

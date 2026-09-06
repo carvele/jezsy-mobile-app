@@ -10,7 +10,9 @@ import { useToast } from '@/src/context/ToastContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Database } from '@/src/types/database.types';
 
-type DirectMessageRow = Database['public']['Tables']['direct_messages']['Row'];
+type DirectMessageRow = Database['public']['Tables']['direct_messages']['Row'] & {
+  _status?: 'sending' | 'failed';
+};
 
 export default function P2PChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>(); // other user id
@@ -161,20 +163,54 @@ export default function P2PChatScreen() {
     const content = inputText.trim();
     setInputText('');
 
+    // Optimistic bubble: show the message immediately as 'sending'.
+    const tempId = 'temp-' + Date.now();
+    const tempMsg: DirectMessageRow = {
+      id: tempId,
+      chat_id: chatId,
+      sender_id: user.id,
+      content,
+      created_at: new Date().toISOString(),
+      read_at: null,
+      _status: 'sending',
+    };
+    setMessages(prev => [tempMsg, ...prev]);
+
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('direct_messages')
-        .insert({
-          chat_id: chatId,
-          sender_id: user.id,
-          content
-        });
-      
+        .insert({ chat_id: chatId, sender_id: user.id, content })
+        .select()
+        .single();
+
       if (error) throw error;
-    } catch (err: any) { console.log(err);
+
+      // Swap the temp row for the confirmed DB row.
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...data } : m));
+    } catch {
+      // Mark the temp bubble as failed so the user can retry.
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, _status: 'failed' } : m));
       showToast('Failed to send message', 'error');
-      // Revert input text if it failed
       setInputText(content);
+    }
+  };
+
+  const handleRetrySend = async (msg: DirectMessageRow) => {
+    if (!chatId || !user) return;
+    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, _status: 'sending' } : m));
+
+    try {
+      const { data, error } = await supabase
+        .from('direct_messages')
+        .insert({ chat_id: chatId, sender_id: user.id, content: msg.content })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...data } : m));
+    } catch {
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, _status: 'failed' } : m));
+      showToast('Failed to send message', 'error');
     }
   };
 
@@ -214,12 +250,23 @@ export default function P2PChatScreen() {
           contentContainerStyle={styles.messageList}
           renderItem={({ item }) => {
             const isMe = item.sender_id === user?.id;
+            const isFailed = item._status === 'failed';
+            const isSending = item._status === 'sending';
             return (
               <View style={[
                 styles.messageBubble,
-                isMe ? [styles.myBubble, { backgroundColor: colors.tint }] : [styles.theirBubble, { backgroundColor: colors.surface, borderColor: colors.border }]
+                isMe ? [styles.myBubble, { backgroundColor: isFailed ? '#c0392b' : colors.tint }] : [styles.theirBubble, { backgroundColor: colors.surface, borderColor: colors.border }],
+                (isSending) && { opacity: 0.6 },
               ]}>
                 <Text style={[styles.messageText, { color: isMe ? '#fff' : colors.text }]}>{item.content}</Text>
+                {isMe && isFailed && (
+                  <TouchableOpacity onPress={() => handleRetrySend(item)} style={styles.retryRow}>
+                    <Text style={styles.retryText}>Tap to retry</Text>
+                  </TouchableOpacity>
+                )}
+                {isMe && isSending && (
+                  <Text style={styles.sendingText}>Sending…</Text>
+                )}
               </View>
             );
           }}
@@ -322,5 +369,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: Spacing.md,
+  },
+  retryRow: {
+    marginTop: Spacing.xs,
+  },
+  retryText: {
+    ...Type.caption,
+    color: '#fff',
+    textDecorationLine: 'underline',
+  },
+  sendingText: {
+    ...Type.caption,
+    color: '#fff',
+    marginTop: Spacing.xs,
   }
 });
