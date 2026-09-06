@@ -146,7 +146,12 @@ export default function EditProfileScreen() {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'id' });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('This username is already taken. Please choose another.');
+        }
+        throw error;
+      }
 
       await refreshProfile();
       if (router.canGoBack()) router.back();

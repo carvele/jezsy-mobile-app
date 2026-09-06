@@ -78,7 +78,7 @@ export const MONTH_NAMES = [
 ];
 
 const currentYear = new Date().getFullYear();
-const maxBirthYear = currentYear - 13;
+export const maxBirthYear = currentYear - 13;
 export const YEARS = Array.from({ length: maxBirthYear - 1939 }, (_, i) => maxBirthYear - i);
 export const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 
@@ -142,3 +142,4 @@ export const dbDateToFormDate = (dbDate: string | null | undefined): string => {
   const [y, m, d] = dbDate.split('-');
   return y && m && d ? `${m}/${d}/${y}` : '';
 };
+

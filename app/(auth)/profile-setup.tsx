@@ -240,7 +240,12 @@ export default function ProfileSetupScreen() {
           updated_at:    new Date().toISOString(),
         }, { onConflict: 'id' });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error('This username is already taken. Please choose another.');
+        }
+        throw error;
+      }
 
       // Refresh profile in context so root layout re-routes to (tabs)
       await refreshProfile();
@@ -265,6 +270,18 @@ export default function ProfileSetupScreen() {
             value={data.firstName}
             onChangeText={v => set('firstName', v)}
             autoFocus
+            returnKeyType="next"
+          />
+        </View>
+        <View style={styles.fieldGroup}>
+          <Text style={[styles.label, { color: colors.secondaryText }]}>Username (optional)</Text>
+          <TextInput keyboardAppearance={theme}
+            style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
+            placeholder="e.g. mariasantos"
+            placeholderTextColor={colors.secondaryText}
+            value={data.username}
+            onChangeText={v => set('username', v)}
+            autoCapitalize="none"
             returnKeyType="next"
           />
         </View>
