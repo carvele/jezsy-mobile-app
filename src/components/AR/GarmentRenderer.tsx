@@ -29,6 +29,7 @@ export interface GarmentRendererRef {
 
 export interface GarmentRendererProps {
   modelUrl: string;
+  visible?: boolean;
   metadata?: import('@/src/types/garment').GarmentMetadata;
   /**
    * Phase B2: real-measurement fit modifier, computed once from the wearer's saved
@@ -68,7 +69,7 @@ export interface GarmentRendererProps {
 }
 
 export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererProps>(
-  ({ modelUrl, metadata, fitModifier = 1, cameraCalibration, onLoadError }, ref) => {
+  ({ modelUrl, visible = true, metadata, fitModifier = 1, cameraCalibration, onLoadError }, ref) => {
     const safeFitModifier = Number.isFinite(fitModifier) && fitModifier > 0 ? fitModifier : 1;
     // metadata.restPoseMetricWidth used to be spliced into the injected script as a bare
     // JS expression with no validation at all -- a malformed DB value (string, object,
@@ -1336,6 +1337,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       <View style={[StyleSheet.absoluteFill, {
         pointerEvents: 'none',
         zIndex: 10,
+        opacity: visible ? 1 : 0,
         // Force this layer into its own GPU compositing layer. Without this, Chromium
         // sometimes promotes the sibling <video> camera feed to a hardware-decode
         // compositing layer that ignores normal DOM/z-index stacking order and renders

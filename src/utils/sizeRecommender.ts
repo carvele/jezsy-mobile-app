@@ -164,7 +164,7 @@ export function computeLengthFitSignal(
   chartLengthCm: number | null | undefined
 ): LengthFitSignal | null {
   const chartLength = toNumeric(chartLengthCm);
-  if (chartLength === null || chartLength <= 0) return null;
+  if (chartLength === null || !Number.isFinite(chartLength) || chartLength <= 0) return null;
   if (!worldLandmarks || worldLandmarks.length <= LM_RIGHT_HIP) return null;
 
   const lS = worldLandmarks[LM_LEFT_SHOULDER];
