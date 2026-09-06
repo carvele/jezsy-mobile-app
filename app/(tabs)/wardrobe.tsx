@@ -124,8 +124,9 @@ export default function WardrobeScreen() {
           .limit(50),
         supabase
           .from('capsules')
-          .select('*, capsule_items(count)')
+          .select('*, capsule_items(wardrobe_items!inner(deleted))')
           .eq('user_id', session.user.id)
+          .eq('capsule_items.wardrobe_items.deleted', false)
           .order('created_at', { ascending: false })
           .limit(50)
       ]);
@@ -151,7 +152,7 @@ export default function WardrobeScreen() {
           name: c.name,
           description: c.description,
           target_count: c.target_count || 30,
-          item_count: c.capsule_items?.[0]?.count || 0
+          item_count: c.capsule_items?.length || 0
         }));
         setCapsules(mappedCapsules);
       } else {
