@@ -64,3 +64,28 @@ Guidance for Codex working with code in this repo.
 
 - No customer personal data - names, contacts, account numbers, transactions (unless approved exemptions).
 - No credentials - passwords, API keys, tokens, connection strings.
+
+## Git & CI Workflow
+
+Follow this strict sequence for all changes to ensure audit integrity and CI stability:
+
+1. **Local Checks**: Always run local checks before committing or pushing.
+   - 
+pm run typecheck (or 
+px tsc --noEmit)
+   - 
+pm run lint (or 
+px eslint)
+   - 
+pm test (where applicable)
+   - 
+pm run build (especially for web/dashboard projects)
+   - supabase test db (when Docker/Podman is available)
+2. **Commit**: Keep commits reasonably scoped to one remediation or feature.
+3. **Push**: Push to a dedicated feature/fix branch.
+4. **Pull Request**: Open a PR. **Never commit directly to main.** Merging through a PR preserves review history and CI evidence, even for solo developers.
+5. **Checks Pass**: Do not merge with failing required checks. 
+   - *Exception*: If a check is blocked by environment constraints (e.g., pgTAP/Docker unavailability), record it explicitly as **verification pending** rather than treating it as passed.
+6. **Integrity Review**: For migrations, verify the migration file is committed and that you did not rewrite an already-applied migration.
+7. **Merge**: Merge the PR into main.
+8. **Cleanup**: Update your local main and delete the merged feature branch. If using Git worktrees, remove the worktree only *after* the branch is safely merged.
