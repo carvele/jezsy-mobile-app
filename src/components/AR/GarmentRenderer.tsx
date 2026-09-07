@@ -58,18 +58,19 @@ export interface GarmentRendererProps {
     videoHeightPx: number;
     wearerShoulderWidthM: number;
   };
+  cameraDimensions?: {
+    width: number;
+    height: number;
+  };
   /**
-   * Fired when the scene fails to load or render -- a GLB fetch/parse failure,
-   * or an uncaught error/rejection inside the WebView/iframe's own JS. Previously
-   * these only reached the WebView's own console (relayed to Metro via the
-   * temporary debug channel), leaving the user on a bare camera feed with zero
-   * indication anything went wrong.
+   * Fired when the scene fails to load or render -- classified into
+   * AR_LOAD_ERROR, AR_RENDER_ERROR, or AR_INTERNAL_ERROR.
    */
-  onLoadError?: (message: string) => void;
+  onLoadError?: (error: string | { type: string; message: string }) => void;
 }
 
 export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererProps>(
-  ({ modelUrl, visible = true, metadata, fitModifier = 1, cameraCalibration, onLoadError }, ref) => {
+  ({ modelUrl, visible = true, metadata, fitModifier = 1, cameraCalibration, cameraDimensions, onLoadError }, ref) => {
     const safeFitModifier = Number.isFinite(fitModifier) && fitModifier > 0 ? fitModifier : 1;
     // metadata.restPoseMetricWidth used to be spliced into the injected script as a bare
     // JS expression with no validation at all -- a malformed DB value (string, object,
@@ -141,25 +142,33 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // telemetry off-device) and is removed now that it's just blocking the view.
           function showDebug(msg) {
             console.log('[AR-STATUS] ' + msg);
-          }
-          // Surfaces a scene failure to the outer React screen instead of leaving it
-          // console-only -- see GarmentRendererProps.onLoadError.
-          function notifyLoadError(message) {
-            var payload = { type: 'AR_LOAD_ERROR', message: message };
+          // Surfaces classified errors to the outer React screen
+          function notifyError(type, message) {
+            var payload = { type: type, message: message };
             if (window.ReactNativeWebView) {
               try { window.ReactNativeWebView.postMessage(JSON.stringify(payload)); } catch (e) {}
             } else if (window.parent && window.parent !== window) {
               try { window.parent.postMessage(payload, '*'); } catch (e) {}
             }
           }
+          function notifyLoadError(message) {
+            notifyError('AR_LOAD_ERROR', message);
+          }
+          function notifyRenderError(message) {
+            notifyError('AR_RENDER_ERROR', message);
+          }
+          function notifyInternalError(message) {
+            notifyError('AR_INTERNAL_ERROR', message);
+          }
+
           window.addEventListener('error', function(e) {
             showDebug('window.onerror: ' + e.message);
-            notifyLoadError(e.message);
+            notifyInternalError(e.message);
           });
           window.addEventListener('unhandledrejection', function(e) {
             var msg = e.reason && e.reason.message ? e.reason.message : e.reason;
             showDebug('unhandledrejection: ' + msg);
-            notifyLoadError(String(msg));
+            notifyInternalError(String(msg));
           });
 
           let scene, camera, renderer, garmentModel, garmentGroup;
@@ -231,6 +240,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // after this component has already mounted, so interpolating it guaranteed
           // exactly one such reload mid-session, right as calibration became available.
           let CAMERA_CALIBRATION = null;
+          let CAMERA_DIMENSIONS = null;
 
           // Same reasoning and same fix as CAMERA_CALIBRATION above, for the same root
           // cause: fitModifier is ALSO computed from the async Supabase sizing profile
@@ -277,10 +287,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           function mapCoverCrop(nx, ny) {
             const cx = Math.max(0, Math.min(1, nx));
             const cy = Math.max(0, Math.min(1, ny));
-            if (!CAMERA_CALIBRATION || !CAMERA_CALIBRATION.videoWidthPx || !CAMERA_CALIBRATION.videoHeightPx) {
+            const dims = CAMERA_DIMENSIONS || (CAMERA_CALIBRATION && { width: CAMERA_CALIBRATION.videoWidthPx, height: CAMERA_CALIBRATION.videoHeightPx });
+            if (!dims || !dims.width || !dims.height) {
               return { nx: cx, ny: cy };
             }
-            const videoAspect = CAMERA_CALIBRATION.videoWidthPx / CAMERA_CALIBRATION.videoHeightPx;
+            const videoAspect = dims.width / dims.height;
             const containerAspect = window.innerWidth / window.innerHeight;
             const visW = Math.min(1, containerAspect / videoAspect);
             const visH = Math.min(1, videoAspect / containerAspect);
@@ -310,6 +321,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setClearColor(0x000000, 0); // fully transparent so the camera feed shows through
+            renderer.domElement.addEventListener('webglcontextlost', function(e) {
+              e.preventDefault();
+              showDebug('WebGL context lost');
+              notifyRenderError('WebGL context lost');
+            }, false);
             container.appendChild(renderer.domElement);
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -588,49 +604,72 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 + ' min=' + JSON.stringify({x:+box.min.x.toFixed(4), y:+box.min.y.toFixed(4), z:+box.min.z.toFixed(4)})
                 + ' max=' + JSON.stringify({x:+box.max.x.toFixed(4), y:+box.max.y.toFixed(4), z:+box.max.z.toFixed(4)}));
 
-              // Phase 5: Anatomical Anchoring
-              const anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? safeStringify(metadata.anatomicalAnchorOffset) : 'null'};
-              if (anchorOffset) {
-                // Shift the model inversely by its anatomical anchor
-                garmentModel.position.set(-anchorOffset.x, -anchorOffset.y, -anchorOffset.z);
-              } else {
-                // Fallback: no calibrated anchor for this garment, so approximate one from
-                // geometry. Anchoring at the box's horizontal center but its TOP edge (not
-                // its vertical center) puts the collar/shoulder line near the origin instead
-                // of the mid-torso -- since the group's position is later set to the wearer's
-                // shoulder midpoint every frame, anchoring at center made the garment hang
-                // roughly half its own height too high, and the visible remainder sit too low.
-                const center = box.getCenter(new THREE.Vector3());
-                const topCenter = new THREE.Vector3(center.x, box.max.y, center.z);
-                garmentModel.position.sub(topCenter);
-              }
-
-              // Parented only now, after the model-local Box3 measurement and anchor
-              // positioning above are both done -- see the comment at garmentModel =
-              // gltf.scene for why parenting earlier corrupted that measurement.
-              garmentGroup.add(garmentModel);
-
-              // r128's SkinnedMesh never recomputes geometry.boundingSphere for the posed
-              // shape -- skinning is GPU-only in this version, so the CPU position attribute
-              // (what computeBoundingSphere reads) always reflects the bind pose, never the
-              // live retargeted pose. WebGLRenderer.projectObject() frustum-culls per object
-              // using that stale sphere transformed by the live (correct) matrixWorld, so a
-              // provably-correct transform can still be silently skipped for the draw call --
-              // confirmed live: the anchorDebugBone diagnostic logged delta=0.000 against
-              // targetPos on frames where the garment still failed to render. Same root cause
-              // this file's own author already worked around for occlusionMesh (frustumCulled
-              // = false, above) but never applied to the actual garment mesh. Recomputing the
-              // bounding sphere per frame would not help -- it would just reproduce the same
-              // wrong bind-pose sphere -- so disable culling on it entirely instead.
-              garmentModel.traverse((child) => {
-                if (child.isMesh) child.frustumCulled = false;
-              });
-
-              // Extract skeleton bones for Phase 4B Skinning
+              // Extract skeleton bones for Phase 4B Skinning and Anatomical Anchoring
               garmentModel.traverse((child) => {
                 if (child.isBone) {
                   skeletonBones[child.name] = child;
                 }
+              });
+
+              // Phase 5: Anatomical Anchoring
+              // Derive the anatomical anchor from the garment's shoulder/arm bone midpoint
+              // in model space. This guarantees 1:1 alignment with the wearer's shoulder
+              // midpoint (MediaPipe landmarks 11 & 12) without guessing hardcoded offsets.
+              const boneMapForBind = ${metadata ? safeStringify(metadata.boneMap) : 'null'};
+              const resolveBindBoneName = (canonical) => {
+                if (skeletonBones[canonical]) return canonical;
+                if (boneMapForBind && boneMapForBind[canonical]) return boneMapForBind[canonical];
+                return 'mixamorig' + canonical;
+              };
+
+              let anchorOffset = null;
+              const armLeft = skeletonBones[resolveBindBoneName('LeftArm')];
+              const armRight = skeletonBones[resolveBindBoneName('RightArm')];
+              const shoulderLeft = skeletonBones[resolveBindBoneName('LeftShoulder')];
+              const shoulderRight = skeletonBones[resolveBindBoneName('RightShoulder')];
+
+              garmentModel.updateMatrixWorld(true);
+              if (armLeft && armRight) {
+                const pL = new THREE.Vector3();
+                const pR = new THREE.Vector3();
+                armLeft.getWorldPosition(pL);
+                armRight.getWorldPosition(pR);
+                anchorOffset = new THREE.Vector3().addVectors(pL, pR).multiplyScalar(0.5);
+                showDebug('Anatomical anchor: derived from LeftArm/RightArm midpoint: ' + JSON.stringify({
+                  x: +anchorOffset.x.toFixed(4),
+                  y: +anchorOffset.y.toFixed(4),
+                  z: +anchorOffset.z.toFixed(4)
+                }));
+              } else if (shoulderLeft && shoulderRight) {
+                const pL = new THREE.Vector3();
+                const pR = new THREE.Vector3();
+                shoulderLeft.getWorldPosition(pL);
+                shoulderRight.getWorldPosition(pR);
+                anchorOffset = new THREE.Vector3().addVectors(pL, pR).multiplyScalar(0.5);
+                showDebug('Anatomical anchor: derived from LeftShoulder/RightShoulder midpoint: ' + JSON.stringify({
+                  x: +anchorOffset.x.toFixed(4),
+                  y: +anchorOffset.y.toFixed(4),
+                  z: +anchorOffset.z.toFixed(4)
+                }));
+              } else if (${metadata && metadata.anatomicalAnchorOffset ? 'true' : 'false'}) {
+                anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? safeStringify(metadata.anatomicalAnchorOffset) : 'null'};
+                showDebug('Anatomical anchor: metadata fallback: ' + JSON.stringify(anchorOffset));
+              }
+
+              if (anchorOffset) {
+                // Shift the model inversely by its anatomical anchor
+                garmentModel.position.set(-anchorOffset.x, -anchorOffset.y, -anchorOffset.z);
+              } else {
+                const center = box.getCenter(new THREE.Vector3());
+                const topCenter = new THREE.Vector3(center.x, box.max.y, center.z);
+                garmentModel.position.sub(topCenter);
+                showDebug('Anatomical anchor: bounding box top-center fallback');
+              }
+
+              garmentGroup.add(garmentModel);
+
+              garmentModel.traverse((child) => {
+                if (child.isMesh) child.frustumCulled = false;
               });
 
               // Capture each Shoulder/Arm/ForeArm bone's REAL bind-pose local quaternion
@@ -661,16 +700,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // confirmed against the GLB, and confirmed live as the blazer sleeve going
               // backward. Walk up to (excluding) garmentGroup, whose own quaternion is the
               // live torso orientation and must never enter a bind prefix.
-              const boneMapForBind = ${metadata ? safeStringify(metadata.boneMap) : 'null'};
               const bindQuats = {};
               garmentModel.traverse((child) => { // traverse includes garmentModel itself
                 bindQuats[child.uuid] = child.quaternion.clone();
               });
-              const resolveBindBoneName = (canonical) => {
-                if (skeletonBones[canonical]) return canonical;
-                if (boneMapForBind && boneMapForBind[canonical]) return boneMapForBind[canonical];
-                return 'mixamorig' + canonical;
-              };
               // TEMP DEBUG: resolve the actual anchor bone (Spine2, the DB's current
               // anatomicalAnchorOffset source) once, for per-frame world-position logging.
               anchorDebugBone = skeletonBones[resolveBindBoneName('Spine2')] || null;
@@ -761,6 +794,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           window.addEventListener('message', (event) => {
             try {
               const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+              if (data && data.type === 'SET_CAMERA_DIMENSIONS') {
+                CAMERA_DIMENSIONS = data.dimensions || null;
+                showDebug('camera dimensions received: ' + JSON.stringify(CAMERA_DIMENSIONS));
+                return;
+              }
               if (data && data.type === 'SET_CAMERA_CALIBRATION') {
                 CAMERA_CALIBRATION = data.calibration || null;
                 if (camera && CAMERA_CALIBRATION) {
@@ -1290,19 +1328,38 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       sendFitModifier();
     }, [sendFitModifier]);
 
+    const sendCameraDimensions = useCallback(() => {
+      if (!cameraDimensions) return;
+      const payload = { type: 'SET_CAMERA_DIMENSIONS', dimensions: cameraDimensions };
+      if (Platform.OS === 'web') {
+        iframeRef.current?.contentWindow?.postMessage(payload, '*');
+      } else if (webviewRef.current) {
+        webviewRef.current.injectJavaScript(
+          "window.postMessage(" + JSON.stringify(payload) + ", '*'); true;"
+        );
+      }
+    }, [cameraDimensions]);
+
+    useEffect(() => {
+      sendCameraDimensions();
+    }, [sendCameraDimensions]);
+
     const sendRuntimeConfig = useCallback(() => {
       sendCameraCalibration();
       sendFitModifier();
-    }, [sendCameraCalibration, sendFitModifier]);
+      sendCameraDimensions();
+    }, [sendCameraCalibration, sendFitModifier, sendCameraDimensions]);
 
-    // Web has no ReactNativeWebView bridge -- the iframe posts AR_LOAD_ERROR to
-    // window.parent directly (see notifyLoadError in the injected script).
+    // Web has no ReactNativeWebView bridge -- the iframe posts errors to
+    // window.parent directly (see notifyError in the injected script).
     useEffect(() => {
       if (Platform.OS !== 'web' || !onLoadError) return;
       const handler = (event: MessageEvent) => {
         if (event.source !== iframeRef.current?.contentWindow) return;
         const data = event.data;
-        if (data && data.type === 'AR_LOAD_ERROR') onLoadError(String(data.message));
+        if (data && (data.type === 'AR_LOAD_ERROR' || data.type === 'AR_RENDER_ERROR' || data.type === 'AR_INTERNAL_ERROR')) {
+          onLoadError(data);
+        }
       };
       window.addEventListener('message', handler);
       return () => window.removeEventListener('message', handler);
@@ -1402,8 +1459,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               const raw = event.nativeEvent.data;
               try {
                 const data = JSON.parse(raw);
-                if (data && data.type === 'AR_LOAD_ERROR') {
-                  onLoadError?.(String(data.message));
+                if (data && (data.type === 'AR_LOAD_ERROR' || data.type === 'AR_RENDER_ERROR' || data.type === 'AR_INTERNAL_ERROR')) {
+                  onLoadError?.(data);
                   return;
                 }
               } catch {

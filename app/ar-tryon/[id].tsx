@@ -45,19 +45,22 @@ interface WebCameraFeedProps {
   active: boolean;
   onPoseResults?: (poseFrame: PoseFrame) => void;
   onTrackingLost?: () => void;
+  onCameraDimensions?: (dimensions: { width: number; height: number }) => void;
 }
 
-function WebCameraFeed({ active, onPoseResults, onTrackingLost }: WebCameraFeedProps) {
+function WebCameraFeed({ active, onPoseResults, onTrackingLost, onCameraDimensions }: WebCameraFeedProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
   const occlusionCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const trackerRef = React.useRef<WebPoseTracker | null>(null);
   const animFrameRef = React.useRef<number | null>(null);
   const onPoseResultsRef = React.useRef(onPoseResults);
   const onTrackingLostRef = React.useRef(onTrackingLost);
+  const onCameraDimensionsRef = React.useRef(onCameraDimensions);
 
   React.useEffect(() => {
     onPoseResultsRef.current = onPoseResults;
     onTrackingLostRef.current = onTrackingLost;
+    onCameraDimensionsRef.current = onCameraDimensions;
   });
 
   React.useEffect(() => {
@@ -92,6 +95,7 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost }: WebCameraFeedP
             if (videoRef.current && isMounted) {
               const vw = videoRef.current.videoWidth || 640;
               const vh = videoRef.current.videoHeight || 480;
+              onCameraDimensionsRef.current?.({ width: vw, height: vh });
               if (occlusionCanvasRef.current) {
                 occlusionCanvasRef.current.width = vw;
                 occlusionCanvasRef.current.height = vh;
@@ -337,7 +341,12 @@ export default function ARTryOnScreen() {
   // resolution as long as format and the values read from it agree.
   const format = useCameraFormat(device, [{ videoResolution: { width: 1280, height: 720 } }]);
 
-  const [arLoadError, setArLoadError] = useState<string | null>(null);
+  const [arError, setArError] = useState<{ type: string; message: string } | null>(null);
+  const setArLoadError = useCallback((msg: string | null) => {
+    setArError(msg ? { type: 'AR_LOAD_ERROR', message: msg } : null);
+  }, []);
+  const arLoadError = arError?.type === 'AR_LOAD_ERROR' ? arError.message : null;
+  const [cameraDimensions, setCameraDimensions] = useState<{ width: number; height: number } | null>(null);
   // Fix for #29 in the AR audit plan: <Camera>'s onError used to only console.warn,
   // leaving a permanently black feed with the "AI Body Tracking Active" pill still
   // shown (stale/false) whenever a camera-level error fired -- confirmed live on this
@@ -1111,6 +1120,7 @@ export default function ARTryOnScreen() {
               active={cameraActive}
               onPoseResults={handlePoseResults}
               onTrackingLost={handleTrackingLost}
+              onCameraDimensions={setCameraDimensions}
             />
           ) : device ? (
             <Camera
@@ -1147,13 +1157,26 @@ export default function ARTryOnScreen() {
               metadata={garmentMetadata}
               fitModifier={fitModifier}
               cameraCalibration={cameraCalibration}
-              onLoadError={setArLoadError}
+              cameraDimensions={cameraDimensions || (cameraCalibration ? { width: cameraCalibration.videoWidthPx, height: cameraCalibration.videoHeightPx } : undefined)}
+              onLoadError={(err) => {
+                if (typeof err === 'string') {
+                  setArError({ type: 'AR_LOAD_ERROR', message: err });
+                } else if (err && typeof err === 'object') {
+                  setArError(err);
+                }
+              }}
             />
           )}
 
-          {arLoadError && (
+          {arError && arError.type === 'AR_LOAD_ERROR' && (
             <View style={[styles.arLoadErrorBanner, { pointerEvents: 'none' }]}>
               <Text style={styles.arLoadErrorText}>Garment failed to load. Try again shortly.</Text>
+            </View>
+          )}
+
+          {arError && arError.type === 'AR_RENDER_ERROR' && (
+            <View style={[styles.arLoadErrorBanner, { pointerEvents: 'none' }]}>
+              <Text style={styles.arLoadErrorText}>3D graphics encountered a problem. Refreshing display...</Text>
             </View>
           )}
 
