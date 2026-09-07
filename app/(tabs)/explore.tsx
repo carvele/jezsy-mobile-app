@@ -377,12 +377,14 @@ export default function ExploreScreen() {
       if (selectedSubCategory === 'View All') {
         const subIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
         if (subIds.length > 0) {
-          query = query.in('category_id', subIds);
+          query = query.or(`category_id.in.(${subIds.join(',')}),and(category_id.is.null,category.eq.${selectedCategory})`);
+        } else {
+          query = query.eq('category', selectedCategory);
         }
       } else {
         const subId = subCategoryIdByName[selectedSubCategory];
         if (!subId) return null;
-        query = query.eq('category_id', subId);
+        query = query.or(`category_id.eq.${subId},and(category_id.is.null,sub_category.eq.${selectedSubCategory},category.eq.${selectedCategory})`);
       }
     } else {
       return null;
