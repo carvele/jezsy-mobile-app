@@ -129,9 +129,7 @@ export default function EditProfileScreen() {
 
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email ?? null,
+        .update({
           first_name: data.firstName.trim(),
           username: data.username.trim() || null,
           last_name: data.lastName.trim(),
@@ -144,7 +142,8 @@ export default function EditProfileScreen() {
           province: data.province.trim() || null,
           zip_code: data.zipCode.trim() || null,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
+        })
+        .eq('id', user.id);
 
       if (error) {
         if (error.code === '23505') {

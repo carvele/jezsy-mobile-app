@@ -221,30 +221,63 @@ export default function ProfileSetupScreen() {
       const fullPhone = cleanedPhone ? `${selectedCountry.dialCode}${cleanedPhone}` : null;
       const dateOfBirth = parseDateOfBirth(data.dateOfBirth);
 
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id:            user.id,
-          email:         user.email ?? null,
-          first_name:    data.firstName.trim(),
-            username:      data.username.trim() || null,
-          last_name:     data.lastName.trim(),
-          phone:         fullPhone,
-          gender:        data.gender || null,
-          date_of_birth: dateOfBirth,
-          address_line:  data.addressLine.trim() || null,
-          barangay:      data.barangay.trim() || null,
-          city:          data.city.trim() || null,
-          province:      data.province.trim() || null,
-          zip_code:      data.zipCode.trim() || null,
-          updated_at:    new Date().toISOString(),
-        }, { onConflict: 'id' });
+      const updatePayload = {
+        first_name:    data.firstName.trim(),
+        username:      data.username.trim() || null,
+        last_name:     data.lastName.trim(),
+        phone:         fullPhone,
+        gender:        data.gender || null,
+        date_of_birth: dateOfBirth,
+        address_line:  data.addressLine.trim() || null,
+        barangay:      data.barangay.trim() || null,
+        city:          data.city.trim() || null,
+        province:      data.province.trim() || null,
+        zip_code:      data.zipCode.trim() || null,
+        updated_at:    new Date().toISOString(),
+      };
 
-      if (error) {
-        if (error.code === '23505') {
+      const { data: updatedRows, error: updateError } = await supabase
+        .from('profiles')
+        .update(updatePayload)
+        .eq('id', user.id)
+        .select('id');
+
+      if (updateError) {
+        if (updateError.code === '23505') {
           throw new Error('This username is already taken. Please choose another.');
         }
-        throw error;
+        throw updateError;
+      }
+
+      if (!updatedRows || updatedRows.length === 0) {
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email ?? null,
+            ...updatePayload,
+          });
+
+        if (insertError) {
+          if (insertError.code === '23505') {
+            const isUsernameConflict = insertError.message?.includes('username') || insertError.details?.includes('username');
+            if (isUsernameConflict) {
+              throw new Error('This username is already taken. Please choose another.');
+            }
+            const { error: retryError } = await supabase
+              .from('profiles')
+              .update(updatePayload)
+              .eq('id', user.id);
+            if (retryError) {
+              if (retryError.code === '23505') {
+                throw new Error('This username is already taken. Please choose another.');
+              }
+              throw retryError;
+            }
+          } else {
+            throw insertError;
+          }
+        }
       }
 
       // Refresh profile in context so root layout re-routes to (tabs)
