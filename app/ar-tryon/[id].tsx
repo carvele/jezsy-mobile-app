@@ -1169,14 +1169,26 @@ export default function ARTryOnScreen() {
           )}
 
           {arError && arError.type === 'AR_LOAD_ERROR' && (
-            <View style={[styles.arLoadErrorBanner, { pointerEvents: 'none' }]}>
-              <Text style={styles.arLoadErrorText}>Garment failed to load. Try again shortly.</Text>
+            <View style={[styles.arLoadErrorBanner, { pointerEvents: 'box-none' }]}>
+              <Text style={styles.arLoadErrorText}>Garment failed to load. Check your connection or try again.</Text>
+              <TouchableOpacity
+                onPress={() => setArError(null)}
+                style={styles.cameraErrorRetryButton}
+              >
+                <Text style={styles.cameraErrorRetryText}>Retry</Text>
+              </TouchableOpacity>
             </View>
           )}
 
           {arError && arError.type === 'AR_RENDER_ERROR' && (
-            <View style={[styles.arLoadErrorBanner, { pointerEvents: 'none' }]}>
-              <Text style={styles.arLoadErrorText}>3D graphics encountered a problem. Refreshing display...</Text>
+            <View style={[styles.arLoadErrorBanner, { pointerEvents: 'box-none' }]}>
+              <Text style={styles.arLoadErrorText}>3D graphics encountered a problem.</Text>
+              <TouchableOpacity
+                onPress={() => setArError(null)}
+                style={styles.cameraErrorRetryButton}
+              >
+                <Text style={styles.cameraErrorRetryText}>Reload 3D View</Text>
+              </TouchableOpacity>
             </View>
           )}
 
