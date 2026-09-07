@@ -59,7 +59,7 @@ export default function UserProfileScreen() {
         .select('*')
         .eq('user_id_1', u1)
         .eq('user_id_2', u2)
-        .single();
+        .maybeSingle();
 
       setConnection(connData || null);
 

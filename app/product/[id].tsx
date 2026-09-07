@@ -113,7 +113,7 @@ export default function ProductDetailScreen() {
             // Compute size recommendation if user is logged in
             if (user?.id && data.measurements) {
               const [{ data: profile }, { data: metrics }] = await Promise.all([
-                supabase.from("profiles").select("fit_preference").eq("id", user.id).single(),
+                supabase.from("profiles").select("fit_preference").eq("id", user.id).maybeSingle(),
                 supabase.from("user_measurements").select("measurements").eq("user_id", user.id).maybeSingle(),
               ]);
 

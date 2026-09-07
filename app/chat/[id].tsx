@@ -75,7 +75,7 @@ export default function P2PChatScreen() {
           .select('status')
           .eq('user_id_1', u1)
           .eq('user_id_2', u2)
-          .single();
+          .maybeSingle();
         
         if (cancelled) return;
         setCanMessage(conn?.status === 'accepted');
