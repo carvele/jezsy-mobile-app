@@ -77,6 +77,7 @@ const MAPPING = {
 
   // User & Profile
   'person.fill': 'person',
+  'person.2.fill': 'people',
   'lock.fill': 'lock',
   'eye.fill': 'visibility',
   'eye.slash.fill': 'visibility-off',

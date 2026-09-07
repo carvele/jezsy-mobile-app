@@ -90,7 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setProfile(nextProfile);
       return nextProfile;
     } catch (err) {
-      captureError(err as Error, { context: 'AuthContext Profile Sync' });
+      console.error('AuthContext Profile Sync error:', err);
       // Total failure — try cache before giving up
       try {
         const cached = await getSecureValue(profileCacheKey(userId));
