@@ -144,35 +144,138 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-                  <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Shopping & Social</Text>
-            <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
-              {renderSettingItem(
-                  'heart.fill',
-                  'Wishlist',
-                  `${wishlistIds.size} saved items`,
-                  () => router.push('/wishlist' as any),
-                )}
-              {renderSettingItem(
-                  'person.2.fill',
-                  'My Network',
-                  'Find and connect with friends',
-                  () => router.push('/network' as any),
-                )}
-              {renderSettingItem(
-                  'lock.fill',
-                  'Privacy Settings',
-                  'Wardrobe sharing',
-                  () => router.push('/profile/privacy-settings' as any),
-                )}
-                {renderSettingItem(
-                  'square.and.arrow.up',
-                  'Share My Profile',
-                  'Send link to friends',
-                  handleShareProfile,
-                )}
-            </View>
+        <View style={styles.section}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg }}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>My Reservations</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/reservations')}
+              accessibilityRole="button"
+              accessibilityLabel="View all reservations"
+            >
+              <Text style={[Type.body, { color: colors.tint }]}>View All</Text>
+            </TouchableOpacity>
           </View>
+          <View style={[styles.ordersContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=pending')}
+              accessibilityRole="button"
+              accessibilityLabel="View pending reservations"
+            >
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="clock.arrow.circlepath" size={24} color={colors.icon} />
+                {counts.pending > 0 && (
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
+                    <Text style={styles.statusBadgeText}>{counts.pending}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Pending</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=toPay')}
+              accessibilityRole="button"
+              accessibilityLabel="View reservations awaiting payment"
+            >
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="creditcard" size={24} color={colors.icon} />
+                {counts.toPay > 0 && (
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
+                    <Text style={styles.statusBadgeText}>{counts.toPay}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>To pay</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=preparing')}
+              accessibilityRole="button"
+              accessibilityLabel="View reservations being prepared"
+            >
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="bag.fill" size={24} color={colors.icon} />
+                {counts.preparing > 0 && (
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
+                    <Text style={styles.statusBadgeText}>{counts.preparing}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Preparing</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=ready')}
+              accessibilityRole="button"
+              accessibilityLabel="View reservations ready to collect"
+            >
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
+                {counts.ready > 0 && (
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
+                    <Text style={styles.statusBadgeText}>{counts.ready}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Ready</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Shopping & Wardrobe</Text>
+          <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
+            {renderSettingItem(
+              'bag.fill',
+              'My Bag',
+              `${itemCount} item${itemCount !== 1 ? 's' : ''} ready to reserve`,
+              () => router.push('/cart'),
+            )}
+            {renderSettingItem(
+              'heart.fill',
+              'Wishlist',
+              `${wishlistIds.size} saved item${wishlistIds.size !== 1 ? 's' : ''}`,
+              () => router.push('/wishlist'),
+            )}
+            {renderSettingItem(
+              'ruler.fill',
+              'Sizing & Measurements',
+              'Height, Weight, Fit preferences',
+              () => router.push('/profile/measurements'),
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Account & Social</Text>
+          <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
+            {renderSettingItem(
+              'gear',
+              'Account Settings',
+              'Email, password',
+              () => router.push('/profile/account-settings' as any),
+            )}
+            {renderSettingItem(
+              'person.2.fill',
+              'My Network',
+              'Connections and requests',
+              () => router.push('/network' as any),
+            )}
+            {renderSettingItem(
+              'lock.fill',
+              'Privacy Settings',
+              'Wardrobe sharing',
+              () => router.push('/profile/privacy-settings' as any),
+            )}
+            {renderSettingItem(
+              'square.and.arrow.up',
+              'Share My Profile',
+              'Send link to friends',
+              handleShareProfile,
+            )}
+          </View>
+        </View>
 
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>App Preferences</Text>
