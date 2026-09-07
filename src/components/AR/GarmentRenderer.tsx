@@ -1341,6 +1341,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
         pointerEvents: 'none',
         zIndex: 10,
         opacity: visible ? 1 : 0,
+        // @ts-ignore - web-only CSS transition property to eliminate harsh strobe/flicker
+        transition: Platform.OS === 'web' ? 'opacity 0.2s ease-in-out' : undefined,
         // Force this layer into its own GPU compositing layer. Without this, Chromium
         // sometimes promotes the sibling <video> camera feed to a hardware-decode
         // compositing layer that ignores normal DOM/z-index stacking order and renders

@@ -112,26 +112,37 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost }: WebCameraFeedP
         // Continuous pose detection loop with ~20 FPS inference budget
         let isProcessing = false;
         let lastInferenceTime = 0;
+        let lastVideoTime = -1;
+        let lastPoseTime = performance.now();
 
         const filter = new PoseLandmarkFilter(1.2, 0.015, 1.0);
 
         function detectLoop() {
           if (!isMounted) return;
           const now = performance.now();
+          const video = videoRef.current;
 
           if (
             now - lastInferenceTime >= 48 &&
-            videoRef.current &&
-            videoRef.current.readyState >= 2 &&
+            video &&
+            video.readyState >= 2 &&
             !isProcessing
           ) {
+            // If the camera has not presented a new frame yet, wait for the next tick
+            // without falsely reporting tracking loss.
+            if (video.currentTime === lastVideoTime) {
+              animFrameRef.current = requestAnimationFrame(detectLoop);
+              return;
+            }
+            lastVideoTime = video.currentTime;
             isProcessing = true;
             lastInferenceTime = now;
             try {
-              const detectResult = tracker.detect(videoRef.current, now);
+              const detectResult = tracker.detect(video, now);
               const canvas = occlusionCanvasRef.current;
 
               if (detectResult) {
+                lastPoseTime = now;
                 const rawLandmarks = detectResult.landmarks;
                 const worldLandmarks = detectResult.worldLandmarks;
                 const landmarks = filter.filterLandmarks(rawLandmarks, now);
@@ -144,16 +155,21 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost }: WebCameraFeedP
                   });
                 }
               } else {
-                filter.reset();
-                onTrackingLostRef.current?.();
-                // Tracking lost: clear occlusion canvas immediately to prevent stale cutouts
-                if (canvas) {
-                  const ctx = canvas.getContext('2d');
-                  ctx?.clearRect(0, 0, canvas.width, canvas.height);
+                // Debounce tracking lost: only declare lost if no pose detected for 750ms (AR_POSE_STALE_MS)
+                if (now - lastPoseTime >= 750) {
+                  filter.reset();
+                  onTrackingLostRef.current?.();
+                  // Tracking lost: clear occlusion canvas immediately to prevent stale cutouts
+                  if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    ctx?.clearRect(0, 0, canvas.width, canvas.height);
+                  }
                 }
               }
             } catch (err) {
-              onTrackingLostRef.current?.();
+              if (now - lastPoseTime >= 750) {
+                onTrackingLostRef.current?.();
+              }
               console.warn('Frame processing error:', err);
             } finally {
               isProcessing = false;
