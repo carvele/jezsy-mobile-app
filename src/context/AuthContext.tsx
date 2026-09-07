@@ -89,7 +89,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       setProfile(nextProfile);
       return nextProfile;
-    } catch {
+    } catch (err) {
+      captureError(err as Error, { context: 'AuthContext Profile Sync' });
       // Total failure — try cache before giving up
       try {
         const cached = await getSecureValue(profileCacheKey(userId));
@@ -159,20 +160,52 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const firstName = nameParts.shift() ?? "";
       const lastName = nameParts.join(" ") ?? "";
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .upsert(
-          {
+      let data = null;
+      let error = null;
+
+      if (existing) {
+        const res = await supabase
+          .from("profiles")
+          .update({
+            first_name: firstName || null,
+            last_name: lastName || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", authUser.id)
+          .select("*")
+          .maybeSingle();
+        data = res.data;
+        error = res.error;
+      } else {
+        const res = await supabase
+          .from("profiles")
+          .insert({
             id: authUser.id,
             email: authUser.email ?? null,
             first_name: firstName || null,
             last_name: lastName || null,
             updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" },
-        )
-        .select("*")
-        .maybeSingle();
+          })
+          .select("*")
+          .maybeSingle();
+        data = res.data;
+        error = res.error;
+
+        if (error && (error as any).code === "23505") {
+          const retry = await supabase
+            .from("profiles")
+            .update({
+              first_name: firstName || null,
+              last_name: lastName || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", authUser.id)
+            .select("*")
+            .maybeSingle();
+          data = retry.data;
+          error = retry.error;
+        }
+      }
 
       if (error) {
         console.error("Failed to sync profile", error);
