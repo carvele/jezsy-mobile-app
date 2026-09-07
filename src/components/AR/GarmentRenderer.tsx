@@ -115,6 +115,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       <body>
         <div id="canvas-container"></div>
         <script>
+          // Explicit host -> iframe boundary configuration
+          const AR_DEBUG = ${Boolean(typeof __DEV__ !== 'undefined' && __DEV__)};
+
           // TEMP DEBUG: relay this WebView's own console into the outer RN console
           // (visible in Metro) via postMessage -- native only, since window.ReactNativeWebView
           // doesn't exist in the web iframe. Direct remote-debugging of the WebView hit a
@@ -671,7 +674,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // TEMP DEBUG: resolve the actual anchor bone (Spine2, the DB's current
               // anatomicalAnchorOffset source) once, for per-frame world-position logging.
               anchorDebugBone = skeletonBones[resolveBindBoneName('Spine2')] || null;
-              if (__DEV__) {
+              if (AR_DEBUG) {
                 console.log('[AR-DEBUG-ANCHOR-SETUP] anchorDebugBone resolved=' + (anchorDebugBone ? anchorDebugBone.name : 'NOT FOUND'));
               }
               // Product of every bind rotation from garmentGroup down to and including this
@@ -746,7 +749,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
             renderFrameCount++;
             const renderRateElapsedMs = renderRateNow - renderRateWindowStart;
             if (renderRateElapsedMs >= 1000) {
-              if (__DEV__) {
+              if (AR_DEBUG) {
                 const renderFps = (renderFrameCount / renderRateElapsedMs) * 1000;
                 console.log('[AR-RENDER-FPS] fps=' + renderFps.toFixed(1));
               }
@@ -803,7 +806,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 transportRateCount++;
                 const rateElapsedMs = rateNow - transportRateWindowStart;
                 if (rateElapsedMs >= 1000) {
-                  if (__DEV__) {
+                  if (AR_DEBUG) {
                     const ratePerSec = (transportRateCount / rateElapsedMs) * 1000;
                     console.log('[AR-TRANSPORT-RATE-WEBVIEW] processed/sec=' + ratePerSec.toFixed(1));
                   }
@@ -1112,7 +1115,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // TEMP DEBUG: throttled diagnostic dump -- remove once the wrong-arm /
                       // disappearing-garment issues are root-caused. Logs every ~20 frames.
                       if (shouldLog) {
-                        if (__DEV__) {
+                        if (AR_DEBUG) {
                           console.log('[AR-DEBUG-FRAME] transformValid=' + transformValid
                             + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
                             + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
@@ -1142,7 +1145,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         // is never retargeted per-frame (only the 4 arm bones are), so it
                         // should sit at its exact bind-pose position; this should land very
                         // close to targetPos/groupPos if the anchor math is correct.
-                        if (anchorDebugBone && __DEV__) {
+                        if (anchorDebugBone && AR_DEBUG) {
                           const anchorBoneWorldPos = new THREE.Vector3();
                           anchorDebugBone.getWorldPosition(anchorBoneWorldPos);
                           const anchorDelta = anchorBoneWorldPos.clone().sub(garmentGroup.position);
@@ -1153,7 +1156,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         }
                       }
                     } else if (shouldLog) {
-                      if (__DEV__) {
+                      if (AR_DEBUG) {
                         console.log('[AR-DEBUG-FRAME] SKIPPED: targetPos/targetL/targetR unprojection failed (likely NaN camera/vector math)');
                       }
                       showDebug('unprojection FAILED (likely NaN camera/vector math)');
@@ -1161,7 +1164,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   } catch(e) { console.error('Projection Math Error', e); showDebug('Projection Math Error: ' + e.message); }
                 } else {
                   // Fallback
-                  if (__DEV__ && shouldLog) {
+                  if (AR_DEBUG && shouldLog) {
                     console.log('[AR-DEBUG-FRAME] FALLBACK PATH: normalizedLandmarks[11]/[12] missing or camera not ready');
                   }
                   if (shouldLog) showDebug('FALLBACK PATH: no shoulder landmarks / camera not ready, pos=' + JSON.stringify(pos) + ' scl=' + scl);
