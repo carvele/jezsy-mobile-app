@@ -142,6 +142,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // telemetry off-device) and is removed now that it's just blocking the view.
           function showDebug(msg) {
             console.log('[AR-STATUS] ' + msg);
+          }
+
           // Surfaces classified errors to the outer React screen
           function notifyError(type, message) {
             var payload = { type: type, message: message };
