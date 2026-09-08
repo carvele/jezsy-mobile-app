@@ -1,0 +1,29 @@
+-- Rollback for 20260908160000_fix_rls_helper_function_volatility.sql.
+
+ALTER FUNCTION public.is_staff_or_admin() VOLATILE;
+ALTER FUNCTION public.is_device_approved() VOLATILE;
+
+DROP INDEX IF EXISTS public.idx_devices_session_id_status;
+
+DROP POLICY IF EXISTS "Enable all access for admin/staff" ON public.profiles;
+CREATE POLICY "Enable all access for admin/staff" ON public.profiles
+  AS PERMISSIVE FOR ALL TO authenticated
+  USING (is_staff_or_admin())
+  WITH CHECK (is_staff_or_admin());
+
+DROP POLICY IF EXISTS "Enable all access for own measurements or admin" ON public.user_measurements;
+CREATE POLICY "Enable insert for own measurements or admin" ON public.user_measurements
+  AS PERMISSIVE FOR INSERT TO public
+  WITH CHECK ((user_id = (select auth.uid())) OR is_staff_or_admin());
+CREATE POLICY "Enable select for own measurements or admin" ON public.user_measurements
+  AS PERMISSIVE FOR SELECT TO public
+  USING ((user_id = (select auth.uid())) OR is_staff_or_admin());
+CREATE POLICY "Enable update/delete for own measurements or admin" ON public.user_measurements
+  AS PERMISSIVE FOR ALL TO public
+  USING ((user_id = (select auth.uid())) OR is_staff_or_admin())
+  WITH CHECK ((user_id = (select auth.uid())) OR is_staff_or_admin());
+
+DROP POLICY IF EXISTS "restrict_profile_insert_to_own_auth" ON public.profiles;
+CREATE POLICY "restrict_profile_insert_to_own_auth" ON public.profiles
+  AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((id = auth.uid()) AND (email = (auth.jwt() ->> 'email'::text)));

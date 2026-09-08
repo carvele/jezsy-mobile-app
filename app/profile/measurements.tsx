@@ -316,24 +316,39 @@ export default function MeasurementsScreen() {
       measurement_source: source,
     };
 
-    let timer: any = null;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        const timeoutErr: any = new Error('Request timed out while saving measurements.');
-        timeoutErr.isTimeout = true;
-        reject(timeoutErr);
-      }, 12000);
-    });
-
-    try {
-      // Execute profile update and measurements upsert concurrently
-      const [profileRes, measurementsRes] = await Promise.race([
+    // Both writes are idempotent (update by id, upsert on user_id), so a
+    // timed-out attempt can be safely retried once without risking a
+    // duplicate or double-applied write -- this absorbs a single transient
+    // slow round-trip (e.g. a cold connection) without making the user
+    // manually tap Save again.
+    const attemptWrite = () => {
+      let timer: any = null;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          const timeoutErr: any = new Error('Request timed out while saving measurements.');
+          timeoutErr.isTimeout = true;
+          reject(timeoutErr);
+        }, 12000);
+      });
+      return Promise.race([
         Promise.all([
           supabase.from('profiles').update({ fit_preference: fitPreference }).eq('id', user.id),
           supabase.from('user_measurements').upsert(payload, { onConflict: 'user_id' }),
         ]),
         timeoutPromise,
-      ]);
+      ]).finally(() => {
+        if (timer) clearTimeout(timer);
+      });
+    };
+
+    try {
+      let profileRes, measurementsRes;
+      try {
+        [profileRes, measurementsRes] = await attemptWrite();
+      } catch (err: any) {
+        if (!err?.isTimeout) throw err;
+        [profileRes, measurementsRes] = await attemptWrite();
+      }
 
       if (profileRes?.error) throw profileRes.error;
       if (measurementsRes?.error) throw measurementsRes.error;
@@ -355,7 +370,6 @@ export default function MeasurementsScreen() {
       setSaveError(userMessage);
       showToast(userMessage, 'error');
     } finally {
-      if (timer) clearTimeout(timer);
       savingRef.current = false;
       setSaving(false);
     }
