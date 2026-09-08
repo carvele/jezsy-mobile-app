@@ -108,8 +108,19 @@ export function registerOfflineSyncListener(): () => void {
 
 /**
  * Checks whether the device currently has internet access.
+ *
+ * isInternetReachable is only ever true/false on native iOS/Android; on web
+ * it is always null when actually online (NetInfo's web shim has no real
+ * reachability probe, only navigator.onLine via isConnected) and never
+ * becomes true. Requiring it to be strictly true, as this used to, meant
+ * isOnline() returned false on every web browser regardless of real
+ * connectivity -- confirmed live, this silently blocked every save attempt
+ * on the deployed web build after it was wired into a fail-fast offline
+ * check. Treating null (unknown) as online and only false (confirmed
+ * unreachable) as offline matches the logic OfflineBanner in app/_layout.tsx
+ * already uses correctly.
  */
 export async function isOnline(): Promise<boolean> {
   const state = await NetInfo.fetch();
-  return !!(state.isConnected && state.isInternetReachable);
+  return !!state.isConnected && state.isInternetReachable !== false;
 }
