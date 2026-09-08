@@ -22,6 +22,7 @@ type AuthContextType = {
   session: Session | null;
   isLoading: boolean;
   isProfileLoading: boolean;
+  isProfileInitialized: boolean;
   profile: Profile | null;
   /** Call this after saving profile data so routing re-evaluates immediately. */
   refreshProfile: () => Promise<void>;
@@ -41,6 +42,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   isLoading: true,
   isProfileLoading: false,
+  isProfileInitialized: false,
   profile: null,
   refreshProfile: async () => {},
   signOut: async () => {},
@@ -59,11 +61,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isProfileInitialized, setIsProfileInitialized] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   const beginPasswordRecovery = useCallback(() => setIsPasswordRecovery(true), []);
   const endPasswordRecovery = useCallback(() => setIsPasswordRecovery(false), []);
+
+  const hydrateProfileFromCache = useCallback(async (userId: string) => {
+    try {
+      const cached = await getSecureValue(profileCacheKey(userId));
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.id === userId) {
+          setProfile((prev) => prev ?? parsed);
+        }
+      }
+    } catch {}
+  }, []);
 
   const fetchProfile = useCallback(async (userId: string) => {
     setIsProfileLoading(true);
@@ -78,7 +93,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const cached = await getSecureValue(profileCacheKey(userId));
         const parsed = cached ? JSON.parse(cached) : null;
         const nextProfile = parsed?.id === userId ? parsed : null;
-        setProfile(nextProfile);
+        setProfile((prev) => nextProfile ?? prev);
         return nextProfile;
       }
       const nextProfile = data ?? null;
@@ -87,7 +102,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (nextProfile) {
         await setSecureValue(profileCacheKey(userId), JSON.stringify(nextProfile));
       }
-      setProfile(nextProfile);
+      setProfile((prev) => nextProfile ?? prev);
       return nextProfile;
     } catch (err) {
       console.error('AuthContext Profile Sync error:', err);
@@ -96,14 +111,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const cached = await getSecureValue(profileCacheKey(userId));
         const parsed = cached ? JSON.parse(cached) : null;
         const nextProfile = parsed?.id === userId ? parsed : null;
-        setProfile(nextProfile);
+        setProfile((prev) => nextProfile ?? prev);
         return nextProfile;
       } catch {
-        setProfile(null);
         return null;
       }
     } finally {
       setIsProfileLoading(false);
+      setIsProfileInitialized(true);
     }
   }, []);
 
@@ -111,8 +126,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!authUser?.id) {
       setProfile(null);
       setIsProfileLoading(false);
+      setIsProfileInitialized(true);
       return null;
     }
+
+    // Fast-path: pre-fill from secure cache if state profile is currently null
+    void hydrateProfileFromCache(authUser.id);
 
     // Prevent re-entrant or duplicate sync loops for the same user
     if (isSyncingRef.current === authUser.id) {
@@ -148,6 +167,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setProfile(existing);
           syncedUsersRef.current.add(authUser.id);
           savePushTokenToProfile(authUser.id);
+          await setSecureValue(profileCacheKey(authUser.id), JSON.stringify(existing)).catch(() => {});
           return existing;
         }
       }
@@ -218,7 +238,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             fallback = parsed?.id === authUser.id ? parsed : null;
           } catch { /* ignore */ }
         }
-        setProfile(fallback);
+        setProfile((prev) => fallback ?? prev);
         return fallback;
       }
 
@@ -236,8 +256,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Must run on every path including a thrown query: leaving this true
       // would strand the app on the pre-bootstrap placeholder forever.
       setIsProfileLoading(false);
+      setIsProfileInitialized(true);
     }
-  }, []);
+  }, [hydrateProfileFromCache]);
 
   const refreshProfile = useCallback(async () => {
     if (user?.id) await fetchProfile(user.id);
@@ -246,6 +267,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = useCallback(async () => {
     try {
       syncedUsersRef.current.clear();
+      setIsProfileInitialized(false);
+      setProfile(null);
       // Remove the legacy shared AsyncStorage key (pre-SecureStore migration)
       // so it can never be used by an older build after logout.
       await AsyncStorage.multiRemove(['jezsy_cart', 'jezsy_profile_cache']);
@@ -266,11 +289,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
+          void hydrateProfileFromCache(session.user.id);
           // If we already synced this user once and have a profile, do not re-run sync on routine background auth events
           if (!syncedUsersRef.current.has(session.user.id)) {
             await syncProfile(session.user);
           }
+        } else {
+          setIsProfileInitialized(true);
         }
+      })
+      .catch((err) => {
+        console.error('Failed to get initial session:', err);
+        setIsProfileInitialized(true);
       })
       .finally(() => {
         setIsLoading(false);
@@ -287,20 +317,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+          void hydrateProfileFromCache(session.user.id);
+          if (!syncedUsersRef.current.has(session.user.id) || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
             await syncProfile(session.user);
           }
         } else {
           syncedUsersRef.current.clear();
           setProfile(null);
           setIsProfileLoading(false);
+          setIsProfileInitialized(true);
         }
         setIsLoading(false);
       },
     );
 
     return () => authListener.subscription.unsubscribe();
-  }, [syncProfile]);
+  }, [syncProfile, hydrateProfileFromCache]);
 
 
   const contextValue = useMemo(() => ({
@@ -308,6 +340,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     session,
     isLoading,
     isProfileLoading,
+    isProfileInitialized,
     profile,
     refreshProfile,
     signOut,
@@ -319,6 +352,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     session,
     isLoading,
     isProfileLoading,
+    isProfileInitialized,
     profile,
     refreshProfile,
     signOut,

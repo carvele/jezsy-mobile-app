@@ -153,7 +153,7 @@ function OfflineBanner() {
 }
 
 function InitialLayout() {
-  const { session, isLoading, isProfileLoading, profile, isPasswordRecovery, beginPasswordRecovery, signOut } = useAuth();
+  const { session, isLoading, isProfileLoading, isProfileInitialized, profile, isPasswordRecovery, beginPasswordRecovery, signOut } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -226,7 +226,9 @@ function InitialLayout() {
 
   // Gates the redirect effect on every run (same as before, so a later
   // refreshProfile() call still pauses redirects while it's in flight).
-  const flagsReady = !isLoading && !isProfileLoading && onboardingSeen !== null && themeLoaded;
+  // If there is an active session, profile MUST be initialized before routing can proceed.
+  const profileReady = !session || isProfileInitialized;
+  const flagsReady = !isLoading && !isProfileLoading && profileReady && onboardingSeen !== null && themeLoaded;
 
   // Gates whether the Stack renders at all -- but only for the very first
   // cold-start bootstrap. Flips true once and never back to false, so a
@@ -286,7 +288,9 @@ function InitialLayout() {
       return;
     }
 
-    if (routeSettled && hasAuthenticated.current && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
+    if (hasAuthenticated.current && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
+      lastRedirectTargetRef.current = null;
+      if (!routeSettled) setRouteSettled(true);
       return;
     }
 
@@ -324,8 +328,10 @@ function InitialLayout() {
     }
 
     // 5. Authenticated Users
-    // 5a. Incomplete Profile: First name required before entering the app
-    if (!profile || !profile.first_name) {
+    // 5a. Incomplete Profile: First name required before entering the app.
+    // Only route to profile-setup if profile resolution is complete, first_name is missing,
+    // and the user has not already been established inside the authenticated app.
+    if (!profile?.first_name && !hasAuthenticated.current) {
       if (!onProfileSetup) {
         safeRedirect('/(auth)/profile-setup');
       } else {
@@ -346,7 +352,6 @@ function InitialLayout() {
     hasAuthenticated.current = true;
     lastRedirectTargetRef.current = null;
     setRouteSettled(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut, routeSettled]);
 
   useEffect(() => {
