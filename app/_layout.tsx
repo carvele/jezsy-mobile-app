@@ -147,7 +147,7 @@ function OfflineBanner() {
         { backgroundColor: colors.warning, transform: [{ translateY: slideAnim }] },
       ]}
     >
-      <Text style={styles.offlineBannerText}>âš¡ No internet â€” browsing cached content</Text>
+      <Text style={styles.offlineBannerText}>⚡ No internet — browsing cached content</Text>
     </Animated.View>
   );
 }
