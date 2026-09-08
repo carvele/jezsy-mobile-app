@@ -13,6 +13,7 @@ import { useToast } from '@/src/context/ToastContext';
 import { consumeScanSession } from '@/src/utils/scanSession';
 import { MeasurementGuideModal } from '@/src/components/MeasurementGuideModal';
 import { ConfirmModal } from '@/src/components/ConfirmModal';
+import { isOnline } from '@/src/services/offlineSync';
 
 type LengthUnit = 'cm' | 'in';
 const UNIT_STORAGE_KEY = '@jezsy_length_unit';
@@ -249,6 +250,19 @@ export default function MeasurementsScreen() {
     setSaving(true);
     setSaveError(null);
 
+    // Fail fast and clearly when there's genuinely no connection, rather than
+    // burning the full timeout+retry cycle first -- confirmed live on mobile
+    // data with a weak signal, waiting it out only to land on the same
+    // generic timeout message wasted the user's time for no new information.
+    if (!(await isOnline())) {
+      const message = 'No internet connection. Your inputs have been kept -- reconnect and tap Save again.';
+      setSaveError(message);
+      showToast(message, 'error');
+      savingRef.current = false;
+      setSaving(false);
+      return;
+    }
+
     // Everything on screen is in `unit`; the DB (and body-scan's math) is
     // cm-only, so this is the one place a display value is converted back.
     const rawMeasurements = {
@@ -314,10 +328,13 @@ export default function MeasurementsScreen() {
     };
 
     // Both writes are idempotent (update by id, upsert on user_id), so a
-    // timed-out attempt can be safely retried once without risking a
-    // duplicate or double-applied write -- this absorbs a single transient
-    // slow round-trip (e.g. a cold connection) without making the user
-    // manually tap Save again.
+    // timed-out attempt can be safely retried without risking a duplicate or
+    // double-applied write -- this absorbs transient slow round-trips (e.g.
+    // marginal mobile signal) without making the user manually tap Save
+    // again. 15s per attempt (up from the original 12s) and up to 3 total
+    // attempts: confirmed live that a laptop on wifi saved fine while phones
+    // on cellular data kept timing out on the same build, so the DB-side fix
+    // alone wasn't enough headroom for genuinely higher-latency connections.
     const attemptWrite = () => {
       let timer: any = null;
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -325,7 +342,7 @@ export default function MeasurementsScreen() {
           const timeoutErr: any = new Error('Request timed out while saving measurements.');
           timeoutErr.isTimeout = true;
           reject(timeoutErr);
-        }, 12000);
+        }, 15000);
       });
       return Promise.race([
         Promise.all([
@@ -340,11 +357,14 @@ export default function MeasurementsScreen() {
 
     try {
       let profileRes, measurementsRes;
-      try {
-        [profileRes, measurementsRes] = await attemptWrite();
-      } catch (err: any) {
-        if (!err?.isTimeout) throw err;
-        [profileRes, measurementsRes] = await attemptWrite();
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          [profileRes, measurementsRes] = await attemptWrite();
+          break;
+        } catch (err: any) {
+          if (!err?.isTimeout || attempt === maxAttempts) throw err;
+        }
       }
 
       if (profileRes?.error) throw profileRes.error;
