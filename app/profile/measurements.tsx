@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
@@ -12,6 +12,7 @@ import { sanitizeForStorage, validateMeasurementRanges } from '@/src/utils/measu
 import { useToast } from '@/src/context/ToastContext';
 import { consumeScanSession } from '@/src/utils/scanSession';
 import { MeasurementGuideModal } from '@/src/components/MeasurementGuideModal';
+import { ConfirmModal } from '@/src/components/ConfirmModal';
 
 type LengthUnit = 'cm' | 'in';
 const UNIT_STORAGE_KEY = '@jezsy_length_unit';
@@ -232,6 +233,10 @@ export default function MeasurementsScreen() {
   }, [user, unitReady]);
 
   const savingRef = React.useRef(false);
+  const [warningModal, setWarningModal] = useState<{ visible: boolean; items: string[]; resolve?: (v: boolean) => void }>({
+    visible: false,
+    items: [],
+  });
 
   const handleSave = async () => {
     if (!user) {
@@ -276,16 +281,8 @@ export default function MeasurementsScreen() {
     });
 
     if (warnings.length > 0) {
-      const message = warnings.join('\n');
       const proceed = await new Promise<boolean>((resolve) => {
-        if (Platform.OS === 'web') {
-          resolve(typeof window !== 'undefined' ? window.confirm(`Some measurements look unusual:\n\n${message}\n\nSave anyway?`) : true);
-        } else {
-          Alert.alert('Unusual measurements', message, [
-            { text: 'Go back and fix', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'Save anyway', onPress: () => resolve(true) },
-          ]);
-        }
+        setWarningModal({ visible: true, items: warnings, resolve });
       });
       if (!proceed) {
         savingRef.current = false;
@@ -638,6 +635,23 @@ export default function MeasurementsScreen() {
         visible={guideVisible}
         onClose={() => setGuideVisible(false)}
         unit={unit}
+      />
+
+      <ConfirmModal
+        visible={warningModal.visible}
+        title="Unusual measurements"
+        message="Some of the values you entered look outside the typical range. You can go back and adjust them, or save as-is."
+        items={warningModal.items}
+        confirmLabel="Save anyway"
+        cancelLabel="Go back and fix"
+        onConfirm={() => {
+          warningModal.resolve?.(true);
+          setWarningModal({ visible: false, items: [] });
+        }}
+        onCancel={() => {
+          warningModal.resolve?.(false);
+          setWarningModal({ visible: false, items: [] });
+        }}
       />
     </SafeAreaView>
   );
