@@ -103,12 +103,17 @@ export default function ProductDetailScreen() {
             
             if (invRes.data) {
               setInventory(invRes.data);
+              const activeInv = invRes.data.filter((i: any) => !i.deleted);
+              if (activeInv.length === 1) {
+                if (activeInv[0].size) setSelectedSize((prev) => prev || activeInv[0].size);
+                if (activeInv[0].color) setSelectedColor((prev) => prev || activeInv[0].color);
+              }
             }
 
-            // Auto-select first color only; size requires explicit user choice.
-            // The AI recommendation path below will pre-select a size when
-            // body scan data is available — that case is intentionally personalized.
             if (data.color) setSelectedColor((prev) => prev || data.color!.split(",")[0].trim());
+            if (data.sizes && data.sizes.length === 1 && data.sizes[0]) {
+              setSelectedSize((prev) => prev || data.sizes![0]);
+            }
 
             // Compute size recommendation if user is logged in
             if (user?.id && data.measurements) {

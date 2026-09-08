@@ -231,129 +231,132 @@ export default function MeasurementsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, unitReady]);
 
+  const savingRef = React.useRef(false);
+
   const handleSave = async () => {
     if (!user) {
-      setSaveError('Not signed in -- reload and log in again.');
+      setSaveError('Not signed in -- please log in to save measurements.');
+      showToast('Please sign in to save your measurements.', 'error');
       return;
     }
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setSaveError(null);
-    // TEMP DEBUG: no reliable devtools access on the test device that reported this
-    // hanging -- a hard client-side timeout plus an always-visible inline error (not
-    // just a toast, which is easy to miss/dismiss) so a stuck save is never silent.
-    // Remove once the save-hang report is root-caused.
-    const timeoutMs = 15000;
-    let timedOut = false;
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => { timedOut = true; reject(new Error('Save timed out after 15s -- request never completed.')); }, timeoutMs);
+
+    // Everything on screen is in `unit`; the DB (and body-scan's math) is
+    // cm-only, so this is the one place a display value is converted back.
+    const rawMeasurements = {
+      height: unitToCm(height, unit),
+      weight: parseFloat(weight) || null,
+      bust: unitToCm(bust, unit),
+      waist: unitToCm(waist, unit),
+      hips: unitToCm(hips, unit),
+      inseam: unitToCm(inseam, unit),
+      shoulderWidth: unitToCm(shoulderWidth, unit),
+      armLength: unitToCm(armLength, unit),
+      torsoLength: unitToCm(torsoLength, unit),
+      legLength: unitToCm(legLength, unit),
+      confidence: fieldConfidence,
+      overallConfidence: scanConfidence ?? 0.95,
+    };
+
+    // Range check sanity warning
+    const warnings = validateMeasurementRanges({
+      height: rawMeasurements.height,
+      weight: rawMeasurements.weight,
+      bust: rawMeasurements.bust,
+      waist: rawMeasurements.waist,
+      hips: rawMeasurements.hips,
+      inseam: rawMeasurements.inseam,
+      shoulderWidth: rawMeasurements.shoulderWidth,
+      armLength: rawMeasurements.armLength,
+      torsoLength: rawMeasurements.torsoLength,
+      legLength: rawMeasurements.legLength,
     });
-    try {
-      // 1. Update Profile Fit Preference
-      const { error: profileError } = await Promise.race([
-        supabase.from('profiles').update({ fit_preference: fitPreference }).eq('id', user.id),
-        timeout
-      ]) as any;
-      if (profileError) throw profileError;
 
-      // 2. Upsert Measurements
-      // Everything on screen is in `unit`; the DB (and body-scan's math) is
-      // cm-only, so this is the one place a display value is converted back.
-      const rawMeasurements = {
-        height: unitToCm(height, unit),
-        weight: parseFloat(weight) || null,
-        bust: unitToCm(bust, unit),
-        waist: unitToCm(waist, unit),
-        hips: unitToCm(hips, unit),
-        inseam: unitToCm(inseam, unit),
-        shoulderWidth: unitToCm(shoulderWidth, unit),
-        armLength: unitToCm(armLength, unit),
-        torsoLength: unitToCm(torsoLength, unit),
-        legLength: unitToCm(legLength, unit),
-        confidence: fieldConfidence,
-        overallConfidence: scanConfidence ?? 0.95
-      };
-
-      // Range check sanity warning
-      const warnings = validateMeasurementRanges({
-        height: rawMeasurements.height,
-        weight: rawMeasurements.weight,
-        bust: rawMeasurements.bust,
-        waist: rawMeasurements.waist,
-        hips: rawMeasurements.hips,
-        inseam: rawMeasurements.inseam,
-        shoulderWidth: rawMeasurements.shoulderWidth,
-        armLength: rawMeasurements.armLength,
-        torsoLength: rawMeasurements.torsoLength,
-        legLength: rawMeasurements.legLength,
-      });
-
-      // Was a silent, dismissible info toast showing only the first warning --
-      // confirmed live this let physically-impossible values (e.g. a 33cm bust)
-      // save without any real friction. Now blocks with an explicit choice, and
-      // lists every out-of-range field, not just one.
-      if (warnings.length > 0) {
-        const message = warnings.join('\n');
-        const proceed = await new Promise<boolean>((resolve) => {
-          if (Platform.OS === 'web') {
-            resolve(typeof window !== 'undefined' ? window.confirm(`Some measurements look unusual:\n\n${message}\n\nSave anyway?`) : true);
-          } else {
-            Alert.alert('Unusual measurements', message, [
-              { text: 'Go back and fix', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Save anyway', onPress: () => resolve(true) },
-            ]);
-          }
-        });
-        if (!proceed) {
-          setSaving(false);
-          return;
+    if (warnings.length > 0) {
+      const message = warnings.join('\n');
+      const proceed = await new Promise<boolean>((resolve) => {
+        if (Platform.OS === 'web') {
+          resolve(typeof window !== 'undefined' ? window.confirm(`Some measurements look unusual:\n\n${message}\n\nSave anyway?`) : true);
+        } else {
+          Alert.alert('Unusual measurements', message, [
+            { text: 'Go back and fix', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Save anyway', onPress: () => resolve(true) },
+          ]);
         }
+      });
+      if (!proceed) {
+        savingRef.current = false;
+        setSaving(false);
+        return;
       }
+    }
 
-      // Ensure data is sanitized before saving to DB
-      const sanitized = sanitizeForStorage(rawMeasurements as any);
+    // Ensure data is sanitized before saving to DB
+    const sanitized = sanitizeForStorage(rawMeasurements as any);
 
-      const payload = {
-        user_id: user.id,
-        height: rawMeasurements.height,
-        weight: rawMeasurements.weight,
-        measurements: {
-          bust: sanitized.bust || null,
-          waist: sanitized.waist || null,
-          hips: sanitized.hips || null,
-          inseam: sanitized.inseam || null,
-          shoulderWidth: sanitized.shoulderWidth || null,
-          armLength: sanitized.armLength || null,
-          torsoLength: sanitized.torsoLength || null,
-          legLength: sanitized.legLength || null,
-        },
-        scan_confidence: sanitized.scan_confidence,
-        per_field_confidence: sanitized.per_field_confidence,
-        measurement_source: source
-      };
+    const payload = {
+      user_id: user.id,
+      height: rawMeasurements.height,
+      weight: rawMeasurements.weight,
+      measurements: {
+        bust: sanitized.bust || null,
+        waist: sanitized.waist || null,
+        hips: sanitized.hips || null,
+        inseam: sanitized.inseam || null,
+        shoulderWidth: sanitized.shoulderWidth || null,
+        armLength: sanitized.armLength || null,
+        torsoLength: sanitized.torsoLength || null,
+        legLength: sanitized.legLength || null,
+      },
+      scan_confidence: sanitized.scan_confidence,
+      per_field_confidence: sanitized.per_field_confidence,
+      measurement_source: source,
+    };
 
-      const { error: measurementsError } = await Promise.race([
-        supabase.from('user_measurements').upsert(payload, { onConflict: 'user_id' }),
-        timeout
-      ]) as any;
-      if (measurementsError) throw measurementsError;
+    let timer: any = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const timeoutErr: any = new Error('Request timed out while saving measurements.');
+        timeoutErr.isTimeout = true;
+        reject(timeoutErr);
+      }, 12000);
+    });
+
+    try {
+      // Execute profile update and measurements upsert concurrently
+      const [profileRes, measurementsRes] = await Promise.race([
+        Promise.all([
+          supabase.from('profiles').update({ fit_preference: fitPreference }).eq('id', user.id),
+          supabase.from('user_measurements').upsert(payload, { onConflict: 'user_id' }),
+        ]),
+        timeoutPromise,
+      ]);
+
+      if (profileRes?.error) throw profileRes.error;
+      if (measurementsRes?.error) throw measurementsRes.error;
 
       showToast('Measurements saved successfully ✨', 'success');
-
-      if (Platform.OS === 'web') {
-        router.back();
-      } else {
-        Alert.alert('Success', 'Your measurements have been updated. Size recommendations and your personalized mannequin will now be tailored to you.', [
-          { text: 'OK', onPress: () => router.back() }
-        ]);
-      }
+      router.back();
     } catch (err: any) {
-      console.error(err);
-      const message = timedOut
-        ? err.message
-        : (err?.message || err?.error_description || JSON.stringify(err) || 'Failed to save measurements.');
-      setSaveError(message);
-      showToast(message, 'error');
+      console.error('Error saving sizing measurements:', err);
+      let userMessage = 'Unable to save measurements right now. Please try again.';
+      if (err?.isTimeout) {
+        userMessage = 'The request took too long. Your inputs have been kept, please tap Save again.';
+      } else if (err?.message?.includes('JWT') || err?.message?.includes('auth') || err?.code === '401') {
+        userMessage = 'Your session expired. Please log in again to save.';
+      } else if (err?.message?.includes('network') || err?.message?.includes('fetch')) {
+        userMessage = 'Network connection interrupted. Your inputs are saved, please try again.';
+      } else if (err?.message) {
+        userMessage = err.message;
+      }
+      setSaveError(userMessage);
+      showToast(userMessage, 'error');
     } finally {
+      if (timer) clearTimeout(timer);
+      savingRef.current = false;
       setSaving(false);
     }
   };

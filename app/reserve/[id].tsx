@@ -126,9 +126,11 @@ export default function ReservationScreen() {
   const colors = Colors[theme];
   const { session } = useAuth();
 
+  const [inventoryByProduct, setInventoryByProduct] = useState<Map<string, any[]>>(new Map());
+
   useEffect(() => {
     if (isCartMode) {
-      const fetchCartPrices = async () => {
+      const fetchCartPricesAndInventory = async () => {
         try {
           const selectedIds = itemIds ? new Set(itemIds.split(",")) : null;
           const scopedItems = selectedIds
@@ -137,38 +139,53 @@ export default function ReservationScreen() {
 
           const productIds = [...new Set(scopedItems.map((i) => i.product.id))];
           if (productIds.length > 0) {
-            const { data, error } = await supabase
-              .from("products")
-              .select("id, price, sale_price, on_sale")
-              .in("id", productIds);
+            const [{ data: pData, error: pError }, { data: invData, error: invError }] = await Promise.all([
+              supabase.from("products").select("id, price, sale_price, on_sale").in("id", productIds),
+              supabase.from("inventory").select("id, product_doc_id, size, color, available, deleted").in("product_doc_id", productIds).eq("deleted", false),
+            ]);
 
-            if (error) throw error;
-            if (data) {
+            if (pError) throw pError;
+            if (pData) {
               const liveMap = new Map();
-              data.forEach(p => liveMap.set(p.id, p));
+              pData.forEach((p) => liveMap.set(p.id, p));
               setLiveCartPrices(liveMap);
+            }
+            if (invData) {
+              const invMap = new Map<string, any[]>();
+              invData.forEach((row) => {
+                if (row.product_doc_id) {
+                  const list = invMap.get(row.product_doc_id) || [];
+                  list.push(row);
+                  invMap.set(row.product_doc_id, list);
+                }
+              });
+              setInventoryByProduct(invMap);
             }
           }
         } catch (err) {
-          console.error("Error fetching live prices for cart:", err);
+          console.error("Error fetching live prices/inventory for cart:", err);
         } finally {
           setLoading(false);
         }
       };
-      fetchCartPrices();
+      fetchCartPricesAndInventory();
       return;
     }
 
-    const fetchProduct = async () => {
+    const fetchProductAndInventory = async () => {
       try {
-        const { data, error } = await supabase
-          .from("products")
-          .select("*")
-          .eq("id", id)
-          .single();
+        const [{ data: pData, error: pError }, { data: invData, error: invError }] = await Promise.all([
+          supabase.from("products").select("*").eq("id", id).single(),
+          supabase.from("inventory").select("id, product_doc_id, size, color, available, deleted").eq("product_doc_id", id).eq("deleted", false),
+        ]);
 
-        if (error) throw error;
-        setProduct(data);
+        if (pError) throw pError;
+        setProduct(pData);
+        if (invData) {
+          const invMap = new Map<string, any[]>();
+          invMap.set(id, invData);
+          setInventoryByProduct(invMap);
+        }
       } catch (err) {
         console.error("Error fetching product for reservation:", err);
       } finally {
@@ -176,14 +193,52 @@ export default function ReservationScreen() {
       }
     };
 
-    fetchProduct();
+    fetchProductAndInventory();
   }, [id, isCartMode, itemIds, cartItems]);
+
+  const resolveVariantForProduct = useCallback((productId: string, rawSize?: string, rawColor?: string) => {
+    const invList = inventoryByProduct.get(productId) || [];
+    const activeInv = invList.filter((i) => !i.deleted);
+
+    // 1. 1-of-1 product or single active inventory row: bind directly to its exact DB variant
+    if (activeInv.length === 1) {
+      return {
+        size: activeInv[0].size ?? null,
+        color: activeInv[0].color ?? null,
+      };
+    }
+
+    // 2. Multi-variant: search for exact or closest case-insensitive match
+    if (activeInv.length > 1) {
+      const cleanSize = (rawSize || '').trim().toLowerCase();
+      const cleanColor = (rawColor || '').trim().toLowerCase();
+
+      const exact = activeInv.find(
+        (i) =>
+          (i.size || '').trim().toLowerCase() === cleanSize &&
+          (i.color || '').trim().toLowerCase() === cleanColor
+      );
+      if (exact) return { size: exact.size ?? null, color: exact.color ?? null };
+
+      if (cleanSize) {
+        const sizeMatch = activeInv.find((i) => (i.size || '').trim().toLowerCase() === cleanSize);
+        if (sizeMatch) return { size: sizeMatch.size ?? null, color: sizeMatch.color ?? null };
+      }
+
+      if (cleanColor) {
+        const colorMatch = activeInv.find((i) => (i.color || '').trim().toLowerCase() === cleanColor);
+        if (colorMatch) return { size: colorMatch.size ?? null, color: colorMatch.color ?? null };
+      }
+    }
+
+    return {
+      size: rawSize && rawSize.trim() ? rawSize.trim() : null,
+      color: rawColor && rawColor.trim() ? rawColor.trim() : null,
+    };
+  }, [inventoryByProduct]);
 
   const lines: ReservationLine[] = useMemo(() => {
     if (isCartMode) {
-      // itemIds scopes this reservation to what the customer checked in the
-      // bag; absent (or empty), fall back to the whole bag for compatibility
-      // with any other caller of /reserve/cart.
       const selectedIds = itemIds ? new Set(itemIds.split(",")) : null;
       const scopedItems = selectedIds
         ? cartItems.filter((item) => selectedIds.has(item.id))
@@ -191,24 +246,26 @@ export default function ReservationScreen() {
       return scopedItems.map((item) => {
         const liveInfo = liveCartPrices.get(item.product.id);
         const effectiveProduct = liveInfo ? { ...item.product, ...liveInfo } : item.product;
+        const resolved = resolveVariantForProduct(item.product.id, item.selectedSize, item.selectedColor);
         return {
           key: item.id,
           product: effectiveProduct,
-          size: normalizeVariantValue(item.selectedSize) ?? undefined,
-          color: normalizeVariantValue(item.selectedColor) ?? undefined,
+          size: resolved.size ?? undefined,
+          color: resolved.color ?? undefined,
           quantity: item.quantity,
         };
       });
     }
     if (!product) return [];
+    const resolved = resolveVariantForProduct(product.id, size, color);
     return [{
       key: product.id,
       product,
-      size: normalizeVariantValue(size) ?? undefined,
-      color: normalizeVariantValue(color) ?? undefined,
+      size: resolved.size ?? undefined,
+      color: resolved.color ?? undefined,
       quantity: 1,
     }];
-  }, [isCartMode, cartItems, product, size, color, itemIds, liveCartPrices]);
+  }, [isCartMode, cartItems, product, size, color, itemIds, liveCartPrices, resolveVariantForProduct]);
 
 
   // Gate, not the submit itself: validates preconditions and steps up
@@ -320,18 +377,8 @@ export default function ReservationScreen() {
           : "") +
         "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).";
 
-      if (Platform.OS === "web") {
-        if (typeof window !== "undefined" && window.alert) {
-          window.alert(`Request sent\n\n${alertMessage}`);
-        }
-        router.replace("/reservations");
-      } else {
-        Alert.alert(
-          "Request sent",
-          alertMessage,
-          [{ text: "OK", onPress: () => router.replace("/reservations") }],
-        );
-      }
+      showToast("Reservation request sent! We'll notify you once accepted ✨", "success");
+      router.replace("/reservations");
     } catch (error: any) {
       console.error("Reservation error:", error);
       // Map known server-side guards to user-friendly messages.

@@ -66,7 +66,7 @@ export function TimeSlotPicker({
         .from("store_hours")
         .select("*")
         .eq("day_of_week", dayOfWeek)
-        .single();
+        .maybeSingle();
 
       if (hoursError && hoursError.code !== "PGRST116") {
         throw hoursError;
@@ -77,7 +77,7 @@ export function TimeSlotPicker({
         .from("store_closures")
         .select("*")
         .eq("closure_date", dateStr)
-        .single();
+        .maybeSingle();
 
       if (closureError && closureError.code !== "PGRST116") {
         throw closureError;
