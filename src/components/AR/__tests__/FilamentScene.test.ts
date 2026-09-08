@@ -24,7 +24,7 @@ jest.mock('react-native-filament', () => ({
   FilamentScene: ({ children }: React.PropsWithChildren) => children,
   FilamentView: 'FilamentView', Light: 'Light',
   useModel: () => mockModel, useAnimator: () => mockAnimator, useFilamentContext: () => mockContext,
-}));
+}), { virtual: true });
 jest.mock('react-native-worklets-core', () => ({
   useSharedValue: (value: unknown) => jest.requireActual('react').useMemo(() => ({ value }), []),
 }));

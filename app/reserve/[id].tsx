@@ -51,6 +51,15 @@ type ReservationLine = {
 // /reserve/cart rather than a product id.
 const CART_ROUTE_ID = "cart";
 
+// Strips placeholder/sentinel color and size strings so the inventory variant
+// lookup on the server receives null rather than a value like "Color Default"
+// that has no matching inventory row.
+const SENTINEL_VALUES = new Set(['default', 'color default', 'size default', 'standard', 'one size', 'n/a', '']);
+function normalizeVariantValue(v: string | null | undefined): string | null {
+  if (!v) return null;
+  return SENTINEL_VALUES.has(v.toLowerCase().trim()) ? null : v.trim();
+}
+
 export default function ReservationScreen() {
   const { showToast } = useToast();
   const { id, size, color, itemIds } = useLocalSearchParams<{
@@ -185,8 +194,8 @@ export default function ReservationScreen() {
         return {
           key: item.id,
           product: effectiveProduct,
-          size: item.selectedSize || undefined,
-          color: item.selectedColor || undefined,
+          size: normalizeVariantValue(item.selectedSize) ?? undefined,
+          color: normalizeVariantValue(item.selectedColor) ?? undefined,
           quantity: item.quantity,
         };
       });
@@ -195,8 +204,8 @@ export default function ReservationScreen() {
     return [{
       key: product.id,
       product,
-      size: size || undefined,
-      color: color || undefined,
+      size: normalizeVariantValue(size) ?? undefined,
+      color: normalizeVariantValue(color) ?? undefined,
       quantity: 1,
     }];
   }, [isCartMode, cartItems, product, size, color, itemIds, liveCartPrices]);
@@ -325,7 +334,21 @@ export default function ReservationScreen() {
       }
     } catch (error: any) {
       console.error("Reservation error:", error);
-      showToast(error.message || "Unable to submit reservation. Try again.", 'error');
+      // Map known server-side guards to user-friendly messages.
+      const raw: string = error?.message || '';
+      let userMessage = "Unable to submit reservation. Please try again.";
+      if (raw.includes("inventory variant") || raw.includes("active inventory")) {
+        userMessage = "The selected size or color is no longer in stock. Please go back and choose a different option.";
+      } else if (raw.includes("fully booked") || raw.includes("closed")) {
+        userMessage = raw;
+      } else if (raw.includes("unavailable")) {
+        userMessage = "One of the items is no longer available. Please remove it and try again.";
+      } else if (raw.includes("price")) {
+        userMessage = "Pricing has changed. Please refresh and try again.";
+      } else if (raw) {
+        userMessage = raw;
+      }
+      showToast(userMessage, 'error');
     } finally {
       submittingRef.current = false;
       setSubmitting(false);

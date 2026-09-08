@@ -513,14 +513,9 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
                 setSilhouetteMode('proportions');
                 showToast('Applied your real body measurements ✨', 'info');
               } else {
-                Alert.alert(
-                  'Custom Body Measurements',
-                  'You haven\'t set up your body measurements yet. Would you like to enter them now to enable custom mannequin proportions?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Enter Measurements', onPress: () => router.push('/profile/measurements') }
-                  ]
-                );
+                // Alert.alert is a no-op on web; navigate directly instead.
+                showToast('Set up your measurements to enable custom proportions', 'info');
+                router.push('/profile/measurements');
               }
             }}
             activeOpacity={0.7}
