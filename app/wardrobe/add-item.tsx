@@ -13,6 +13,7 @@ import {
   Dimensions,
   Platform,
   KeyboardAvoidingView,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -29,6 +30,7 @@ import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/uti
 import { useToast } from '@/src/context/ToastContext';
 import { ImageCropModal } from '@/src/components/ImageCropModal';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
+import { isOnline } from '@/src/services/offlineSync';
 
 const { width } = Dimensions.get('window');
 
@@ -68,6 +70,8 @@ export default function AddWardrobeItemScreen() {
   const [colorOptions, setColorOptions] = useState<ColorOption[]>(DEFAULT_COLOR_OPTIONS);
   const [subCategory, setSubCategory] = useState<string>('');
   const [removeBg, setRemoveBg] = useState<boolean>(true);
+  const [categoryModalVisible, setCategoryModalVisible] = useState<boolean>(false);
+  const [categorySearch, setCategorySearch] = useState<string>('');
   
   const [saving, setSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -188,6 +192,22 @@ export default function AddWardrobeItemScreen() {
     );
   };
 
+  // Bounds an upload/DB call so a dropped connection surfaces a clear,
+  // recoverable error instead of leaving the screen stuck on "Uploading to
+  // storage..." forever -- confirmed live, with no timeout here the button
+  // never came back even after the request had no hope of completing.
+  const withTimeout = <T,>(promise: PromiseLike<T>, ms: number): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const err: any = new Error('Request timed out.');
+        err.isTimeout = true;
+        reject(err);
+      }, ms);
+    });
+    return Promise.race([Promise.resolve(promise), timeoutPromise]).finally(() => clearTimeout(timer));
+  };
+
   const handleSave = async () => {
     if (!session?.user?.id) {
       showToast('Sign in required to add items.', 'error');
@@ -204,6 +224,12 @@ export default function AddWardrobeItemScreen() {
 
     setSaving(true);
     try {
+      if (!(await isOnline())) {
+        const offlineErr: any = new Error('No internet connection. Check your connection and try again.');
+        offlineErr.isOffline = true;
+        throw offlineErr;
+      }
+
       // Use processed image if background removal was enabled and successful
       let finalUri = (removeBg && processedImageUri) ? processedImageUri : imageUri;
 
@@ -230,9 +256,12 @@ export default function AddWardrobeItemScreen() {
       const { contentType, ext } = resolveImageFileInfo(finalUri, headerContentType);
       const fileName = `${session.user.id}/${Date.now()}.${ext}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('wardrobe-images')
-        .upload(fileName, bytes, { upsert: false, contentType });
+      // 25s, not the 12s used for small JSON writes elsewhere -- an image
+      // upload is legitimately larger and slower on a weak connection.
+      const { data: uploadData, error: uploadError } = await withTimeout(
+        supabase.storage.from('wardrobe-images').upload(fileName, bytes, { upsert: false, contentType }),
+        25000,
+      );
 
       if (uploadError) throw uploadError;
 
@@ -243,14 +272,17 @@ export default function AddWardrobeItemScreen() {
 
       setStatusMessage('Saving details...');
       // Insert wardrobe item row
-      const { error: dbError } = await supabase.from('wardrobe_items').insert({
-        user_id: session.user.id,
-        category,
-        garment_type: garmentType,
-        sub_category: subCategory.trim() || null,
-        image_url: publicUrl,
-        color_tags: selectedColors,
-      });
+      const { error: dbError } = await withTimeout(
+        supabase.from('wardrobe_items').insert({
+          user_id: session.user.id,
+          category,
+          garment_type: garmentType,
+          sub_category: subCategory.trim() || null,
+          image_url: publicUrl,
+          color_tags: selectedColors,
+        }),
+        12000,
+      );
 
       if (dbError) throw dbError;
 
@@ -273,7 +305,13 @@ export default function AddWardrobeItemScreen() {
       }
     } catch (err: any) {
       console.error('Error saving wardrobe item:', err);
-      showToast(err.message || 'Failed to save item. Try again.', 'error');
+      let userMessage = err?.message || 'Failed to save item. Try again.';
+      if (err?.isTimeout) {
+        userMessage = 'The upload took too long. Check your connection and tap Save again.';
+      } else if (err?.isOffline) {
+        userMessage = err.message;
+      }
+      showToast(userMessage, 'error');
     } finally {
       setSaving(false);
       setStatusMessage('');
@@ -370,43 +408,27 @@ export default function AddWardrobeItemScreen() {
             </View>
           </View>
 
-          {/* Category Dropdown/Selector */}
+          {/* Category Selector -- opens a searchable list instead of a
+              horizontal chip scroller. That scroller only ever showed the
+              first 2-3 of 23 categories with no scroll affordance, which
+              read as if those were the only options rather than a
+              partially-hidden list. */}
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Category</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-              {CATEGORIES.map((cat) => {
-                const isSelected = category === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.chip,
-                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
-                    ]}
-                    onPress={() => setCategory(cat)}
-                  >
-                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                style={[
-                  styles.chip,
-                  { borderColor: colors.border, backgroundColor: !CATEGORIES.includes(category) ? colors.tint : colors.card }
-                ]}
-                onPress={() => {
-                  if (CATEGORIES.includes(category)) {
-                    setCategory('');
-                  }
-                }}
+            <TouchableOpacity
+              style={[styles.selectorField, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={() => { setCategorySearch(''); setCategoryModalVisible(true); }}
+              accessibilityRole="button"
+              accessibilityLabel="Select category"
+            >
+              <Text
+                style={[styles.selectorFieldText, { color: category ? colors.text : colors.secondaryText }]}
+                numberOfLines={1}
               >
-                <Text style={[styles.chipText, { color: !CATEGORIES.includes(category) ? colors.onTint : colors.text }]}>
-                  Custom...
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
+                {category || 'Select a category'}
+              </Text>
+              <IconSymbol name="chevron.down" size={18} color={colors.secondaryText} />
+            </TouchableOpacity>
             {!CATEGORIES.includes(category) && (
               <TextInput keyboardAppearance={theme}
                 style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginTop: Spacing.sm }]}
@@ -496,6 +518,59 @@ export default function AddWardrobeItemScreen() {
         onCancel={handleCropCancel}
         onConfirm={handleCropConfirm}
       />
+
+      <Modal
+        visible={categoryModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCategoryModalVisible(false)}
+      >
+        <View style={styles.categoryModalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setCategoryModalVisible(false)} />
+          <SafeAreaView edges={['bottom']} style={[styles.categorySheet, { backgroundColor: colors.background }]}>
+            <View style={styles.categorySheetHeader}>
+              <Text style={[styles.categorySheetTitle, { color: colors.text }]}>Select Category</Text>
+              <TouchableOpacity onPress={() => setCategoryModalVisible(false)} style={styles.categorySheetClose}>
+                <IconSymbol name="xmark" size={20} color={colors.secondaryText} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.searchField, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <IconSymbol name="magnifyingglass" size={16} color={colors.secondaryText} />
+              <TextInput keyboardAppearance={theme}
+                style={[styles.searchInput, { color: colors.text }]}
+                placeholder="Search categories..."
+                placeholderTextColor={colors.secondaryText}
+                value={categorySearch}
+                onChangeText={setCategorySearch}
+                autoFocus
+              />
+            </View>
+
+            <ScrollView style={styles.categoryList} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity
+                style={[styles.categoryRow, { borderColor: colors.border }]}
+                onPress={() => { setCategory(''); setCategoryModalVisible(false); }}
+              >
+                <Text style={[styles.categoryRowText, { color: colors.tint, fontWeight: '700' }]}>+ Custom category...</Text>
+              </TouchableOpacity>
+              {CATEGORIES.filter((cat) => cat.toLowerCase().includes(categorySearch.trim().toLowerCase())).map((cat) => {
+                const isSelected = category === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.categoryRow, { borderColor: colors.border }]}
+                    onPress={() => { setCategory(cat); setCategoryModalVisible(false); }}
+                  >
+                    <Text style={[styles.categoryRowText, { color: colors.text }]}>{cat}</Text>
+                    {isSelected && <IconSymbol name="checkmark" size={18} color={colors.tint} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -637,6 +712,73 @@ const styles = StyleSheet.create({
   chipText: {
     ...Type.body,
     fontWeight: '600',
+  },
+  selectorField: {
+    height: 52,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  selectorFieldText: {
+    ...Type.bodyStrong,
+    flex: 1,
+  },
+  categoryModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  categorySheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '75%',
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
+  },
+  categorySheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
+  },
+  categorySheetTitle: {
+    ...Type.subtitle,
+    fontWeight: '700',
+  },
+  categorySheetClose: {
+    padding: Spacing.xs,
+  },
+  searchField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    height: 44,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    ...Type.body,
+    height: '100%',
+  },
+  categoryList: {
+    marginBottom: Spacing.xl,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  categoryRowText: {
+    ...Type.body,
   },
   colorPalette: {
     flexDirection: 'row',
