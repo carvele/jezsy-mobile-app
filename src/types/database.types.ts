@@ -1838,6 +1838,7 @@ export type Database = {
           created_at: string
           delta: number
           id: string
+          inventory_id: string | null
           new_stock: number
           note: string | null
           previous_stock: number
@@ -1849,6 +1850,7 @@ export type Database = {
           created_at?: string
           delta: number
           id?: string
+          inventory_id?: string | null
           new_stock: number
           note?: string | null
           previous_stock: number
@@ -1860,6 +1862,7 @@ export type Database = {
           created_at?: string
           delta?: number
           id?: string
+          inventory_id?: string | null
           new_stock?: number
           note?: string | null
           previous_stock?: number
@@ -1867,6 +1870,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "stock_movements_inventory_id_fkey"
+            columns: ["inventory_id"]
+            isOneToOne: false
+            referencedRelation: "inventory"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "stock_movements_product_id_fkey"
             columns: ["product_id"]
@@ -2179,6 +2189,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adjust_inventory_on_hand: {
+        Args: { p_delta: number; p_inventory_id: string; p_reason: string }
+        Returns: Json
+      }
       adjust_inventory_stock: {
         Args: {
           p_available_delta?: number
@@ -2211,6 +2225,10 @@ export type Database = {
         Returns: undefined
       }
       auto_cancel_expired_reservations: { Args: never; Returns: number }
+      can_manage_customers: { Args: never; Returns: boolean }
+      can_manage_inventory: { Args: never; Returns: boolean }
+      can_manage_staff: { Args: never; Returns: boolean }
+      can_operate_inventory: { Args: never; Returns: boolean }
       check_email_exists: { Args: { lookup_email: string }; Returns: boolean }
       check_rate_limit: {
         Args: {
@@ -2420,8 +2438,6 @@ export type Database = {
           p_inventory_id: string
           p_quantity: number
           p_sale_price?: number
-          p_staff_id?: string
-          p_staff_name?: string
         }
         Returns: Json
       }
@@ -2592,6 +2608,34 @@ export type Database = {
         Args: { _body: string; _title: string; _user_id: string }
         Returns: string
       }
+      set_customer_archive_state: {
+        Args: {
+          change_reason: string
+          new_deleted: boolean
+          target_customer_id: string
+        }
+        Returns: Json
+      }
+      set_customer_block_state: {
+        Args: {
+          change_reason: string
+          new_is_blocked: boolean
+          target_customer_id: string
+        }
+        Returns: Json
+      }
+      set_inventory_archive_state: {
+        Args: { p_deleted: boolean; p_inventory_id: string; p_reason?: string }
+        Returns: Json
+      }
+      set_inventory_baseline: {
+        Args: { p_baseline: number; p_product_id: string }
+        Returns: Json
+      }
+      set_staff_archive_state: {
+        Args: { archived: boolean; change_note: string; target_user_id: string }
+        Returns: Json
+      }
       settle_payment_webhook: {
         Args: {
           _event: Json
@@ -2618,6 +2662,10 @@ export type Database = {
         Args: { new_role: string; target_user_id: string }
         Returns: undefined
       }
+      update_staff_role_v2: {
+        Args: { new_role: string; target_user_id: string }
+        Returns: Json
+      }
       update_staff_status: {
         Args: {
           change_note: string
@@ -2626,6 +2674,15 @@ export type Database = {
           target_staff_id: string
         }
         Returns: undefined
+      }
+      update_staff_status_v2: {
+        Args: {
+          change_note: string
+          employment_status: string
+          is_blocked: boolean
+          target_user_id: string
+        }
+        Returns: Json
       }
       update_user_streak: { Args: never; Returns: undefined }
       verify_pickup: { Args: { _pickup_token: string }; Returns: Json }

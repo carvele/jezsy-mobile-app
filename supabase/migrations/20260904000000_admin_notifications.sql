@@ -21,12 +21,16 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_customer_name TEXT;
 BEGIN
-    SELECT COALESCE(full_name, 'A customer') INTO v_customer_name FROM public.profiles WHERE id = NEW.customer_id;
+    IF NEW.customer_id IS NOT NULL THEN
+        SELECT COALESCE(full_name, 'A customer') INTO v_customer_name FROM public.profiles WHERE id = NEW.customer_id;
+    ELSE
+        v_customer_name := 'A customer';
+    END IF;
     
     INSERT INTO public.admin_notifications (title, message, type)
     VALUES (
         'New Reservation',
-        v_customer_name || ' placed a new reservation for ' || COALESCE(NEW.product_name, 'an item') || '.',
+        COALESCE(v_customer_name || ' placed a new reservation for ' || COALESCE(NEW.product_name, 'an item') || '.', 'New reservation received.'),
         'Reservation'
     );
     RETURN NEW;
