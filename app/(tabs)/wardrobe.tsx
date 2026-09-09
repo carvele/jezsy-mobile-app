@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl } from 'react-native';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -10,8 +10,15 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { Database } from '@/src/types/database.types';
-import { Capsule, CapsuleCard } from '@/src/components/CapsuleCard';
+import { CapsuleCard } from '@/src/components/CapsuleCard';
+import {
+  getWardrobeItemsPage,
+  getWardrobeOutfitsPage,
+  getWardrobeCapsulesPage,
+  WardrobeItem,
+  SavedOutfit,
+  Capsule,
+} from '@/src/services/wardrobeService';
 import { GapAnalysis } from '@/src/components/GapAnalysis';
 import { WardrobeStatsBar } from '@/src/components/WardrobeStatsBar';
 import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
@@ -26,13 +33,10 @@ import { useToast } from '@/src/context/ToastContext';
 import { MannequinView } from '@/src/components/Mannequin/MannequinView';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
 
-type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
-type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
 
 type Tab = 'items' | 'outfits' | 'capsules' | 'mannequin';
-type WearFilter = 'all' | 'never' | 'neglected';
 
 const VALID_TABS: Tab[] = ['items', 'outfits', 'capsules', 'mannequin'];
 const STORAGE_KEY = 'jezsy_wardrobe_active_tab';
@@ -42,7 +46,6 @@ function persistTab(tab: Tab) {
 }
 
 const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'];
-const NEGLECT_MS = 60 * 86_400_000;
 
 export default function WardrobeScreen() {
   const { cardWidth, columns } = useGridCardWidth();
@@ -92,6 +95,18 @@ export default function WardrobeScreen() {
   const [capsules, setCapsules] = useState<Capsule[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [itemsOffset, setItemsOffset] = useState(0);
+  const [hasMoreItems, setHasMoreItems] = useState(false);
+  const [loadingMoreItems, setLoadingMoreItems] = useState(false);
+
+  const [outfitsOffset, setOutfitsOffset] = useState(0);
+  const [hasMoreOutfits, setHasMoreOutfits] = useState(false);
+  const [loadingMoreOutfits, setLoadingMoreOutfits] = useState(false);
+
+  const [capsulesOffset, setCapsulesOffset] = useState(0);
+  const [hasMoreCapsules, setHasMoreCapsules] = useState(false);
+  const [loadingMoreCapsules, setLoadingMoreCapsules] = useState(false);
+
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [wearFilter, setWearFilter] = useState<WearFilter>('all');
@@ -108,55 +123,34 @@ export default function WardrobeScreen() {
     try {
       if (!isRefresh && !hasLoadedOnce.current) setLoading(true);
       const [itemsRes, outfitsRes, capsulesRes] = await Promise.allSettled([
-        supabase
-          .from('wardrobe_items')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .eq('deleted', false)
-          .order('created_at', { ascending: false })
-          .limit(200),
-        supabase
-          .from('saved_outfits')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .eq('deleted', false)
-          .order('created_at', { ascending: false })
-          .limit(50),
-        supabase
-          .from('capsules')
-          .select('*, capsule_items(wardrobe_items!inner(deleted))')
-          .eq('user_id', session.user.id)
-          .eq('capsule_items.wardrobe_items.deleted', false)
-          .order('created_at', { ascending: false })
-          .limit(50)
+        getWardrobeItemsPage(session.user.id, 0, { garmentType: typeFilter, search, wearFilter }, 50),
+        getWardrobeOutfitsPage(session.user.id, 0, 25),
+        getWardrobeCapsulesPage(session.user.id, 0, 25),
       ]);
 
-      // Apply each result independently; a failure in capsules must not
-      // hide successfully loaded items or outfits.
-      if (itemsRes.status === 'fulfilled' && !itemsRes.value.error) {
-        setItems(itemsRes.value.data || []);
+      if (itemsRes.status === 'fulfilled') {
+        setItems(itemsRes.value.items);
+        setItemsOffset(itemsRes.value.nextOffset);
+        setHasMoreItems(itemsRes.value.hasMore);
       } else {
-        console.error('Error fetching wardrobe items:', itemsRes.status === 'rejected' ? itemsRes.reason : itemsRes.value.error);
+        console.error('Error fetching wardrobe items:', itemsRes.reason);
         showToast('Could not load your wardrobe items. Please try again.', 'error');
       }
 
-      if (outfitsRes.status === 'fulfilled' && !outfitsRes.value.error) {
-        setOutfits(outfitsRes.value.data || []);
+      if (outfitsRes.status === 'fulfilled') {
+        setOutfits(outfitsRes.value.items);
+        setOutfitsOffset(outfitsRes.value.nextOffset);
+        setHasMoreOutfits(outfitsRes.value.hasMore);
       } else {
-        console.error('Error fetching outfits:', outfitsRes.status === 'rejected' ? outfitsRes.reason : outfitsRes.value.error);
+        console.error('Error fetching outfits:', outfitsRes.reason);
       }
 
-      if (capsulesRes.status === 'fulfilled' && !capsulesRes.value.error) {
-        const mappedCapsules = (capsulesRes.value.data || []).map(c => ({
-          id: c.id,
-          name: c.name,
-          description: c.description,
-          target_count: c.target_count || 30,
-          item_count: c.capsule_items?.length || 0
-        }));
-        setCapsules(mappedCapsules);
+      if (capsulesRes.status === 'fulfilled') {
+        setCapsules(capsulesRes.value.items);
+        setCapsulesOffset(capsulesRes.value.nextOffset);
+        setHasMoreCapsules(capsulesRes.value.hasMore);
       } else {
-        console.error('Error fetching capsules:', capsulesRes.status === 'rejected' ? capsulesRes.reason : capsulesRes.value.error);
+        console.error('Error fetching capsules:', capsulesRes.reason);
       }
     } catch (error) {
       console.error('Error fetching wardrobe data:', error);
@@ -165,7 +159,94 @@ export default function WardrobeScreen() {
       hasLoadedOnce.current = true;
       setLoading(false);
     }
-  }, [session?.user?.id, showToast]);
+  }, [session?.user?.id, typeFilter, search, wearFilter, showToast]);
+
+  const fetchItemsFiltered = useCallback(async () => {
+    if (!session?.user?.id) return;
+    try {
+      const res = await getWardrobeItemsPage(
+        session.user.id,
+        0,
+        { garmentType: typeFilter, search, wearFilter },
+        50
+      );
+      setItems(res.items);
+      setItemsOffset(res.nextOffset);
+      setHasMoreItems(res.hasMore);
+    } catch (err) {
+      console.error('Error filtering wardrobe items:', err);
+    }
+  }, [session?.user?.id, typeFilter, search, wearFilter]);
+
+  useEffect(() => {
+    if (!hasLoadedOnce.current) return;
+    const timer = setTimeout(() => {
+      fetchItemsFiltered();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [fetchItemsFiltered]);
+
+  const loadMoreItems = useCallback(async () => {
+    if (!session?.user?.id || loadingMoreItems || !hasMoreItems || loading) return;
+    setLoadingMoreItems(true);
+    try {
+      const res = await getWardrobeItemsPage(
+        session.user.id,
+        itemsOffset,
+        { garmentType: typeFilter, search, wearFilter },
+        50
+      );
+      setItems((prev) => {
+        const existing = new Set(prev.map((i) => i.id));
+        const novel = res.items.filter((i) => !existing.has(i.id));
+        return [...prev, ...novel];
+      });
+      setItemsOffset(res.nextOffset);
+      setHasMoreItems(res.hasMore);
+    } catch (err) {
+      console.error('Error loading more wardrobe items:', err);
+    } finally {
+      setLoadingMoreItems(false);
+    }
+  }, [session?.user?.id, itemsOffset, typeFilter, search, wearFilter, loadingMoreItems, hasMoreItems, loading]);
+
+  const loadMoreOutfits = useCallback(async () => {
+    if (!session?.user?.id || loadingMoreOutfits || !hasMoreOutfits || loading) return;
+    setLoadingMoreOutfits(true);
+    try {
+      const res = await getWardrobeOutfitsPage(session.user.id, outfitsOffset, 25);
+      setOutfits((prev) => {
+        const existing = new Set(prev.map((o) => o.id));
+        const novel = res.items.filter((o) => !existing.has(o.id));
+        return [...prev, ...novel];
+      });
+      setOutfitsOffset(res.nextOffset);
+      setHasMoreOutfits(res.hasMore);
+    } catch (err) {
+      console.error('Error loading more outfits:', err);
+    } finally {
+      setLoadingMoreOutfits(false);
+    }
+  }, [session?.user?.id, outfitsOffset, loadingMoreOutfits, hasMoreOutfits, loading]);
+
+  const loadMoreCapsules = useCallback(async () => {
+    if (!session?.user?.id || loadingMoreCapsules || !hasMoreCapsules || loading) return;
+    setLoadingMoreCapsules(true);
+    try {
+      const res = await getWardrobeCapsulesPage(session.user.id, capsulesOffset, 25);
+      setCapsules((prev) => {
+        const existing = new Set(prev.map((c) => c.id));
+        const novel = res.items.filter((c) => !existing.has(c.id));
+        return [...prev, ...novel];
+      });
+      setCapsulesOffset(res.nextOffset);
+      setHasMoreCapsules(res.hasMore);
+    } catch (err) {
+      console.error('Error loading more capsules:', err);
+    } finally {
+      setLoadingMoreCapsules(false);
+    }
+  }, [session?.user?.id, capsulesOffset, loadingMoreCapsules, hasMoreCapsules, loading]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -184,24 +265,6 @@ export default function WardrobeScreen() {
 
   const stats = useMemo(() => computeStats(items), [items]);
   const suggestions = useMemo(() => generateOutfits(items), [items]);
-
-  const visibleItems = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return items.filter((item) => {
-      if (typeFilter && item.garment_type !== typeFilter) return false;
-
-      if (wearFilter === 'never' && item.wear_count > 0) return false;
-      if (wearFilter === 'neglected') {
-        if (item.wear_count === 0) return false;
-        const worn = item.last_worn_at ? new Date(item.last_worn_at).getTime() : 0;
-        if (Date.now() - worn < NEGLECT_MS) return false;
-      }
-
-      if (!q) return true;
-      return [item.garment_type, item.category, item.sub_category, ...(item.color_tags || [])]
-        .some((f) => f?.toLowerCase().includes(q));
-    });
-  }, [items, search, typeFilter, wearFilter]);
 
   const handleSaveSuggestion = useCallback(async (outfit: GeneratedOutfit) => {
     if (!session?.user?.id) return;
@@ -525,7 +588,7 @@ export default function WardrobeScreen() {
         </ScrollView>
       ) : activeTab === 'items' ? (
         <FlatList
-          data={visibleItems}
+          data={items}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
           key={`items-grid-${columns}`}
@@ -537,6 +600,13 @@ export default function WardrobeScreen() {
           windowSize={7}
           removeClippedSubviews
           keyboardShouldPersistTaps="handled"
+          onEndReached={loadMoreItems}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMoreItems ? (
+              <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
+            ) : null
+          }
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} colors={[colors.tint]} />
           }
@@ -568,6 +638,8 @@ export default function WardrobeScreen() {
             contentContainerStyle={styles.listContent}
             initialNumToRender={4}
             ListHeaderComponent={outfitsHeader}
+            onEndReached={loadMoreOutfits}
+            onEndReachedThreshold={0.4}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} colors={[colors.tint]} />
             }
@@ -577,15 +649,20 @@ export default function WardrobeScreen() {
               </Text>
             }
             ListFooterComponent={
-              <TouchableOpacity
-                style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/outfit-builder'); }}
-                accessibilityRole="button"
-                accessibilityLabel="Create new outfit"
-              >
-                <IconSymbol name="plus" size={20} color={colors.onTint} />
-                <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Outfit</Text>
-              </TouchableOpacity>
+              <View>
+                {loadingMoreOutfits && (
+                  <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
+                )}
+                <TouchableOpacity
+                  style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/outfit-builder'); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create new outfit"
+                >
+                  <IconSymbol name="plus" size={20} color={colors.onTint} />
+                  <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Outfit</Text>
+                </TouchableOpacity>
+              </View>
             }
           />
         ) : (
@@ -610,6 +687,27 @@ export default function WardrobeScreen() {
                   onPress={() => router.push(`/wardrobe/capsule/${c.id}` as any)}
                 />
               ))}
+              {hasMoreCapsules && (
+                <TouchableOpacity
+                  style={[
+                    styles.createOutfitBtn,
+                    {
+                      backgroundColor: colors.surface,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      marginBottom: Spacing.md,
+                    },
+                  ]}
+                  onPress={loadMoreCapsules}
+                  disabled={loadingMoreCapsules}
+                >
+                  {loadingMoreCapsules ? (
+                    <ActivityIndicator size="small" color={colors.tint} />
+                  ) : (
+                    <Text style={[styles.createOutfitBtnText, { color: colors.text }]}>Load More Capsules</Text>
+                  )}
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
                 onPress={() => router.push('/wardrobe/create-capsule' as any)}

@@ -8,23 +8,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-
-type UserProfile = {
-  id: string;
-  username: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  
-};
-
-type Connection = {
-  id: string;
-  user_id_1: string;
-  user_id_2: string;
-  status: 'pending' | 'accepted' | 'blocked';
-  action_user_id: string;
-  other_user: UserProfile;
-};
+import { getConnectionsPage, Connection, UserProfile } from '@/src/services/connectionService';
 
 export default function NetworkScreen() {
   const { user } = useAuth();
@@ -40,47 +24,44 @@ export default function NetworkScreen() {
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const loadConnections = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      // Fetch connections where user is involved
-      const { data, error } = await supabase
-        .from('connections')
-        .select(`
-          id, user_id_1, user_id_2, status, action_user_id
-        `)
-        .or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`)
-        .neq('status', 'blocked');
-
-      if (error) throw error;
-
-      // profiles' own RLS only allows a row's owner or staff to read it, so
-      // other users' rows must go through this SECURITY DEFINER accessor.
-      const otherUserIds = (data || []).map((conn) =>
-        conn.user_id_1 === user.id ? conn.user_id_2 : conn.user_id_1
-      );
-      const { data: profiles } = await supabase.rpc('get_public_profiles', { p_user_ids: otherUserIds });
-      const profileById = new Map((profiles || []).map((p: any) => [p.id, p]));
-
-      const formattedConnections = (data || []).map((conn) => {
-        const otherUserId = conn.user_id_1 === user.id ? conn.user_id_2 : conn.user_id_1;
-        const profile = profileById.get(otherUserId);
-
-        return {
-          ...conn,
-          other_user: profile || { id: otherUserId, username: 'Unknown', first_name: '', last_name: '' }
-        } as Connection;
-      });
-
-      setConnections(formattedConnections);
-    } catch (err: any) { console.log(err);
-      console.log('Error loading connections:', err.message);
+      const res = await getConnectionsPage(user.id, 0, 50);
+      setConnections(res.items);
+      setOffset(res.nextOffset);
+      setHasMore(res.hasMore);
+    } catch (err: any) {
+      console.log('Error loading connections:', err?.message || err);
+      showToast('Could not load connections.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, showToast]);
+
+  const loadMoreConnections = useCallback(async () => {
+    if (!user || loadingMore || !hasMore || loading) return;
+    setLoadingMore(true);
+    try {
+      const res = await getConnectionsPage(user.id, offset, 50);
+      setConnections((prev) => {
+        const existing = new Set(prev.map((c) => c.id));
+        const novel = res.items.filter((c) => !existing.has(c.id));
+        return [...prev, ...novel];
+      });
+      setOffset(res.nextOffset);
+      setHasMore(res.hasMore);
+    } catch (err: any) {
+      console.log('Error loading more connections:', err?.message || err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [user, offset, loadingMore, hasMore, loading]);
 
   useEffect(() => {
     if (user && (activeTab === 'connections' || activeTab === 'pending')) {
@@ -319,6 +300,13 @@ export default function NetworkScreen() {
           renderItem={renderConnectionItem}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.list}
+          onEndReached={loadMoreConnections}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
+            ) : null
+          }
           ListEmptyComponent={
             <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
               No {activeTab} found.

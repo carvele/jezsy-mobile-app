@@ -14,15 +14,12 @@ import { Image } from 'expo-image';
 import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useWishlist } from '@/src/context/WishlistContext';
-import { Database } from '@/src/types/database.types';
 import { useToast } from '@/src/context/ToastContext';
-import { CATEGORY_SELECT, getCategoryLabel, WithCategoryEmbed } from '@/src/utils/categoryDisplay';
+import { getCategoryLabel } from '@/src/utils/categoryDisplay';
 import { useGridCardWidth, GRID_COLUMN_GAP } from '@/src/utils/layout';
-
-type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
+import { getWishlistPage, WishlistProduct as Product } from '@/src/services/wishlistService';
 
 export default function WishlistScreen() {
   const theme = useColorScheme();
@@ -30,39 +27,53 @@ export default function WishlistScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const { user } = useAuth();
-  const { wishlistIds, toggleWishlist } = useWishlist();
+  const { toggleWishlist } = useWishlist();
   const { cardWidth, columns } = useGridCardWidth();
 
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchWishlistProducts = useCallback(async () => {
-    if (!user?.id || wishlistIds.size === 0) {
+    if (!user?.id) {
       setItems([]);
       setLoading(false);
       return;
     }
-    // No setLoading(true) here: the initial load is covered by useState, and
-    // removing an item mutates wishlistIds (a dependency), so re-showing the
-    // spinner on every removal would flash the whole grid.
+    setLoading(true);
     try {
-      const ids = Array.from(wishlistIds);
-      const { data, error } = await supabase
-        .from('products')
-        .select(`*, ${CATEGORY_SELECT}`)
-        .in('id', ids)
-        .eq('deleted', false)
-        .eq('visibility', 'public');
-      if (!error && data) setItems(data);
+      const res = await getWishlistPage(user.id, 0, 30);
+      setItems(res.items);
+      setOffset(res.nextOffset);
+      setHasMore(res.hasMore);
     } catch (err) {
-      // Rendered as an empty wishlist indistinguishable from actually
-      // having nothing saved.
       console.error('Error fetching wishlist products:', err);
       showToast('Unable to load wishlist. Try again.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [user?.id, wishlistIds, showToast]);
+  }, [user?.id, showToast]);
+
+  const loadMoreWishlist = useCallback(async () => {
+    if (!user?.id || loadingMore || !hasMore || loading) return;
+    setLoadingMore(true);
+    try {
+      const res = await getWishlistPage(user.id, offset, 30);
+      setItems((prev) => {
+        const existing = new Set(prev.map((p) => p.id));
+        const novel = res.items.filter((p) => !existing.has(p.id));
+        return [...prev, ...novel];
+      });
+      setOffset(res.nextOffset);
+      setHasMore(res.hasMore);
+    } catch (err) {
+      console.error('Error loading more wishlist products:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [user?.id, offset, loadingMore, hasMore, loading]);
 
   useEffect(() => {
     fetchWishlistProducts();
@@ -86,7 +97,10 @@ export default function WishlistScreen() {
         {/* Remove from wishlist */}
         <TouchableOpacity
           style={styles.heartBtn}
-          onPress={() => toggleWishlist(item.id)}
+          onPress={() => {
+            toggleWishlist(item.id);
+            setItems((prev) => prev.filter((p) => p.id !== item.id));
+          }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${item.name} from wishlist`}
@@ -112,17 +126,22 @@ export default function WishlistScreen() {
         </Text>
       </View>
     </TouchableOpacity>
-  ), [colors, router, toggleWishlist, cardWidth]);
+  ), [colors, cardWidth, router, toggleWishlist]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <IconSymbol name="chevron.left" size={22} color={colors.text} />
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Wishlist</Text>
-        <View style={{ width: 38 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       {loading ? (
@@ -158,6 +177,13 @@ export default function WishlistScreen() {
           windowSize={5}
           removeClippedSubviews={true}
           showsVerticalScrollIndicator={false}
+          onEndReached={loadMoreWishlist}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
+            ) : null
+          }
           ListHeaderComponent={
             <Text style={[styles.countText, { color: colors.secondaryText }]}>
               {items.length} {items.length === 1 ? 'item' : 'items'} saved
