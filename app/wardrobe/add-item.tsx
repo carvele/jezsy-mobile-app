@@ -1,5 +1,5 @@
 import { notifySuccess } from '@/src/utils/haptics';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -75,6 +75,40 @@ export default function AddWardrobeItemScreen() {
   
   const [saving, setSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  // Wall-clock (not setTimeout-based) recovery for a save that started while
+  // the tab was foregrounded and then got backgrounded mid-upload. Mobile
+  // Chrome throttles or fully freezes a hidden tab's JS timers to save
+  // battery, so withTimeout's own setTimeout(...) can simply never fire --
+  // confirmed live, reported as "waited a few minutes [in another app], came
+  // back, still stuck on Uploading to storage" on two separate phones.
+  // document.visibilitychange reliably fires when a frozen tab wakes back
+  // up even though its own timers didn't, so that's the signal used here to
+  // check real elapsed time and force the UI out of a stuck state the
+  // setTimeout guard missed.
+  const saveStartedAtRef = useRef<number | null>(null);
+  const saveGenerationRef = useRef(0);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (saveStartedAtRef.current === null) return;
+      const elapsed = Date.now() - saveStartedAtRef.current;
+      // A little past the longest single-attempt timeout in handleSave (40s
+      // upload + up to one retry), so this only fires once the operation is
+      // unambiguously past any legitimate completion window.
+      if (elapsed > 90000) {
+        saveStartedAtRef.current = null;
+        saveGenerationRef.current += 1;
+        setSaving(false);
+        setStatusMessage('');
+        showToast('The upload was interrupted while the app was in the background. Please try again.', 'error');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchColorOptions().then(setColorOptions);
@@ -223,6 +257,8 @@ export default function AddWardrobeItemScreen() {
     }
 
     setSaving(true);
+    saveStartedAtRef.current = Date.now();
+    const myGeneration = ++saveGenerationRef.current;
     try {
       if (!(await isOnline())) {
         const offlineErr: any = new Error('No internet connection. Check your connection and try again.');
@@ -325,6 +361,14 @@ export default function AddWardrobeItemScreen() {
 
       if (dbError) throw dbError;
 
+      // If the visibility-recovery effect already declared this attempt
+      // interrupted (tab was backgrounded past the recovery threshold) and
+      // reset the UI, don't let this same attempt's late, actually-
+      // successful resolution silently flip things back to "success" out
+      // from under a user who may already be retrying.
+      if (myGeneration !== saveGenerationRef.current) return;
+      saveStartedAtRef.current = null;
+
       setImageUri(null);
       setProcessedImageUri(null);
       setRawPickedUri(null);
@@ -343,6 +387,8 @@ export default function AddWardrobeItemScreen() {
         ]);
       }
     } catch (err: any) {
+      if (myGeneration !== saveGenerationRef.current) return;
+      saveStartedAtRef.current = null;
       console.error('Error saving wardrobe item:', err);
       let userMessage = err?.message || 'Failed to save item. Try again.';
       if (err?.isTimeout) {
@@ -358,8 +404,10 @@ export default function AddWardrobeItemScreen() {
       }
       showToast(userMessage, 'error');
     } finally {
-      setSaving(false);
-      setStatusMessage('');
+      if (myGeneration === saveGenerationRef.current) {
+        setSaving(false);
+        setStatusMessage('');
+      }
     }
   };
 

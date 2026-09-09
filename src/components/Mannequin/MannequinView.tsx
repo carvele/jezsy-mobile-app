@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -107,6 +107,44 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
   const [loadModalVisible, setLoadModalVisible] = useState(false);
   const [savedLooks, setSavedLooks] = useState<any[]>([]);
   const [loadingLooks, setLoadingLooks] = useState(false);
+
+  // Wall-clock recovery for a save/load that started while the tab was
+  // foregrounded and then got backgrounded mid-request. Mobile Chrome
+  // throttles or fully freezes a hidden tab's JS timers, so the setTimeout
+  // inside handleSaveLook/handleOpenLoadModal can simply never fire --
+  // confirmed live on the wardrobe upload flow (same pattern) as "waited a
+  // few minutes [away from the tab], came back, still stuck".
+  // document.visibilitychange reliably fires when a frozen tab wakes back up
+  // even though its own timers didn't.
+  const saveStartedAtRef = useRef<number | null>(null);
+  const loadStartedAtRef = useRef<number | null>(null);
+  // Distinguishes a stale, late-resolving attempt (after the
+  // visibility-recovery above already reset the UI) from the current one --
+  // the saved_outfits insert isn't idempotent, so a late "success" from an
+  // attempt the user already retried past could otherwise create a
+  // duplicate saved look silently.
+  const saveGenerationRef = useRef(0);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (saveStartedAtRef.current !== null && Date.now() - saveStartedAtRef.current > 20000) {
+        saveStartedAtRef.current = null;
+        saveGenerationRef.current += 1;
+        setSaving(false);
+        showToast('Saving was interrupted while the app was in the background. Please try again.', 'error');
+      }
+      if (loadStartedAtRef.current !== null && Date.now() - loadStartedAtRef.current > 20000) {
+        loadStartedAtRef.current = null;
+        setLoadingLooks(false);
+        showToast('Loading was interrupted while the app was in the background. Please try again.', 'error');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Stylist Critique Modal State
   const [stylistModalVisible, setStylistModalVisible] = useState(false);
@@ -254,6 +292,8 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
 
     const name = lookName.trim() || 'My Mannequin Look';
     setSaving(true);
+    saveStartedAtRef.current = Date.now();
+    const myGeneration = ++saveGenerationRef.current;
     try {
       // Embed both standard boutique fields AND spatial canvas coordinates into items JSONB
       const itemsPayload = canvasItems.map((item) => ({
@@ -304,15 +344,26 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
       ]);
       if (error) throw error;
 
+      // The visibility-recovery effect may have already declared this
+      // attempt interrupted and reset the UI (bumping the generation) --
+      // don't let a late, actually-successful resolution silently flip
+      // things back or double up with a retry the user already made.
+      if (myGeneration !== saveGenerationRef.current) return;
+      saveStartedAtRef.current = null;
+
       setSaveModalVisible(false);
       setLookName('');
       showToast(`Saved "${name}" ✨`, 'success');
       onRefreshWardrobe();
     } catch (err: any) {
+      if (myGeneration !== saveGenerationRef.current) return;
+      saveStartedAtRef.current = null;
       console.error('Error saving mannequin look:', err);
       showToast(err.message || 'Could not save look.', 'error');
     } finally {
-      setSaving(false);
+      if (myGeneration === saveGenerationRef.current) {
+        setSaving(false);
+      }
     }
   };
 
@@ -321,6 +372,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
     if (!session?.user?.id) return;
     setLoadModalVisible(true);
     setLoadingLooks(true);
+    loadStartedAtRef.current = Date.now();
     try {
       // Same bounded-timeout reasoning as handleSaveLook: a stalled client
       // can leave this awaiting forever with no request ever sent, which
@@ -346,6 +398,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
       console.error('Error loading saved outfits:', err);
       showToast('Could not load saved outfits.', 'error');
     } finally {
+      loadStartedAtRef.current = null;
       setLoadingLooks(false);
     }
   };

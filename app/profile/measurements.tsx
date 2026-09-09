@@ -239,6 +239,38 @@ export default function MeasurementsScreen() {
     items: [],
   });
 
+  // Wall-clock recovery for a save that started while the tab was
+  // foregrounded and then got backgrounded mid-request. Mobile Chrome
+  // throttles or fully freezes a hidden tab's JS timers, so the setTimeout
+  // inside attemptWrite below can simply never fire -- confirmed live on the
+  // wardrobe upload flow (same withTimeout pattern) as "waited a few minutes
+  // [away from the tab], came back, still stuck". document.visibilitychange
+  // reliably fires when a frozen tab wakes back up even though its own
+  // timers didn't, so that's used here to check real elapsed time and force
+  // the UI out of a stuck state the setTimeout guard missed.
+  const saveStartedAtRef = React.useRef<number | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (saveStartedAtRef.current === null) return;
+      // Past the longest legitimate completion window (15s x up to 3
+      // attempts), so this only fires once genuinely stuck.
+      if (Date.now() - saveStartedAtRef.current > 60000) {
+        saveStartedAtRef.current = null;
+        savingRef.current = false;
+        setSaving(false);
+        const message = 'Saving was interrupted while the app was in the background. Your inputs have been kept -- please tap Save again.';
+        setSaveError(message);
+        showToast(message, 'error');
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSave = async () => {
     if (!user) {
       setSaveError('Not signed in -- please log in to save measurements.');
@@ -247,6 +279,7 @@ export default function MeasurementsScreen() {
     }
     if (savingRef.current) return;
     savingRef.current = true;
+    saveStartedAtRef.current = Date.now();
     setSaving(true);
     setSaveError(null);
 
@@ -259,6 +292,7 @@ export default function MeasurementsScreen() {
       setSaveError(message);
       showToast(message, 'error');
       savingRef.current = false;
+      saveStartedAtRef.current = null;
       setSaving(false);
       return;
     }
@@ -313,6 +347,7 @@ export default function MeasurementsScreen() {
       });
       if (!proceed) {
         savingRef.current = false;
+        saveStartedAtRef.current = null;
         setSaving(false);
         return;
       }
@@ -402,6 +437,7 @@ export default function MeasurementsScreen() {
       showToast(userMessage, 'error');
     } finally {
       savingRef.current = false;
+      saveStartedAtRef.current = null;
       setSaving(false);
     }
   };
