@@ -167,6 +167,24 @@ export default function ChatScreen() {
     };
   }, [messages]);
 
+  // Chrome can freeze this tab into the back-forward cache while backgrounded
+  // (confirmed live: "WebSocket connection ... failed: Page entered
+  // Back-Forward Cache" in the console) and Realtime's socket does not
+  // reconnect on its own when the tab returns -- new messages then stop
+  // arriving live until the screen is left and reopened. reconnectTick just
+  // re-runs the effect below on visibility regain, which re-fetches (to
+  // backfill anything missed) and recreates the channel via its existing,
+  // already-working subscribe/cleanup logic -- no change to that logic itself.
+  const [reconnectTick, setReconnectTick] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') setReconnectTick(t => t + 1);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
   useEffect(() => {
     if (!conversationId) return;
 
@@ -229,7 +247,7 @@ export default function ChatScreen() {
       cancelled = true;
       supabase.removeChannel(messageSubscription);
     };
-  }, [conversationId, markAsRead, session?.user.id]);
+  }, [conversationId, markAsRead, session?.user.id, reconnectTick]);
 
   // Typing indicator: ephemeral broadcast on a per-conversation channel, not
   // a DB write -- the admin dashboard joins the same channel name/shape when
