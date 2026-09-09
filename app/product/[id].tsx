@@ -28,6 +28,7 @@ import { ReviewsList } from "@/src/components/ReviewsList";
 import { RelatedProducts } from "@/src/components/RelatedProducts";
 import { RecentlyViewed } from "@/src/components/RecentlyViewed";
 import CompleteTheLookSection from "@/components/CompleteTheLookSection";
+import { StyledLooksSection } from "@/components/StyledLooksSection";
 import { addRecentlyViewed } from "@/src/utils/recentlyViewed";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
@@ -746,6 +747,10 @@ export default function ProductDetailScreen() {
 
           {/* Customer Reviews & Ratings */}
           <ReviewsList productId={product.id} />
+
+          {/* Styled Looks - real curated editorial content, ahead of the
+              algorithmic Complete the Look suggestions below */}
+          <StyledLooksSection currentProduct={product} />
 
           {/* Complete The Look - AI Stylist */}
           <CompleteTheLookSection currentProduct={product as any} />

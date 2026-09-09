@@ -2282,6 +2282,16 @@ export type Database = {
         Returns: string
       }
       get_outfit_privacy: { Args: { p_user_id: string }; Returns: string }
+      get_pose_guides_for_product: {
+        Args: { p_product_id: string }
+        Returns: {
+          category: string
+          id: string
+          image_url: string
+          name: string
+          occasion: string
+        }[]
+      }
       get_product_loved_by: {
         Args: { p_product_id: string }
         Returns: {
