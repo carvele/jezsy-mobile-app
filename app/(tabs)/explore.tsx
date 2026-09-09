@@ -182,41 +182,37 @@ export default function ExploreScreen() {
   // an actual tab-bar press, not on returning here via the back button from
   // a product detail screen pushed on top of an in-progress category browse
   // -- that must still preserve where the user was.
+  // Two fixes were tried and reverted here before landing on this one:
+  // router.replace('/explore') updated the URL but not React Navigation's
+  // own tab-focus state, leaving the previous tab still visually rendered;
+  // calling event.preventDefault() + navigating the parent tab navigator
+  // directly fought expo-router's own default tabPress dispatch in ways
+  // that were fragile to get right. The actual fix needs none of that:
+  // the stale category/all params being back in the URL on every tab press
+  // is expo-router's normal, harmless "remember this tab's last path"
+  // behavior -- it only became a bug because setHandledInitialParams(false)
+  // (removed below) re-armed the deep-link-consuming effect above,
+  // which then saw those params and re-applied them. Leaving that flag
+  // alone keeps the guard closed, so the stale params sit unused in the
+  // URL while these resets are what actually determine what renders.
   const navigation = useNavigation();
   useEffect(() => {
     // The parent tab navigator's event map (tabPress) isn't visible from a
-    // leaf screen's own navigation type, hence the cast -- this is the
-    // standard React Navigation pattern for listening to the containing
-    // tab bar from a screen it renders.
+    // leaf screen's own navigation type, hence the cast -- standard React
+    // Navigation pattern for listening to the containing tab bar.
     const tabNavigation = navigation.getParent?.() as
-      | { addListener?: (event: string, cb: (e: { preventDefault: () => void }) => void) => (() => void) | undefined }
+      | { addListener?: (event: string, cb: () => void) => (() => void) | undefined }
       | undefined;
-    // Read directly from expo-router's own BottomTabBar source
-    // (react-navigation/bottom-tabs/views/BottomTabBar.js) to get this
-    // right: its tabPress handler does
-    //   if (!focused && !event.defaultPrevented) navigation.dispatch(CommonActions.navigate(route))
-    // where `route` is this tab's own persisted route object, params and
-    // all. That's the actual default action putting the stale category/all
-    // params back -- not a timing race against it, an explicit dispatch
-    // using stale data every time this tab is pressed while unfocused.
-    // event.preventDefault() (available because the emitter passes
-    // canPreventDefault: true) stops that dispatch outright; it does NOT
-    // stop the tab from becoming focused, since that's just React state
-    // already changed by the press. Only after suppressing the default
-    // stale-param navigate do we issue our own clean one.
-    const unsub = tabNavigation?.addListener?.('tabPress', (e) => {
-      e.preventDefault();
+    const unsub = tabNavigation?.addListener?.('tabPress', () => {
       setSelectedCategory(null);
       setSelectedSubCategory(null);
       setShowAllProducts(false);
       setIsSearchActive(false);
       setSearchQuery('');
       setSearchResults([]);
-      setHandledInitialParams(false);
-      router.replace('/explore');
     });
     return unsub;
-  }, [navigation, router]);
+  }, [navigation]);
 
   // products.category_id references a subcategory row directly; these maps
   // resolve the display names this screen navigates by (set from tile
