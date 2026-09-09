@@ -170,8 +170,9 @@ export default function ExploreScreen() {
   // All") once. Category matching needs topCategories loaded first, so this
   // waits for that fetch rather than racing it.
   useEffect(() => {
-    if (handledInitialParams) return;
     const paramsSignature = `${params.all ?? ''}|${params.category ?? ''}`;
+    console.log('[EXPLORE_DEBUG] deep-link effect run', { handledInitialParams, paramsSignature, lastHandledExploreParams, topCategoriesLen: topCategories.length });
+    if (handledInitialParams) return;
     if (paramsSignature === lastHandledExploreParams) return;
     if (params.all === '1') {
       setShowAllProducts(true);
@@ -214,10 +215,12 @@ export default function ExploreScreen() {
     // The parent tab navigator's event map (tabPress) isn't visible from a
     // leaf screen's own navigation type, hence the cast -- standard React
     // Navigation pattern for listening to the containing tab bar.
+    console.log('[EXPLORE_DEBUG] registering tabPress listener', { hasParent: !!navigation.getParent?.() });
     const tabNavigation = navigation.getParent?.() as
       | { addListener?: (event: string, cb: () => void) => (() => void) | undefined }
       | undefined;
     const unsub = tabNavigation?.addListener?.('tabPress', () => {
+      console.log('[EXPLORE_DEBUG] tabPress fired', { params });
       lastHandledExploreParams = `${params.all ?? ''}|${params.category ?? ''}`;
       setSelectedCategory(null);
       setSelectedSubCategory(null);
@@ -226,6 +229,7 @@ export default function ExploreScreen() {
       setSearchQuery('');
       setSearchResults([]);
     });
+    console.log('[EXPLORE_DEBUG] listener registered?', { unsub: typeof unsub });
     return unsub;
   }, [navigation, params.all, params.category]);
 
