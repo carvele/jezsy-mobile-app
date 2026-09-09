@@ -31,6 +31,19 @@ import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
 
+// Module scope, not component state: confirmed live that this screen gets a
+// fresh mount (fresh useState defaults, handledInitialParams included) every
+// time it regains focus via the tab bar's default tabPress navigation, which
+// reuses this tab's own persisted route object -- stale category/all params
+// included. A remount defeats any fix that resets component state, since the
+// new instance's first render reads the exact same stale params fresh. This
+// module-level signature survives remounts (the module itself is only
+// evaluated once per page load), so a tab-press reset can mark a given set
+// of params as "already consumed" in a way a later remount still honors --
+// while a genuinely different deep link (a different signature) still gets
+// processed normally.
+let lastHandledExploreParams: string | null = null;
+
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
 const PAGE_SIZE = 20;
@@ -158,43 +171,44 @@ export default function ExploreScreen() {
   // waits for that fetch rather than racing it.
   useEffect(() => {
     if (handledInitialParams) return;
+    const paramsSignature = `${params.all ?? ''}|${params.category ?? ''}`;
+    if (paramsSignature === lastHandledExploreParams) return;
     if (params.all === '1') {
       setShowAllProducts(true);
       setHandledInitialParams(true);
+      lastHandledExploreParams = paramsSignature;
     } else if (params.category && topCategories.length > 0) {
       const match = topCategories.find((c) => c.name === params.category);
       if (match) {
         setSelectedCategory(match.name);
         setHandledInitialParams(true);
+        lastHandledExploreParams = paramsSignature;
       }
     }
   }, [params.all, params.category, topCategories, handledInitialParams]);
 
   // Reset to the Explore root whenever the Explore tab button itself is
-  // pressed -- confirmed live: this screen never unmounts on tab switches
-  // (React Navigation keeps tab screens mounted), so selectedCategory/
-  // showAllProducts from an earlier deep link (e.g. tapping a category from
-  // Home) stayed stuck for the rest of the session. Tapping Explore from
-  // Home, or elsewhere, kept showing whatever category the user had drilled
-  // into hours earlier instead of the actual Explore categories screen.
+  // pressed. Confirmed live this needed three attempts to get right:
+  // resetting only component state didn't survive expo-router's default
+  // tabPress action, which re-navigates using this tab's own persisted
+  // route object (stale category/all params included) -- and that
+  // re-navigation gives this screen a fresh mount, so a fresh
+  // handledInitialParams=false effect run reprocessed the exact same stale
+  // params right after this handler reset them. router.replace() and a
+  // direct parent-navigator navigate() call were each tried to suppress or
+  // override that default action and neither reliably won. The fix that
+  // actually holds up across a remount is the module-level
+  // lastHandledExploreParams signature above: this handler marks the
+  // CURRENT (about to go stale-again) params as already consumed, so
+  // whether or not this screen remounts, the deep-link effect sees its own
+  // guard already satisfied and skips reprocessing them -- while a
+  // genuinely different deep link later (a different signature) still gets
+  // handled normally.
   //
   // tabPress specifically (not useFocusEffect/focus) so this only fires on
   // an actual tab-bar press, not on returning here via the back button from
   // a product detail screen pushed on top of an in-progress category browse
   // -- that must still preserve where the user was.
-  // Two fixes were tried and reverted here before landing on this one:
-  // router.replace('/explore') updated the URL but not React Navigation's
-  // own tab-focus state, leaving the previous tab still visually rendered;
-  // calling event.preventDefault() + navigating the parent tab navigator
-  // directly fought expo-router's own default tabPress dispatch in ways
-  // that were fragile to get right. The actual fix needs none of that:
-  // the stale category/all params being back in the URL on every tab press
-  // is expo-router's normal, harmless "remember this tab's last path"
-  // behavior -- it only became a bug because setHandledInitialParams(false)
-  // (removed below) re-armed the deep-link-consuming effect above,
-  // which then saw those params and re-applied them. Leaving that flag
-  // alone keeps the guard closed, so the stale params sit unused in the
-  // URL while these resets are what actually determine what renders.
   const navigation = useNavigation();
   useEffect(() => {
     // The parent tab navigator's event map (tabPress) isn't visible from a
@@ -204,6 +218,7 @@ export default function ExploreScreen() {
       | { addListener?: (event: string, cb: () => void) => (() => void) | undefined }
       | undefined;
     const unsub = tabNavigation?.addListener?.('tabPress', () => {
+      lastHandledExploreParams = `${params.all ?? ''}|${params.category ?? ''}`;
       setSelectedCategory(null);
       setSelectedSubCategory(null);
       setShowAllProducts(false);
@@ -212,7 +227,7 @@ export default function ExploreScreen() {
       setSearchResults([]);
     });
     return unsub;
-  }, [navigation]);
+  }, [navigation, params.all, params.category]);
 
   // products.category_id references a subcategory row directly; these maps
   // resolve the display names this screen navigates by (set from tile
