@@ -272,23 +272,28 @@ export default function AddWardrobeItemScreen() {
       }
 
       const { contentType, ext } = resolveImageFileInfo(finalUri, headerContentType);
-      // Generated once per save, not per attempt -- a retry re-uploading the
-      // exact same path with upsert:true is idempotent (safely overwrites),
-      // unlike a fresh Date.now() per attempt which could orphan a duplicate
-      // if an earlier attempt actually succeeded server-side but the client
-      // never got the response in time.
-      const fileName = `${userId}/${Date.now()}.${ext}`;
 
-      // 40s per attempt (up from 25s), up to 2 attempts: server-side logs
-      // showed every completed upload finishing in under a second even for
-      // multi-MB images, so a timeout here means the upload genuinely didn't
-      // finish transferring in time on that connection, not server slowness
-      // -- worth one automatic retry rather than making the user start over.
-      const attemptUpload = () =>
-        withTimeout(
-          supabase.storage.from('wardrobe-images').upload(fileName, bytes, { upsert: true, contentType }),
+      // upsert:true was tried here and reverted -- confirmed live that it
+      // makes Supabase Storage's own RLS check on storage.objects fail
+      // UNCONDITIONALLY (statusCode 403, "new row violates row-level
+      // security policy"), even for a freshly-authenticated owner uploading
+      // to their own folder. The bucket's policies only grant INSERT/UPDATE/
+      // DELETE, not the SELECT upsert needs internally to check whether the
+      // object already exists, so upsert:true fails RLS before it can ever
+      // write. upsert:false (plain insert) is unaffected and is what every
+      // successful upload in this bucket has always used.
+      //
+      // A fresh filename per attempt (not one shared filename retried) means
+      // a retry can never hit a "conflict" from the previous attempt having
+      // silently succeeded server-side -- the only cost is a harmless,
+      // never-referenced orphaned object in that rare case, not a failure.
+      const attemptUpload = () => {
+        const fileName = `${userId}/${Date.now()}.${ext}`;
+        return withTimeout(
+          supabase.storage.from('wardrobe-images').upload(fileName, bytes, { upsert: false, contentType }),
           40000,
         );
+      };
       let uploadResult;
       try {
         uploadResult = await attemptUpload();
@@ -346,7 +351,11 @@ export default function AddWardrobeItemScreen() {
       } else if (err?.isOffline || err?.isAuthStale) {
         userMessage = err.message;
       } else if (err?.code === '42501' || err?.message?.includes('row-level security')) {
-        userMessage = 'Your session expired. Please log in again to add items.';
+        // Not necessarily an expired session -- upsert:true on storage
+        // uploads was a confirmed cause of this exact error regardless of
+        // auth state (reverted). Keep this generic rather than pointing at
+        // a specific cause we can't actually confirm client-side.
+        userMessage = 'Unable to save this item right now. Please try again.';
       }
       showToast(userMessage, 'error');
     } finally {
