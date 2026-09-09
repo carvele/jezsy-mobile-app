@@ -1,0 +1,2 @@
+-- Rollback get_direct_chat_summaries RPC.
+DROP FUNCTION IF EXISTS public.get_direct_chat_summaries(int, int);
