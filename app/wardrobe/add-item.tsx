@@ -94,10 +94,11 @@ export default function AddWardrobeItemScreen() {
       if (document.visibilityState !== 'visible') return;
       if (saveStartedAtRef.current === null) return;
       const elapsed = Date.now() - saveStartedAtRef.current;
-      // A little past the longest single-attempt timeout in handleSave (40s
-      // upload + up to one retry), so this only fires once the operation is
-      // unambiguously past any legitimate completion window.
-      if (elapsed > 90000) {
+      // A little past the longest legitimate run: up to 4 upload attempts
+      // at 40s each plus the pauses between retries, then the DB insert's
+      // own 12s. So this only fires once the operation is unambiguously
+      // past any legitimate completion window, not mid-retry.
+      if (elapsed > 220000) {
         saveStartedAtRef.current = null;
         saveGenerationRef.current += 1;
         setSaving(false);
@@ -329,14 +330,28 @@ export default function AddWardrobeItemScreen() {
           40000,
         );
       };
-      let uploadResult;
-      try {
-        uploadResult = await attemptUpload();
-      } catch (err: any) {
-        if (!err?.isTimeout) throw err;
-        uploadResult = await attemptUpload();
+      // Up to 4 attempts (raised from 2), with a short pause between each --
+      // confirmed live that resuming from several minutes idle (the phone's
+      // screen-lock/background-tab case this whole flow is hardened for) can
+      // take more than one retry to clear, since it's not just a slow
+      // request but the client's auth token background-refreshing right as
+      // the upload wants to use it. A single immediate retry sometimes
+      // raced the same still-settling refresh; a brief pause gives it room
+      // to finish first. Still fully safe to repeat: each attempt uses a
+      // fresh filename, so there's no conflict risk from retrying.
+      const maxAttempts = 4;
+      let uploadResult: Awaited<ReturnType<typeof attemptUpload>> | undefined;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          uploadResult = await attemptUpload();
+          break;
+        } catch (err: any) {
+          if (!err?.isTimeout || attempt === maxAttempts) throw err;
+          setStatusMessage(`Upload interrupted, retrying... (${attempt + 1}/${maxAttempts})`);
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+        }
       }
-      const { data: uploadData, error: uploadError } = uploadResult;
+      const { data: uploadData, error: uploadError } = uploadResult!;
 
       if (uploadError || !uploadData) throw uploadError || new Error('Upload failed.');
 
