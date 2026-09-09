@@ -1,0 +1,86 @@
+import { supabase } from '@/src/lib/supabase';
+import { OffsetPageResult } from '@/src/types/pagination';
+import { Database } from '@/src/types/database.types';
+import { StatusFilter, statusBucket } from '@/src/utils/reservationStatus';
+
+export type CustomerReservation = Database['public']['Tables']['reservations']['Row'] & {
+  reservation_items?: { count: number }[] | null;
+};
+
+const STATUS_BUCKET_MAP: Record<Exclude<StatusFilter, 'all'>, string[]> = {
+  pending: ['pending', 'request approval', 'Pending', 'Request Approval'],
+  toPay: ['confirmed', 'approved', 'to pay', 'Confirmed', 'Approved', 'To Pay'],
+  preparing: ['preparing', 'Preparing'],
+  ready: ['to pickup', 'fitting', 'active', 'ready', 'To Pickup', 'Fitting', 'Active', 'Ready'],
+  completed: ['completed', 'Completed'],
+  cancelled: ['cancelled', 'Cancelled'],
+};
+
+export async function getMyReservationsPage(
+  userId: string,
+  offset = 0,
+  filter: StatusFilter = 'all',
+  limit = 20
+): Promise<OffsetPageResult<CustomerReservation>> {
+  let query = supabase
+    .from('reservations')
+    .select('*, reservation_items(count)')
+    .eq('customer_id', userId)
+    .eq('deleted', false);
+
+  if (filter !== 'all') {
+    const rawStatuses = STATUS_BUCKET_MAP[filter];
+    if (rawStatuses && rawStatuses.length > 0) {
+      query = query.in('status', rawStatuses);
+    }
+  }
+
+  query = query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + limit);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const raw = data ?? [];
+  const hasMore = raw.length > limit;
+  const items = raw.slice(0, limit) as CustomerReservation[];
+
+  return {
+    items,
+    hasMore,
+    nextOffset: offset + items.length,
+  };
+}
+
+export async function getMyReservationStatusCounts(
+  userId: string
+): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('status')
+    .eq('customer_id', userId)
+    .eq('deleted', false);
+
+  if (error) throw error;
+
+  const counts: Record<string, number> = {
+    all: (data || []).length,
+    pending: 0,
+    toPay: 0,
+    preparing: 0,
+    ready: 0,
+    completed: 0,
+    cancelled: 0,
+  };
+
+  (data || []).forEach((r) => {
+    const bucket = statusBucket(r.status);
+    if (counts[bucket] !== undefined) {
+      counts[bucket] += 1;
+    }
+  });
+
+  return counts;
+}

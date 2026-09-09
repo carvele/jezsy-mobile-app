@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useMessages } from '@/src/context/MessagesContext';
@@ -9,9 +9,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { formatPHDate } from '@/src/utils/dateTime';
-// import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';
+import { getDirectChatsPage, DirectChatSummary } from '@/src/services/chatService';
+import { getNotificationsPage, NotificationItem } from '@/src/services/notificationService';
 
 export default function InboxScreen() {
   const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline } = useMessages();
@@ -22,8 +23,11 @@ export default function InboxScreen() {
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'shop' | 'friends' | 'notifications'>('shop');
-  const [directChats, setDirectChats] = useState<any[]>([]);
+  const [directChats, setDirectChats] = useState<DirectChatSummary[]>([]);
   const [directChatsLoading, setDirectChatsLoading] = useState(true);
+  const [directChatsOffset, setDirectChatsOffset] = useState(0);
+  const [hasMoreDirectChats, setHasMoreDirectChats] = useState(false);
+  const [loadingMoreDirectChats, setLoadingMoreDirectChats] = useState(false);
 
   const fetchDirectChats = useCallback(async () => {
     if (!user) {
@@ -31,61 +35,48 @@ export default function InboxScreen() {
       setDirectChatsLoading(false);
       return;
     }
+    setDirectChatsLoading(true);
     try {
-      const { data: myParticipants, error: err1 } = await supabase
-        .from('direct_chat_participants')
-        .select('chat_id')
-        .eq('user_id', user.id);
-      
-      if (err1) throw err1;
-
-      if (!myParticipants || myParticipants.length === 0) {
-        setDirectChats([]);
-        setDirectChatsLoading(false);
-        return;
-      }
-
-      const chatIds = myParticipants.map(p => p.chat_id);
-      
-      const { data: otherParticipants, error: err2 } = await supabase
-        .from('direct_chat_participants')
-        .select(`
-          chat_id,
-          user_id,
-          direct_chats!inner ( updated_at )
-        `)
-        .in('chat_id', chatIds)
-        .neq('user_id', user.id);
-
-      if (err2) throw err2;
-
-      // profiles' own RLS only allows a row's owner or staff to read it, so
-      // the other participant's row must go through this accessor -- an
-      // embedded `profiles!inner(...)` join here silently drops every row.
-      const otherUserIds = (otherParticipants || []).map(p => p.user_id);
-      const { data: profiles } = await supabase.rpc('get_public_profiles', { p_user_ids: otherUserIds });
-      const profileById = new Map((profiles || []).map((p: any) => [p.id, p]));
-
-      const formatted = (otherParticipants || []).map(p => ({
-        id: p.chat_id,
-        other_user: profileById.get(p.user_id) || null,
-        updated_at: (p.direct_chats as any)?.updated_at || new Date().toISOString()
-      })).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-
-      setDirectChats(formatted);
+      const res = await getDirectChatsPage(0, 30);
+      setDirectChats(res.items);
+      setDirectChatsOffset(res.nextOffset);
+      setHasMoreDirectChats(res.hasMore);
     } catch (err) {
       console.error('Error fetching direct chats:', err);
+      showToast('Could not load direct chats.', 'error');
     } finally {
       setDirectChatsLoading(false);
     }
-  }, [user]);
+  }, [user, showToast]);
+
+  const loadMoreDirectChats = useCallback(async () => {
+    if (!user || loadingMoreDirectChats || !hasMoreDirectChats) return;
+    setLoadingMoreDirectChats(true);
+    try {
+      const res = await getDirectChatsPage(directChatsOffset, 30);
+      setDirectChats((prev) => {
+        const existing = new Set(prev.map((c) => c.id));
+        const novel = res.items.filter((c) => !existing.has(c.id));
+        return [...prev, ...novel];
+      });
+      setDirectChatsOffset(res.nextOffset);
+      setHasMoreDirectChats(res.hasMore);
+    } catch (err) {
+      console.error('Error loading more direct chats:', err);
+    } finally {
+      setLoadingMoreDirectChats(false);
+    }
+  }, [user, directChatsOffset, loadingMoreDirectChats, hasMoreDirectChats]);
 
   useEffect(() => {
     fetchDirectChats();
   }, [fetchDirectChats]);
 
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [notifOffset, setNotifOffset] = useState(0);
+  const [hasMoreNotifications, setHasMoreNotifications] = useState(false);
+  const [loadingMoreNotifications, setLoadingMoreNotifications] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) {
@@ -93,36 +84,38 @@ export default function InboxScreen() {
       setNotificationsLoading(false);
       return;
     }
+    setNotificationsLoading(true);
     try {
-      const nowIso = new Date().toISOString();
-      const [personalRes, announcementsRes, dismissalsRes] = await Promise.all([
-        supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
-        supabase.from('announcements').select('*').or(`expires_at.is.null,expires_at.gt.${nowIso}`).order('created_at', { ascending: false }).limit(10),
-        supabase.from('announcement_dismissals').select('announcement_id').eq('user_id', user.id),
-      ]);
-
-      if (personalRes.error) throw personalRes.error;
-      if (announcementsRes.error) throw announcementsRes.error;
-      if (dismissalsRes.error) throw dismissalsRes.error;
-
-      const dismissedIds = new Set((dismissalsRes.data || []).map(d => d.announcement_id));
-      const activeAnnouncements = (announcementsRes.data || [])
-        .filter(a => !dismissedIds.has(a.id))
-        .map(a => ({ ...a, kind: 'announcement' as const, is_read: true }));
-      const personal = (personalRes.data || []).map(n => ({ ...n, kind: 'personal' as const }));
-
-      const combined = [...personal, ...activeAnnouncements].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      setNotifications(combined);
+      const res = await getNotificationsPage(user.id, 0, 30);
+      setNotifications(res.items);
+      setNotifOffset(res.nextOffset);
+      setHasMoreNotifications(res.hasMore);
     } catch (err) {
-      // Rendered as an empty inbox indistinguishable from having no messages.
       console.error('Error fetching notifications:', err);
       showToast('Could not load your messages. Please try again.', 'error');
     } finally {
       setNotificationsLoading(false);
     }
   }, [user, showToast]);
+
+  const loadMoreNotifications = useCallback(async () => {
+    if (!user || loadingMoreNotifications || !hasMoreNotifications) return;
+    setLoadingMoreNotifications(true);
+    try {
+      const res = await getNotificationsPage(user.id, notifOffset, 30);
+      setNotifications((prev) => {
+        const existing = new Set(prev.map((n) => n.id));
+        const novel = res.items.filter((n) => !existing.has(n.id));
+        return [...prev, ...novel];
+      });
+      setNotifOffset(res.nextOffset);
+      setHasMoreNotifications(res.hasMore);
+    } catch (err) {
+      console.error('Error loading more notifications:', err);
+    } finally {
+      setLoadingMoreNotifications(false);
+    }
+  }, [user, notifOffset, loadingMoreNotifications, hasMoreNotifications]);
 
   useEffect(() => {
     fetchNotifications();
@@ -384,6 +377,15 @@ export default function InboxScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderDirectChatItem}
             contentContainerStyle={styles.list}
+            onEndReached={loadMoreDirectChats}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={
+              loadingMoreDirectChats ? (
+                <View style={{ paddingVertical: Spacing.md, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={colors.tint} />
+                </View>
+              ) : null
+            }
           />
         )
       )}
@@ -408,6 +410,15 @@ export default function InboxScreen() {
             renderItem={renderNotificationItem}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.list}
+            onEndReached={loadMoreNotifications}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={
+              loadingMoreNotifications ? (
+                <View style={{ paddingVertical: Spacing.md, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={colors.tint} />
+                </View>
+              ) : null
+            }
           />
         )
       )}

@@ -1,12 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { formatPHDate, formatTimeLabel } from '@/src/utils/dateTime';
-import { supabase } from '@/src/lib/supabase';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
-import { Database } from '@/src/types/database.types';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -19,11 +17,11 @@ import {
   statusLabel,
   filterLabel,
 } from '@/src/utils/reservationStatus';
-
-// The embedded aggregate arrives as reservation_items: [{ count: n }].
-type Reservation = Database['public']['Tables']['reservations']['Row'] & {
-  reservation_items?: { count: number }[] | null;
-};
+import {
+  getMyReservationsPage,
+  getMyReservationStatusCounts,
+  CustomerReservation as Reservation,
+} from '@/src/services/reservationService';
 
 // Lines beyond the first, which is the one the parent's product columns
 // already describe. 0 for single-item reservations and for rows fetched
@@ -36,6 +34,18 @@ export default function ReservationsScreen() {
   const { session } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({
+    all: 0,
+    pending: 0,
+    toPay: 0,
+    preparing: 0,
+    ready: 0,
+    completed: 0,
+    cancelled: 0,
+  });
 
   const params = useLocalSearchParams<{ status?: string }>();
   const initialFilter: StatusFilter = STATUS_FILTERS.includes(params.status as StatusFilter)
@@ -48,52 +58,59 @@ export default function ReservationsScreen() {
   const colors = Colors[theme];
   const { showToast } = useToast();
 
-  // useFocusEffect (not useEffect) so returning to this screen after an
-  // admin action elsewhere -- e.g. staff marking a reservation paid --
-  // refetches instead of leaving stale status badges from the last visit.
+  const fetchInitialReservations = useCallback(async (filterToFetch: StatusFilter) => {
+    if (!session?.user) return;
+    setLoading(true);
+    try {
+      const [res, counts] = await Promise.all([
+        getMyReservationsPage(session.user.id, 0, filterToFetch, 20),
+        getMyReservationStatusCounts(session.user.id),
+      ]);
+      setReservations(res.items);
+      setOffset(res.nextOffset);
+      setHasMore(res.hasMore);
+      setStatusCounts(counts);
+    } catch (err) {
+      console.error('Error fetching reservations:', err);
+      showToast('Unable to load reservations. Try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [session?.user, showToast]);
+
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-
-      const fetchReservations = async () => {
-        if (!session?.user) return;
-
-        try {
-          // The embedded count turns "Tailored Blazer" into "Tailored Blazer
-          // + 2 more": the parent's product columns only ever describe the
-          // first line, so on its own a multi-item reservation reads as if it
-          // held a single item.
-          const { data, error } = await supabase
-            .from('reservations')
-            .select('*, reservation_items(count)')
-            .eq('customer_id', session.user.id)
-            .eq('deleted', false)
-            .order('created_at', { ascending: false });
-
-          if (error) throw error;
-          if (!cancelled) setReservations(data || []);
-        } catch (err) {
-          // Rendered as "no reservations" indistinguishable from actually
-          // having none -- including the confirm-then-pay ones now waiting on
-          // a payment deadline, which is the worst screen for this to go quiet on.
-          console.error('Error fetching reservations:', err);
-          if (!cancelled) showToast('Unable to load reservations. Try again.', 'error');
-        } finally {
-          if (!cancelled) setLoading(false);
-        }
-      };
-
-      fetchReservations();
-      return () => {
-        cancelled = true;
-      };
-    }, [session, showToast])
+      fetchInitialReservations(activeFilter);
+    }, [fetchInitialReservations, activeFilter])
   );
+
+  const handleFilterChange = useCallback((filter: StatusFilter) => {
+    setActiveFilter(filter);
+    fetchInitialReservations(filter);
+  }, [fetchInitialReservations]);
+
+  const loadMoreReservations = useCallback(async () => {
+    if (!session?.user || loadingMore || !hasMore || loading) return;
+    setLoadingMore(true);
+    try {
+      const res = await getMyReservationsPage(session.user.id, offset, activeFilter, 20);
+      setReservations((prev) => {
+        const existing = new Set(prev.map((r) => r.id));
+        const novel = res.items.filter((r) => !existing.has(r.id));
+        return [...prev, ...novel];
+      });
+      setOffset(res.nextOffset);
+      setHasMore(res.hasMore);
+    } catch (err) {
+      console.error('Error loading more reservations:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [session?.user, offset, activeFilter, loadingMore, hasMore, loading]);
 
   const getStatusColor = (status: string | null) => {
     switch (statusBucket(status)) {
       case 'pending': return colors.warning;
-      // Money is owed: the same attention colour the deadline copy uses.
       case 'toPay': return colors.notification;
       case 'preparing': return colors.info;
       case 'ready': return colors.info;
@@ -101,30 +118,6 @@ export default function ReservationsScreen() {
       case 'cancelled': return colors.error;
     }
   };
-
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      all: reservations.length,
-      pending: 0,
-      toPay: 0,
-      preparing: 0,
-      ready: 0,
-      completed: 0,
-      cancelled: 0,
-    };
-    reservations.forEach((r) => {
-      const bucket = statusBucket(r.status);
-      if (counts[bucket] !== undefined) {
-        counts[bucket] += 1;
-      }
-    });
-    return counts;
-  }, [reservations]);
-
-  const filteredReservations = useMemo(() => {
-    if (activeFilter === 'all') return reservations;
-    return reservations.filter((r) => statusBucket(r.status) === activeFilter);
-  }, [reservations, activeFilter]);
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {
     const dateStr = item.date ? formatPHDate(item.date) : 'N/A';
@@ -199,7 +192,7 @@ export default function ReservationsScreen() {
             const count = statusCounts[filter] ?? 0;
             return (
               <TouchableOpacity
-                onPress={() => setActiveFilter(filter)}
+                onPress={() => handleFilterChange(filter)}
                 style={[
                   styles.filterChip,
                   { borderColor: isActive ? colors.tint : colors.border },
@@ -263,7 +256,7 @@ export default function ReservationsScreen() {
             <Text style={[styles.exploreButtonText, { color: colors.onTint }]}>Explore Catalog</Text>
           </TouchableOpacity>
         </View>
-      ) : filteredReservations.length === 0 ? (
+      ) : reservations.length === 0 && activeFilter !== 'all' ? (
         <View style={styles.centerContainer}>
           <IconSymbol name="calendar.badge.exclamationmark" size={64} color={colors.border} />
           {/* Quoting the filter's own label rather than interpolating the key:
@@ -277,7 +270,7 @@ export default function ReservationsScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.exploreButton, { backgroundColor: colors.tint }]}
-            onPress={() => setActiveFilter('all')}
+            onPress={() => handleFilterChange('all')}
             accessibilityRole="button"
             accessibilityLabel="Show all reservations"
           >
@@ -286,11 +279,18 @@ export default function ReservationsScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredReservations}
+          data={reservations}
           keyExtractor={(item) => item.id}
           renderItem={renderReservationItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          onEndReached={loadMoreReservations}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
+            ) : null
+          }
         />
       )}
     </SafeAreaView>
