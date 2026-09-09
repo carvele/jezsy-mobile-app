@@ -195,6 +195,16 @@ BEGIN
   WHERE id = _reservation_id
   RETURNING * INTO v_res;
 
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Changed reservation status',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object('previous_status', _expected_status, 'status', v_res.status)
+  );
+
   RETURN jsonb_build_object(
     'reservation_id', v_res.id,
     'previous_status', _expected_status,
@@ -220,6 +230,7 @@ SET search_path TO ''
 AS $function$
 DECLARE
   v_actor uuid := auth.uid();
+  v_actor_name text;
   v_res public.reservations%rowtype;
 BEGIN
   IF v_actor IS NULL OR NOT public.is_admin_or_owner() THEN
@@ -250,6 +261,11 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
   UPDATE public.reservations
   SET status = 'Cancelled',
       countdown = false,
@@ -257,6 +273,16 @@ BEGIN
       updated_at = now()
   WHERE id = _reservation_id
   RETURNING * INTO v_res;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Cancelled reservation',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object('previous_status', _expected_status, 'reason', v_res.cancellation_reason)
+  );
 
   RETURN jsonb_build_object('reservation_id', v_res.id, 'status', v_res.status);
 END;
@@ -278,6 +304,7 @@ SET search_path TO ''
 AS $function$
 DECLARE
   v_actor uuid := auth.uid();
+  v_actor_name text;
   v_res public.reservations%rowtype;
 BEGIN
   IF v_actor IS NULL OR NOT public.is_admin_or_owner() THEN
@@ -299,6 +326,11 @@ BEGIN
     RAISE EXCEPTION 'This receipt is no longer awaiting review.' USING ERRCODE = 'check_violation';
   END IF;
 
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
   IF _approve THEN
     UPDATE public.reservations
     SET payment_status = 'Paid',
@@ -316,6 +348,20 @@ BEGIN
     WHERE id = _reservation_id
     RETURNING * INTO v_res;
   END IF;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    CASE WHEN _approve THEN 'Approved reservation receipt' ELSE 'Rejected reservation receipt' END,
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'approved', _approve,
+      'status', v_res.status,
+      'payment_status', v_res.payment_status
+    )
+  );
 
   RETURN jsonb_build_object(
     'reservation_id', v_res.id,
@@ -370,11 +416,33 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO ''
 AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_result jsonb;
 BEGIN
-  IF auth.uid() IS NULL OR NOT public.is_admin_or_owner() THEN
+  IF v_actor IS NULL OR NOT public.is_admin_or_owner() THEN
     RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
   END IF;
-  RETURN public.resolve_reschedule(_reservation_id, _approve);
+
+  v_result := public.resolve_reschedule(_reservation_id, _approve);
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    CASE WHEN _approve THEN 'Approved reschedule request' ELSE 'Declined reschedule request' END,
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object('approved', _approve)
+  );
+
+  RETURN v_result;
 END;
 $function$;
 
@@ -393,11 +461,14 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
   v_res public.reservations%rowtype;
   v_settlement jsonb;
   v_outstanding numeric;
+  v_previous_status text;
 BEGIN
-  IF auth.uid() IS NULL OR NOT public.is_admin_or_owner() THEN
+  IF v_actor IS NULL OR NOT public.is_admin_or_owner() THEN
     RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
   END IF;
 
@@ -417,6 +488,7 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
+  v_previous_status := v_res.status;
   v_outstanding := coalesce(v_res.rental_price, 0) - coalesce(v_res.deposit, 0);
   IF v_outstanding > 0 AND v_res.balance_settled_at IS NULL THEN
     v_settlement := public.settle_reservation_balance(_reservation_id, _method);
@@ -426,6 +498,26 @@ BEGIN
   SET status = 'Completed', updated_at = now()
   WHERE id = _reservation_id
   RETURNING * INTO v_res;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Completed reservation handover',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'previous_status', v_previous_status,
+      'status', v_res.status,
+      'settled_amount', coalesce((v_settlement->>'settled_amount')::numeric, 0),
+      'method', _method
+    )
+  );
 
   RETURN jsonb_build_object(
     'reservation_id', v_res.id,
