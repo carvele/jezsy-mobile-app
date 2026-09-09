@@ -19,6 +19,16 @@ type LengthUnit = 'cm' | 'in';
 const UNIT_STORAGE_KEY = '@jezsy_length_unit';
 const CM_PER_IN = 2.54;
 const round1 = (n: number) => Math.round(n * 10) / 10;
+// keyboardType="numeric" only hints at a numeric keyboard on native; on web
+// (React Native Web) it does not restrict what a physical keyboard can type,
+// so "-160" was going straight into state unfiltered. Strip to digits and a
+// single decimal point -- there's no valid negative body measurement.
+const sanitizeNumericInput = (v: string) => {
+  const cleaned = v.replace(/[^0-9.]/g, '');
+  const firstDot = cleaned.indexOf('.');
+  if (firstDot === -1) return cleaned;
+  return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+};
 
 // Every length field is stored and typed in whatever `unit` currently is --
 // conversion only happens at explicit boundaries (toggle, load, save), never
@@ -327,6 +337,22 @@ export default function MeasurementsScreen() {
       overallConfidence: scanConfidence ?? 0.95,
     };
 
+    // Zero/negative is not "unusual", it's not a body measurement at all --
+    // reject outright rather than routing it through the dismissible range
+    // warning below, which is meant for real-but-atypical values.
+    const nonPositiveField = Object.entries(rawMeasurements).find(
+      ([key, value]) => typeof value === 'number' && value <= 0 && key !== 'overallConfidence'
+    );
+    if (nonPositiveField) {
+      const message = 'Measurements must be greater than 0. Please check your entries.';
+      setSaveError(message);
+      showToast(message, 'error');
+      savingRef.current = false;
+      saveStartedAtRef.current = null;
+      setSaving(false);
+      return;
+    }
+
     // Range check sanity warning
     const warnings = validateMeasurementRanges({
       height: rawMeasurements.height,
@@ -499,7 +525,7 @@ export default function MeasurementsScreen() {
           value={value}
           accessibilityLabel={`${label} measurement in ${unit === 'in' ? 'inches' : 'centimeters'}`}
           onChangeText={(v) => {
-            setValue(v);
+            setValue(sanitizeNumericInput(v));
             // Once manually edited, it is no longer AI derived purely
             if (conf !== undefined) {
               setFieldConfidence((prev: any) => ({ ...prev, [fieldKey]: 0 }));
@@ -604,7 +630,7 @@ export default function MeasurementsScreen() {
                   placeholderTextColor={colors.secondaryText}
                   keyboardType="numeric"
                   value={height}
-                  onChangeText={setHeight}
+                  onChangeText={(v) => setHeight(sanitizeNumericInput(v))}
                 />
               </View>
               <View style={styles.inputGroup}>
@@ -615,7 +641,7 @@ export default function MeasurementsScreen() {
                   placeholderTextColor={colors.secondaryText}
                   keyboardType="numeric"
                   value={weight}
-                  onChangeText={setWeight}
+                  onChangeText={(v) => setWeight(sanitizeNumericInput(v))}
                 />
               </View>
             </View>
