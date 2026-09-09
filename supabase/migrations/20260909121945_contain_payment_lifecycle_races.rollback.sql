@@ -1,8 +1,20 @@
 -- Restore the payment behavior that preceded the containment migration.
 
+DROP FUNCTION IF EXISTS public.complete_reservation_handover(uuid, text);
+DROP FUNCTION IF EXISTS public.resolve_reschedule_as_manager(uuid, boolean);
+DROP FUNCTION IF EXISTS public.record_reservation_balance(uuid, text);
+DROP FUNCTION IF EXISTS public.review_reservation_receipt(uuid, boolean);
+DROP FUNCTION IF EXISTS public.cancel_reservation_as_manager(uuid, text, text);
+DROP FUNCTION IF EXISTS public.transition_reservation_status(uuid, text, text);
+
+GRANT EXECUTE ON FUNCTION public.settle_reservation_balance(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.resolve_reschedule(uuid, boolean) TO authenticated;
+
 DROP TRIGGER IF EXISTS trg_guard_reservation_financial_state ON public.reservations;
 DROP FUNCTION IF EXISTS public.guard_reservation_financial_state();
 DROP INDEX IF EXISTS public.payments_one_paid_per_reservation;
+DROP TRIGGER IF EXISTS trg_guard_payment_attempt_identity ON public.payments;
+DROP FUNCTION IF EXISTS public.guard_payment_attempt_identity();
 
 ALTER TABLE public.reservations DROP CONSTRAINT IF EXISTS reservations_payment_status_check;
 ALTER TABLE public.reservations ADD CONSTRAINT reservations_payment_status_check

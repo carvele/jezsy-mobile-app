@@ -250,6 +250,12 @@ BEGIN
   v_was := public.reservation_holds_stock(OLD.status, OLD.deleted);
   v_now := public.reservation_holds_stock(NEW.status, NEW.deleted);
 
+  IF lower(coalesce(OLD.status, '')) = 'completed'
+     AND NEW.status IS DISTINCT FROM OLD.status THEN
+    RAISE EXCEPTION 'A completed purchase cannot be reopened; adjust inventory through a stock command.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
   IF v_was = v_now THEN
     RETURN NEW;
   END IF;
@@ -384,12 +390,16 @@ REVOKE EXECUTE ON FUNCTION public.hold_inventory_for_reservation_item() FROM PUB
 REVOKE EXECUTE ON FUNCTION public.apply_inventory_on_reservation_status_change() FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.release_inventory_for_reservation_item() FROM PUBLIC, anon, authenticated;
 
+DROP FUNCTION IF EXISTS public.create_reservation_multi(jsonb, text, text, text, text);
+DROP FUNCTION IF EXISTS public.create_reservation_multi(jsonb, text, text, text, text, uuid);
+
 CREATE OR REPLACE FUNCTION public.create_reservation_multi(
   _items jsonb,
   _date text,
   _appointment_time text,
   _receipt_path text DEFAULT NULL,
-  _payment_option text DEFAULT 'deposit'
+  _payment_option text DEFAULT 'deposit',
+  _customer_id uuid DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -397,7 +407,8 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 DECLARE
-  v_user_id uuid := auth.uid();
+  v_actor_id uuid := auth.uid();
+  v_user_id uuid;
   v_profile record;
   v_product record;
   v_reservation public.reservations%rowtype;
@@ -415,8 +426,14 @@ DECLARE
   v_first jsonb;
   v_items_resolved jsonb := '[]'::jsonb;
 BEGIN
-  IF v_user_id IS NULL THEN
+  IF v_actor_id IS NULL THEN
     RAISE EXCEPTION 'Authentication required.';
+  END IF;
+  v_user_id := coalesce(_customer_id, v_actor_id);
+  IF _customer_id IS NOT NULL
+     AND _customer_id <> v_actor_id
+     AND NOT public.is_admin_or_owner() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
   END IF;
   IF v_option NOT IN ('deposit', 'full') THEN
     RAISE EXCEPTION 'Payment option must be deposit or full.';
@@ -518,7 +535,13 @@ BEGIN
   SELECT p.first_name, p.last_name
   INTO v_profile
   FROM public.profiles p
-  WHERE p.id = v_user_id;
+  WHERE p.id = v_user_id
+    AND p.role = 'customer'
+    AND coalesce(p.deleted, false) = false
+    AND coalesce(p.is_blocked, false) = false;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Customer account is unavailable.';
+  END IF;
 
   LOOP
     v_attempt := v_attempt + 1;
@@ -578,9 +601,9 @@ BEGIN
 END;
 $function$;
 
-REVOKE EXECUTE ON FUNCTION public.create_reservation_multi(jsonb, text, text, text, text)
+REVOKE EXECUTE ON FUNCTION public.create_reservation_multi(jsonb, text, text, text, text, uuid)
   FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.create_reservation_multi(jsonb, text, text, text, text)
+GRANT EXECUTE ON FUNCTION public.create_reservation_multi(jsonb, text, text, text, text, uuid)
   TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.recalculate_inventory_stock()

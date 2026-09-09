@@ -125,39 +125,28 @@ serve(async (req) => {
       : "Deposit for";
     const description = label + " " + (reservation.product_name ?? "reservation") + " (" + reservation.display_id + ")";
 
-    // Reuse an open session rather than stacking them; the partial unique index
-    // would reject a second one anyway.
-    const { data: existing } = await admin
+    // Close any existing pending payment attempts for this reservation and start a fresh one.
+    const { data: existingAttempts, error: existingError } = await admin
       .from("payments")
-      .select("id, provider_ref, amount_centavos")
+      .select("id")
       .eq("reservation_id", reservationId)
-      .in("status", ["awaiting_payment", "processing"])
-      .maybeSingle();
+      .in("status", ["awaiting_payment", "processing"]);
 
-    if (existing?.provider_ref && existing.amount_centavos === amountCentavos) {
-      const sessionResponse = await fetch(
-        PAYMONGO_API + "/checkout_sessions/" + existing.provider_ref,
-        { headers: { Authorization: basicAuth } },
-      ).catch(() => null);
-      if (!sessionResponse?.ok) {
-        return json(req, { error: "Could not verify the existing payment session. Please try again." }, 502);
-      }
-      const session = await sessionResponse.json().catch(() => null);
-      if (!session?.data) {
-        return json(req, { error: "Could not verify the existing payment session. Please try again." }, 502);
-      }
+    if (existingError) {
+      console.error("Failed to fetch existing payment attempts", existingError);
+      return json(req, { error: "Could not start the payment." }, 500);
+    }
 
-      const pmStatus = session?.data?.attributes?.status;
-      const payments = session?.data?.attributes?.payments || [];
-      const hasPaid = payments.some((p: any) => p.attributes?.status === 'paid');
-
-      if (hasPaid) {
-        return json(req, { error: "Your payment has already been received and is being processed." }, 409);
-      }
-
-      if (pmStatus === 'active') {
-        const url = session?.data?.attributes?.checkout_url;
-        if (url) return json(req, { payment_id: existing.id, checkout_url: url, reused: true });
+    if (existingAttempts && existingAttempts.length > 0) {
+      const ids = existingAttempts.map((p: any) => p.id);
+      const { error: closeError } = await admin
+        .from("payments")
+        .update({ status: "failed" })
+        .in("id", ids)
+        .in("status", ["awaiting_payment", "processing"]);
+      if (closeError) {
+        console.error("Could not close stale payment attempt", closeError);
+        return json(req, { error: "Could not start the payment." }, 500);
       }
     }
 
@@ -168,45 +157,25 @@ serve(async (req) => {
     // in `payments` pointing back at it. provider_ref starts null (the
     // partial unique index only applies once it's set) and is attached once
     // the session actually exists.
-    let paymentId: string;
-    if (existing) {
-      paymentId = existing.id;
-      const { error: resetError } = await admin
-        .from("payments")
-        .update({
-          provider_ref: null,
-          amount_centavos: amountCentavos,
-          status: "awaiting_payment",
-          attempt_started_at: new Date().toISOString(),
-          requires_refund: false,
-          refund_required_at: null,
-        })
-        .eq("id", existing.id);
-      if (resetError) {
-        console.error("Could not reset payment row", resetError);
-        return json(req, { error: "Could not start the payment." }, 500);
-      }
-    } else {
-      const { data: inserted, error: insertError } = await admin
-        .from("payments")
-        .insert({
-          user_id: userId,
-          reservation_id: reservationId,
-          provider: "paymongo",
-          amount_centavos: amountCentavos,
-          currency: "PHP",
-          status: "awaiting_payment",
-          attempt_started_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
+    const { data: inserted, error: insertError } = await admin
+      .from("payments")
+      .insert({
+        user_id: userId,
+        reservation_id: reservationId,
+        provider: "paymongo",
+        amount_centavos: amountCentavos,
+        currency: "PHP",
+        status: "awaiting_payment",
+        attempt_started_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
 
-      if (insertError || !inserted) {
-        console.error("Could not record payment", insertError);
-        return json(req, { error: "Could not start the payment." }, 500);
-      }
-      paymentId = inserted.id;
+    if (insertError || !inserted) {
+      console.error("Could not record payment", insertError);
+      return json(req, { error: "Could not start the payment." }, 500);
     }
+    const paymentId: string = inserted.id;
 
     const returnUrl = Deno.env.get("PAYMONGO_RETURN_URL") ?? "jezsymobileapp://payment-return";
     const separator = returnUrl.includes("?") ? "&" : "?";

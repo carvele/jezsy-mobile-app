@@ -4,6 +4,7 @@ DROP TRIGGER IF EXISTS trg_00_lock_reservation_capacity_day ON public.reservatio
 DROP FUNCTION IF EXISTS public.lock_reservation_capacity_day();
 DROP TRIGGER IF EXISTS trg_guard_held_reservation_item_update ON public.reservation_items;
 DROP FUNCTION IF EXISTS public.guard_held_reservation_item_update();
+DROP FUNCTION IF EXISTS public.create_reservation_multi(jsonb, text, text, text, text, uuid);
 
 ALTER TABLE public.reservation_items
   DROP CONSTRAINT IF EXISTS reservation_items_inventory_required;
