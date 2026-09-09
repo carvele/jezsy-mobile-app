@@ -593,7 +593,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
               } else {
                 // Alert.alert is a no-op on web; navigate directly instead.
                 showToast('Set up your measurements to enable custom proportions', 'info');
-                router.push('/profile/measurements');
+                router.push('/profile/measurements?from=mannequin');
               }
             }}
             activeOpacity={0.7}

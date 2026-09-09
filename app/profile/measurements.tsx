@@ -419,18 +419,16 @@ export default function MeasurementsScreen() {
       if (measurementsRes?.error) throw measurementsRes.error;
 
       showToast('Measurements saved successfully ✨', 'success');
-      // router.back() relied on this screen having a real "back" entry in
-      // the in-app navigation history -- confirmed missing right after a
-      // page reload (add-item.tsx's identical case: save succeeds but lands
-      // on the wrong screen, Home instead of where the user actually came
-      // from). This screen is reachable from several places (Profile
-      // settings, Mannequin's "set up measurements" prompt), so there's no
-      // one right destination to replace() to -- canGoBack() preserves
-      // real back-navigation whenever history has somewhere to go, and only
-      // falls back to Profile (the closest thing this screen has to a
-      // home) when it doesn't.
-      if (router.canGoBack()) router.back();
-      else router.replace('/profile');
+      // canGoBack()/back() is unreliable here: after a page reload, Expo
+      // Router's web linking reconstructs a synthetic history stack from
+      // the URL alone, so canGoBack() can report true with no real "came
+      // from" entry, and back() falls through to the tab navigator's
+      // default tab (Home) instead of where the user actually came from
+      // (confirmed live on the identical add-item.tsx flow). This screen
+      // is reachable from several places, so instead of guessing from
+      // history, entry points pass an explicit `from` param and we
+      // navigate there directly; Profile is the default when absent.
+      router.replace(params.from === 'mannequin' ? '/wardrobe?tab=mannequin' : '/profile');
     } catch (err: any) {
       console.error('Error saving sizing measurements:', err);
       let userMessage = 'Unable to save measurements right now. Please try again.';
