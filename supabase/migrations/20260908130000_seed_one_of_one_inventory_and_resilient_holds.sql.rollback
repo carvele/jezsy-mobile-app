@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- ============================================================================
 -- Rollback for: 20260908130000_seed_one_of_one_inventory_and_resilient_holds.sql
 -- ============================================================================

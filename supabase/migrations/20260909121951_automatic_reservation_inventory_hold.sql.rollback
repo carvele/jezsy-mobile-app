@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- Restore the approval-gated reservation flow and parent-based reconciliation.
 
 DROP TRIGGER IF EXISTS trg_00_lock_reservation_capacity_day ON public.reservations;

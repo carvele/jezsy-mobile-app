@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 DROP FUNCTION IF EXISTS public.get_pose_guides_for_product(uuid);
 
 ALTER TABLE public.pose_guides

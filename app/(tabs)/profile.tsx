@@ -22,14 +22,14 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { wishlistIds } = useWishlist();
   const { itemCount } = useCart();
-  // Summarized to 4 tiles: Pending, To pay, Preparing, Ready. Completed and
-  // Cancelled reservations are done and stay reachable from "View All"
-  // rather than cluttering the at-a-glance summary.
+  // Summarized to the normal hold-to-purchase stages. Legacy pending and
+  // cancelled records stay reachable from "View All".
   const [counts, setCounts] = useState({
     pending: 0,
     toPay: 0,
     preparing: 0,
     ready: 0,
+    completed: 0,
     activeTotal: 0,
   });
 
@@ -51,6 +51,7 @@ export default function ProfileScreen() {
         let toPay = 0;
         let preparing = 0;
         let ready = 0;
+        let completed = 0;
 
         // Shared with reservations.tsx and the admin dashboard so a status
         // only ever needs to be classified in one place.
@@ -60,6 +61,7 @@ export default function ProfileScreen() {
           else if (bucket === 'toPay') toPay++;
           else if (bucket === 'preparing') preparing++;
           else if (bucket === 'ready') ready++;
+          else if (bucket === 'completed') completed++;
         });
 
         setCounts({
@@ -67,6 +69,7 @@ export default function ProfileScreen() {
           toPay,
           preparing,
           ready,
+          completed,
           activeTotal: pending + toPay + preparing + ready,
         });
       }
@@ -158,22 +161,6 @@ export default function ProfileScreen() {
           <View style={[styles.ordersContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <TouchableOpacity
               style={styles.orderStatus}
-              onPress={() => router.push('/reservations?status=pending')}
-              accessibilityRole="button"
-              accessibilityLabel="View pending reservations"
-            >
-              <View style={{ position: 'relative' }}>
-                <IconSymbol name="clock.arrow.circlepath" size={24} color={colors.icon} />
-                {counts.pending > 0 && (
-                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
-                    <Text style={styles.statusBadgeText}>{counts.pending}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Pending</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.orderStatus}
               onPress={() => router.push('/reservations?status=toPay')}
               accessibilityRole="button"
               accessibilityLabel="View reservations awaiting payment"
@@ -219,6 +206,22 @@ export default function ProfileScreen() {
                 )}
               </View>
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Ready</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.orderStatus}
+              onPress={() => router.push('/reservations?status=completed')}
+              accessibilityRole="button"
+              accessibilityLabel="View completed reservations"
+            >
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
+                {counts.completed > 0 && (
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
+                    <Text style={styles.statusBadgeText}>{counts.completed}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Completed</Text>
             </TouchableOpacity>
           </View>
         </View>

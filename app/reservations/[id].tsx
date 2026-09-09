@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -123,9 +123,25 @@ export default function ReservationDetailScreen() {
     }, [receiptPath])
   );
 
-  useEffect(() => {
-    fetchReservation();
-  }, [fetchReservation]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchReservation();
+      if (!id) return;
+
+      const channel = supabase
+        .channel(`reservation-detail:${id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'reservations', filter: `id=eq.${id}` },
+          (payload) => setReservation(payload.new as Reservation),
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }, [fetchReservation, id]),
+  );
 
   const handleAskAboutReservation = async () => {
     const conv = await getOrCreateConversation();

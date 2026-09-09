@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- Rollback: Revert seed_inventory_for_new_product to previous definition without color/variant_sku logic
 
 CREATE OR REPLACE FUNCTION public.seed_inventory_for_new_product()

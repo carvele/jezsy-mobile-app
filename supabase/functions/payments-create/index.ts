@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { decideExistingCheckout } from "../../../src/utils/paymongoCheckout.ts";
 
 // Opens a PayMongo Checkout Session for a reservation and records it in
 // public.payments.
@@ -125,10 +126,12 @@ serve(async (req) => {
       : "Deposit for";
     const description = label + " " + (reservation.product_name ?? "reservation") + " (" + reservation.display_id + ")";
 
-    // Close any existing pending payment attempts for this reservation and start a fresh one.
+    // Reuse a verified active provider session. A local "open" status alone
+    // is not enough: the provider may have expired or completed the session
+    // while its webhook is still in flight.
     const { data: existingAttempts, error: existingError } = await admin
       .from("payments")
-      .select("id")
+      .select("id, provider_ref, amount_centavos")
       .eq("reservation_id", reservationId)
       .in("status", ["awaiting_payment", "processing"]);
 
@@ -137,17 +140,67 @@ serve(async (req) => {
       return json(req, { error: "Could not start the payment." }, 500);
     }
 
-    if (existingAttempts && existingAttempts.length > 0) {
-      const ids = existingAttempts.map((p: any) => p.id);
+    for (const attempt of existingAttempts ?? []) {
+      if (!attempt.provider_ref) {
+        return json(req, { error: "A payment session is already being prepared. Please try again." }, 409);
+      }
+
+      const sessionResponse = await fetch(
+        PAYMONGO_API + "/checkout_sessions/" + attempt.provider_ref,
+        { headers: { Authorization: basicAuth } },
+      ).catch(() => null);
+
+      if (!sessionResponse) {
+        return json(req, { error: "Could not verify the existing payment session. Please try again." }, 502);
+      }
+
+      if (sessionResponse.status === 404) {
+        const { error: closeError } = await admin
+          .from("payments")
+          .update({ status: "failed" })
+          .eq("id", attempt.id)
+          .in("status", ["awaiting_payment", "processing"]);
+        if (closeError) throw closeError;
+        continue;
+      }
+
+      if (!sessionResponse.ok) {
+        return json(req, { error: "Could not verify the existing payment session. Please try again." }, 502);
+      }
+
+      const session = await sessionResponse.json().catch(() => null);
+      if (!session?.data) {
+        return json(req, { error: "Could not verify the existing payment session. Please try again." }, 502);
+      }
+
+      const providerPayments = session.data.attributes?.payments ?? [];
+      const decision = decideExistingCheckout({
+        providerStatus: session.data.attributes?.status,
+        paymentStatuses: providerPayments.map((payment: any) => payment.attributes?.status),
+        storedAmount: attempt.amount_centavos,
+        requestedAmount: amountCentavos,
+        checkoutUrl: session.data.attributes?.checkout_url,
+      });
+
+      if (decision.kind === "paid") {
+        return json(req, { error: "Your payment has already been received and is being processed." }, 409);
+      }
+      if (decision.kind === "amount_changed") {
+        return json(req, { error: "The reservation amount changed while a checkout is active. Please contact the boutique." }, 409);
+      }
+      if (decision.kind === "invalid") {
+        return json(req, { error: "Could not verify the existing payment session. Please try again." }, 502);
+      }
+      if (decision.kind === "reuse") {
+        return json(req, { payment_id: attempt.id, checkout_url: decision.checkoutUrl, reused: true });
+      }
+
       const { error: closeError } = await admin
         .from("payments")
         .update({ status: "failed" })
-        .in("id", ids)
+        .eq("id", attempt.id)
         .in("status", ["awaiting_payment", "processing"]);
-      if (closeError) {
-        console.error("Could not close stale payment attempt", closeError);
-        return json(req, { error: "Could not start the payment." }, 500);
-      }
+      if (closeError) throw closeError;
     }
 
     // Record the payment attempt BEFORE calling PayMongo, not after. The
@@ -191,6 +244,7 @@ serve(async (req) => {
             show_description: true,
             show_line_items: true,
             description,
+            reference_number: paymentId,
             payment_method_types: PAYMENT_METHODS,
             success_url: paymentReturnUrl,
             cancel_url: paymentReturnUrl,
@@ -208,6 +262,12 @@ serve(async (req) => {
 
     if (!createRes.ok || !sessionId || !checkoutUrl) {
       console.error("PayMongo session creation failed", JSON.stringify(created));
+      const { error: failError } = await admin
+        .from("payments")
+        .update({ status: "failed" })
+        .eq("id", paymentId)
+        .is("provider_ref", null);
+      if (failError) console.error("Could not close failed payment attempt", failError);
       return json(req, { error: "Could not start the payment." }, 502);
     }
 
@@ -218,6 +278,12 @@ serve(async (req) => {
 
     if (updateError) {
       console.error("Could not link payment to session", updateError);
+      const { error: alertError } = await admin.from("admin_notifications").insert({
+        title: "Unlinked PayMongo session",
+        message: `Checkout ${sessionId} for payment ${paymentId} could not be linked.`,
+        type: "Payment",
+      });
+      if (alertError) console.error("Could not alert on unlinked payment session", alertError);
       return json(req, { error: "Could not start the payment." }, 500);
     }
 

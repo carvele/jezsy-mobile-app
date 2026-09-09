@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 DELETE FROM public.pose_guide_products WHERE pose_guide_id IN ('P-001', 'P-002', 'P-003', 'P-004');
 
 UPDATE public.pose_guides SET

@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- Rollback for 20260908160000_fix_rls_helper_function_volatility.sql.
 
 ALTER FUNCTION public.is_staff_or_admin() VOLATILE;

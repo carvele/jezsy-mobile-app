@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- Rollback: Remove public.min(uuid) aggregate and function
 
 DROP AGGREGATE IF EXISTS public.min(uuid);

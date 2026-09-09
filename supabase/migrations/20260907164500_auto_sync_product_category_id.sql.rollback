@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- ============================================================================
 -- Rollback: Remove auto_sync_product_category_id trigger and function
 -- ============================================================================
