@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- Rollback: 20260908140000_inventory_command_boundary.rollback.sql
 -- Description: Revert Phase B3 Migration A changes.
 

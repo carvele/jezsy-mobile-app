@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 CREATE OR REPLACE FUNCTION public.search_catalog(search_query text DEFAULT NULL::text, category_ids text[] DEFAULT NULL::text[], size_filters text[] DEFAULT NULL::text[], color_filters text[] DEFAULT NULL::text[], fit_filters text[] DEFAULT NULL::text[], material_filters text[] DEFAULT NULL::text[], tag_filters text[] DEFAULT NULL::text[], on_sale_only boolean DEFAULT false, new_arrivals_only boolean DEFAULT false, ar_only boolean DEFAULT false, min_price numeric DEFAULT NULL::numeric, max_price numeric DEFAULT NULL::numeric, sort_by text DEFAULT 'recommended'::text)
 RETURNS SETOF products
 LANGUAGE sql

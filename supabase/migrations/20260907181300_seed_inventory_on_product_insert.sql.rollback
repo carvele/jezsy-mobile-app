@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- Rollback: 20260907181300_seed_inventory_on_product_insert.sql
 -- Removes the trigger and function. Does NOT remove the backfilled rows
 -- (reversing a data backfill is destructive and must be done manually).

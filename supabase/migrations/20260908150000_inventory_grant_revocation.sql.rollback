@@ -1,3 +1,4 @@
+-- Rollback companion; excluded from Supabase forward migration scanning.
 -- Rollback Migration: 20260908150000_inventory_grant_revocation.rollback.sql
 -- Description: Restores pre-Migration-B grants and legacy adjust_inventory_stock compatibility RPC.
 
