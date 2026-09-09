@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, ActivityIndicator, Image } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
@@ -25,13 +25,34 @@ export default function UserProfileScreen() {
   const [wardrobeLoading, setWardrobeLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
 
-  useEffect(() => {
-    if (id && user) {
-      loadProfileAndConnection();
+  const loadWardrobe = async (targetId: string, privacy: string, status?: string) => {
+    if (privacy === 'private') {
+      setAccessDenied(true);
+      setWardrobeLoading(false);
+      return;
     }
-  }, [id, user]);
+    if (privacy === 'connections' && status !== 'accepted') {
+      setAccessDenied(true);
+      setWardrobeLoading(false);
+      return;
+    }
+    try {
+      setWardrobeLoading(true);
+      const { data, error } = await supabase
+        .from('wishlists')
+        .select('*, product:products(*)')
+        .eq('user_id', targetId);
+      
+      if (error) throw error;
+      setWardrobe(data || []);
+    } catch (err: any) {
+      console.log('Error loading wardrobe:', err.message);
+    } finally {
+      setWardrobeLoading(false);
+    }
+  };
 
-  const loadProfileAndConnection = async () => {
+  const loadProfileAndConnection = useCallback(async () => {
     try {
       let targetId = id;
       
@@ -76,34 +97,13 @@ export default function UserProfileScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, user, router, showToast]);
 
-  const loadWardrobe = async (targetId: string, privacy: string, status?: string) => {
-    if (privacy === 'private') {
-      setAccessDenied(true);
-      setWardrobeLoading(false);
-      return;
+  useEffect(() => {
+    if (id && user) {
+      loadProfileAndConnection();
     }
-    if (privacy === 'connections' && status !== 'accepted') {
-      setAccessDenied(true);
-      setWardrobeLoading(false);
-      return;
-    }
-    try {
-      setWardrobeLoading(true);
-      const { data, error } = await supabase
-        .from('wishlists')
-        .select('*, product:products(*)')
-        .eq('user_id', targetId);
-      
-      if (error) throw error;
-      setWardrobe(data || []);
-    } catch (err: any) {
-      console.log('Error loading wardrobe:', err.message);
-    } finally {
-      setWardrobeLoading(false);
-    }
-  };
+  }, [id, user, loadProfileAndConnection]);
 
   const handleConnect = async () => {
     try {
@@ -115,7 +115,7 @@ export default function UserProfileScreen() {
       if (error) throw error;
       showToast('Connection request sent', 'success');
       loadProfileAndConnection();
-    } catch (err: any) {
+    } catch {
       showToast('Failed to send request', 'error');
     }
   };

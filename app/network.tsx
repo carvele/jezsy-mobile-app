@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -8,8 +8,6 @@ import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-
-type SuggestedUser = UserProfile & { mutual_count: number };
 
 type UserProfile = {
   id: string;
@@ -40,18 +38,10 @@ export default function NetworkScreen() {
   
   const [connections, setConnections] = useState<Connection[]>([]);
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
-  const [suggestedUsers, setSuggestedUsers] = useState<SuggestedUser[]>([]);
-  const [suggestedLoading, setSuggestedLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
 
-  useEffect(() => {
-    if (user && (activeTab === 'connections' || activeTab === 'pending')) {
-      loadConnections();
-    }
-    }, [user, activeTab]);
-
-  const loadConnections = async () => {
+  const loadConnections = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -90,7 +80,13 @@ export default function NetworkScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user && (activeTab === 'connections' || activeTab === 'pending')) {
+      loadConnections();
+    }
+  }, [user, activeTab, loadConnections]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim() || !user) return;
@@ -155,27 +151,6 @@ export default function NetworkScreen() {
       loadConnections();
     } catch (err: any) { console.log(err);
       showToast('Failed to accept request', 'error');
-    }
-  };
-
-  const handleBlock = async (u1: string, u2: string) => {
-    if (!user) return;
-    try {
-      // Upsert block
-      const { error } = await supabase
-        .from('connections')
-        .upsert({
-          user_id_1: u1,
-          user_id_2: u2,
-          status: 'blocked',
-          action_user_id: user.id
-        }, { onConflict: 'user_id_1,user_id_2' });
-
-      if (error) throw error;
-      showToast('User blocked', 'success');
-      if (activeTab !== 'search') loadConnections();
-    } catch (err: any) { console.log(err);
-      showToast('Failed to block user', 'error');
     }
   };
 

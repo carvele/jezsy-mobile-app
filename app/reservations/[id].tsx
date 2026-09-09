@@ -169,7 +169,7 @@ export default function ReservationDetailScreen() {
     }
   };
 
-  // Opens the PayMongo checkout for an already-accepted reservation. This is
+  // Opens the PayMongo checkout for an active reservation. This is
   // the path that did not exist before: a customer who closed the checkout
   // page had no way back to it, and simply lost the reservation.
   const handlePayNow = async () => {
@@ -280,8 +280,8 @@ export default function ReservationDetailScreen() {
 
   const paymentState = (reservation.payment_status || 'Pending').toLowerCase();
   const reservationState = statusBucket(reservation.status);
-  // Payment only opens once staff accept. Before that the customer owes
-  // nothing and there is no deadline running.
+  // New reservations enter the payment window immediately. Pending remains
+  // readable only for legacy rows created before automatic holds.
   const awaitingPayment = isAwaitingPayment(reservation.status) && paymentState === 'pending';
   const receiptUnderReview = paymentState === 'submitted';
   const timeLeft = reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
@@ -490,11 +490,19 @@ export default function ReservationDetailScreen() {
 
         {reservationState === 'pending' && (
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Awaiting review</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Reservation needs attention</Text>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              Nothing to pay yet. We will let you know once this is accepted, and you
-              will then have up to 24 hours to pay ₱{(reservation.deposit || 0).toFixed(2)}
-              {' '}(less if your appointment is coming up soon).
+              This reservation was created under the previous approval flow. Please contact
+              the boutique so it can be moved into the payment window.
+            </Text>
+          </View>
+        )}
+
+        {paymentState === 'refund required' && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.warning }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Refund review required</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
+              Your payment arrived after this reservation ended. The boutique has been alerted and will arrange the refund.
             </Text>
           </View>
         )}
@@ -503,7 +511,7 @@ export default function ReservationDetailScreen() {
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.tint }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment needed</Text>
             <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
-              Your request was accepted. Pay ₱{(reservation.deposit || 0).toFixed(2)} to keep this item.
+              Pay ₱{(reservation.deposit || 0).toFixed(2)} before the deadline to keep this item reserved for you.
             </Text>
 
             {/* The deadline was previously invisible -- the customer was on a

@@ -23,7 +23,6 @@ import { ConsentModal } from "@/src/components/ConsentModal";
 import { TiltGuide } from "@/src/components/TiltGuide";
 import { PoseLandmarkOverlay } from "@/src/components/PoseLandmarkOverlay";
 import { SilhouetteOverlay } from "@/src/components/SilhouetteOverlay";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FirstUseHintModal } from "@/src/components/FirstUseHintModal";
 import { useAuth } from "@/src/context/AuthContext";
 import { hasSeenHint, markHintSeen } from "@/src/utils/firstUseHints";

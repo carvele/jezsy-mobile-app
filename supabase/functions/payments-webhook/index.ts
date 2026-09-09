@@ -71,16 +71,25 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    const { data: payment } = await admin
+    const { data: payment, error: paymentLookupError } = await admin
       .from("payments")
       .select("id, reservation_id, status, last_event_id")
       .eq("provider", "paymongo")
       .eq("provider_ref", sessionId)
       .maybeSingle();
+    if (paymentLookupError) throw paymentLookupError;
 
-    // 200 on an unknown session: retrying will not help, and a non-2xx makes
-    // PayMongo redeliver indefinitely.
-    if (!payment) return json({ received: true, ignored: "unknown session" });
+    // Retrying cannot repair an unknown mapping, but silently discarding a
+    // real provider event leaves no operational recovery path.
+    if (!payment) {
+      const { error: alertError } = await admin.from("admin_notifications").insert({
+        title: "Unknown PayMongo session",
+        message: `Webhook ${eventId} (${eventType}) referenced unmapped session ${sessionId}.`,
+        type: "Payment",
+      });
+      if (alertError) throw alertError;
+      return json({ received: true, ignored: "unknown session", alerted: true });
+    }
 
     const nextStatus = resolveNextPaymentStatus(eventType);
 

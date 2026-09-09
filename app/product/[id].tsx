@@ -101,6 +101,13 @@ export default function ProductDetailScreen() {
             const data = productRes.data;
             setProduct(data);
             
+            // Fetch loved by data
+            const { data: lovedData } = await supabase.rpc('get_product_loved_by', { p_product_id: id });
+            if (lovedData && lovedData[0]) {
+              setLovedByCount(lovedData[0].total_count || 0);
+              setLovedByUsers((lovedData[0].public_users as any[]) || []);
+            }
+            
             if (invRes.data) {
               setInventory(invRes.data);
               const activeInv = invRes.data.filter((i: any) => !i.deleted);

@@ -22,7 +22,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     ScrollView,
     StyleSheet,
@@ -139,7 +138,7 @@ export default function ReservationScreen() {
 
           const productIds = [...new Set(scopedItems.map((i) => i.product.id))];
           if (productIds.length > 0) {
-            const [{ data: pData, error: pError }, { data: invData, error: invError }] = await Promise.all([
+            const [{ data: pData, error: pError }, { data: invData }] = await Promise.all([
               supabase.from("products").select("id, price, sale_price, on_sale").in("id", productIds),
               supabase.from("inventory").select("id, product_doc_id, size, color, available, deleted").in("product_doc_id", productIds).eq("deleted", false),
             ]);
@@ -174,7 +173,7 @@ export default function ReservationScreen() {
 
     const fetchProductAndInventory = async () => {
       try {
-        const [{ data: pData, error: pError }, { data: invData, error: invError }] = await Promise.all([
+        const [{ data: pData, error: pError }, { data: invData }] = await Promise.all([
           supabase.from("products").select("*").eq("id", id).single(),
           supabase.from("inventory").select("id, product_doc_id, size, color, available, deleted").eq("product_doc_id", id).eq("deleted", false),
         ]);
@@ -310,8 +309,8 @@ export default function ReservationScreen() {
       const { data, error } = await supabase.rpc("create_reservation_multi", {
         _items: lines.map((line) => ({
           product_id: line.product.id,
-          size: line.size ?? null,
-          color: line.color ?? null,
+          size: normalizeVariantValue(line.size),
+          color: normalizeVariantValue(line.color),
           quantity: line.quantity,
         })),
         _date: reservationDate,
@@ -368,16 +367,12 @@ export default function ReservationScreen() {
         appointmentTime,
       );
 
-      // No payment here by design: staff vet the booking first, and only then
-      // does a payment window open. Taking money before acceptance would mean
-      // refunding through PayMongo every time staff turn a booking down.
-      const alertMessage =
-        (priceChanged
-          ? `Pricing for one or more items changed while you were booking. Your reservation total is ₱${serverTotal.toFixed(2)}.\n\n`
-          : "") +
-        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).";
-
-      showToast("Reservation request sent! We'll notify you once accepted ✨", "success");
+      showToast(
+        priceChanged
+          ? `Items reserved. Your updated total is ₱${serverTotal.toFixed(2)}. Pay before the deadline to keep them.`
+          : 'Items reserved. Pay before the deadline to keep them.',
+        'success',
+      );
       router.replace("/reservations");
     } catch (error: any) {
       console.error("Reservation error:", error);
@@ -644,7 +639,7 @@ export default function ReservationScreen() {
 
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              {payOption === 'full' ? 'To pay once accepted (full)' : 'To pay once accepted (50%)'}
+              {payOption === 'full' ? 'Payment due (full)' : 'Reservation payment due (50%)'}
             </Text>
             <Text style={[styles.rowValue, { color: colors.tint }]}>
               ₱{amountDueNow.toFixed(2)}
@@ -663,7 +658,7 @@ export default function ReservationScreen() {
           <View style={styles.receiptStatus}>
             <IconSymbol name="checkmark.circle.fill" size={16} color={colors.tint} />
             <Text style={[styles.receiptStatusText, { color: colors.secondaryText }]}>
-              Nothing is charged now. You pay once we accept your request.
+              Nothing is charged now. Your items are held until the payment deadline.
             </Text>
           </View>
         </View>
@@ -688,18 +683,18 @@ export default function ReservationScreen() {
           onPress={handleReserve}
           disabled={!canSubmit}
           accessibilityRole="button"
-          accessibilityLabel="Send reservation request"
+          accessibilityLabel="Reserve items"
           accessibilityHint={
             !appointmentTime
               ? 'Select a pickup time to enable'
-              : 'Sends your reservation request for review. Nothing is charged now.'
+              : 'Reserves the selected items and starts the payment window.'
           }
           accessibilityState={{ disabled: !canSubmit }}
         >
           {submitting ? (
             <ActivityIndicator color={colors.background} />
           ) : (
-            <Text style={styles.primaryActionText}>Request Reservation</Text>
+            <Text style={styles.primaryActionText}>Reserve Items</Text>
           )}
         </TouchableOpacity>
       </View>
