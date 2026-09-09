@@ -15,7 +15,7 @@ import MasonryList from '@react-native-seoul/masonry-list';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
@@ -169,6 +169,37 @@ export default function ExploreScreen() {
       }
     }
   }, [params.all, params.category, topCategories, handledInitialParams]);
+
+  // Reset to the Explore root whenever the Explore tab button itself is
+  // pressed -- confirmed live: this screen never unmounts on tab switches
+  // (React Navigation keeps tab screens mounted), so selectedCategory/
+  // showAllProducts from an earlier deep link (e.g. tapping a category from
+  // Home) stayed stuck for the rest of the session. Tapping Explore from
+  // Home, or elsewhere, kept showing whatever category the user had drilled
+  // into hours earlier instead of the actual Explore categories screen.
+  //
+  // tabPress specifically (not useFocusEffect/focus) so this only fires on
+  // an actual tab-bar press, not on returning here via the back button from
+  // a product detail screen pushed on top of an in-progress category browse
+  // -- that must still preserve where the user was.
+  const navigation = useNavigation();
+  useEffect(() => {
+    // The parent tab navigator's event map (tabPress) isn't visible from a
+    // leaf screen's own navigation type, hence the cast -- this is the
+    // standard React Navigation pattern for listening to the containing
+    // tab bar from a screen it renders.
+    const tabNavigation = navigation.getParent?.() as { addListener?: (event: string, cb: () => void) => (() => void) | undefined } | undefined;
+    const unsub = tabNavigation?.addListener?.('tabPress', () => {
+      setSelectedCategory(null);
+      setSelectedSubCategory(null);
+      setShowAllProducts(false);
+      setIsSearchActive(false);
+      setSearchQuery('');
+      setSearchResults([]);
+      setHandledInitialParams(false);
+    });
+    return unsub;
+  }, [navigation]);
 
   // products.category_id references a subcategory row directly; these maps
   // resolve the display names this screen navigates by (set from tile
