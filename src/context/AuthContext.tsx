@@ -283,29 +283,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     void SecureStore.deleteItemAsync('jezsy_user_pin').catch(() => {});
     void SecureStore.deleteItemAsync('jezsy_last_full_login').catch(() => {});
 
-    supabase.auth
-      .getSession()
-      .then(async ({ data: { session } }) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          void hydrateProfileFromCache(session.user.id);
-          // If we already synced this user once and have a profile, do not re-run sync on routine background auth events
-          if (!syncedUsersRef.current.has(session.user.id)) {
-            await syncProfile(session.user);
-          }
-        } else {
-          setIsProfileInitialized(true);
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to get initial session:', err);
-        setIsProfileInitialized(true);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-
+    // Deliberately NOT also calling supabase.auth.getSession() here.
+    // onAuthStateChange fires once immediately on subscribe with whatever
+    // session is already in storage (supabase-js's INITIAL_SESSION event),
+    // so it already covers what a separate getSession() call would provide
+    // -- calling both concurrently at boot made two competing requests for
+    // supabase-js's cross-tab Web Locks auth lock in the same tick.
+    // Confirmed live: this produced "Lock ... was not released within
+    // 5000ms ... orphaned lock" and, worse, left the lock wedged such that
+    // every later getSession() call on that tab hung indefinitely -- the
+    // root cause of the "randomly stuck on loading" reports. A single
+    // subscriber touching the lock at boot removes the race entirely.
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         // Belt-and-braces alongside the explicit begin/end calls: on platforms
