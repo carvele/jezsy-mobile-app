@@ -87,19 +87,16 @@ serve(async (req) => {
       return json(req, { error: "This reservation is already paid." }, 409);
     }
 
-    // Payment opens only after staff accept, matching
-    // is_awaiting_payment_status/isAwaitingPayment in the app. Pending means
-    // the request has not been reviewed yet -- charging there would mean
-    // refunding through PayMongo every time staff decline. 'confirmed' and
-    // 'approved' are pre-rename status values kept here during the
-    // reservation-status vocabulary transition; drop once no live row uses them.
+    // New reservations enter To Pay immediately because creating one is the
+    // customer's stock-hold decision; there is no administrator acceptance
+    // step. Confirmed/approved remain temporarily for older app versions.
     const status = String(reservation.status ?? "").toLowerCase();
     if (status !== "confirmed" && status !== "approved" && status !== "to pay") {
       const errMsg =
         status === "cancelled"
           ? "This reservation was cancelled."
           : status === "pending"
-            ? "This reservation has not been accepted yet."
+            ? "This legacy reservation is not ready for payment. Please contact the boutique."
             : "This reservation is no longer awaiting payment.";
       return json(req, { error: errMsg }, 409);
     }
@@ -138,11 +135,17 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existing?.provider_ref && existing.amount_centavos === amountCentavos) {
-      const session = await fetch(PAYMONGO_API + "/checkout_sessions/" + existing.provider_ref, {
-        headers: { Authorization: basicAuth },
-      })
-        .then((r) => r.json())
-        .catch(() => null);
+      const sessionResponse = await fetch(
+        PAYMONGO_API + "/checkout_sessions/" + existing.provider_ref,
+        { headers: { Authorization: basicAuth } },
+      ).catch(() => null);
+      if (!sessionResponse?.ok) {
+        return json(req, { error: "Could not verify the existing payment session. Please try again." }, 502);
+      }
+      const session = await sessionResponse.json().catch(() => null);
+      if (!session?.data) {
+        return json(req, { error: "Could not verify the existing payment session. Please try again." }, 502);
+      }
 
       const pmStatus = session?.data?.attributes?.status;
       const payments = session?.data?.attributes?.payments || [];
@@ -170,7 +173,14 @@ serve(async (req) => {
       paymentId = existing.id;
       const { error: resetError } = await admin
         .from("payments")
-        .update({ provider_ref: null, amount_centavos: amountCentavos, status: "awaiting_payment" })
+        .update({
+          provider_ref: null,
+          amount_centavos: amountCentavos,
+          status: "awaiting_payment",
+          attempt_started_at: new Date().toISOString(),
+          requires_refund: false,
+          refund_required_at: null,
+        })
         .eq("id", existing.id);
       if (resetError) {
         console.error("Could not reset payment row", resetError);
@@ -186,6 +196,7 @@ serve(async (req) => {
           amount_centavos: amountCentavos,
           currency: "PHP",
           status: "awaiting_payment",
+          attempt_started_at: new Date().toISOString(),
         })
         .select("id")
         .single();
