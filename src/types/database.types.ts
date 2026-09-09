@@ -2464,6 +2464,23 @@ export type Database = {
         Returns: Json
       }
       resolve_username: { Args: { p_username: string }; Returns: string }
+      save_pose_guide: {
+        Args: {
+          p_base_pose_type?: string
+          p_category: string
+          p_description?: string
+          p_difficulty?: string
+          p_id: string
+          p_image_url?: string
+          p_is_featured?: boolean
+          p_name: string
+          p_occasion?: string
+          p_product_ids?: string[]
+          p_sort_order?: number
+          p_style_tags?: string[]
+        }
+        Returns: undefined
+      }
       search_catalog: {
         Args: {
           ar_only?: boolean
