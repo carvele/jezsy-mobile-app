@@ -188,8 +188,24 @@ export default function ExploreScreen() {
     // leaf screen's own navigation type, hence the cast -- this is the
     // standard React Navigation pattern for listening to the containing
     // tab bar from a screen it renders.
-    const tabNavigation = navigation.getParent?.() as { addListener?: (event: string, cb: () => void) => (() => void) | undefined } | undefined;
-    const unsub = tabNavigation?.addListener?.('tabPress', () => {
+    const tabNavigation = navigation.getParent?.() as
+      | { addListener?: (event: string, cb: (e: { preventDefault: () => void }) => void) => (() => void) | undefined }
+      | undefined;
+    // Read directly from expo-router's own BottomTabBar source
+    // (react-navigation/bottom-tabs/views/BottomTabBar.js) to get this
+    // right: its tabPress handler does
+    //   if (!focused && !event.defaultPrevented) navigation.dispatch(CommonActions.navigate(route))
+    // where `route` is this tab's own persisted route object, params and
+    // all. That's the actual default action putting the stale category/all
+    // params back -- not a timing race against it, an explicit dispatch
+    // using stale data every time this tab is pressed while unfocused.
+    // event.preventDefault() (available because the emitter passes
+    // canPreventDefault: true) stops that dispatch outright; it does NOT
+    // stop the tab from becoming focused, since that's just React state
+    // already changed by the press. Only after suppressing the default
+    // stale-param navigate do we issue our own clean one.
+    const unsub = tabNavigation?.addListener?.('tabPress', (e) => {
+      e.preventDefault();
       setSelectedCategory(null);
       setSelectedSubCategory(null);
       setShowAllProducts(false);
@@ -197,17 +213,6 @@ export default function ExploreScreen() {
       setSearchQuery('');
       setSearchResults([]);
       setHandledInitialParams(false);
-      // Resetting state alone was not enough -- confirmed live. Expo
-      // Router's tab bar remembers each tab's last full path (including
-      // query params) and re-navigates there as its OWN default tabPress
-      // behavior, which immediately re-fed the same stale category/all
-      // params right back into the deep-link-consuming effect above
-      // (now unguarded since handledInitialParams was just reset),
-      // reproducing the identical stuck-on-stale-category result through a
-      // different path. Not intercepted with preventDefault(), which would
-      // risk blocking the tab switch entirely when Explore isn't already
-      // focused -- instead, force the clean URL right after, so whichever
-      // navigation applies first, this is what's left standing.
       router.replace('/explore');
     });
     return unsub;
