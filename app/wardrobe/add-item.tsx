@@ -346,7 +346,18 @@ export default function AddWardrobeItemScreen() {
           uploadResult = await attemptUpload();
           break;
         } catch (err: any) {
-          if (!err?.isTimeout || attempt === maxAttempts) throw err;
+          if (!err?.isTimeout) throw err;
+          if (attempt === maxAttempts) {
+            // All 4 attempts timed out -- confirmed live this can happen
+            // (a brief background/foreground cycle is enough to trigger it,
+            // not just a long idle period), and once it does, it can stay
+            // wedged for minutes: more retries within this same page load
+            // have diminishing odds of helping. A full reload gives the
+            // browser a genuinely fresh session/lock state, which is far
+            // more likely to actually clear it than tapping Save again.
+            err.exhaustedRetries = true;
+            throw err;
+          }
           setStatusMessage(`Upload interrupted, retrying... (${attempt + 1}/${maxAttempts})`);
           await new Promise((resolve) => setTimeout(resolve, 2500));
         }
@@ -406,7 +417,9 @@ export default function AddWardrobeItemScreen() {
       saveStartedAtRef.current = null;
       console.error('Error saving wardrobe item:', err);
       let userMessage = err?.message || 'Failed to save item. Try again.';
-      if (err?.isTimeout) {
+      if (err?.exhaustedRetries) {
+        userMessage = 'Still stuck after several tries. Please reload the app (pull down to refresh, or close and reopen this tab), then try again.';
+      } else if (err?.isTimeout) {
         userMessage = 'The upload took too long. Check your connection and tap Save again.';
       } else if (err?.isOffline || err?.isAuthStale) {
         userMessage = err.message;
