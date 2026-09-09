@@ -2193,23 +2193,6 @@ export type Database = {
         Args: { p_delta: number; p_inventory_id: string; p_reason: string }
         Returns: Json
       }
-      adjust_inventory_stock: {
-        Args: {
-          p_available_delta?: number
-          p_inventory_id: string
-          p_reserved_delta?: number
-          p_total_delta?: number
-        }
-        Returns: {
-          new_available: number
-          new_reserved: number
-          new_total: number
-          out_product_doc_id: string
-          prev_available: number
-          prev_reserved: number
-          prev_total: number
-        }[]
-      }
       admin_manage_device: {
         Args: { _action: string; _fingerprint: string; _value?: string }
         Returns: undefined
