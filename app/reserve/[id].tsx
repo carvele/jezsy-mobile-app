@@ -22,7 +22,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     ScrollView,
     StyleSheet,
@@ -139,7 +138,7 @@ export default function ReservationScreen() {
 
           const productIds = [...new Set(scopedItems.map((i) => i.product.id))];
           if (productIds.length > 0) {
-            const [{ data: pData, error: pError }, { data: invData, error: invError }] = await Promise.all([
+            const [{ data: pData, error: pError }, { data: invData }] = await Promise.all([
               supabase.from("products").select("id, price, sale_price, on_sale").in("id", productIds),
               supabase.from("inventory").select("id, product_doc_id, size, color, available, deleted").in("product_doc_id", productIds).eq("deleted", false),
             ]);
@@ -174,7 +173,7 @@ export default function ReservationScreen() {
 
     const fetchProductAndInventory = async () => {
       try {
-        const [{ data: pData, error: pError }, { data: invData, error: invError }] = await Promise.all([
+        const [{ data: pData, error: pError }, { data: invData }] = await Promise.all([
           supabase.from("products").select("*").eq("id", id).single(),
           supabase.from("inventory").select("id, product_doc_id, size, color, available, deleted").eq("product_doc_id", id).eq("deleted", false),
         ]);
@@ -310,8 +309,8 @@ export default function ReservationScreen() {
       const { data, error } = await supabase.rpc("create_reservation_multi", {
         _items: lines.map((line) => ({
           product_id: line.product.id,
-          size: line.size ?? null,
-          color: line.color ?? null,
+          size: normalizeVariantValue(line.size),
+          color: normalizeVariantValue(line.color),
           quantity: line.quantity,
         })),
         _date: reservationDate,
