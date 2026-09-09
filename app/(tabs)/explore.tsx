@@ -15,7 +15,7 @@ import MasonryList from '@react-native-seoul/masonry-list';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useCart } from '@/src/context/CartContext';
@@ -30,19 +30,6 @@ import { GRID_GUTTER, GRID_COLUMN_GAP, useGridCardWidth } from '@/src/utils/layo
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
-
-// Module scope, not component state: confirmed live that this screen gets a
-// fresh mount (fresh useState defaults, handledInitialParams included) every
-// time it regains focus via the tab bar's default tabPress navigation, which
-// reuses this tab's own persisted route object -- stale category/all params
-// included. A remount defeats any fix that resets component state, since the
-// new instance's first render reads the exact same stale params fresh. This
-// module-level signature survives remounts (the module itself is only
-// evaluated once per page load), so a tab-press reset can mark a given set
-// of params as "already consumed" in a way a later remount still honors --
-// while a genuinely different deep link (a different signature) still gets
-// processed normally.
-let lastHandledExploreParams: string | null = null;
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
@@ -170,68 +157,18 @@ export default function ExploreScreen() {
   // All") once. Category matching needs topCategories loaded first, so this
   // waits for that fetch rather than racing it.
   useEffect(() => {
-    const paramsSignature = `${params.all ?? ''}|${params.category ?? ''}`;
-    console.log('[EXPLORE_DEBUG] deep-link effect run', { handledInitialParams, paramsSignature, lastHandledExploreParams, topCategoriesLen: topCategories.length });
     if (handledInitialParams) return;
-    if (paramsSignature === lastHandledExploreParams) return;
     if (params.all === '1') {
       setShowAllProducts(true);
       setHandledInitialParams(true);
-      lastHandledExploreParams = paramsSignature;
     } else if (params.category && topCategories.length > 0) {
       const match = topCategories.find((c) => c.name === params.category);
       if (match) {
         setSelectedCategory(match.name);
         setHandledInitialParams(true);
-        lastHandledExploreParams = paramsSignature;
       }
     }
   }, [params.all, params.category, topCategories, handledInitialParams]);
-
-  // Reset to the Explore root whenever the Explore tab button itself is
-  // pressed. Confirmed live this needed three attempts to get right:
-  // resetting only component state didn't survive expo-router's default
-  // tabPress action, which re-navigates using this tab's own persisted
-  // route object (stale category/all params included) -- and that
-  // re-navigation gives this screen a fresh mount, so a fresh
-  // handledInitialParams=false effect run reprocessed the exact same stale
-  // params right after this handler reset them. router.replace() and a
-  // direct parent-navigator navigate() call were each tried to suppress or
-  // override that default action and neither reliably won. The fix that
-  // actually holds up across a remount is the module-level
-  // lastHandledExploreParams signature above: this handler marks the
-  // CURRENT (about to go stale-again) params as already consumed, so
-  // whether or not this screen remounts, the deep-link effect sees its own
-  // guard already satisfied and skips reprocessing them -- while a
-  // genuinely different deep link later (a different signature) still gets
-  // handled normally.
-  //
-  // tabPress specifically (not useFocusEffect/focus) so this only fires on
-  // an actual tab-bar press, not on returning here via the back button from
-  // a product detail screen pushed on top of an in-progress category browse
-  // -- that must still preserve where the user was.
-  const navigation = useNavigation();
-  useEffect(() => {
-    // The parent tab navigator's event map (tabPress) isn't visible from a
-    // leaf screen's own navigation type, hence the cast -- standard React
-    // Navigation pattern for listening to the containing tab bar.
-    console.log('[EXPLORE_DEBUG] registering tabPress listener', { hasParent: !!navigation.getParent?.() });
-    const tabNavigation = navigation.getParent?.() as
-      | { addListener?: (event: string, cb: () => void) => (() => void) | undefined }
-      | undefined;
-    const unsub = tabNavigation?.addListener?.('tabPress', () => {
-      console.log('[EXPLORE_DEBUG] tabPress fired', { params });
-      lastHandledExploreParams = `${params.all ?? ''}|${params.category ?? ''}`;
-      setSelectedCategory(null);
-      setSelectedSubCategory(null);
-      setShowAllProducts(false);
-      setIsSearchActive(false);
-      setSearchQuery('');
-      setSearchResults([]);
-    });
-    console.log('[EXPLORE_DEBUG] listener registered?', { unsub: typeof unsub });
-    return unsub;
-  }, [navigation, params.all, params.category]);
 
   // products.category_id references a subcategory row directly; these maps
   // resolve the display names this screen navigates by (set from tile
