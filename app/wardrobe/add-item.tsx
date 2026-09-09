@@ -403,13 +403,27 @@ export default function AddWardrobeItemScreen() {
       setSelectedColors([]);
       setSubCategory('');
 
+      // router.back() here relied on this screen having a real "back" entry
+      // in the in-app navigation history. Confirmed live: reload the page
+      // (the exact recovery this flow now suggests after exhausted upload
+      // retries) and there's no such entry anymore -- back() then fell
+      // through to the tab navigator's default tab (Home) instead of
+      // returning to Wardrobe, even though the save itself succeeded.
+      // canGoBack() lets this still use real back-navigation (preserving
+      // whatever tab/scroll state Wardrobe had) whenever history actually
+      // has somewhere to go, and only falls back to an explicit destination
+      // when it doesn't -- e.g. right after a reload.
+      const goToWardrobe = () => {
+        if (router.canGoBack()) router.back();
+        else router.replace('/wardrobe?tab=items');
+      };
       if (Platform.OS === 'web') {
         showToast('Item added to your wardrobe.', 'success');
-        router.back();
+        goToWardrobe();
       } else {
         notifySuccess();
         Alert.alert('Item Added', 'Item added to your wardrobe.', [
-          { text: 'Done', onPress: () => router.back() }
+          { text: 'Done', onPress: goToWardrobe }
         ]);
       }
     } catch (err: any) {
