@@ -254,16 +254,33 @@ export default function AddWardrobeItemScreen() {
       }
 
       const { contentType, ext } = resolveImageFileInfo(finalUri, headerContentType);
+      // Generated once per save, not per attempt -- a retry re-uploading the
+      // exact same path with upsert:true is idempotent (safely overwrites),
+      // unlike a fresh Date.now() per attempt which could orphan a duplicate
+      // if an earlier attempt actually succeeded server-side but the client
+      // never got the response in time.
       const fileName = `${session.user.id}/${Date.now()}.${ext}`;
 
-      // 25s, not the 12s used for small JSON writes elsewhere -- an image
-      // upload is legitimately larger and slower on a weak connection.
-      const { data: uploadData, error: uploadError } = await withTimeout(
-        supabase.storage.from('wardrobe-images').upload(fileName, bytes, { upsert: false, contentType }),
-        25000,
-      );
+      // 40s per attempt (up from 25s), up to 2 attempts: server-side logs
+      // showed every completed upload finishing in under a second even for
+      // multi-MB images, so a timeout here means the upload genuinely didn't
+      // finish transferring in time on that connection, not server slowness
+      // -- worth one automatic retry rather than making the user start over.
+      const attemptUpload = () =>
+        withTimeout(
+          supabase.storage.from('wardrobe-images').upload(fileName, bytes, { upsert: true, contentType }),
+          40000,
+        );
+      let uploadResult;
+      try {
+        uploadResult = await attemptUpload();
+      } catch (err: any) {
+        if (!err?.isTimeout) throw err;
+        uploadResult = await attemptUpload();
+      }
+      const { data: uploadData, error: uploadError } = uploadResult;
 
-      if (uploadError) throw uploadError;
+      if (uploadError || !uploadData) throw uploadError || new Error('Upload failed.');
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
