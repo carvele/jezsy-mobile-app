@@ -272,36 +272,37 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
         canvas_bg: canvasBgColor,
       }));
 
-      // Try inserting with canvas_layout first; if column not found (PGRST204), fallback to standard items JSON
-      let insertError: any = null;
-      try {
-        const payload: Database['public']['Tables']['saved_outfits']['Insert'] = {
-          user_id: session.user.id,
-          name,
-          items: itemsPayload,
-        };
-        
-        // Use an untyped wrapper if we want to try a legacy column gracefully without breaking tsc
-        const { error } = await supabase.from('saved_outfits').insert({
-          ...payload,
-          canvas_layout: itemsPayload,
-        } as Database['public']['Tables']['saved_outfits']['Insert']);
-        insertError = error;
-      } catch (e) {
-        insertError = e;
-      }
+      // The two-attempt "try canvas_layout column, fall back to items-only"
+      // pattern that used to live here always paid for a doomed first
+      // insert -- confirmed directly against the live schema: saved_outfits
+      // has no canvas_layout column, so that attempt could only ever fail
+      // with PGRST204. Removed it; this is the payload shape that actually
+      // works, verified with a real insert.
+      const payload: Database['public']['Tables']['saved_outfits']['Insert'] = {
+        user_id: session.user.id,
+        name,
+        items: itemsPayload,
+      };
 
-      if (insertError) {
-        // Fallback without canvas_layout column (stores all spatial layout inside items JSONB)
-        const payload: Database['public']['Tables']['saved_outfits']['Insert'] = {
-          user_id: session.user.id,
-          name,
-          items: itemsPayload,
-        };
-        const { error: fallbackError } = await supabase.from('saved_outfits').insert(payload);
+      // Bounded so a stalled request (confirmed live: a client-side
+      // Supabase auth-lock stall can leave this hanging with zero network
+      // request ever sent, not a slow server) fails clearly and
+      // recoverably instead of leaving the Save button spinning forever
+      // with no feedback -- the exact "I can't save my outfits" symptom
+      // this was reported as.
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          const err: any = new Error('The request took too long. Please try again.');
+          err.isTimeout = true;
+          reject(err);
+        }, 15000);
+      });
 
-        if (fallbackError) throw fallbackError;
-      }
+      const { error } = await Promise.race([
+        supabase.from('saved_outfits').insert(payload),
+        timeoutPromise,
+      ]);
+      if (error) throw error;
 
       setSaveModalVisible(false);
       setLookName('');
@@ -321,11 +322,24 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
     setLoadModalVisible(true);
     setLoadingLooks(true);
     try {
-      const { data, error } = await supabase
-        .from('saved_outfits').select('*')
-        .eq('user_id', session.user.id)
-        .eq('deleted', false)
-        .order('created_at', { ascending: false }).limit(30);
+      // Same bounded-timeout reasoning as handleSaveLook: a stalled client
+      // can leave this awaiting forever with no request ever sent, which
+      // would otherwise leave the Load modal spinning with no way out.
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          const err: any = new Error('The request took too long.');
+          err.isTimeout = true;
+          reject(err);
+        }, 15000);
+      });
+      const { data, error } = await Promise.race([
+        supabase
+          .from('saved_outfits').select('*')
+          .eq('user_id', session.user.id)
+          .eq('deleted', false)
+          .order('created_at', { ascending: false }).limit(30),
+        timeoutPromise,
+      ]);
       if (error) throw error;
       setSavedLooks(data || []);
     } catch (err) {
