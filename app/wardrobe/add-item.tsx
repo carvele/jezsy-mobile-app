@@ -230,23 +230,22 @@ export default function AddWardrobeItemScreen() {
         throw offlineErr;
       }
 
-      // Re-fetch the session fresh rather than trusting the `session` from
-      // AuthContext, which is React state and can be a render or two behind
-      // supabase-js's actual current token (e.g. right after a background
-      // refresh). Using a stale user id here doesn't fail loudly -- it just
-      // silently mismatches auth.uid() server-side and the insert is
-      // rejected with a bare "new row violates row-level security policy",
-      // which is what "it just fails, no clear reason" looks like from the
-      // user's side. Confirmed live: the exact same insert succeeds with a
-      // freshly-fetched session, so RLS itself is not the problem -- staleness
-      // at the call site is.
-      const { data: { session: freshSession } } = await supabase.auth.getSession();
-      if (!freshSession?.user?.id) {
+      // Reverted the fresh supabase.auth.getSession() call that was here:
+      // it was chasing a misdiagnosed cause (the real bug was upsert:true on
+      // the storage upload, fixed separately and confirmed the true root
+      // cause). Every getSession() call contends for supabase-js's
+      // cross-tab Web Locks auth lock -- confirmed live via a genuine
+      // "Lock ... was not released within 5000ms" warning on a freshly
+      // loaded tab, which is a real contributor to the "randomly stuck
+      // loading" reports. session.user.id from AuthContext (already
+      // populated via its own onAuthStateChange listener) is sufficient and
+      // adds no extra lock contention.
+      if (!session?.user?.id) {
         const authErr: any = new Error('Your session expired. Please log in again to add items.');
         authErr.isAuthStale = true;
         throw authErr;
       }
-      const userId = freshSession.user.id;
+      const userId = session.user.id;
 
       // Use processed image if background removal was enabled and successful
       let finalUri = (removeBg && processedImageUri) ? processedImageUri : imageUri;

@@ -263,24 +263,18 @@ export default function MeasurementsScreen() {
       return;
     }
 
-    // Re-fetch the session fresh rather than trusting `user` from
-    // AuthContext, which is React state and can lag supabase-js's actual
-    // current token by a render or two (e.g. right after a background
-    // refresh). A stale id here doesn't fail loudly -- it silently
-    // mismatches auth.uid() server-side and both writes are rejected with a
-    // bare RLS violation. Confirmed on the wardrobe upload flow: the exact
-    // same write succeeds with a freshly-fetched session, so this is a
-    // call-site staleness issue, not an RLS policy bug.
-    const { data: { session: freshSession } } = await supabase.auth.getSession();
-    if (!freshSession?.user?.id) {
-      const message = 'Your session expired. Please log in again to save.';
-      setSaveError(message);
-      showToast(message, 'error');
-      savingRef.current = false;
-      setSaving(false);
-      return;
-    }
-    const userId = freshSession.user.id;
+    // Reverted the fresh supabase.auth.getSession() call that was here: it
+    // was chasing a misdiagnosed cause. The wardrobe-upload RLS failure it
+    // was modeled on turned out to be upsert:true on the storage bucket,
+    // unrelated to session freshness, fixed separately at its true root
+    // cause. Every getSession() call contends for supabase-js's cross-tab
+    // Web Locks auth lock -- confirmed live via a genuine "Lock ... was not
+    // released within 5000ms" warning on a freshly loaded tab, a real
+    // contributor to "randomly stuck loading" reports. user.id from
+    // AuthContext (already populated via its own onAuthStateChange
+    // listener, guarded at the top of this function) is sufficient and
+    // adds no extra lock contention.
+    const userId = user.id;
 
     // Everything on screen is in `unit`; the DB (and body-scan's math) is
     // cm-only, so this is the one place a display value is converted back.
