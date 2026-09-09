@@ -1,5 +1,10 @@
 import { supabase } from '@/src/lib/supabase';
-import { OffsetPageResult } from '@/src/types/pagination';
+import { CursorPageResult, MessageCursor, OffsetPageResult } from '@/src/types/pagination';
+import { Database } from '@/src/types/database.types';
+
+export type MessageRow = Database['public']['Tables']['messages']['Row'] & {
+  _status?: 'sending' | 'failed';
+};
 
 export type DirectChatSummary = {
   id: string;
@@ -49,5 +54,44 @@ export async function getDirectChatsPage(
     items: formatted,
     hasMore,
     nextOffset: offset + formatted.length,
+  };
+}
+
+export async function getConversationMessagesPage(
+  conversationId: string,
+  cursor?: MessageCursor,
+  limit = 30
+): Promise<CursorPageResult<MessageRow, MessageCursor>> {
+  let query = supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId);
+
+  if (cursor) {
+    const filter = `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`;
+    query = query.or(filter);
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+
+  if (error) throw error;
+
+  const raw = (data ?? []) as MessageRow[];
+  const hasMore = raw.length > limit;
+  const items = raw.slice(0, limit);
+
+  const lastItem = items[items.length - 1];
+  const nextCursor: MessageCursor | undefined =
+    hasMore && lastItem && lastItem.created_at
+      ? { createdAt: lastItem.created_at, id: lastItem.id }
+      : undefined;
+
+  return {
+    items,
+    hasMore,
+    nextCursor,
   };
 }

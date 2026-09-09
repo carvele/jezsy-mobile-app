@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
-  TouchableOpacity, Pressable, KeyboardAvoidingView, Platform, Image, Modal
+  TouchableOpacity, Pressable, KeyboardAvoidingView, Platform, Image, Modal,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -18,12 +19,8 @@ import { decode } from 'base64-arraybuffer';
 import { resolveChatImageUrl } from '@/src/utils/chatImageUrl';
 import { formatDateSeparator, formatReceiptTime, shouldStartMessageGroup } from '@/src/utils/dateTime';
 import { useToast } from '@/src/context/ToastContext';
-import { Database } from '@/src/types/database.types';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
-
-type MessageRow = Database['public']['Tables']['messages']['Row'] & {
-  _status?: 'sending' | 'failed';
-};
+import { getConversationMessagesPage, MessageRow } from '@/src/services/chatService';
 
 // One reaction per person per message, so this is a shortlist rather than a
 // full picker -- matching the set the admin dashboard already offers.
@@ -77,6 +74,11 @@ export default function ChatScreen() {
   const colors = Colors[theme];
 
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const isInitialLoadRef = useRef(true);
+  const isLoadingOlderRef = useRef(false);
+  const lastMessageIdRef = useRef<string | null>(null);
   const [inputText, setInputText] = useState('');
   // Non-null while editing: the composer becomes an edit box for that message.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -191,18 +193,14 @@ export default function ChatScreen() {
     let cancelled = false;
 
     const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
-        .limit(30);
-
-      if (cancelled) return;
-
-      if (!error && data) {
+      try {
+        const result = await getConversationMessagesPage(conversationId, undefined, 30);
+        if (cancelled) return;
+        setHasOlderMessages(result.hasMore);
         // Reverse array so messages render chronologically ascending
-        setMessages([...data].reverse());
+        setMessages([...result.items].reverse());
+      } catch (err) {
+        console.error('Error fetching conversation messages:', err);
       }
       markAsRead(conversationId);
     };
@@ -248,6 +246,38 @@ export default function ChatScreen() {
       supabase.removeChannel(messageSubscription);
     };
   }, [conversationId, markAsRead, session?.user.id, reconnectTick]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!conversationId || !hasOlderMessages || loadingOlder) return;
+    const oldest = messages.find(m => !String(m.id).startsWith('temp-') && m.created_at);
+    if (!oldest || !oldest.created_at) return;
+
+    setLoadingOlder(true);
+    isLoadingOlderRef.current = true;
+    try {
+      const result = await getConversationMessagesPage(
+        conversationId,
+        { createdAt: oldest.created_at, id: oldest.id },
+        20
+      );
+      setHasOlderMessages(result.hasMore);
+      if (result.items.length > 0) {
+        const reversedOlder = [...result.items].reverse();
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const uniqueOlder = reversedOlder.filter(m => !existingIds.has(m.id));
+          return [...uniqueOlder, ...prev];
+        });
+      }
+    } catch (err) {
+      console.error('Error loading older messages:', err);
+    } finally {
+      setLoadingOlder(false);
+      setTimeout(() => {
+        isLoadingOlderRef.current = false;
+      }, 150);
+    }
+  }, [conversationId, hasOlderMessages, loadingOlder, messages]);
 
   // Typing indicator: ephemeral broadcast on a per-conversation channel, not
   // a DB write -- the admin dashboard joins the same channel name/shape when
@@ -786,8 +816,49 @@ export default function ChatScreen() {
           // rendering the fallback chip.
           extraData={productPreviews}
           contentContainerStyle={styles.listContent}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+          }}
+          onContentSizeChange={() => {
+            if (isLoadingOlderRef.current) return;
+            const currentNewest = messages[messages.length - 1]?.id;
+            if (isInitialLoadRef.current && messages.length > 0) {
+              isInitialLoadRef.current = false;
+              lastMessageIdRef.current = currentNewest;
+              flatListRef.current?.scrollToEnd({ animated: false });
+              return;
+            }
+            if (currentNewest && currentNewest !== lastMessageIdRef.current) {
+              lastMessageIdRef.current = currentNewest;
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }
+          }}
+          onLayout={() => {
+            if (isInitialLoadRef.current && messages.length > 0) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+          ListHeaderComponent={
+            hasOlderMessages ? (
+              <View style={styles.loadOlderContainer}>
+                {loadingOlder ? (
+                  <ActivityIndicator size="small" color={colors.tint} />
+                ) : (
+                  <TouchableOpacity
+                    onPress={loadOlderMessages}
+                    style={[styles.loadOlderButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Load older messages"
+                  >
+                    <IconSymbol name="arrow.clockwise" size={14} color={colors.secondaryText} />
+                    <Text style={[styles.loadOlderText, { color: colors.secondaryText }]}>
+                      Load older messages
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : null
+          }
           ListFooterComponent={
             otherTyping ? (
               <View style={[styles.messageRow, styles.messageRowThem]}>
@@ -1196,5 +1267,23 @@ const styles = StyleSheet.create({
     height: 40,
     width: 40,
     borderRadius: 20,
+  },
+  loadOlderContainer: {
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadOlderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  loadOlderText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
