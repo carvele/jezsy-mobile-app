@@ -197,9 +197,21 @@ export default function ExploreScreen() {
       setSearchQuery('');
       setSearchResults([]);
       setHandledInitialParams(false);
+      // Resetting state alone was not enough -- confirmed live. Expo
+      // Router's tab bar remembers each tab's last full path (including
+      // query params) and re-navigates there as its OWN default tabPress
+      // behavior, which immediately re-fed the same stale category/all
+      // params right back into the deep-link-consuming effect above
+      // (now unguarded since handledInitialParams was just reset),
+      // reproducing the identical stuck-on-stale-category result through a
+      // different path. Not intercepted with preventDefault(), which would
+      // risk blocking the tab switch entirely when Explore isn't already
+      // focused -- instead, force the clean URL right after, so whichever
+      // navigation applies first, this is what's left standing.
+      router.replace('/explore');
     });
     return unsub;
-  }, [navigation]);
+  }, [navigation, router]);
 
   // products.category_id references a subcategory row directly; these maps
   // resolve the display names this screen navigates by (set from tile
