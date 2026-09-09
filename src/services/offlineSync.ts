@@ -121,6 +121,22 @@ export function registerOfflineSyncListener(): () => void {
  * already uses correctly.
  */
 export async function isOnline(): Promise<boolean> {
-  const state = await NetInfo.fetch();
-  return !!state.isConnected && state.isInternetReachable !== false;
+  // Bounded and fail-open: this is a pre-flight check ahead of a write that
+  // already has its own timeout/retry handling, so it must never be able to
+  // block that write indefinitely on its own. NetInfo.fetch() has no
+  // guaranteed upper bound -- on some browser/OS network-stack combinations
+  // its connection-info query can hang well past any reasonable wait. If it
+  // does, assume online and let the actual write's own timeout be the real
+  // judge, rather than leaving the caller stuck on a spinner forever with no
+  // network request ever having been attempted.
+  try {
+    const state = await Promise.race([
+      NetInfo.fetch(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
+    if (!state) return true;
+    return !!state.isConnected && state.isInternetReachable !== false;
+  } catch {
+    return true;
+  }
 }

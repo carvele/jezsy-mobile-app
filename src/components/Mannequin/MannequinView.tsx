@@ -82,7 +82,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
   const canvasRef = useRef<View>(null);
 
   // Sizing Profile & Silhouette Proportions
-  const { measurements, heightCm, ready: sizingReady } = useSizingProfile();
+  const { measurements, heightCm, ready: sizingReady, loaded: sizingLoaded } = useSizingProfile();
   const [silhouetteMode, setSilhouetteMode] = useState<'default' | 'proportions'>('default');
 
   const bodyParams = useMemo(() => {
@@ -509,6 +509,17 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
               { backgroundColor: silhouetteMode === 'proportions' ? colors.tint : colors.card, borderColor: silhouetteMode === 'proportions' ? colors.tint : colors.border }
             ]}
             onPress={() => {
+              // useSizingProfile() re-fetches from scratch on every mount and
+              // starts with ready=false until that fetch resolves. Without
+              // this guard, tapping "My Body" during that window -- entirely
+              // realistic on a fresh navigation into this screen -- read
+              // "not ready yet" as "never set up" and bounced the user to
+              // the measurements screen even though their profile was saved
+              // and sitting in the database the whole time.
+              if (!sizingLoaded) {
+                showToast('Still loading your profile, one moment...', 'info');
+                return;
+              }
               if (sizingReady && bodyParams.isCustomProportioned) {
                 setSilhouetteMode('proportions');
                 showToast('Applied your real body measurements ✨', 'info');
