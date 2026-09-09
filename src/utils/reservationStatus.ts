@@ -66,7 +66,7 @@ export function statusBucket(status: string | null): Exclude<StatusFilter, 'all'
 
 const FILTER_LABEL: Record<StatusFilter, string> = {
   all: 'All',
-  pending: 'Pending',
+  pending: 'Legacy',
   toPay: 'To pay',
   preparing: 'Preparing',
   ready: 'Ready',
