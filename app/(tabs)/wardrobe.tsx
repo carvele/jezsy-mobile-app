@@ -47,6 +47,8 @@ function persistTab(tab: Tab) {
 
 const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'];
 
+type WearFilter = 'all' | 'never' | 'neglected';
+
 export default function WardrobeScreen() {
   const { cardWidth, columns } = useGridCardWidth();
   const theme = useColorScheme();
