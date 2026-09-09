@@ -368,16 +368,12 @@ export default function ReservationScreen() {
         appointmentTime,
       );
 
-      // No payment here by design: staff vet the booking first, and only then
-      // does a payment window open. Taking money before acceptance would mean
-      // refunding through PayMongo every time staff turn a booking down.
-      const alertMessage =
-        (priceChanged
-          ? `Pricing for one or more items changed while you were booking. Your reservation total is ₱${serverTotal.toFixed(2)}.\n\n`
-          : "") +
-        "We will review your request shortly. Once it is accepted you will be notified to pay, and you will have up to 24 hours to do so (less if your appointment is coming up soon).";
-
-      showToast("Reservation request sent! We'll notify you once accepted ✨", "success");
+      showToast(
+        priceChanged
+          ? `Items reserved. Your updated total is ₱${serverTotal.toFixed(2)}. Pay before the deadline to keep them.`
+          : 'Items reserved. Pay before the deadline to keep them.',
+        'success',
+      );
       router.replace("/reservations");
     } catch (error: any) {
       console.error("Reservation error:", error);
@@ -644,7 +640,7 @@ export default function ReservationScreen() {
 
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              {payOption === 'full' ? 'To pay once accepted (full)' : 'To pay once accepted (50%)'}
+              {payOption === 'full' ? 'Payment due (full)' : 'Reservation payment due (50%)'}
             </Text>
             <Text style={[styles.rowValue, { color: colors.tint }]}>
               ₱{amountDueNow.toFixed(2)}
@@ -663,7 +659,7 @@ export default function ReservationScreen() {
           <View style={styles.receiptStatus}>
             <IconSymbol name="checkmark.circle.fill" size={16} color={colors.tint} />
             <Text style={[styles.receiptStatusText, { color: colors.secondaryText }]}>
-              Nothing is charged now. You pay once we accept your request.
+              Nothing is charged now. Your items are held until the payment deadline.
             </Text>
           </View>
         </View>
@@ -688,18 +684,18 @@ export default function ReservationScreen() {
           onPress={handleReserve}
           disabled={!canSubmit}
           accessibilityRole="button"
-          accessibilityLabel="Send reservation request"
+          accessibilityLabel="Reserve items"
           accessibilityHint={
             !appointmentTime
               ? 'Select a pickup time to enable'
-              : 'Sends your reservation request for review. Nothing is charged now.'
+              : 'Reserves the selected items and starts the payment window.'
           }
           accessibilityState={{ disabled: !canSubmit }}
         >
           {submitting ? (
             <ActivityIndicator color={colors.background} />
           ) : (
-            <Text style={styles.primaryActionText}>Request Reservation</Text>
+            <Text style={styles.primaryActionText}>Reserve Items</Text>
           )}
         </TouchableOpacity>
       </View>

@@ -59,7 +59,7 @@ describe('reservationStatus Utility', () => {
   });
 
   test('returns human readable badge labels', () => {
-    expect(statusLabel('Pending')).toBe('Awaiting approval');
+    expect(statusLabel('Pending')).toBe('Needs attention');
     expect(statusLabel('confirmed')).toBe('To pay');
     expect(statusLabel('to pickup')).toBe('Ready to collect');
   });

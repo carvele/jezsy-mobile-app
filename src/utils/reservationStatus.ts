@@ -8,11 +8,8 @@
  *
  * Two things caused the drift, and both are handled here.
  *
- * First, the admin stores one value and shows staff another. `Confirmed` is
- * stored when staff approve a reservation, but it means "approved, not yet
- * paid", so the dashboard displays it as "To Pay". This app used to render the
- * stored value raw, telling a customer with a running payment deadline that
- * their reservation was "Confirmed".
+ * Confirmed and Approved are legacy aliases for the active payment window.
+ * New reservations enter To Pay immediately without administrator approval.
  *
  * Second, `To Pickup` -- written when staff mark a reservation paid -- matched
  * no filter tab here at all, so a customer whose item was sitting ready for
@@ -80,7 +77,7 @@ const FILTER_LABEL: Record<StatusFilter, string> = {
 export const filterLabel = (filter: StatusFilter): string => FILTER_LABEL[filter];
 
 const BADGE_LABEL: Record<Exclude<StatusFilter, 'all'>, string> = {
-  pending: 'Awaiting approval',
+  pending: 'Needs attention',
   toPay: 'To pay',
   preparing: 'Preparing your item',
   ready: 'Ready to collect',
@@ -95,7 +92,7 @@ const BADGE_LABEL: Record<Exclude<StatusFilter, 'all'>, string> = {
  */
 export const statusLabel = (status: string | null): string => BADGE_LABEL[statusBucket(status)];
 
-/** Payment is owed once staff approve and until it lands. */
+/** Payment is owed while an automatic reservation hold is active. */
 export const isAwaitingPayment = (status: string | null): boolean =>
   statusBucket(status) === 'toPay';
 
