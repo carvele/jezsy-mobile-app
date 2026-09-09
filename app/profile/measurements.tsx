@@ -263,6 +263,25 @@ export default function MeasurementsScreen() {
       return;
     }
 
+    // Re-fetch the session fresh rather than trusting `user` from
+    // AuthContext, which is React state and can lag supabase-js's actual
+    // current token by a render or two (e.g. right after a background
+    // refresh). A stale id here doesn't fail loudly -- it silently
+    // mismatches auth.uid() server-side and both writes are rejected with a
+    // bare RLS violation. Confirmed on the wardrobe upload flow: the exact
+    // same write succeeds with a freshly-fetched session, so this is a
+    // call-site staleness issue, not an RLS policy bug.
+    const { data: { session: freshSession } } = await supabase.auth.getSession();
+    if (!freshSession?.user?.id) {
+      const message = 'Your session expired. Please log in again to save.';
+      setSaveError(message);
+      showToast(message, 'error');
+      savingRef.current = false;
+      setSaving(false);
+      return;
+    }
+    const userId = freshSession.user.id;
+
     // Everything on screen is in `unit`; the DB (and body-scan's math) is
     // cm-only, so this is the one place a display value is converted back.
     const rawMeasurements = {
@@ -309,7 +328,7 @@ export default function MeasurementsScreen() {
     const sanitized = sanitizeForStorage(rawMeasurements as any);
 
     const payload = {
-      user_id: user.id,
+      user_id: userId,
       height: rawMeasurements.height,
       weight: rawMeasurements.weight,
       measurements: {
@@ -346,7 +365,7 @@ export default function MeasurementsScreen() {
       });
       return Promise.race([
         Promise.all([
-          supabase.from('profiles').update({ fit_preference: fitPreference }).eq('id', user.id),
+          supabase.from('profiles').update({ fit_preference: fitPreference }).eq('id', userId),
           supabase.from('user_measurements').upsert(payload, { onConflict: 'user_id' }),
         ]),
         timeoutPromise,
@@ -377,7 +396,8 @@ export default function MeasurementsScreen() {
       let userMessage = 'Unable to save measurements right now. Please try again.';
       if (err?.isTimeout) {
         userMessage = 'The request took too long. Your inputs have been kept, please tap Save again.';
-      } else if (err?.message?.includes('JWT') || err?.message?.includes('auth') || err?.code === '401') {
+      } else if (err?.message?.includes('JWT') || err?.message?.includes('auth') || err?.code === '401'
+        || err?.code === '42501' || err?.message?.includes('row-level security')) {
         userMessage = 'Your session expired. Please log in again to save.';
       } else if (err?.message?.includes('network') || err?.message?.includes('fetch')) {
         userMessage = 'Network connection interrupted. Your inputs are saved, please try again.';

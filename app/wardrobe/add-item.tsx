@@ -230,6 +230,24 @@ export default function AddWardrobeItemScreen() {
         throw offlineErr;
       }
 
+      // Re-fetch the session fresh rather than trusting the `session` from
+      // AuthContext, which is React state and can be a render or two behind
+      // supabase-js's actual current token (e.g. right after a background
+      // refresh). Using a stale user id here doesn't fail loudly -- it just
+      // silently mismatches auth.uid() server-side and the insert is
+      // rejected with a bare "new row violates row-level security policy",
+      // which is what "it just fails, no clear reason" looks like from the
+      // user's side. Confirmed live: the exact same insert succeeds with a
+      // freshly-fetched session, so RLS itself is not the problem -- staleness
+      // at the call site is.
+      const { data: { session: freshSession } } = await supabase.auth.getSession();
+      if (!freshSession?.user?.id) {
+        const authErr: any = new Error('Your session expired. Please log in again to add items.');
+        authErr.isAuthStale = true;
+        throw authErr;
+      }
+      const userId = freshSession.user.id;
+
       // Use processed image if background removal was enabled and successful
       let finalUri = (removeBg && processedImageUri) ? processedImageUri : imageUri;
 
@@ -259,7 +277,7 @@ export default function AddWardrobeItemScreen() {
       // unlike a fresh Date.now() per attempt which could orphan a duplicate
       // if an earlier attempt actually succeeded server-side but the client
       // never got the response in time.
-      const fileName = `${session.user.id}/${Date.now()}.${ext}`;
+      const fileName = `${userId}/${Date.now()}.${ext}`;
 
       // 40s per attempt (up from 25s), up to 2 attempts: server-side logs
       // showed every completed upload finishing in under a second even for
@@ -291,7 +309,7 @@ export default function AddWardrobeItemScreen() {
       // Insert wardrobe item row
       const { error: dbError } = await withTimeout(
         supabase.from('wardrobe_items').insert({
-          user_id: session.user.id,
+          user_id: userId,
           category,
           garment_type: garmentType,
           sub_category: subCategory.trim() || null,
@@ -325,8 +343,10 @@ export default function AddWardrobeItemScreen() {
       let userMessage = err?.message || 'Failed to save item. Try again.';
       if (err?.isTimeout) {
         userMessage = 'The upload took too long. Check your connection and tap Save again.';
-      } else if (err?.isOffline) {
+      } else if (err?.isOffline || err?.isAuthStale) {
         userMessage = err.message;
+      } else if (err?.code === '42501' || err?.message?.includes('row-level security')) {
+        userMessage = 'Your session expired. Please log in again to add items.';
       }
       showToast(userMessage, 'error');
     } finally {
