@@ -8,7 +8,6 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { Database } from '@/src/types/database.types';
-import { ReviewModal } from './ReviewModal';
 
 interface ReviewsListProps {
   productId: string;
@@ -35,37 +34,12 @@ export function ReviewsList({ productId }: ReviewsListProps) {
   const [reviews, setReviews] = useState<ReviewWithVote[]>([]);
   const [votingIds, setVotingIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
   const [stats, setStats] = useState({ average: 0, count: 0, breakdown: [0,0,0,0,0] });
   const [sortBy, setSortBy] = useState<SortKey>('recent');
   const [photosOnly, setPhotosOnly] = useState(false);
-  // null while unchecked/logged-out -- the write button stays visible so a
-  // signed-out visitor still gets ReviewModal's "log in to review" prompt.
-  // The reviews RLS policy is the real gate; this only avoids sending an
-  // eligible-looking customer into a submit that the DB will reject.
-  const [eligible, setEligible] = useState<boolean | null>(null);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    const checkEligibility = async () => {
-      if (!user?.id) {
-        if (active) setEligible(null);
-        return;
-      }
-      const { data } = await supabase
-        .from('reservation_items')
-        .select('id, reservations!inner(customer_id, deleted, status)')
-        .eq('product_id', productId)
-        .eq('reservations.customer_id', user.id);
-      if (!active) return;
-      setEligible(!!data?.some((row: any) => !row.reservations?.deleted && ['Completed', 'Active'].includes(row.reservations?.status)));
-    };
-    checkEligibility();
-    return () => { active = false; };
-  }, [productId, user?.id]);
 
   const LIMIT = 20;
 
@@ -224,15 +198,6 @@ export function ReviewsList({ productId }: ReviewsListProps) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Reviews ({stats.count})</Text>
-        {!user || eligible ? (
-          <TouchableOpacity style={[styles.writeBtn, { borderColor: colors.tint }]} onPress={() => setModalVisible(true)}>
-            <Text style={[styles.writeBtnText, { color: colors.tint }]}>Write a Review</Text>
-          </TouchableOpacity>
-        ) : eligible === false ? (
-          <Text style={[styles.ineligibleNote, { color: colors.secondaryText }]}>
-            Reserve this item to review it
-          </Text>
-        ) : null}
       </View>
 
       {stats.count > 0 && (
@@ -381,13 +346,6 @@ export function ReviewsList({ productId }: ReviewsListProps) {
             )}
           </TouchableOpacity>
         )}
-  
-        <ReviewModal 
-        visible={modalVisible} 
-        productId={productId} 
-        onClose={() => setModalVisible(false)} 
-        onSuccess={fetchReviews} 
-      />
     </View>
   );
 }
@@ -404,12 +362,6 @@ const styles = StyleSheet.create({
   },
   title: {
     ...Type.subtitle,
-  },
-  ineligibleNote: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    maxWidth: 160,
-    textAlign: 'right',
   },
   writeBtn: {
     borderWidth: 1,
