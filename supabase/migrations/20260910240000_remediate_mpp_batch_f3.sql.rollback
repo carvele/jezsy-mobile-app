@@ -1,0 +1,155 @@
+-- Rollback for 20260910240000_remediate_mpp_batch_f3
+-- Restores original policies for all 7 tables
+
+-- 1. account_deletion_requests
+DROP POLICY IF EXISTS "Account deletion requests select" ON public.account_deletion_requests;
+DROP POLICY IF EXISTS "Account deletion requests insert" ON public.account_deletion_requests;
+DROP POLICY IF EXISTS "Account deletion requests update" ON public.account_deletion_requests;
+DROP POLICY IF EXISTS "Account deletion requests delete" ON public.account_deletion_requests;
+
+CREATE POLICY "Staff manage deletion requests"
+  ON public.account_deletion_requests
+  FOR ALL
+  TO authenticated
+  USING (is_staff_or_admin())
+  WITH CHECK (is_staff_or_admin());
+
+CREATE POLICY "Users withdraw own pending deletion request"
+  ON public.account_deletion_requests
+  FOR DELETE
+  TO authenticated
+  USING (((SELECT auth.uid()) = user_id) AND (status = 'pending'));
+
+CREATE POLICY "Users read own deletion requests"
+  ON public.account_deletion_requests
+  FOR SELECT
+  TO authenticated
+  USING ((SELECT auth.uid()) = user_id);
+
+-- 2. ar_sessions
+DROP POLICY IF EXISTS "AR sessions select" ON public.ar_sessions;
+DROP POLICY IF EXISTS "AR sessions insert" ON public.ar_sessions;
+DROP POLICY IF EXISTS "AR sessions update" ON public.ar_sessions;
+DROP POLICY IF EXISTS "AR sessions delete" ON public.ar_sessions;
+
+CREATE POLICY "Enable all access for admin/staff"
+  ON public.ar_sessions
+  FOR ALL
+  TO authenticated
+  USING (is_staff_or_admin())
+  WITH CHECK (is_staff_or_admin());
+
+CREATE POLICY "Enable insert for authenticated users"
+  ON public.ar_sessions
+  FOR INSERT
+  TO public
+  WITH CHECK ((SELECT auth.uid()) = user_id);
+
+-- 3. feedback
+DROP POLICY IF EXISTS "Feedback select" ON public.feedback;
+DROP POLICY IF EXISTS "Feedback insert" ON public.feedback;
+DROP POLICY IF EXISTS "Feedback update" ON public.feedback;
+DROP POLICY IF EXISTS "Feedback delete" ON public.feedback;
+
+CREATE POLICY "Enable all access for admin/staff"
+  ON public.feedback
+  FOR ALL
+  TO authenticated
+  USING (is_staff_or_admin())
+  WITH CHECK (is_staff_or_admin());
+
+CREATE POLICY "Enable insert for authenticated users"
+  ON public.feedback
+  FOR INSERT
+  TO public
+  WITH CHECK ((SELECT auth.uid()) = user_id);
+
+-- 4. inventory
+DROP POLICY IF EXISTS "Inventory select" ON public.inventory;
+DROP POLICY IF EXISTS "Inventory insert" ON public.inventory;
+DROP POLICY IF EXISTS "Inventory update" ON public.inventory;
+DROP POLICY IF EXISTS "Inventory delete" ON public.inventory;
+
+CREATE POLICY "Enable owner access for inventory"
+  ON public.inventory
+  FOR ALL
+  TO authenticated
+  USING (is_admin_or_owner())
+  WITH CHECK (is_admin_or_owner());
+
+CREATE POLICY "Enable read access for all users"
+  ON public.inventory
+  FOR SELECT
+  TO public
+  USING (true);
+
+-- 5. payments
+DROP POLICY IF EXISTS "Payments select" ON public.payments;
+
+CREATE POLICY "Staff read all payments"
+  ON public.payments
+  FOR SELECT
+  TO authenticated
+  USING (is_staff_or_admin());
+
+CREATE POLICY "Users read own payments"
+  ON public.payments
+  FOR SELECT
+  TO authenticated
+  USING ((SELECT auth.uid()) = user_id);
+
+-- 6. profiles
+DROP POLICY IF EXISTS "Profiles select" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles insert" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles update" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles delete" ON public.profiles;
+
+CREATE POLICY "Enable all access for admin/staff"
+  ON public.profiles
+  FOR ALL
+  TO authenticated
+  USING ((SELECT is_staff_or_admin()))
+  WITH CHECK ((SELECT is_staff_or_admin()));
+
+CREATE POLICY "Enable insert for authenticated users only"
+  ON public.profiles
+  FOR INSERT
+  TO public
+  WITH CHECK ((SELECT auth.uid()) = id);
+
+CREATE POLICY "restrict_profile_insert_to_own_auth"
+  ON public.profiles
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (((SELECT auth.uid()) = id) AND (email = ((SELECT auth.jwt()) ->> 'email')));
+
+CREATE POLICY "Enable read for own profile or admin"
+  ON public.profiles
+  FOR SELECT
+  TO public
+  USING (((SELECT auth.uid()) = id) OR is_staff_or_admin());
+
+CREATE POLICY "Enable update for users based on email"
+  ON public.profiles
+  FOR UPDATE
+  TO public
+  USING ((SELECT auth.uid()) = id);
+
+-- 7. stock_notify_requests
+DROP POLICY IF EXISTS "Stock notify requests select" ON public.stock_notify_requests;
+DROP POLICY IF EXISTS "Stock notify requests insert" ON public.stock_notify_requests;
+DROP POLICY IF EXISTS "Stock notify requests update" ON public.stock_notify_requests;
+DROP POLICY IF EXISTS "Stock notify requests delete" ON public.stock_notify_requests;
+
+CREATE POLICY "Users manage own stock notify requests"
+  ON public.stock_notify_requests
+  FOR ALL
+  TO authenticated
+  USING ((SELECT auth.uid()) = user_id)
+  WITH CHECK ((SELECT auth.uid()) = user_id);
+
+CREATE POLICY "Staff and admin can read all stock notify requests"
+  ON public.stock_notify_requests
+  FOR SELECT
+  TO public
+  USING (is_staff_or_admin());
