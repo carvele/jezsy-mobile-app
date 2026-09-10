@@ -5,6 +5,7 @@ import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
+import { useFloatingTabBarMetrics } from '@/src/hooks/useFloatingTabBarMetrics';
 import { TOUR_MODULE_IDS, TOUR_MODULES, TourModuleId, TourStep } from './tourConfig';
 import { markTourStepComplete } from './tourProgress';
 import { readModuleProgress, TourModuleProgress } from './tourStorage';
@@ -120,6 +121,15 @@ interface TourCoachmarkBannerProps {
   totalSteps: number;
   onNext?: () => void;
   onDismiss: () => void;
+  /**
+   * Whether this screen has the floating pill tab bar (app/(tabs)/_layout.tsx)
+   * docked above the true screen bottom. Defaults to true since 3 of the 4
+   * screens hosting this banner are tab screens; the one that isn't
+   * (app/ar-tryon/[id].tsx, a full-screen camera route) passes false.
+   * Without this, the card renders underneath the floating bar instead of
+   * above it -- its own content becomes unreadable, hidden behind the bar.
+   */
+  aboveTabBar?: boolean;
 }
 
 /**
@@ -134,13 +144,19 @@ export function TourCoachmarkBanner({
   totalSteps,
   onNext,
   onDismiss,
+  aboveTabBar = true,
 }: TourCoachmarkBannerProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[colorScheme ?? 'light'];
+  const { clearance } = useFloatingTabBarMetrics();
 
   return (
-    <SafeAreaView style={styles.wrapper} edges={['bottom']} pointerEvents="box-none">
+    <SafeAreaView
+      style={[styles.wrapper, aboveTabBar ? { bottom: clearance } : undefined]}
+      edges={['bottom']}
+      pointerEvents="box-none"
+    >
       <View
         style={[
           styles.card,

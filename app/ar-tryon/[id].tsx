@@ -1316,6 +1316,7 @@ export default function ARTryOnScreen() {
           totalSteps={tourCoachmark.totalSteps}
           onNext={tourCoachmark.step.completion.type === 'next' ? tourCoachmark.advance : undefined}
           onDismiss={tourCoachmark.dismiss}
+          aboveTabBar={false}
         />
       )}
     </SafeAreaView>

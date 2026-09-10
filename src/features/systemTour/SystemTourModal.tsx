@@ -5,7 +5,7 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -31,14 +31,18 @@ interface SystemTourModalProps {
   isReplay?: boolean;
 }
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-
 export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTourModalProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
   const { user } = useAuth();
+  // Reactive, not a module-level Dimensions.get() snapshot: a value read once
+  // at module load can be stale by the time this modal actually shows (this
+  // is the same class of bug useGridCardWidth's own comment documents, and
+  // it produced an overflowing modal in practice -- the container rendered
+  // wider than the real viewport).
+  const { width: screenWidth } = useWindowDimensions();
 
   const [activeModule, setActiveModule] = useState<TourModuleId | null>(null);
   const [progress, setProgress] = useState<TourProgressSnapshot | null>(null);
@@ -111,6 +115,7 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
           style={[
             styles.modalContainer,
             {
+              width: Math.min(screenWidth - 32, 440),
               backgroundColor: isDark ? '#141418' : 'white',
               borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)',
             },
@@ -267,7 +272,6 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
   },
   modalContainer: {
-    width: Math.min(SCREEN_WIDTH - 32, 440),
     maxHeight: '88%',
     borderRadius: 24,
     borderWidth: 1,
