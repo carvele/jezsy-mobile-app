@@ -15,6 +15,10 @@ import {
     manilaWeekdayLabel,
 } from "@/src/utils/dateTime";
 import { scheduleReservationReminder } from "@/src/utils/pushNotifications";
+import {
+    getReservationAttempt,
+    ReservationAttempt,
+} from "@/src/utils/reservationIdempotency";
 import { needsStepUpReauth } from "@/src/utils/stepUpAuth";
 import { StepUpAuthModal } from "@/src/components/StepUpAuthModal";
 import { Image } from "expo-image";
@@ -74,6 +78,7 @@ export default function ReservationScreen() {
   const [submitting, setSubmitting] = useState(false);
   // Synchronous guard: blocks a second call before the setSubmitting(true) round-trip lands.
   const submittingRef = useRef(false);
+  const reservationAttemptRef = useRef<ReservationAttempt | null>(null);
   const [reauthVisible, setReauthVisible] = useState(false);
   const [liveCartPrices, setLiveCartPrices] = useState<Map<string, Partial<Product>>>(new Map());
 
@@ -304,21 +309,29 @@ export default function ReservationScreen() {
     try {
       const reservationDate = formatManilaDate(selectedDate);
 
-      // Every line's price and the resulting deposit are resolved
-      // server-side from the products table; only the selection is sent.
-      const { data, error } = await supabase.rpc("create_reservation_multi", {
-        _items: lines.map((line) => ({
+      const request = {
+        items: lines.map((line) => ({
           product_id: line.product.id,
           size: normalizeVariantValue(line.size),
           color: normalizeVariantValue(line.color),
           quantity: line.quantity,
         })),
-        _date: reservationDate,
-        _appointment_time: appointmentTime,
-        // Nothing is paid at this point, so there is never a receipt to
-        // attach here.
-        _receipt_path: null as unknown as string,
-        _payment_option: payOption,
+        date: reservationDate,
+        appointmentTime,
+        paymentOption: payOption,
+        customerId: session?.user.id,
+      };
+      const attempt = getReservationAttempt(reservationAttemptRef.current, request);
+      reservationAttemptRef.current = attempt;
+
+      // Every line's price and the resulting deposit are resolved server-side.
+      // Retrying this exact request reuses the key and returns the first result.
+      const { data, error } = await supabase.rpc("create_reservation_multi_idempotent", {
+        _idempotency_key: attempt.key,
+        _items: request.items,
+        _date: request.date,
+        _appointment_time: request.appointmentTime,
+        _payment_option: request.paymentOption,
       });
 
       if (error) {
@@ -373,6 +386,7 @@ export default function ReservationScreen() {
           : 'Items reserved. Pay before the deadline to keep them.',
         'success',
       );
+      reservationAttemptRef.current = null;
       router.replace("/reservations");
     } catch (error: any) {
       console.error("Reservation error:", error);

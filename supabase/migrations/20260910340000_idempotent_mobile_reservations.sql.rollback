@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.create_reservation_multi_idempotent(uuid, jsonb, text, text, text, text, uuid);

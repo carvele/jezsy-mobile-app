@@ -989,6 +989,7 @@ export type Database = {
           provider_payment_id: string | null
           provider_payment_intent_id: string | null
           provider_ref: string | null
+          purpose: string
           refund_required_at: string | null
           requires_refund: boolean
           reservation_id: string
@@ -1009,6 +1010,7 @@ export type Database = {
           provider_payment_id?: string | null
           provider_payment_intent_id?: string | null
           provider_ref?: string | null
+          purpose?: string
           refund_required_at?: string | null
           requires_refund?: boolean
           reservation_id: string
@@ -1029,6 +1031,7 @@ export type Database = {
           provider_payment_id?: string | null
           provider_payment_intent_id?: string | null
           provider_ref?: string | null
+          purpose?: string
           refund_required_at?: string | null
           requires_refund?: boolean
           reservation_id?: string
@@ -2327,6 +2330,18 @@ export type Database = {
           _appointment_time: string
           _customer_id?: string
           _date: string
+          _items: Json
+          _payment_option?: string
+          _receipt_path?: string
+        }
+        Returns: Json
+      }
+      create_reservation_multi_idempotent: {
+        Args: {
+          _appointment_time: string
+          _customer_id?: string
+          _date: string
+          _idempotency_key: string
           _items: Json
           _payment_option?: string
           _receipt_path?: string
