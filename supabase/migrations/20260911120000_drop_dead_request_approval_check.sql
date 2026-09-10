@@ -1,0 +1,60 @@
+-- request_reschedule checked v_status against 'request approval' as a real
+-- status value -- unreachable now that the CHECK constraint blocks it
+-- (20260911110000). Its 'pending' entry stays: that's the target of this
+-- function's own COALESCE(v_res.status, 'pending') null-status fallback,
+-- not a check against 'Pending' as a real stored value, and status remains
+-- a nullable column.
+
+CREATE OR REPLACE FUNCTION public.request_reschedule(_reservation_id uuid, _date text, _appointment_time text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_user uuid := auth.uid();
+  v_res public.reservations%rowtype;
+  v_status text;
+  v_appointment timestamptz;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.';
+  END IF;
+
+  IF _date IS NULL OR _date = '' OR _appointment_time IS NULL OR _appointment_time = '' THEN
+    RAISE EXCEPTION 'A new date and appointment time are required.';
+  END IF;
+
+  SELECT * INTO v_res FROM public.reservations
+  WHERE id = _reservation_id
+    AND customer_id = v_user
+    AND COALESCE(deleted, false) = false
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found.';
+  END IF;
+
+  v_status := lower(COALESCE(v_res.status, 'pending'));
+  IF v_status NOT IN ('pending', 'confirmed', 'approved', 'to pay', 'preparing', 'to pickup', 'fitting', 'ready') THEN
+    RAISE EXCEPTION 'This reservation can no longer be rescheduled.';
+  END IF;
+
+  IF v_res.reschedule_requested_at IS NOT NULL THEN
+    RAISE EXCEPTION 'You already have a reschedule request waiting for review.';
+  END IF;
+
+  v_appointment := (_date::date + _appointment_time::time) AT TIME ZONE 'Asia/Manila';
+
+  PERFORM public.assert_bookable_slot(_date::date, v_appointment, _reservation_id);
+
+  UPDATE public.reservations
+  SET reschedule_requested_date    = _date::date,
+      reschedule_requested_at_time = v_appointment,
+      reschedule_requested_at      = now()
+  WHERE id = _reservation_id
+  RETURNING * INTO v_res;
+
+  RETURN to_jsonb(v_res);
+END;
+$function$;

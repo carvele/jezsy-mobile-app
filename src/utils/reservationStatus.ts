@@ -15,14 +15,18 @@
  * no filter tab here at all, so a customer whose item was sitting ready for
  * collection could only find it under "All".
  *
- * Statuses are compared case-insensitively: the create RPC writes 'Pending',
- * the dashboard writes title case, and older rows are inconsistent.
+ * Statuses are compared case-insensitively -- the dashboard writes title
+ * case, and older rows are inconsistent.
  */
 
-/** Every status either side writes, in lifecycle order. */
+/**
+ * Every status either side writes, in lifecycle order. 'Pending' and
+ * 'Request Approval' are retired (dropped from the reservations_status_check
+ * constraint in 20260911110000) -- no live writer produced either. The
+ * 'pending' bucket below stays as a defensive catch-all for null/unknown
+ * status, unrelated to whether these two specific values can occur.
+ */
 export const RESERVATION_STATUSES = [
-  'Pending',
-  'Request Approval',
   'Confirmed',
   'Approved',
   'To Pay',
@@ -45,8 +49,10 @@ export type StatusFilter = (typeof STATUS_FILTERS)[number];
  * 'ready' rather than dropped.
  */
 const BUCKET: Record<string, Exclude<StatusFilter, 'all'>> = {
+  // Not a status any row can carry anymore -- kept only as the target of the
+  // null/unknown-status fallback below, so a malformed row is never
+  // unreachable rather than crashing the screen.
   pending: 'pending',
-  'request approval': 'pending',
   confirmed: 'toPay',
   approved: 'toPay',
   'to pay': 'toPay',

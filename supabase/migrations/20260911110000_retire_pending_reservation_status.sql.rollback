@@ -1,0 +1,8 @@
+ALTER TABLE public.reservations DROP CONSTRAINT IF EXISTS reservations_status_check;
+ALTER TABLE public.reservations ADD CONSTRAINT reservations_status_check
+  CHECK (status = ANY (ARRAY[
+    'Pending', 'Request Approval', 'Confirmed', 'Approved', 'To Pay', 'Preparing',
+    'Ready', 'To Pickup', 'Fitting', 'Active', 'Completed', 'Cancelled'
+  ]))
+  NOT VALID;
+ALTER TABLE public.reservations VALIDATE CONSTRAINT reservations_status_check;
