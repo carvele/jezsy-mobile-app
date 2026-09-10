@@ -508,7 +508,7 @@ export default function ProductDetailScreen() {
               <View style={styles.sizeHeader}>
                 <View style={styles.sizeTitleRow}>
                   <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Size</Text>
-                  {!selectedSize && !recommendedSize && (
+                  {!selectedSize && !recommendedSize && !(hasSizeChart && user?.id) && (
                     <Text style={[Type.caption, { color: colors.warning, fontWeight: '600', marginLeft: Spacing.sm }]}>
                       — select one
                     </Text>
@@ -518,6 +518,20 @@ export default function ProductDetailScreen() {
                       <IconSymbol name="sparkles" size={11} color={colors.tint} />
                       <Text style={[styles.recText, { color: colors.tint }]}>Recommended: {recommendedSize.toUpperCase()}</Text>
                     </View>
+                  )}
+                  {/* Size recommendation needs saved body measurements, and there was
+                      previously no hint that this feature existed at all -- a user
+                      without measurements just saw nothing and assumed it was broken. */}
+                  {!recommendedSize && hasSizeChart && user?.id && (
+                    <TouchableOpacity
+                      onPress={() => router.push('/profile/measurements')}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add your measurements to get a size recommendation"
+                    >
+                      <Text style={[Type.caption, { color: colors.tint, fontWeight: '600', marginLeft: Spacing.sm, textDecorationLine: 'underline' }]}>
+                        Get your size
+                      </Text>
+                    </TouchableOpacity>
                   )}
                 </View>
 

@@ -247,8 +247,8 @@ export default function ReservationDetailScreen() {
 
   const getStatusColor = (status: string | null) => {
     switch (statusBucket(status)) {
-      case 'pending': return colors.warning;
       case 'toPay': return colors.notification;
+      case 'preparing': return colors.info;
       case 'ready': return colors.info;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
@@ -515,16 +515,6 @@ export default function ReservationDetailScreen() {
             </View>
           )}
         </View>
-
-        {reservationState === 'pending' && (
-          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Reservation needs attention</Text>
-            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              This reservation was created under the previous approval flow. Please contact
-              the boutique so it can be moved into the payment window.
-            </Text>
-          </View>
-        )}
 
         {paymentState === 'refund required' && (
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.warning }]}>

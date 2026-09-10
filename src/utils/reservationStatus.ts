@@ -22,9 +22,9 @@
 /**
  * Every status either side writes, in lifecycle order. 'Pending' and
  * 'Request Approval' are retired (dropped from the reservations_status_check
- * constraint in 20260911110000) -- no live writer produced either. The
- * 'pending' bucket below stays as a defensive catch-all for null/unknown
- * status, unrelated to whether these two specific values can occur.
+ * constraint in 20260911110000) -- no live writer produced either, and their
+ * filter tab and bucket were dropped along with them; a null/unknown status
+ * now falls into 'toPay' (see statusBucket) rather than a dead-end tab.
  */
 export const RESERVATION_STATUSES = [
   'Confirmed',
@@ -40,7 +40,7 @@ export const RESERVATION_STATUSES = [
 ] as const;
 
 /** Filter buckets, in the order they appear in the tab row. */
-export const STATUS_FILTERS = ['all', 'pending', 'toPay', 'preparing', 'ready', 'completed', 'cancelled'] as const;
+export const STATUS_FILTERS = ['all', 'toPay', 'preparing', 'ready', 'completed', 'cancelled'] as const;
 export type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 /**
@@ -49,10 +49,6 @@ export type StatusFilter = (typeof STATUS_FILTERS)[number];
  * 'ready' rather than dropped.
  */
 const BUCKET: Record<string, Exclude<StatusFilter, 'all'>> = {
-  // Not a status any row can carry anymore -- kept only as the target of the
-  // null/unknown-status fallback below, so a malformed row is never
-  // unreachable rather than crashing the screen.
-  pending: 'pending',
   confirmed: 'toPay',
   approved: 'toPay',
   'to pay': 'toPay',
@@ -65,14 +61,17 @@ const BUCKET: Record<string, Exclude<StatusFilter, 'all'>> = {
   cancelled: 'cancelled',
 };
 
-/** Unknown statuses fall into 'pending' so a reservation is never unreachable. */
+/**
+ * Unknown/null statuses fall into 'toPay' -- matching the admin dashboard's
+ * own null-status fallback -- so a malformed row is never unreachable
+ * instead of crashing the screen.
+ */
 export function statusBucket(status: string | null): Exclude<StatusFilter, 'all'> {
-  return BUCKET[(status || 'pending').trim().toLowerCase()] ?? 'pending';
+  return BUCKET[(status || '').trim().toLowerCase()] ?? 'toPay';
 }
 
 const FILTER_LABEL: Record<StatusFilter, string> = {
   all: 'All',
-  pending: 'Legacy',
   toPay: 'To pay',
   preparing: 'Preparing',
   ready: 'Ready',
@@ -83,7 +82,6 @@ const FILTER_LABEL: Record<StatusFilter, string> = {
 export const filterLabel = (filter: StatusFilter): string => FILTER_LABEL[filter];
 
 const BADGE_LABEL: Record<Exclude<StatusFilter, 'all'>, string> = {
-  pending: 'Needs attention',
   toPay: 'To pay',
   preparing: 'Preparing your item',
   ready: 'Ready to collect',
@@ -104,9 +102,8 @@ export const isAwaitingPayment = (status: string | null): boolean =>
 
 /**
  * Reschedulable states, matching what request_reschedule actually accepts
- * server-side (pending/request approval/confirmed/approved/to pay/preparing/
- * to pickup/fitting/ready) -- kept in sync so this never offers a button the
- * server then rejects.
+ * server-side (confirmed/approved/to pay/preparing/to pickup/fitting/ready)
+ * -- kept in sync so this never offers a button the server then rejects.
  */
 export const canReschedule = (status: string | null): boolean =>
-  ['pending', 'toPay', 'preparing', 'ready'].includes(statusBucket(status));
+  ['toPay', 'preparing', 'ready'].includes(statusBucket(status));
