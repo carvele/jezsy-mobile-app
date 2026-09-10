@@ -28,6 +28,17 @@ import {
 // picker offering slots the server then refused.
 const DEFAULT_SLOT_CAPACITY = 3;
 
+// A slot must be at least this far in the future to be bookable at all --
+// not just "not already past". Booking a slot minutes away used to be
+// allowed, and by the time checkout completed the resulting payment_due_at
+// (computed server-side as appointment - 1h, floored at 2h from now) could
+// already be behind "now": a reservation created dead-on-arrival, holding
+// stock until the expiry cron eventually cancelled it. This value is tied
+// to that server-side floor -- see create_reservation_multi and
+// resolve_reschedule, both of which reserve a 2h payment window plus a 30
+// min buffer before pickup, hence 150 minutes here.
+const MIN_LEAD_TIME_MINUTES = 150;
+
 interface TimeSlotPickerProps {
   selectedDate: Date;
   onSelectSlot: (time: string) => void;
@@ -177,15 +188,19 @@ export function TimeSlotPicker({
       end.setHours(closeH, closeM, 0, 0);
 
       const now = new Date();
+      const minBookableAt = new Date(now.getTime() + MIN_LEAD_TIME_MINUTES * 60000);
 
       while (current < end) {
         const timeValue = formatTimeValue(current);
         const timeLabel = formatTimeLabel(timeValue);
 
-        // Ensure it's not in the past
         const isPast = current < now;
+        // Distinct from isPast: this slot hasn't happened yet, but it's too
+        // close to "now" to leave a workable payment window once checkout
+        // finishes.
+        const isTooSoon = !isPast && current < minBookableAt;
         const count = bookedCounts[timeValue] || 0;
-        const isAvailable = !isPast && count < slotCapacity && !dayIsFull;
+        const isAvailable = !isPast && !isTooSoon && count < slotCapacity && !dayIsFull;
 
         generatedSlots.push({
           value: timeValue,
@@ -193,9 +208,11 @@ export function TimeSlotPicker({
           isAvailable,
           reason: isPast
             ? "Past time"
-            : !isAvailable
-              ? "Fully booked"
-              : undefined,
+            : isTooSoon
+              ? "Too soon to book"
+              : !isAvailable
+                ? "Fully booked"
+                : undefined,
         });
 
         // Add 30 mins
