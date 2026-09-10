@@ -170,7 +170,7 @@ export function TourCoachmarkBanner({
           <Text style={[styles.progressText, { color: colors.tint }]}>
             {stepNumber} of {totalSteps}
           </Text>
-          <TouchableOpacity onPress={onDismiss} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss tip">
+          <TouchableOpacity onPress={onDismiss} hitSlop={14} accessibilityRole="button" accessibilityLabel="Dismiss tip">
             <IconSymbol name="xmark" size={16} color={colors.icon} />
           </TouchableOpacity>
         </View>
@@ -231,8 +231,10 @@ const styles = StyleSheet.create({
   nextBtn: {
     alignSelf: 'flex-start',
     marginTop: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xxl,
     borderRadius: 10,
   },
   nextBtnText: {
