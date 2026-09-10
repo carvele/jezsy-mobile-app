@@ -1528,6 +1528,7 @@ export type Database = {
           image_url: string | null
           payment_due_at: string | null
           payment_method: string | null
+          payment_reminder_sent_at: string | null
           payment_status: string | null
           payment_type: string | null
           pickup_token: string | null
@@ -1575,6 +1576,7 @@ export type Database = {
           image_url?: string | null
           payment_due_at?: string | null
           payment_method?: string | null
+          payment_reminder_sent_at?: string | null
           payment_status?: string | null
           payment_type?: string | null
           pickup_token?: string | null
@@ -1622,6 +1624,7 @@ export type Database = {
           image_url?: string | null
           payment_due_at?: string | null
           payment_method?: string | null
+          payment_reminder_sent_at?: string | null
           payment_status?: string | null
           payment_type?: string | null
           pickup_token?: string | null
@@ -2288,7 +2291,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      check_unattended_reservations: { Args: never; Returns: undefined }
       complete_reservation_handover: {
         Args: { _method?: string; _reservation_id: string }
         Returns: Json
@@ -2714,6 +2716,7 @@ export type Database = {
         Args: { _body: string; _title: string; _user_id: string }
         Returns: string
       }
+      send_payment_deadline_reminders: { Args: never; Returns: number }
       set_customer_archive_state: {
         Args: {
           change_reason: string
