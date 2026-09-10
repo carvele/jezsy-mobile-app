@@ -213,14 +213,11 @@ export default function ProfileScreen() {
               accessibilityRole="button"
               accessibilityLabel="View completed reservations"
             >
-              <View style={{ position: 'relative' }}>
-                <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
-                {counts.completed > 0 && (
-                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
-                    <Text style={styles.statusBadgeText}>{counts.completed}</Text>
-                  </View>
-                )}
-              </View>
+              {/* No badge here: Completed is a terminal state with nothing to
+                  act on, unlike the other three tiles. A count badge would
+                  only ever grow and never clear, which reads as a stuck
+                  notification rather than something needing attention. */}
+              <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
               <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Completed</Text>
             </TouchableOpacity>
           </View>
