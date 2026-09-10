@@ -16,6 +16,7 @@ import {
   statusBucket,
   statusLabel,
   filterLabel,
+  formatPaymentDeadline,
 } from '@/src/utils/reservationStatus';
 import {
   getMyReservationsPage,
@@ -119,23 +120,37 @@ export default function ReservationsScreen() {
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {
     const dateStr = item.date ? formatPHDate(item.date) : 'N/A';
-    
+    // Only the payment window has a deadline worth flagging -- once it's
+    // paid or past that stage, payment_due_at is a stale leftover value.
+    const deadline = statusBucket(item.status) === 'toPay'
+      ? formatPaymentDeadline(item.payment_due_at)
+      : null;
+
     return (
       <TouchableOpacity
         style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         accessible={true}
         accessibilityRole="button"
-        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${statusLabel(item.status)}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
+        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${statusLabel(item.status)}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
         accessibilityHint="View reservation details"
         onPress={() => router.push(`/reservations/${item.id}` as any)}
       >
         <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
           <Text style={[styles.reservationId, { color: colors.secondaryText }]}>ID: {item.display_id || item.id.substring(0,8)}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20', borderColor: getStatusColor(item.status) }]}>
-            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{statusLabel(item.status)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
+            {deadline && (
+              <View style={[styles.deadlineBadge, { borderColor: deadline.urgent ? colors.error : colors.warning }]}>
+                <Text style={[styles.deadlineText, { color: deadline.urgent ? colors.error : colors.warning }]}>
+                  {deadline.label}
+                </Text>
+              </View>
+            )}
+            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20', borderColor: getStatusColor(item.status) }]}>
+              <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{statusLabel(item.status)}</Text>
+            </View>
           </View>
         </View>
-        
+
         <View style={styles.cardBody}>
           <Image
             source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
@@ -406,6 +421,15 @@ const styles = StyleSheet.create({
     // letterSpacing stops the capitals crowding.
     ...Type.label,
     textTransform: 'uppercase',
+  },
+  deadlineBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  deadlineText: {
+    ...Type.label,
   },
   cardBody: {
     flexDirection: 'row',
