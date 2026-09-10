@@ -1,0 +1,76 @@
+CREATE OR REPLACE FUNCTION public.create_admin_reservation(_customer_id uuid, _product_id uuid, _size text, _color text, _appointment_time timestamp with time zone, _payment_status text DEFAULT 'Pending'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_customer_name text;
+  v_product record;
+  v_reservation public.reservations%rowtype;
+  v_display_id text;
+BEGIN
+  IF v_actor IS NULL OR NOT public.is_admin_or_owner() THEN
+    RAISE EXCEPTION 'Owner or administrator access required.';
+  END IF;
+  IF _appointment_time IS NULL OR _appointment_time <= now() THEN
+    RAISE EXCEPTION 'A future appointment time is required.';
+  END IF;
+  IF lower(coalesce(_payment_status, '')) NOT IN ('pending', 'paid') THEN
+    RAISE EXCEPTION 'Payment status must be Pending or Paid.';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), email, 'Customer')
+  INTO v_customer_name
+  FROM public.profiles
+  WHERE id = _customer_id AND coalesce(deleted, false) = false AND coalesce(is_blocked, false) = false;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Select an active customer.'; END IF;
+
+  SELECT id, name, image_url,
+    CASE WHEN coalesce(on_sale, false) AND sale_price > 0 THEN sale_price ELSE price END::numeric AS price
+  INTO v_product
+  FROM public.products
+  WHERE id = _product_id AND coalesce(deleted, false) = false
+  FOR SHARE;
+  IF NOT FOUND OR coalesce(v_product.price, 0) <= 0 THEN
+    RAISE EXCEPTION 'Select an available product with a valid price.';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.inventory WHERE product_doc_id = _product_id AND deleted = false)
+     AND NOT EXISTS (
+       SELECT 1 FROM public.inventory
+       WHERE product_doc_id = _product_id
+         AND size IS NOT DISTINCT FROM nullif(_size, '')
+         AND color IS NOT DISTINCT FROM coalesce(_color, '')
+         AND deleted = false
+     ) THEN
+    RAISE EXCEPTION 'The selected product variant does not exist.';
+  END IF;
+
+  v_display_id := 'RES-' || upper(to_hex(floor(extract(epoch from clock_timestamp()) * 1000)::bigint))
+                  || '-' || lpad(floor(random() * 1000)::text, 3, '0');
+
+  INSERT INTO public.reservations (
+    display_id, customer_id, customer_name, product_id, product_name, image_url,
+    size, color, quantity, rental_price, deposit, date, appointment_time,
+    status, payment_status, payment_type, countdown, assigned_staff_id,
+    purchase_mode, sales_channel
+  ) VALUES (
+    v_display_id, _customer_id, v_customer_name, _product_id, v_product.name, v_product.image_url,
+    nullif(_size, ''), coalesce(_color, ''), 1, round(v_product.price, 2),
+    round(v_product.price * 0.5, 2), (_appointment_time AT TIME ZONE 'Asia/Manila')::date,
+    _appointment_time, 'Pending', initcap(lower(_payment_status)), 'Deposit', true, NULL,
+    'reservation', 'admin_assisted'
+  ) RETURNING * INTO v_reservation;
+
+  INSERT INTO public.reservation_items (
+    reservation_id, product_id, product_name, image_url, size, color, quantity, unit_price
+  ) VALUES (
+    v_reservation.id, _product_id, v_product.name, v_product.image_url,
+    nullif(_size, ''), coalesce(_color, ''), 1, v_product.price
+  );
+
+  RETURN to_jsonb(v_reservation);
+END;
+$function$;
