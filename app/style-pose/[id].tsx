@@ -36,6 +36,7 @@ interface LinkedProduct {
   rental_price: number | null;
   price: number | null;
   category: string | null;
+  model_3d_url: string | null;
 }
 
 export default function StylePoseDetailScreen() {
@@ -91,16 +92,27 @@ export default function StylePoseDetailScreen() {
     }
   };
 
+  // The product ar-tryon actually opens matters: routing on products.length
+  // alone (the old check) let "Try This Look in AR" show for every look with
+  // any linked product, but most products have no real model_3d_url --
+  // ar-tryon then silently falls back to a generic demo astronaut model, so
+  // the button promised the look's garment and delivered an unrelated
+  // placeholder. Same model_3d_url gate product/[id].tsx's own AR button
+  // already uses, applied here to whichever linked product actually has one
+  // rather than always products[0].
+  const arProduct = products.find((p) => !!p.model_3d_url);
+
   const handleTryInAR = () => {
     // No fallback product id: 'P-001' isn't a real row (products.id is a
     // uuid), and ar-tryon's non-uuid lookup path queries sku/display_id --
     // neither exists on products (sku is on inventory, display_id is on
-    // reservations) -- so a look with no linked products always dead-ended
-    // on "Product not found." The button below is hidden in that case
-    // instead of routing somewhere that can't resolve.
-    if (!pose || products.length === 0) return;
+    // reservations) -- so a look with no AR-eligible product always
+    // dead-ended on "Product not found" or showed the wrong garment. The
+    // button below is hidden in that case instead of routing somewhere
+    // that can't resolve or misrepresents the look.
+    if (!pose || !arProduct) return;
     router.push({
-      pathname: `/ar-tryon/${products[0].id}` as any,
+      pathname: `/ar-tryon/${arProduct.id}` as any,
       params: { stylePoseId: pose.id },
     });
   };
@@ -233,7 +245,7 @@ export default function StylePoseDetailScreen() {
       </ScrollView>
 
       {/* Sticky Bottom CTA Bar */}
-      {products.length > 0 && (
+      {arProduct && (
         <View style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TouchableOpacity
             style={[
