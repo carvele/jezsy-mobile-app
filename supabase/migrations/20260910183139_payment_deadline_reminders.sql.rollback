@@ -1,0 +1,15 @@
+DO $block$
+DECLARE
+  v_job_id bigint;
+BEGIN
+  SELECT jobid INTO v_job_id FROM cron.job WHERE jobname = 'send-payment-deadline-reminders';
+  IF v_job_id IS NOT NULL THEN
+    PERFORM cron.unschedule(v_job_id);
+  END IF;
+END;
+$block$;
+
+DROP FUNCTION IF EXISTS public.send_payment_deadline_reminders();
+
+ALTER TABLE public.reservations
+  DROP COLUMN IF EXISTS payment_reminder_sent_at;
