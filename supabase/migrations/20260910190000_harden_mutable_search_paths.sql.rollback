@@ -1,0 +1,37 @@
+-- ============================================================================
+-- Rollback: 20260910190000_harden_mutable_search_paths.sql.rollback
+-- WARNING: Security regression: use only to recover from a demonstrated
+-- production incompatibility while a corrective forward migration is prepared.
+-- ============================================================================
+
+-- Reset search_path on functions
+ALTER FUNCTION public.get_review_stats(uuid) RESET search_path;
+ALTER FUNCTION public.get_trending_products(integer) RESET search_path;
+ALTER FUNCTION public.search_catalog(text, text[], text[], text[], text[], text[], text[], boolean, boolean, boolean, numeric, numeric, text) RESET search_path;
+ALTER FUNCTION public.search_catalog_fuzzy(text, integer) RESET search_path;
+ALTER FUNCTION public.notify_admin_on_reservation() RESET search_path;
+ALTER FUNCTION public.seed_inventory_for_new_product() RESET search_path;
+ALTER FUNCTION public.set_connections_updated_at() RESET search_path;
+ALTER FUNCTION public.set_direct_chats_updated_at() RESET search_path;
+ALTER FUNCTION public.sync_product_category_id() RESET search_path;
+ALTER FUNCTION public.sync_profile_full_name() RESET search_path;
+
+-- Recreate obsolete min(uuid) safety net if needed
+CREATE OR REPLACE FUNCTION public.min_uuid_step(uuid, uuid)
+RETURNS uuid
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN $1 IS NULL THEN $2
+    WHEN $2 IS NULL THEN $1
+    WHEN $1 < $2 THEN $1
+    ELSE $2
+  END;
+$$;
+
+DROP AGGREGATE IF EXISTS public.min(uuid);
+CREATE AGGREGATE public.min(uuid) (
+  sfunc = public.min_uuid_step,
+  stype = uuid
+);
