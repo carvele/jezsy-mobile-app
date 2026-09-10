@@ -2336,6 +2336,18 @@ export type Database = {
         }
         Returns: Json
       }
+      create_reservation_multi_idempotent: {
+        Args: {
+          _appointment_time: string
+          _customer_id?: string
+          _date: string
+          _idempotency_key: string
+          _items: Json
+          _payment_option?: string
+          _receipt_path?: string
+        }
+        Returns: Json
+      }
       dispatch_pending_push: { Args: never; Returns: number }
       expire_all_stale_reservations: { Args: never; Returns: number }
       expire_stale_payments: { Args: never; Returns: number }
