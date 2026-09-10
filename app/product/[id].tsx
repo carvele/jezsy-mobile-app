@@ -399,7 +399,7 @@ export default function ProductDetailScreen() {
 
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{product.name}</Text>
 
-                                        {product.rating && product.review_count ? (
+          {product.rating && product.review_count ? (
             <View style={styles.ratingRow}>
               <IconSymbol name="star.fill" size={13} color={colors.tint} />
               <Text style={[styles.ratingValue, { color: colors.text }]}>{product.rating.toFixed(1)}</Text>
@@ -433,69 +433,7 @@ export default function ProductDetailScreen() {
               <Text style={{ ...Type.caption, color: colors.secondaryText }}>
                 {lovedByUsers.length > 0 
                   ? `${lovedByUsers[0].first_name}${lovedByCount > 1 ? ` and ${lovedByCount - 1} other${lovedByCount > 2 ? 's' : ''}` : ''} saved this`
-                  : `${lovedByCount} people saved this`}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Social Proof: Loved By */}
-          {lovedByCount > 0 && (
-            <TouchableOpacity 
-              style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.sm }}
-              onPress={() => {
-                if (lovedByUsers.length > 0) {
-                  const firstUser = lovedByUsers[0];
-                  router.push(`/user/@${firstUser.username}` as any);
-                }
-              }}
-              disabled={lovedByUsers.length === 0}
-            >
-              <View style={{ flexDirection: 'row', marginRight: Spacing.sm }}>
-                {lovedByUsers.map((u, i) => (
-                  <View key={u.id} style={{
-                    width: 24, height: 24, borderRadius: 12, backgroundColor: colors.border,
-                    justifyContent: 'center', alignItems: 'center',
-                    marginLeft: i > 0 ? -8 : 0, borderWidth: 2, borderColor: colors.background
-                  }}>
-                    <IconSymbol name="person.fill" size={14} color={colors.secondaryText} />
-                  </View>
-                ))}
-              </View>
-              <Text style={{ ...Type.caption, color: colors.secondaryText }}>
-                {lovedByUsers.length > 0 
-                  ? `${lovedByUsers[0].first_name}${lovedByCount > 1 ? ` and ${lovedByCount - 1} other${lovedByCount > 2 ? 's' : ''}` : ''} saved this`
-                  : `${lovedByCount} people saved this`}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Social Proof: Loved By */}
-          {lovedByCount > 0 && (
-            <TouchableOpacity 
-              style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.sm }}
-              onPress={() => {
-                if (lovedByUsers.length > 0) {
-                  const firstUser = lovedByUsers[0];
-                  router.push(`/user/@${firstUser.username}` as any);
-                }
-              }}
-              disabled={lovedByUsers.length === 0}
-            >
-              <View style={{ flexDirection: 'row', marginRight: Spacing.sm }}>
-                {lovedByUsers.map((u, i) => (
-                  <View key={u.id} style={{
-                    width: 24, height: 24, borderRadius: 12, backgroundColor: colors.border,
-                    justifyContent: 'center', alignItems: 'center',
-                    marginLeft: i > 0 ? -8 : 0, borderWidth: 2, borderColor: colors.background
-                  }}>
-                    <IconSymbol name="person.fill" size={14} color={colors.secondaryText} />
-                  </View>
-                ))}
-              </View>
-              <Text style={{ ...Type.caption, color: colors.secondaryText }}>
-                {lovedByUsers.length > 0 
-                  ? `${lovedByUsers[0].first_name}${lovedByCount > 1 ? ` and ${lovedByCount - 1} other${lovedByCount > 2 ? 's' : ''}` : ''} saved this`
-                  : `${lovedByCount} people saved this`}
+                  : `${lovedByCount} ${lovedByCount === 1 ? 'person' : 'people'} saved this`}
               </Text>
             </TouchableOpacity>
           )}
