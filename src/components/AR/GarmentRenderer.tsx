@@ -631,13 +631,26 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               const shoulderRight = skeletonBones[resolveBindBoneName('RightShoulder')];
 
               garmentModel.updateMatrixWorld(true);
-              if (armLeft && armRight) {
+              // Calibrated metadata now takes priority over live bone-position heuristics.
+              // Confirmed live on the Tailored Blazer: the LeftArm/RightArm bone midpoint
+              // (a guess that the arm socket sits at the anatomical collar anchor) measured
+              // y=1.3997, while the admin dashboard's own calibration tool -- which analyzes
+              // the actual mesh geometry, not just bone positions, and requires passing an
+              // automated quality check -- independently computed y=1.3044 for this exact
+              // GLB. The bone-derived guess rendered the garment collar down near the
+              // wearer's stomach; the calibrated value is the one that's actually verified.
+              // Bone-position derivation remains as a fallback for garments that were never
+              // run through calibration at all (no anatomicalAnchorOffset in metadata).
+              if (${metadata && metadata.anatomicalAnchorOffset ? 'true' : 'false'}) {
+                anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? safeStringify(metadata.anatomicalAnchorOffset) : 'null'};
+                showDebug('Anatomical anchor: calibrated metadata: ' + JSON.stringify(anchorOffset));
+              } else if (armLeft && armRight) {
                 const pL = new THREE.Vector3();
                 const pR = new THREE.Vector3();
                 armLeft.getWorldPosition(pL);
                 armRight.getWorldPosition(pR);
                 anchorOffset = new THREE.Vector3().addVectors(pL, pR).multiplyScalar(0.5);
-                showDebug('Anatomical anchor: derived from LeftArm/RightArm midpoint: ' + JSON.stringify({
+                showDebug('Anatomical anchor: derived from LeftArm/RightArm midpoint (uncalibrated fallback): ' + JSON.stringify({
                   x: +anchorOffset.x.toFixed(4),
                   y: +anchorOffset.y.toFixed(4),
                   z: +anchorOffset.z.toFixed(4)
@@ -648,14 +661,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 shoulderLeft.getWorldPosition(pL);
                 shoulderRight.getWorldPosition(pR);
                 anchorOffset = new THREE.Vector3().addVectors(pL, pR).multiplyScalar(0.5);
-                showDebug('Anatomical anchor: derived from LeftShoulder/RightShoulder midpoint: ' + JSON.stringify({
+                showDebug('Anatomical anchor: derived from LeftShoulder/RightShoulder midpoint (uncalibrated fallback): ' + JSON.stringify({
                   x: +anchorOffset.x.toFixed(4),
                   y: +anchorOffset.y.toFixed(4),
                   z: +anchorOffset.z.toFixed(4)
                 }));
-              } else if (${metadata && metadata.anatomicalAnchorOffset ? 'true' : 'false'}) {
-                anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? safeStringify(metadata.anatomicalAnchorOffset) : 'null'};
-                showDebug('Anatomical anchor: metadata fallback: ' + JSON.stringify(anchorOffset));
               }
 
               if (anchorOffset) {
