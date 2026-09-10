@@ -1,7 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, Platform, View, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,6 +8,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMessages } from '@/src/context/MessagesContext';
 import { useAuth } from '@/src/context/AuthContext';
+import { useFloatingTabBarMetrics } from '@/src/hooks/useFloatingTabBarMetrics';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -17,20 +17,16 @@ export default function TabLayout() {
   const { unreadCount } = useMessages();
   const { isLoading } = useAuth();
 
-  const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  const { barBottom, barHeight, isCompact } = useFloatingTabBarMetrics();
 
   // Responsive horizontal constraints:
   // - Wide screens (tablet, desktop web > 540px): constrain & center the pill to max 500px.
   // - Compact screens (< 360px): use 10px margins for tab breathing room.
   // - Standard mobile: 16px margins.
   const isWide = windowWidth > 540;
-  const isCompact = windowWidth < 360;
   const horizontalMargin = isWide ? Math.max(16, (windowWidth - 500) / 2) : isCompact ? 10 : 16;
 
-  // The bar floats, so its offset clears the system gesture pill or 3-button nav.
-  const barBottom = Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 10) + 8;
-  const barHeight = isCompact ? 64 : 68;
   const iconSize = isCompact ? 20 : 22;
 
   const screenOptions = React.useMemo(() => ({
