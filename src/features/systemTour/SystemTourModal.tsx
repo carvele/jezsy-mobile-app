@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   StyleSheet,
@@ -12,119 +12,24 @@ import { useRouter } from 'expo-router';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { PrimaryButton } from './PrimaryButton';
-import { markHintSeen } from '@/src/utils/firstUseHints';
+import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { useAuth } from '@/src/context/AuthContext';
+import { TOUR_MODULE_IDS, TOUR_MODULES, TourModuleId } from './tourConfig';
+import {
+  dismissSystemTour,
+  getTourProgress,
+  markTourModuleStarted,
+  neverShowSystemTourAgain,
+  TourProgressSnapshot,
+} from './tourProgress';
+import { reportTourAnalyticsEvent } from './tourAnalytics';
 
 interface SystemTourModalProps {
   visible: boolean;
   onClose: () => void;
+  /** Profile's replay entry point: shows the hub without touching completion/dismissal state. */
   isReplay?: boolean;
 }
-
-type PrimerId = 'discover' | 'ar' | 'wardrobe' | 'concierge';
-
-interface PrimerDefinition {
-  id: PrimerId;
-  icon: string;
-  title: string;
-  subtitle: string;
-  highlights: {
-    icon: string;
-    title: string;
-    description: string;
-  }[];
-  actionRoute: string;
-  actionLabel: string;
-  hintKey: string;
-}
-
-const PRIMERS: Record<PrimerId, PrimerDefinition> = {
-  discover: {
-    id: 'discover',
-    icon: 'magnifyingglass',
-    title: 'Discover Styles',
-    subtitle: 'Explore our curated catalog of luxury fashion.',
-    highlights: [
-      {
-        icon: 'house.fill',
-        title: 'Curated Collections',
-        description: 'Explore trending haute couture, premium rentals, and seasonal edits.',
-      },
-      {
-        icon: 'slider.horizontal.3',
-        title: 'Smart Filters',
-        description: 'Find garments tailored to your measurements and palette.',
-      },
-    ],
-    actionRoute: '/(tabs)/explore',
-    actionLabel: 'Browse Catalog',
-    hintKey: 'discover_primer:v1',
-  },
-  ar: {
-    id: 'ar',
-    icon: 'cube.fill',
-    title: 'AR Fitting Room',
-    subtitle: 'Experience how luxury garments look and fit before reserving.',
-    highlights: [
-      {
-        icon: 'camera.fill',
-        title: 'Real-Time Body Fitting',
-        description: 'Use your camera for live pose tracking and 3D simulations.',
-      },
-      {
-        icon: 'figure.stand',
-        title: 'Calibrated Body Scan',
-        description: 'Get tailored sizing recommendations based on your unique shape.',
-      },
-    ],
-    actionRoute: '/(tabs)/explore',
-    actionLabel: 'Browse Catalog',
-    hintKey: 'ar_primer:v1',
-  },
-  wardrobe: {
-    id: 'wardrobe',
-    icon: 'tshirt',
-    title: 'Digital Wardrobe',
-    subtitle: 'Turn your physical closet into an intelligent digital wardrobe powered by AI.',
-    highlights: [
-      {
-        icon: 'plus',
-        title: 'Auto Background Removal',
-        description: 'Snap photos of your clothes; AI crops and catalogs each item instantly.',
-      },
-      {
-        icon: 'square.grid.2x2.fill',
-        title: 'Outfit Builder',
-        description: 'Generate daily outfit pairings from your wardrobe and wishlist.',
-      },
-    ],
-    actionRoute: '/(tabs)/wardrobe',
-    actionLabel: 'Go to Digital Wardrobe',
-    hintKey: 'wardrobe_primer:v1',
-  },
-  concierge: {
-    id: 'concierge',
-    icon: 'sparkles',
-    title: 'Concierge & Support',
-    subtitle: 'Get help with reservations, styling, and returns.',
-    highlights: [
-      {
-        icon: 'message.fill',
-        title: 'Direct Chat',
-        description: 'Chat directly with our luxury styling and support team.',
-      },
-      {
-        icon: 'bell.fill',
-        title: 'Instant Updates',
-        description: 'Receive notifications about your reservations and wishlist items.',
-      },
-    ],
-    actionRoute: '/(tabs)/messages',
-    actionLabel: 'Message Concierge',
-    hintKey: 'concierge_primer:v1',
-  }
-};
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -135,54 +40,61 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
   const router = useRouter();
   const { user } = useAuth();
 
-  const [activePrimer, setActivePrimer] = useState<PrimerId | null>(null);
+  const [activeModule, setActiveModule] = useState<TourModuleId | null>(null);
+  const [progress, setProgress] = useState<TourProgressSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!visible || !user) return;
+    let isCancelled = false;
+    getTourProgress(user.id).then((snapshot) => {
+      if (!isCancelled) setProgress(snapshot);
+    });
+    reportTourAnalyticsEvent(isReplay ? 'tour_replayed' : 'tour_introduced', {
+      version: 0,
+      source: isReplay ? 'profile_replay' : 'auto',
+    });
+    return () => {
+      isCancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, user]);
 
   const handleSkipForNow = async () => {
     if (!isReplay && user) {
-      await markHintSeen(user.id, 'welcome:v1');
+      await dismissSystemTour(user.id);
     }
     onClose();
   };
 
   const handleDontShowAgain = async () => {
     if (!isReplay && user) {
-      await markHintSeen(user.id, 'welcome:v1');
+      await neverShowSystemTourAgain(user.id);
     }
     onClose();
   };
 
-  const selectPath = async (primerId: PrimerId) => {
+  const selectPath = async (moduleId: TourModuleId) => {
     if (!isReplay && user) {
-      await markHintSeen(user.id, 'welcome:v1');
+      await markTourModuleStarted(user.id, moduleId);
     }
-    // If they choose discover, it skips the primer and routes straight to catalog.
-    if (primerId === 'discover') {
-      onClose();
-      router.push('/(tabs)/explore' as any);
-      return;
-    }
-    setActivePrimer(primerId);
+    setActiveModule(moduleId);
   };
 
-  const handlePrimerAction = async () => {
-    if (!activePrimer) return;
-    const primer = PRIMERS[activePrimer];
-    
-    if (!isReplay && user) {
-      await markHintSeen(user.id, primer.hintKey);
-    }
-    
+  const handleModuleAction = async () => {
+    if (!activeModule) return;
+    const moduleDef = TOUR_MODULES[activeModule];
+
     onClose();
     // small delay to allow modal to close before navigating
     setTimeout(() => {
-      router.push(primer.actionRoute as any);
+      router.push(moduleDef.actionRoute as any);
       // Reset state for next time modal opens
-      setActivePrimer(null);
+      setActiveModule(null);
     }, 100);
   };
-  
+
   const handleBackToMenu = () => {
-    setActivePrimer(null);
+    setActiveModule(null);
   };
 
   if (!visible) return null;
@@ -204,8 +116,8 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
             },
           ]}
         >
-          {activePrimer === null ? (
-            // Welcome & Intent Screen
+          {activeModule === null ? (
+            // Welcome Hub: choose a learning path
             <>
               <View style={styles.headerBar}>
                 <Text style={[styles.badgeText, { color: colors.tint }]}>JEZSY DISCOVERY</Text>
@@ -234,56 +146,40 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 <Text style={[styles.title, { color: colors.text, marginTop: Spacing.md }]}>Welcome to JezSy</Text>
                 <Text style={[styles.subtitle, { color: colors.secondaryText }]}>Your personal luxury fashion destination.</Text>
-                
-                <Text style={[styles.questionText, { color: colors.text }]}>What would you like to do first?</Text>
+
+                <Text style={[styles.questionText, { color: colors.text }]}>What would you like to learn first?</Text>
 
                 <View style={styles.optionsContainer}>
-                  <TouchableOpacity 
-                    style={[styles.optionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
-                    onPress={() => selectPath('discover')}
-                  >
-                    <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
-                      <IconSymbol name="magnifyingglass" size={20} color={colors.tint} />
-                    </View>
-                    <Text style={[styles.optionText, { color: colors.text }]}>Discover styles</Text>
-                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.optionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
-                    onPress={() => selectPath('ar')}
-                  >
-                    <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
-                      <IconSymbol name="cube.fill" size={20} color={colors.tint} />
-                    </View>
-                    <Text style={[styles.optionText, { color: colors.text }]}>Try something on</Text>
-                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.optionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
-                    onPress={() => selectPath('wardrobe')}
-                  >
-                    <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
-                      <IconSymbol name="tshirt" size={20} color={colors.tint} />
-                    </View>
-                    <Text style={[styles.optionText, { color: colors.text }]}>Explore my wardrobe</Text>
-                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity 
-                    style={[styles.optionCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}
-                    onPress={() => selectPath('concierge')}
-                  >
-                    <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
-                      <IconSymbol name="message.fill" size={20} color={colors.tint} />
-                    </View>
-                    <Text style={[styles.optionText, { color: colors.text }]}>Get help</Text>
-                    <IconSymbol name="chevron.right" size={16} color={colors.icon} />
-                  </TouchableOpacity>
+                  {TOUR_MODULE_IDS.map((id) => {
+                    const moduleDef = TOUR_MODULES[id];
+                    const completed = !isReplay && progress?.[id]?.completed;
+                    return (
+                      <TouchableOpacity
+                        key={id}
+                        style={[
+                          styles.optionCard,
+                          {
+                            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
+                          },
+                        ]}
+                        onPress={() => selectPath(id)}
+                      >
+                        <View style={[styles.optionIcon, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
+                          <IconSymbol name={moduleDef.icon as any} size={20} color={colors.tint} />
+                        </View>
+                        <Text style={[styles.optionText, { color: colors.text }]}>{moduleDef.title}</Text>
+                        <IconSymbol
+                          name={completed ? 'checkmark.circle.fill' : 'chevron.right'}
+                          size={16}
+                          color={completed ? colors.tint : colors.icon}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </ScrollView>
-              
+
               {!isReplay && (
                 <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
                   <TouchableOpacity
@@ -296,7 +192,8 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
               )}
             </>
           ) : (
-            // Path-Specific Primer Screen
+            // Path primer: explains why the feature matters, then hands off
+            // to contextual coachmarks on the real screen (see TourCoachmark).
             <>
               <View style={styles.headerBar}>
                 <TouchableOpacity onPress={handleBackToMenu} style={styles.backBtn}>
@@ -310,14 +207,14 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
 
               <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                 <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(201,169,110,0.15)' : 'rgba(138,109,59,0.1)' }]}>
-                  <IconSymbol name={PRIMERS[activePrimer].icon as any} size={32} color={colors.tint} />
+                  <IconSymbol name={TOUR_MODULES[activeModule].icon as any} size={32} color={colors.tint} />
                 </View>
 
-                <Text style={[styles.title, { color: colors.text }]}>{PRIMERS[activePrimer].title}</Text>
-                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>{PRIMERS[activePrimer].subtitle}</Text>
+                <Text style={[styles.title, { color: colors.text }]}>{TOUR_MODULES[activeModule].title}</Text>
+                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>{TOUR_MODULES[activeModule].subtitle}</Text>
 
                 <View style={styles.highlightsContainer}>
-                  {PRIMERS[activePrimer].highlights.map((h, i) => (
+                  {TOUR_MODULES[activeModule].highlights.map((h, i) => (
                     <View
                       key={i}
                       style={[
@@ -340,12 +237,16 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
                     </View>
                   ))}
                 </View>
+
+                <Text style={[styles.hintText, { color: colors.secondaryText }]}>
+                  We&apos;ll show quick tips right on the screen as you go.
+                </Text>
               </ScrollView>
 
               <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
                 <PrimaryButton
-                  label={PRIMERS[activePrimer].actionLabel}
-                  onPress={handlePrimerAction}
+                  label={TOUR_MODULES[activeModule].actionLabel}
+                  onPress={handleModuleAction}
                   dark={isDark}
                 />
               </View>
@@ -495,6 +396,12 @@ const styles = StyleSheet.create({
   highlightDescription: {
     fontSize: 12,
     lineHeight: 16,
+  },
+  hintText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: Spacing.md,
   },
   footer: {
     paddingHorizontal: Spacing.xl,

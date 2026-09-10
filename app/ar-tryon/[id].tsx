@@ -39,6 +39,8 @@ import { WebPoseTracker } from '@/src/utils/webPoseDetection';
 import { PoseLandmarkFilter } from '@/src/utils/oneEuroFilter';
 import type { PoseFrame } from '@/src/types/pose';
 import { GarmentRenderer, type GarmentRendererRef } from '@/src/components/AR/GarmentRenderer';
+import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
+import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 type Product = Database['public']['Tables']['products']['Row'];
 
 interface WebCameraFeedProps {
@@ -332,6 +334,12 @@ export default function ARTryOnScreen() {
   const [replay, setReplay] = useState(false);
   const replayActive = experimentEnabled && replay;
   const LiveRenderer = experimentEnabled && experimentRenderer === 'filament' ? FilamentExperimentRenderer : GarmentRenderer;
+  const tourCoachmark = useTourCoachmark('ar-tryon');
+
+  useEffect(() => {
+    emitTourEvent('ar_tryon_screen');
+  }, []);
+
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('front');
   // Phase 3: an explicit format so fieldOfView/videoWidth/videoHeight below are
@@ -1300,6 +1308,16 @@ export default function ARTryOnScreen() {
         message="Preview clothing on your body. Face the camera in good light with your shoulders and hips visible. Fit guidance is approximate, not a fit guarantee."
         onAcknowledge={handleAcknowledgeHint}
       />
+      {tourCoachmark.step && (
+        <TourCoachmarkBanner
+          title={tourCoachmark.step.title}
+          description={tourCoachmark.step.description}
+          stepNumber={tourCoachmark.stepNumber}
+          totalSteps={tourCoachmark.totalSteps}
+          onNext={tourCoachmark.step.completion.type === 'next' ? tourCoachmark.advance : undefined}
+          onDismiss={tourCoachmark.dismiss}
+        />
+      )}
     </SafeAreaView>
   );
 }

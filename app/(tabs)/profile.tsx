@@ -14,7 +14,7 @@ import { StreakBadge } from '@/src/components/StreakBadge';
 import { useToast } from '@/src/context/ToastContext';
 import { statusBucket } from '@/src/utils/reservationStatus';
 import { getMyUnratedItems } from '@/src/services/reservationService';
-import { SystemTourModal } from '@/src/components/SystemTourModal';
+import { SystemTourModal } from '@/src/features/systemTour/SystemTourModal';
 
 export default function ProfileScreen() {
   const { showToast } = useToast();
