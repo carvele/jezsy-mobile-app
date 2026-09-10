@@ -57,26 +57,31 @@ serve(async (req) => {
 
     if (!eventId || !eventType) return json({ received: true, ignored: "no event id or type" });
 
-    // A Checkout Session event carries the session on the resource; a payment
-    // event carries the payment, whose session id is on its attributes.
+    // A Checkout Session event carries the session on the resource. A Payment
+    // event -- what PayMongo actually sends for payment.paid -- carries the
+    // Payment resource instead, which has no checkout_session_id field at
+    // all; its only usable back-reference is payment_intent_id.
     const sessionId: string | undefined =
       resource?.type === "checkout_session"
         ? resource?.id
         : resource?.attributes?.checkout_session_id ?? resource?.attributes?.data?.id;
+    const paymentIntentId: string | undefined =
+      resource?.type === "payment" ? resource?.attributes?.payment_intent_id : undefined;
 
-    if (!sessionId) return json({ received: true, ignored: "no session id" });
+    if (!sessionId && !paymentIntentId) return json({ received: true, ignored: "no session id" });
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    const { data: payment, error: paymentLookupError } = await admin
+    const lookup = admin
       .from("payments")
       .select("id, reservation_id, status, last_event_id")
-      .eq("provider", "paymongo")
-      .eq("provider_ref", sessionId)
-      .maybeSingle();
+      .eq("provider", "paymongo");
+    const { data: payment, error: paymentLookupError } = await (
+      sessionId ? lookup.eq("provider_ref", sessionId) : lookup.eq("provider_payment_intent_id", paymentIntentId)
+    ).maybeSingle();
     if (paymentLookupError) throw paymentLookupError;
 
     // Retrying cannot repair an unknown mapping, but silently discarding a
@@ -84,7 +89,7 @@ serve(async (req) => {
     if (!payment) {
       const { error: alertError } = await admin.from("admin_notifications").insert({
         title: "Unknown PayMongo session",
-        message: `Webhook ${eventId} (${eventType}) referenced unmapped session ${sessionId}.`,
+        message: `Webhook ${eventId} (${eventType}) referenced unmapped session ${sessionId ?? paymentIntentId}.`,
         type: "Payment",
       });
       if (alertError) throw alertError;

@@ -987,6 +987,7 @@ export type Database = {
           method: string | null
           provider: string
           provider_payment_id: string | null
+          provider_payment_intent_id: string | null
           provider_ref: string | null
           refund_required_at: string | null
           requires_refund: boolean
@@ -1006,6 +1007,7 @@ export type Database = {
           method?: string | null
           provider?: string
           provider_payment_id?: string | null
+          provider_payment_intent_id?: string | null
           provider_ref?: string | null
           refund_required_at?: string | null
           requires_refund?: boolean
@@ -1025,6 +1027,7 @@ export type Database = {
           method?: string | null
           provider?: string
           provider_payment_id?: string | null
+          provider_payment_intent_id?: string | null
           provider_ref?: string | null
           refund_required_at?: string | null
           requires_refund?: boolean
