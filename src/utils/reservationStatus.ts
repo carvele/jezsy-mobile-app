@@ -107,3 +107,29 @@ export const isAwaitingPayment = (status: string | null): boolean =>
  */
 export const canReschedule = (status: string | null): boolean =>
   ['toPay', 'preparing', 'ready'].includes(statusBucket(status));
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Compact payment-deadline label for the reservation list card -- the detail
+ * screen already has its own full-sentence countdown, but the list showed no
+ * urgency at all, so every "To pay" card looked the same whether the window
+ * closes in 20 hours or 20 minutes. Mirrors admin-dashboard's own
+ * formatPaymentDeadline so staff and customer read the same urgency language.
+ */
+export const formatPaymentDeadline = (
+  dueAt: string | null
+): { label: string; urgent: boolean } | null => {
+  if (!dueAt) return null;
+  const due = new Date(dueAt);
+  if (Number.isNaN(due.getTime())) return null;
+
+  const remaining = due.getTime() - Date.now();
+  if (remaining <= 0) return { label: 'Overdue', urgent: true };
+
+  const minutes = Math.ceil(remaining / 60000);
+  if (minutes < 60) return { label: `${minutes}m left`, urgent: true };
+
+  const hours = Math.ceil(remaining / HOUR_MS);
+  return { label: `${hours}h left`, urgent: remaining < HOUR_MS };
+};
