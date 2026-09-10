@@ -1,0 +1,102 @@
+-- Rollback for 20260910290000_rescope_legacy_public_rls_helpers
+-- Reverts the 19 policies from TO authenticated back to TO public
+
+-- ============================================================================
+-- 1. admin_notifications (1 policy)
+-- ============================================================================
+ALTER POLICY "Admins can manage admin notifications"
+  ON public.admin_notifications
+  TO PUBLIC;
+
+-- ============================================================================
+-- 2. conversations (3 policies)
+-- ============================================================================
+ALTER POLICY "Enable insert for own conversation or admin"
+  ON public.conversations
+  TO PUBLIC;
+
+ALTER POLICY "Enable select for own conversation or admin"
+  ON public.conversations
+  TO PUBLIC;
+
+ALTER POLICY "Enable update for own conversation or admin"
+  ON public.conversations
+  TO PUBLIC;
+
+-- ============================================================================
+-- 3. logs (1 policy)
+-- ============================================================================
+ALTER POLICY "Staff or admin can view logs"
+  ON public.logs
+  TO PUBLIC;
+
+-- ============================================================================
+-- 4. messages (4 policies)
+-- ============================================================================
+ALTER POLICY "Staff can delete messages"
+  ON public.messages
+  TO PUBLIC;
+
+ALTER POLICY "Enable insert for messages in own conversation or admin"
+  ON public.messages
+  TO PUBLIC;
+
+ALTER POLICY "Enable select for messages in own conversation or admin"
+  ON public.messages
+  TO PUBLIC;
+
+ALTER POLICY "Users can update their messages or mark as read"
+  ON public.messages
+  TO PUBLIC;
+
+-- ============================================================================
+-- 5. reservation_items (4 policies)
+-- ============================================================================
+ALTER POLICY "Enable delete for admin and owner"
+  ON public.reservation_items
+  TO PUBLIC;
+
+ALTER POLICY "Enable insert for admin only"
+  ON public.reservation_items
+  TO PUBLIC;
+
+ALTER POLICY "Enable select for own reservation items or staff"
+  ON public.reservation_items
+  TO PUBLIC;
+
+ALTER POLICY "Enable update for admin only"
+  ON public.reservation_items
+  TO PUBLIC;
+
+-- ============================================================================
+-- 6. reservations (4 policies)
+-- ============================================================================
+ALTER POLICY "Enable delete for admin and owner"
+  ON public.reservations
+  TO PUBLIC;
+
+ALTER POLICY "Enable insert for admin only"
+  ON public.reservations
+  TO PUBLIC;
+
+ALTER POLICY "Enable select for own reservations or admin"
+  ON public.reservations
+  TO PUBLIC;
+
+ALTER POLICY "Enable update for admin only"
+  ON public.reservations
+  TO PUBLIC;
+
+-- ============================================================================
+-- 7. reviews (1 policy)
+-- ============================================================================
+ALTER POLICY "Customers can insert reviews for reserved products"
+  ON public.reviews
+  TO PUBLIC;
+
+-- ============================================================================
+-- 8. user_measurements (1 policy)
+-- ============================================================================
+ALTER POLICY "Enable all access for own measurements or admin"
+  ON public.user_measurements
+  TO PUBLIC;
