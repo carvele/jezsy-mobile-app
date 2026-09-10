@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -81,6 +82,10 @@ export default function CreditsScreen() {
             </Text>
           </View>
         ))}
+
+        <Text style={[styles.versionText, { color: colors.secondaryText }]}>
+          JezSy v{Constants.expoConfig?.version ?? '—'}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -145,5 +150,10 @@ const styles = StyleSheet.create({
   creditLine: {
     ...Type.body,
     fontSize: 13,
+  },
+  versionText: {
+    ...Type.caption,
+    textAlign: 'center',
+    marginTop: Spacing.xl,
   },
 });
