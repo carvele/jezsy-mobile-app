@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { supabase } from '@/src/lib/supabase';
+import type { PaymentPurpose } from '@/src/utils/reservationPayment';
 
 export type PaymentStatus =
   | 'awaiting_payment'
@@ -44,11 +45,14 @@ export function isPaymentReturnUrl(value: string): boolean {
 }
 
 // Asks the payments-create Edge Function to open a PayMongo Checkout Session.
-// Deliberately sends only the reservation id: the amount is resolved server-side
-// from reservations.deposit, so a tampered client cannot choose what it pays.
-export async function startReservationPayment(reservationId: string): Promise<StartedPayment> {
+// The client chooses only a supported payment purpose. The amount is resolved
+// server-side from the reservation and paid ledger, so it cannot be tampered with.
+export async function startReservationPayment(
+  reservationId: string,
+  purpose: PaymentPurpose,
+): Promise<StartedPayment> {
   const { data, error } = await supabase.functions.invoke('payments-create', {
-    body: { reservation_id: reservationId, platform: Platform.OS },
+    body: { reservation_id: reservationId, purpose, platform: Platform.OS },
   });
 
   if (error) throw new Error(error.message || 'Could not start the payment.');
@@ -63,11 +67,12 @@ export async function startReservationPayment(reservationId: string): Promise<St
 // the row is the honest check -- returning from the checkout page proves nothing
 // about whether the money moved.
 export async function getPaymentStatus(paymentId: string): Promise<PaymentStatus | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('payments')
     .select('status')
     .eq('id', paymentId)
     .maybeSingle();
 
+  if (error) throw new Error(error.message || 'Could not confirm the payment status.');
   return (data?.status as PaymentStatus) ?? null;
 }

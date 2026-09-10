@@ -37,7 +37,7 @@ export default function PaymentReturnScreen() {
       if (finalStatus === 'paid') {
         Alert.alert(
           'Payment received',
-          'Your deposit is in. We will confirm your reservation shortly.',
+          'Your payment has been received and your reservation has been updated.',
           [{ text: 'OK', onPress: () => router.replace('/reservations') }],
         );
         return;
@@ -80,7 +80,17 @@ export default function PaymentReturnScreen() {
     const tick = async (paymentId: string) => {
       if (cancelled) return;
 
-      const current = await getPaymentStatus(paymentId);
+      let current: PaymentStatus | null;
+      try {
+        current = await getPaymentStatus(paymentId);
+      } catch {
+        if (foregroundElapsed() > POLL_TIMEOUT_MS) {
+          finish(null);
+          return;
+        }
+        setTimeout(() => tick(paymentId), POLL_INTERVAL_MS);
+        return;
+      }
       if (cancelled) return;
       setStatus(current);
 
@@ -101,7 +111,13 @@ export default function PaymentReturnScreen() {
         return;
       }
 
-      const current = await getPaymentStatus(paymentId);
+      let current: PaymentStatus | null;
+      try {
+        current = await getPaymentStatus(paymentId);
+      } catch {
+        tick(paymentId);
+        return;
+      }
       if (cancelled) return;
       if (!current) {
         router.replace('/reservations');

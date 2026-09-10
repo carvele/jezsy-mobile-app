@@ -28,6 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { startReservationPayment } from '@/src/lib/payments';
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
+import type { PaymentPurpose } from '@/src/utils/reservationPayment';
 
 // Rounded up so a window of 59 minutes reads "1 hour left" rather than
 // "0 hours left".
@@ -188,13 +189,13 @@ export default function ReservationDetailScreen() {
   // Opens the PayMongo checkout for an active reservation. This is
   // the path that did not exist before: a customer who closed the checkout
   // page had no way back to it, and simply lost the reservation.
-  const handlePayNow = async () => {
+  const handlePayNow = async (purpose: PaymentPurpose) => {
     if (!id) return;
     if (payBusyRef.current) return;
     payBusyRef.current = true;
     setPayBusy(true);
     try {
-      const { paymentId, checkoutUrl } = await startReservationPayment(id);
+      const { paymentId, checkoutUrl } = await startReservationPayment(id, purpose);
       router.push({
         pathname: '/payment/[paymentId]',
         params: { paymentId, url: checkoutUrl },
@@ -301,6 +302,17 @@ export default function ReservationDetailScreen() {
   const awaitingPayment = isAwaitingPayment(reservation.status) && paymentState === 'pending';
   const receiptUnderReview = paymentState === 'submitted';
   const timeLeft = reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
+  const initialPaymentPurpose: PaymentPurpose =
+    (reservation.payment_type || '').toLowerCase() === 'full' ? 'full_payment' : 'initial_deposit';
+  const canUpgradeToFullPayment = initialPaymentPurpose === 'initial_deposit' && rawBalanceDue > 0;
+  const canPayRemainingBalance =
+    paymentState === 'paid' &&
+    balanceDue > 0 &&
+    reservationState !== 'cancelled' &&
+    reservationState !== 'completed';
+  const paymentDisplayStatus = paymentState === 'paid'
+    ? (balanceDue > 0 ? 'Reservation payment received' : 'Paid in full')
+    : reservation.payment_status || 'Pending';
 
   // Falls back to the reservation's own denormalised product columns if the
   // lines could not be read, so the screen still shows the item rather than
@@ -545,18 +557,36 @@ export default function ReservationDetailScreen() {
 
             <TouchableOpacity
               style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
-              onPress={handlePayNow}
+              onPress={() => handlePayNow(initialPaymentPurpose)}
               disabled={payBusy || uploadingReceipt}
               accessibilityRole="button"
-              accessibilityLabel="Pay with GCash"
+              accessibilityLabel={initialPaymentPurpose === 'full_payment' ? 'Pay in full with GCash' : 'Pay reservation fee with GCash'}
               accessibilityState={{ disabled: payBusy || uploadingReceipt }}
             >
               {payBusy ? (
                 <ActivityIndicator color={colors.onTint} />
               ) : (
-                <Text style={[styles.payPrimaryText, { color: colors.onTint }]}>Pay with GCash</Text>
+                <Text style={[styles.payPrimaryText, { color: colors.onTint }]}>
+                  {initialPaymentPurpose === 'full_payment'
+                    ? `Pay ₱${(reservation.rental_price || 0).toFixed(2)} in full with GCash`
+                    : `Pay ₱${(reservation.deposit || 0).toFixed(2)} with GCash`}
+                </Text>
               )}
             </TouchableOpacity>
+
+            {canUpgradeToFullPayment && (
+              <TouchableOpacity
+                style={[styles.paySecondary, { borderColor: colors.tint, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
+                onPress={() => handlePayNow('full_payment')}
+                disabled={payBusy || uploadingReceipt}
+                accessibilityRole="button"
+                accessibilityLabel="Switch to full payment with GCash"
+                accessibilityHint="Expires the previous unpaid checkout and opens a checkout for the full item price"
+                accessibilityState={{ disabled: payBusy || uploadingReceipt }}
+              >
+                <Text style={[styles.paySecondaryText, { color: colors.tint }]}>Pay in full instead</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
@@ -584,6 +614,29 @@ export default function ReservationDetailScreen() {
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
               We have your receipt and are checking it. Your reservation is held while we do.
             </Text>
+          </View>
+        )}
+
+        {canPayRemainingBalance && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.tint }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Remaining balance</Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
+              Pay ₱{balanceDue.toFixed(2)} now, or settle it with the boutique before collecting your item.
+            </Text>
+            <TouchableOpacity
+              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy ? 0.6 : 1 }]}
+              onPress={() => handlePayNow('remaining_balance')}
+              disabled={payBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Pay remaining balance with GCash"
+              accessibilityState={{ disabled: payBusy }}
+            >
+              {payBusy ? (
+                <ActivityIndicator color={colors.onTint} />
+              ) : (
+                <Text style={[styles.payPrimaryText, { color: colors.onTint }]}>Pay balance with GCash</Text>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
@@ -616,7 +669,7 @@ export default function ReservationDetailScreen() {
           )}
           <View style={[styles.paymentStatusRow, { borderTopColor: colors.border }]}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>Payment Status</Text>
-            <Text style={[styles.rowValue, { color: colors.text }]}>{reservation.payment_status || 'Pending'}</Text>
+            <Text style={[styles.rowValue, { color: colors.text }]}>{paymentDisplayStatus}</Text>
           </View>
         </View>
 

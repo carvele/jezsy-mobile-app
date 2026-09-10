@@ -1,7 +1,12 @@
 import { decideExistingCheckout } from './paymongoCheckout';
 
 describe('decideExistingCheckout', () => {
-  const base = { storedAmount: 50000, requestedAmount: 50000 };
+  const base = {
+    storedAmount: 50000,
+    requestedAmount: 50000,
+    storedPurpose: 'initial_deposit',
+    requestedPurpose: 'initial_deposit',
+  };
 
   test('reuses an active session only when its amount and URL are valid', () => {
     expect(decideExistingCheckout({
@@ -21,6 +26,15 @@ describe('decideExistingCheckout', () => {
       ...base,
       providerStatus: 'active',
       requestedAmount: 60000,
+      checkoutUrl: 'https://checkout.example/session',
+    })).toEqual({ kind: 'amount_changed' });
+  });
+
+  test('does not reuse an active session for a different payment purpose', () => {
+    expect(decideExistingCheckout({
+      ...base,
+      providerStatus: 'active',
+      requestedPurpose: 'full_payment',
       checkoutUrl: 'https://checkout.example/session',
     })).toEqual({ kind: 'amount_changed' });
   });
