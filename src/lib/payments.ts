@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { supabase } from '@/src/lib/supabase';
 
 export type PaymentStatus =
@@ -47,7 +48,7 @@ export function isPaymentReturnUrl(value: string): boolean {
 // from reservations.deposit, so a tampered client cannot choose what it pays.
 export async function startReservationPayment(reservationId: string): Promise<StartedPayment> {
   const { data, error } = await supabase.functions.invoke('payments-create', {
-    body: { reservation_id: reservationId },
+    body: { reservation_id: reservationId, platform: Platform.OS },
   });
 
   if (error) throw new Error(error.message || 'Could not start the payment.');

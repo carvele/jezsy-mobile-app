@@ -271,6 +271,14 @@ function InitialLayout() {
     const inAuthGroup = pathSegments.some((s) => AUTH_SCREENS.includes(s));
     const onProfileSetup = pathSegments.includes('profile-setup');
     const onResetPassword = pathSegments.includes('reset-password');
+    // PayMongo's redirect target on web -- it must render with no session,
+    // since a customer's tab can lose one between opening checkout and
+    // finishing payment (expired token, cleared storage, private window).
+    if (pathSegments.includes('payment') && pathSegments.includes('return')) {
+      lastRedirectTargetRef.current = null;
+      if (!routeSettled) setRouteSettled(true);
+      return;
+    }
 
     // Helper: Safely replace route without issuing duplicate navigations
     const safeRedirect = (target: string) => {

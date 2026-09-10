@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { corsHeaders, handleCors, isAllowedOrigin } from "../_shared/cors.ts";
 import { decideExistingCheckout } from "../../../src/utils/paymongoCheckout.ts";
 
 // Opens a PayMongo Checkout Session for a reservation and records it in
@@ -74,6 +74,7 @@ serve(async (req) => {
     const body = await req.json().catch(() => null);
     const reservationId: string | undefined = body?.reservation_id;
     if (!reservationId) return json(req, { error: "reservation_id is required." }, 400);
+    const platform: string | undefined = body?.platform;
 
     // Ownership and amount both come from the row itself.
     const { data: reservation, error: reservationError } = await admin
@@ -230,7 +231,17 @@ serve(async (req) => {
     }
     const paymentId: string = inserted.id;
 
-    const returnUrl = Deno.env.get("PAYMONGO_RETURN_URL") ?? "jezsymobileapp://payment-return";
+    // Web opens checkout in a new browser tab, not a WebView, so a custom
+    // URL scheme has nowhere to land there -- the browser just shows an
+    // unhandled-link error instead of returning to the app. A same-origin
+    // page can at least say "you're done, close this tab". Native keeps the
+    // custom scheme: WebView's onShouldStartLoadWithRequest intercepts it
+    // directly, and there is no tab to worry about closing.
+    const origin = req.headers.get("Origin");
+    const returnUrl =
+      platform === "web" && isAllowedOrigin(origin)
+        ? origin + "/payment/return"
+        : Deno.env.get("PAYMONGO_RETURN_URL") ?? "jezsymobileapp://payment-return";
     const separator = returnUrl.includes("?") ? "&" : "?";
     const paymentReturnUrl = returnUrl + separator + "payment_id=" + encodeURIComponent(paymentId);
 
