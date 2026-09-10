@@ -126,6 +126,29 @@ export default function PaymentScreen() {
     return isAllowedCheckoutUrl(navState.url);
   };
 
+  // Web can't embed PayMongo Checkout in an iframe -- their own CSP
+  // (frame-ancestors) only allows a short list of pre-approved merchant
+  // domains and refuses everyone else outright, this app included. A
+  // WebView on native doesn't hit this: it's a top-level browsing context,
+  // not a CSP-restricted subframe, which is why this only ever showed up on
+  // web. Opening a new tab sidesteps the restriction (frame-ancestors only
+  // governs embedding, not top-level navigation), and there's no reliable
+  // way to detect that tab reaching the jezsymobileapp:// return scheme
+  // from here anyway -- so this starts the same polling loop immediately
+  // instead of waiting for a navigation callback that would never fire.
+  const openWebCheckout = useCallback(() => {
+    if (!checkoutUrl) return;
+    window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+    setSettling(true);
+  }, [checkoutUrl]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && checkoutUrl && !settling) {
+      openWebCheckout();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutUrl]);
+
   if (!checkoutUrl) {
     return (
       <SafeAreaView style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
@@ -167,11 +190,13 @@ export default function PaymentScreen() {
           </Text>
         </View>
       ) : Platform.OS === 'web' ? (
-        // @ts-ignore
-        <iframe
-          src={checkoutUrl}
-          style={{ width: '100%', height: '100%', border: 'none' }}
-        />
+        <View style={[styles.center, styles.flexOne]}>
+          <ActivityIndicator size="large" color={colors.tint} />
+          <Text style={[styles.settlingText, { color: colors.text }]}>Opening secure checkout…</Text>
+          <TouchableOpacity onPress={openWebCheckout} style={{ marginTop: Spacing.lg }}>
+            <Text style={{ color: colors.tint }}>Checkout didn&apos;t open? Tap to retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <WebView
           source={{ uri: checkoutUrl }}
