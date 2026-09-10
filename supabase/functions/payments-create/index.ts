@@ -259,6 +259,10 @@ serve(async (req) => {
     const created = await createRes.json();
     const sessionId = created?.data?.id;
     const checkoutUrl = created?.data?.attributes?.checkout_url;
+    // The webhook's payment.paid event carries a Payment resource with no
+    // checkout_session_id field, only payment_intent_id -- capturing it here
+    // is what lets the webhook find its way back to this row.
+    const paymentIntentId = created?.data?.attributes?.payment_intent?.id ?? null;
 
     if (!createRes.ok || !sessionId || !checkoutUrl) {
       console.error("PayMongo session creation failed", JSON.stringify(created));
@@ -273,7 +277,7 @@ serve(async (req) => {
 
     const { error: updateError } = await admin
       .from("payments")
-      .update({ provider_ref: sessionId })
+      .update({ provider_ref: sessionId, provider_payment_intent_id: paymentIntentId })
       .eq("id", paymentId);
 
     if (updateError) {
