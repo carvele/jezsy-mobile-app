@@ -1,0 +1,54 @@
+-- Rollback for 20260911150000_retire_dead_reservation_alert_cron_jobs
+
+CREATE INDEX IF NOT EXISTS reservations_pending_unattended_idx
+  ON public.reservations (created_at)
+  WHERE status = 'pending';
+
+CREATE OR REPLACE FUNCTION public.check_unattended_reservations()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  unattended_count int;
+  webhook_url text;
+BEGIN
+  SELECT count(*) INTO unattended_count
+  FROM public.reservations
+  WHERE lower(status) = 'pending'
+    AND created_at < now() - interval '15 minutes';
+
+  IF unattended_count > 0 THEN
+    webhook_url := 'https://wufcmtndotfvxvvxkamv.supabase.co/functions/v1/send-unattended-alert';
+
+    PERFORM net.http_post(
+      url := webhook_url,
+      headers := '{"Content-Type": "application/json", "Authorization": "Bearer anon_key_placeholder"}'::jsonb,
+      body := jsonb_build_object('unattended_count', unattended_count, 'message', 'There are unattended pending reservations.')
+    );
+  END IF;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.check_unattended_reservations() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_unattended_reservations() TO service_role;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'check-unattended-reservations-cron') THEN
+    PERFORM cron.schedule(
+      'check-unattended-reservations-cron',
+      '*/5 * * * *',
+      $cron$ SELECT public.check_unattended_reservations(); $cron$
+    );
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'auto_cancel_reservations_5m') THEN
+    PERFORM cron.schedule(
+      'auto_cancel_reservations_5m',
+      '*/5 * * * *',
+      'SELECT auto_cancel_expired_reservations()'
+    );
+  END IF;
+END $$;
