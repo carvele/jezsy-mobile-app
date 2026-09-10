@@ -134,11 +134,16 @@ export function ProductCard({
             accessibilityLabel={saved ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
             accessibilityState={{ selected: saved }}
           >
-            <BlurView intensity={40} tint="light" style={styles.heartBg}>
+            {/* tint="dark" (not "light"): the blur must darken whatever
+                photo sits behind it, not brighten it -- a light tint over a
+                white/pale product photo left a white heart icon with almost
+                no contrast. Dark tint makes white reliably legible
+                regardless of the photo underneath. */}
+            <BlurView intensity={40} tint="dark" style={styles.heartBg}>
               <IconSymbol
                 name={saved ? 'heart.fill' : 'heart'}
                 size={16}
-                // Sits on a dark scrim over the product image, so the logo
+                // Sits on a dark blur regardless of app theme, so the logo
                 // pink is the right variant regardless of app theme.
                 color={saved ? Colors.dark.blushFill : '#FFF'}
               />
