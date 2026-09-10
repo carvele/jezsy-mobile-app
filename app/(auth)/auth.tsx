@@ -359,7 +359,7 @@ export default function AuthScreen() {
   // ─── Dynamic UI Texts ───────────────────────────────
   const getTitle = () => {
     switch (mode) {
-      case 'login':       return 'Welcome\nback.';
+      case 'login':       return 'Welcome.';
       case 'signup':      return 'Create\naccount.';
       case 'otp_request': return 'Log in\nwith code.';
       case 'otp_verify':  return 'Enter the\ncode.';

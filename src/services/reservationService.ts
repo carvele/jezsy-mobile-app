@@ -84,3 +84,60 @@ export async function getMyReservationStatusCounts(
 
   return counts;
 }
+
+export type UnratedItem = {
+  reservationItemId: string;
+  reservationId: string;
+  displayId: string | null;
+  productId: string;
+  productName: string;
+  imageUrl: string | null;
+  size: string | null;
+  color: string | null;
+  completedDate: string | null;
+};
+
+/**
+ * Items from Completed reservations the customer hasn't reviewed yet, one
+ * row per distinct product -- a multi-item reservation can be partially
+ * rated, so this checks per product, not per reservation.
+ */
+export async function getMyUnratedItems(userId: string): Promise<UnratedItem[]> {
+  const [itemsResult, reviewsResult] = await Promise.all([
+    supabase
+      .from('reservation_items')
+      .select('id, reservation_id, product_id, product_name, image_url, size, color, reservations!inner(display_id, date, customer_id, status, deleted)')
+      .eq('reservations.customer_id', userId)
+      .eq('reservations.status', 'Completed')
+      .eq('reservations.deleted', false),
+    supabase
+      .from('reviews')
+      .select('product_id')
+      .eq('user_id', userId),
+  ]);
+
+  if (itemsResult.error) throw itemsResult.error;
+  if (reviewsResult.error) throw reviewsResult.error;
+
+  const reviewedProductIds = new Set((reviewsResult.data ?? []).map((r) => r.product_id));
+  const seenProductIds = new Set<string>();
+  const unrated: UnratedItem[] = [];
+
+  for (const row of (itemsResult.data ?? []) as any[]) {
+    if (reviewedProductIds.has(row.product_id) || seenProductIds.has(row.product_id)) continue;
+    seenProductIds.add(row.product_id);
+    unrated.push({
+      reservationItemId: row.id,
+      reservationId: row.reservation_id,
+      displayId: row.reservations?.display_id ?? null,
+      productId: row.product_id,
+      productName: row.product_name,
+      imageUrl: row.image_url,
+      size: row.size,
+      color: row.color,
+      completedDate: row.reservations?.date ?? null,
+    });
+  }
+
+  return unrated;
+}
