@@ -2301,17 +2301,6 @@ export type Database = {
         }
         Returns: Json
       }
-      create_admin_reservation: {
-        Args: {
-          _appointment_time: string
-          _color: string
-          _customer_id: string
-          _payment_status?: string
-          _product_id: string
-          _size: string
-        }
-        Returns: Json
-      }
       create_reservation: {
         Args: {
           _appointment_time: string
