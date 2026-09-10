@@ -9,9 +9,11 @@ import {
   TouchableOpacity,
   Platform,
   Dimensions,
+  FlatList,
+  RefreshControl,
+  ListRenderItem,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MasonryList from '@react-native-seoul/masonry-list';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -869,12 +871,7 @@ export default function ExploreScreen() {
     );
   };
 
-  const renderProductItem = useCallback(({ item }: { item: unknown }) => {
-    // MasonryList's default export is wrapped in React.memo, which erases its
-    // generic <T> -- renderItem's declared type is always `unknown`, so a
-    // single narrow cast here is unavoidable. Everything downstream of this
-    // point is fully typed as Product.
-    const product = item as Product;
+  const renderProductItem: ListRenderItem<Product> = useCallback(({ item: product }) => {
     return (
       <ProductCard
         product={product}
@@ -1188,12 +1185,13 @@ export default function ExploreScreen() {
                   </TouchableOpacity>
                 </View>
               ) : (
-                <MasonryList
+                <FlatList
                   data={processedProducts}
                   renderItem={renderProductItem}
                   keyExtractor={(item) => item.id}
                   key={`grid-${columns}`}
                   numColumns={columns}
+                  columnWrapperStyle={styles.productRow}
                   contentContainerStyle={styles.productList}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
@@ -1382,12 +1380,13 @@ export default function ExploreScreen() {
                   )}
                 </View>
               ) : (
-                <MasonryList
+                <FlatList
                   data={processedProducts}
                   renderItem={renderProductItem}
                   keyExtractor={(item) => item.id}
                   key={`grid-${columns}`}
                   numColumns={columns}
+                  columnWrapperStyle={styles.productRow}
                   contentContainerStyle={styles.productList}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
@@ -1423,9 +1422,14 @@ export default function ExploreScreen() {
                   }
                   onEndReached={loadMoreProducts}
                   onEndReachedThreshold={0.5}
-                  refreshing={refreshing}
-                  onRefresh={onRefreshProducts}
-                  refreshControlProps={{ tintColor: colors.tint, colors: [colors.tint] }}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={onRefreshProducts}
+                      tintColor={colors.tint}
+                      colors={[colors.tint]}
+                    />
+                  }
                   ListFooterComponent={
                     loadingMore ? (
                       <View style={styles.loadMoreFooter}>
