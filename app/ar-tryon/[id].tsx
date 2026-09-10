@@ -341,6 +341,15 @@ export default function ARTryOnScreen() {
   // resolution as long as format and the values read from it agree.
   const format = useCameraFormat(device, [{ videoResolution: { width: 1280, height: 720 } }]);
 
+  // No fps was ever specified here, so vision-camera let the sensor pick --
+  // and a sensor can trade frame rate for exposure time in dim light,
+  // silently dropping fps rather than the app ever seeing an error. Locks a
+  // steady rate instead, clamped to the selected format's own supported
+  // range so this can't request an unsupported value.
+  const targetFps = format
+    ? Math.max(format.minFps, Math.min(30, format.maxFps))
+    : undefined;
+
   const [arError, setArError] = useState<{ type: string; message: string } | null>(null);
   const setArLoadError = useCallback((msg: string | null) => {
     setArError(msg ? { type: 'AR_LOAD_ERROR', message: msg } : null);
@@ -564,7 +573,7 @@ export default function ARTryOnScreen() {
         sizingMeasurements ?? undefined,
         recommendedSize && product?.measurements ? (product.measurements as any)[recommendedSize] : undefined
       );
-      
+
       const isTracking = pose.trackingState === 'GOOD_FIT' || pose.trackingState === 'TURN_TOO_FAR';
       const chartLength = recommendedSize && product?.measurements
         ? (product.measurements as any)[recommendedSize]?.length : undefined;
@@ -747,8 +756,19 @@ export default function ARTryOnScreen() {
     minPoseDetectionConfidence: 0.35,
     minPosePresenceConfidence: 0.35,
     minTrackingConfidence: 0.35,
+    // A/B tested CPU vs GPU delegate live against the pose-update transport
+    // rate: CPU was equal or slightly worse, ruling out GPU contention with
+    // the WebView's Three.js render loop as a cause of the observed lag.
     delegate: Delegate.GPU,
-    shouldOutputSegmentationMasks: true,
+    // On native, GarmentRenderer.updateTransform's WebView path never reads
+    // `segmentation` at all (only the web/iframe path checks
+    // segmentation.data) -- it was a real per-frame MediaPipe cost (compute
+    // + crossing the native-JS bridge) for zero use. Disabling it measurably
+    // reduced both the average and worst-case gap between pose updates
+    // reaching the renderer. Occlusion via segmentation is unimplemented on
+    // native regardless (see the Tier 2 note in GarmentRenderer.tsx), so
+    // this changes no visible behavior today.
+    shouldOutputSegmentationMasks: false,
     // Root-caused live via the library's own Kotlin source
     // (PoseDetectionFrameProcessorPlugin.kt): the frame processor worklet tracks the
     // camera's real per-frame orientation internally but never forwards it to native --
@@ -1128,6 +1148,7 @@ export default function ARTryOnScreen() {
               style={styles.camera}
               device={device}
               format={format}
+              fps={targetFps}
               isActive={cameraActive && !cameraError && !replayActive}
               pixelFormat="rgb"
               frameProcessor={poseDetection.frameProcessor}
