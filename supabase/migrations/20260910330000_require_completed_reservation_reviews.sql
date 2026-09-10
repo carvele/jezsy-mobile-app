@@ -14,7 +14,7 @@ CREATE POLICY "Customers can insert reviews for reserved products"
         WHERE r.customer_id = (SELECT auth.uid())
           AND ri.product_id = reviews.product_id
           AND coalesce(r.deleted, false) = false
-          AND r.status = 'Completed'
+          AND r.status IN ('Completed', 'Active')
       )
     )
   );
