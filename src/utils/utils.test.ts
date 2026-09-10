@@ -50,23 +50,25 @@ describe('stock Utility', () => {
 
 describe('reservationStatus Utility', () => {
   test('maps status strings to correct buckets', () => {
-    expect(statusBucket('Pending')).toBe('pending');
+    // 'Pending' is a retired status no writer can produce anymore -- an
+    // unrecognized value now falls into 'toPay' rather than a dead tab.
+    expect(statusBucket('Pending')).toBe('toPay');
     expect(statusBucket('confirmed')).toBe('toPay');
     expect(statusBucket('to pickup')).toBe('ready');
     expect(statusBucket('completed')).toBe('completed');
     expect(statusBucket('cancelled')).toBe('cancelled');
-    expect(statusBucket(null)).toBe('pending');
+    expect(statusBucket(null)).toBe('toPay');
   });
 
   test('returns human readable badge labels', () => {
-    expect(statusLabel('Pending')).toBe('Needs attention');
+    expect(statusLabel('Pending')).toBe('To pay');
     expect(statusLabel('confirmed')).toBe('To pay');
     expect(statusLabel('to pickup')).toBe('Ready to collect');
   });
 
   test('correctly evaluates payment awaiting state', () => {
     expect(isAwaitingPayment('confirmed')).toBe(true);
-    expect(isAwaitingPayment('Pending')).toBe(false);
+    expect(isAwaitingPayment('Pending')).toBe(true);
   });
 
   test('evaluates reschedule permission correctly', () => {

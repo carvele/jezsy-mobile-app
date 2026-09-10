@@ -8,7 +8,6 @@ export type CustomerReservation = Database['public']['Tables']['reservations']['
 };
 
 const STATUS_BUCKET_MAP: Record<Exclude<StatusFilter, 'all'>, string[]> = {
-  pending: ['pending', 'request approval', 'Pending', 'Request Approval'],
   toPay: ['confirmed', 'approved', 'to pay', 'Confirmed', 'Approved', 'To Pay'],
   preparing: ['preparing', 'Preparing'],
   ready: ['to pickup', 'fitting', 'active', 'ready', 'To Pickup', 'Fitting', 'Active', 'Ready'],
@@ -67,7 +66,6 @@ export async function getMyReservationStatusCounts(
 
   const counts: Record<string, number> = {
     all: (data || []).length,
-    pending: 0,
     toPay: 0,
     preparing: 0,
     ready: 0,

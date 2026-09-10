@@ -39,7 +39,6 @@ export default function ReservationsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({
     all: 0,
-    pending: 0,
     toPay: 0,
     preparing: 0,
     ready: 0,
@@ -110,7 +109,6 @@ export default function ReservationsScreen() {
 
   const getStatusColor = (status: string | null) => {
     switch (statusBucket(status)) {
-      case 'pending': return colors.warning;
       case 'toPay': return colors.notification;
       case 'preparing': return colors.info;
       case 'ready': return colors.info;
@@ -178,7 +176,10 @@ export default function ReservationsScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      {!loading && reservations.length > 0 && (
+      {/* Keyed on the unfiltered total, not the current page: a filter with
+          zero matches must keep showing the row, or switching back to "all"
+          becomes impossible once a tab comes up empty. */}
+      {!loading && statusCounts.all > 0 && (
         <FlatList
           horizontal
           data={STATUS_FILTERS}
@@ -210,7 +211,7 @@ export default function ReservationsScreen() {
                 >
                   {label}
                 </Text>
-                {count > 0 && ['pending', 'toPay', 'preparing', 'ready'].includes(filter) && (
+                {count > 0 && ['toPay', 'preparing', 'ready'].includes(filter) && (
                   <View
                     style={[
                       styles.countBadge,
@@ -239,23 +240,6 @@ export default function ReservationsScreen() {
         <View style={{ paddingHorizontal: Spacing.xl }}>
           <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
         </View>
-      ) : reservations.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <IconSymbol name="calendar.badge.exclamationmark" size={64} color={colors.border} />
-          <Text style={[styles.emptyText, { color: colors.text }]}>No reservations yet</Text>
-          <Text style={[styles.emptySubtext, { color: colors.secondaryText }]}>
-            Your upcoming fitting appointments will appear here.
-          </Text>
-          <TouchableOpacity
-            style={[styles.exploreButton, { backgroundColor: colors.tint }]}
-            onPress={() => router.navigate('/(tabs)/explore')}
-            accessibilityRole="button"
-            accessibilityLabel="Explore Catalog"
-            accessibilityHint="Opens the product catalog to browse items"
-          >
-            <Text style={[styles.exploreButtonText, { color: colors.onTint }]}>Explore Catalog</Text>
-          </TouchableOpacity>
-        </View>
       ) : reservations.length === 0 && activeFilter !== 'all' ? (
         <View style={styles.centerContainer}>
           <IconSymbol name="calendar.badge.exclamationmark" size={64} color={colors.border} />
@@ -275,6 +259,23 @@ export default function ReservationsScreen() {
             accessibilityLabel="Show all reservations"
           >
             <Text style={[styles.exploreButtonText, { color: colors.onTint }]}>Show All</Text>
+          </TouchableOpacity>
+        </View>
+      ) : reservations.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <IconSymbol name="calendar.badge.exclamationmark" size={64} color={colors.border} />
+          <Text style={[styles.emptyText, { color: colors.text }]}>No reservations yet</Text>
+          <Text style={[styles.emptySubtext, { color: colors.secondaryText }]}>
+            Your upcoming fitting appointments will appear here.
+          </Text>
+          <TouchableOpacity
+            style={[styles.exploreButton, { backgroundColor: colors.tint }]}
+            onPress={() => router.navigate('/(tabs)/explore')}
+            accessibilityRole="button"
+            accessibilityLabel="Explore Catalog"
+            accessibilityHint="Opens the product catalog to browse items"
+          >
+            <Text style={[styles.exploreButtonText, { color: colors.onTint }]}>Explore Catalog</Text>
           </TouchableOpacity>
         </View>
       ) : (

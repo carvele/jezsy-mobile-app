@@ -23,10 +23,9 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { wishlistIds } = useWishlist();
   const { itemCount } = useCart();
-  // Summarized to the normal hold-to-purchase stages. Legacy pending and
-  // cancelled records stay reachable from "View All".
+  // Summarized to the normal hold-to-purchase stages. Cancelled records
+  // stay reachable from "View All".
   const [counts, setCounts] = useState({
-    pending: 0,
     toPay: 0,
     preparing: 0,
     ready: 0,
@@ -52,7 +51,6 @@ export default function ProfileScreen() {
       const resData = resResult.data;
 
       if (resData && isMounted) {
-        let pending = 0;
         let toPay = 0;
         let preparing = 0;
         let ready = 0;
@@ -61,19 +59,17 @@ export default function ProfileScreen() {
         // only ever needs to be classified in one place.
         resData.forEach((r: any) => {
           const bucket = statusBucket(r.status);
-          if (bucket === 'pending') pending++;
-          else if (bucket === 'toPay') toPay++;
+          if (bucket === 'toPay') toPay++;
           else if (bucket === 'preparing') preparing++;
           else if (bucket === 'ready') ready++;
         });
 
         setCounts({
-          pending,
           toPay,
           preparing,
           ready,
           toRate: unratedResult.length,
-          activeTotal: pending + toPay + preparing + ready,
+          activeTotal: toPay + preparing + ready,
         });
       }
     };
@@ -82,7 +78,21 @@ export default function ProfileScreen() {
     return () => { isMounted = false; };
   }, [user?.id]);
 
-  const handleShareProfile = async () => { if (!profile?.username) return; try { const url = Linking.createURL(`user/@${profile.username}`); await Share.share({ message: `Check out my digital wardrobe on JezSy! ${url}`, url, }); } catch (error) { console.log('Error sharing:', error); } };
+  const handleShareProfile = async () => {
+    // A profile has no shareable link without a username -- silently doing
+    // nothing here reads as a broken button, so send the customer to set one.
+    if (!profile?.username) {
+      showToast('Add a username first to share your profile.', 'info');
+      router.push('/profile/edit');
+      return;
+    }
+    try {
+      const url = Linking.createURL(`user/@${profile.username}`);
+      await Share.share({ message: `Check out my digital wardrobe on JezSy! ${url}`, url });
+    } catch (error) {
+      console.log('Error sharing:', error);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
