@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Database } from '@/src/types/database.types';
+import { useAuth } from '@/src/context/AuthContext';
+import { cartStorageKey, LEGACY_CART_STORAGE_KEYS } from '@/src/utils/cartStorage';
 
 type Product = Database['public']['Tables']['products']['Row'];
 
@@ -51,24 +53,41 @@ const CartContext = createContext<CartContextData>({
   itemCount: 0,
 });
 
-const CART_STORAGE_KEY = '@jezsy_cart';
-
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [items, setItems] = useState<CartItem[]>([]);
+  const userId = user?.id ?? null;
+  const storageKey = useMemo(() => cartStorageKey(userId), [userId]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadCart = async () => {
+      if (isAuthLoading) {
+        setItems([]);
+        return;
+      }
+
       try {
-        const stored = await AsyncStorage.getItem(CART_STORAGE_KEY);
-        if (stored) {
-          setItems(JSON.parse(stored));
+        let stored = await AsyncStorage.getItem(storageKey);
+
+        // A legacy cart had no owner. Preserve it only as a guest cart so it
+        // can never appear inside whichever account signs in next.
+        if (!userId && !stored) {
+          stored = await AsyncStorage.getItem(LEGACY_CART_STORAGE_KEYS[0]);
+          if (stored) await AsyncStorage.setItem(storageKey, stored);
         }
+        await AsyncStorage.multiRemove([...LEGACY_CART_STORAGE_KEYS]);
+
+        if (!cancelled) setItems(stored ? JSON.parse(stored) : []);
       } catch (err) {
         console.error('Failed to load cart', err);
+        if (!cancelled) setItems([]);
       }
     };
-    loadCart();
-  }, []);
+    void loadCart();
+    return () => { cancelled = true; };
+  }, [isAuthLoading, storageKey, userId]);
 
   const addToCart = useCallback(async (product: Product, quantity: number, size?: string, color?: string, maxQuantity?: number) => {
     setItems((prev) => {
@@ -97,18 +116,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }];
       }
 
-      AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems)).catch((e: any) => console.error(e));
+      AsyncStorage.setItem(storageKey, JSON.stringify(newItems)).catch((e: any) => console.error(e));
       return newItems;
     });
-  }, []);
+  }, [storageKey]);
 
   const removeFromCart = useCallback(async (itemId: string) => {
     setItems((prev) => {
       const newItems = prev.filter(i => i.id !== itemId);
-      AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems)).catch((e: any) => console.error(e));
+      AsyncStorage.setItem(storageKey, JSON.stringify(newItems)).catch((e: any) => console.error(e));
       return newItems;
     });
-  }, []);
+  }, [storageKey]);
 
   const updateQuantity = useCallback(async (itemId: string, quantity: number) => {
     setItems((prev) => {
@@ -117,10 +136,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const maxQty = i.maxQuantity ?? Infinity;
         return { ...i, quantity: Math.min(Math.max(1, quantity), maxQty) };
       });
-      AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems)).catch((e: any) => console.error(e));
+      AsyncStorage.setItem(storageKey, JSON.stringify(newItems)).catch((e: any) => console.error(e));
       return newItems;
     });
-  }, []);
+  }, [storageKey]);
 
   // Re-keys an item onto the (productId-size-color) id its new selection maps
   // to. If that id already has its own line -- the customer picked a variant
@@ -157,23 +176,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newItems)).catch((e: any) => console.error(e));
+      AsyncStorage.setItem(storageKey, JSON.stringify(newItems)).catch((e: any) => console.error(e));
       return newItems;
     });
-  }, []);
+  }, [storageKey]);
 
   const removeItems = useCallback(async (itemIds: string[]) => {
     setItems((prev) => {
       const remaining = prev.filter((i) => !itemIds.includes(i.id));
-      AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(remaining)).catch((e: any) => console.error(e));
+      AsyncStorage.setItem(storageKey, JSON.stringify(remaining)).catch((e: any) => console.error(e));
       return remaining;
     });
-  }, []);
+  }, [storageKey]);
 
   const clearCart = useCallback(async () => {
     setItems([]);
-    await AsyncStorage.removeItem(CART_STORAGE_KEY);
-  }, []);
+    await AsyncStorage.removeItem(storageKey);
+  }, [storageKey]);
 
   const totalAmount = items.reduce((sum, item) => {
     const { on_sale, sale_price, price } = item.product;

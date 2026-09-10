@@ -271,7 +271,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setProfile(null);
       // Remove the legacy shared AsyncStorage key (pre-SecureStore migration)
       // so it can never be used by an older build after logout.
-      await AsyncStorage.multiRemove(['jezsy_cart', 'jezsy_profile_cache']);
+      await AsyncStorage.multiRemove(['@jezsy_cart', 'jezsy_cart', 'jezsy_profile_cache']);
       if (user?.id) await deleteSecureValue(profileCacheKey(user.id));
     } catch {}
     await supabase.auth.signOut();
