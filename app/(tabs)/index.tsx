@@ -455,11 +455,21 @@ export default function HomeScreen() {
                           accessibilityRole="button"
                           accessibilityLabel={saved ? `Remove ${item.name} from wishlist` : `Save ${item.name} to wishlist`}
                         >
-                          <BlurView intensity={40} tint="light" style={styles.heroHeartBg}>
+                          {/* tint="dark", not "light": the blur must darken
+                              the photo behind it, not brighten it, or a
+                              white/pale product photo leaves the icon with
+                              almost no contrast. Dark tint makes white
+                              reliably legible regardless of the photo
+                              underneath, so the icon color no longer needs
+                              to branch on app theme either -- that was
+                              tracking the wrong thing (app theme, not photo
+                              brightness) and still broke on a light photo in
+                              dark mode. */}
+                          <BlurView intensity={40} tint="dark" style={styles.heroHeartBg}>
                             <IconSymbol
                               name={saved ? 'heart.fill' : 'heart'}
                               size={16}
-                              color={saved ? Colors[theme ?? 'light'].blushFill : (theme === 'light' ? Colors.light.icon : '#FFF')}
+                              color={saved ? Colors[theme ?? 'light'].blushFill : '#FFF'}
                             />
                           </BlurView>
                         </Pressable>
