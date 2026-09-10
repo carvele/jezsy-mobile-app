@@ -55,7 +55,7 @@ Guidance for Codex working with code in this repo.
 - The Supabase DB is shared and live: the admin-dashboard repo and a co-worker apply to it too. Coordinate schema changes.
 - There is no staging environment — migrations apply directly to the shared live DB. Write idempotent SQL (`IF NOT EXISTS`, `CREATE OR REPLACE`) so a re-apply or ledger drift is never destructive.
 - Confirm with the user before applying a migration, unless they've already authorized it for the session.
-- Every schema change is a file in `supabase/migrations/` with a matching `.rollback.sql`; do not rely on ad-hoc SQL.
+- Every schema change is a file in `supabase/migrations/` with a matching `.sql.rollback` (extension first, not `.rollback.sql` — the Supabase CLI's `migration list` only recognizes and skips the `.sql.rollback` suffix, so the other order shows up as a phantom extra migration); do not rely on ad-hoc SQL.
 - After applying a migration, re-sync the migration ledger (apply can drift ledger versions) and regenerate `src/types/database.types.ts`.
 - Prefer SECURITY INVOKER RPCs that write least-privilege columns; verify grants with `has_function_privilege` (REVOKE FROM anon alone can no-op due to the PUBLIC default grant).
 - Exception, and check for it: an INVOKER RPC whose target table has an admin-only INSERT/UPDATE policy will fail closed for customers, silently. `create_reservation` shipped this way and blocked every customer reservation. When an RPC *is* the trusted customer write path, it must be SECURITY DEFINER with its own guards — auth check, caller-derived owner id, server-side price resolution — as `create_order` does. Match the RPC's security mode to the policy it has to satisfy.
