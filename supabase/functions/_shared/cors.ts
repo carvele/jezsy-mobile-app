@@ -46,3 +46,8 @@ export function handleCors(req: Request): Response | null {
   }
   return null;
 }
+
+/** True if `origin` is one of the explicitly configured web origins (not the '*' fallback). */
+export function isAllowedOrigin(origin: string | null): origin is string {
+  return !!origin && ALLOWED_ORIGINS.includes(origin);
+}
