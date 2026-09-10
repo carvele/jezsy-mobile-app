@@ -132,21 +132,16 @@ export default function PaymentScreen() {
   // WebView on native doesn't hit this: it's a top-level browsing context,
   // not a CSP-restricted subframe, which is why this only ever showed up on
   // web. Opening a new tab sidesteps the restriction (frame-ancestors only
-  // governs embedding, not top-level navigation), and there's no reliable
-  // way to detect that tab reaching the jezsymobileapp:// return scheme
-  // from here anyway -- so this starts the same polling loop immediately
+  // governs embedding, not top-level navigation). This must run directly
+  // inside a tap handler -- calling it from an effect loses the user
+  // activation and browsers silently block it as a popup. There's also no
+  // reliable way to detect that tab reaching the jezsymobileapp:// return
+  // scheme from here, so this starts the same polling loop immediately
   // instead of waiting for a navigation callback that would never fire.
   const openWebCheckout = useCallback(() => {
     if (!checkoutUrl) return;
     window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
     setSettling(true);
-  }, [checkoutUrl]);
-
-  useEffect(() => {
-    if (Platform.OS === 'web' && checkoutUrl && !settling) {
-      openWebCheckout();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkoutUrl]);
 
   if (!checkoutUrl) {
@@ -191,10 +186,15 @@ export default function PaymentScreen() {
         </View>
       ) : Platform.OS === 'web' ? (
         <View style={[styles.center, styles.flexOne]}>
-          <ActivityIndicator size="large" color={colors.tint} />
-          <Text style={[styles.settlingText, { color: colors.text }]}>Opening secure checkout…</Text>
-          <TouchableOpacity onPress={openWebCheckout} style={{ marginTop: Spacing.lg }}>
-            <Text style={{ color: colors.tint }}>Checkout didn&apos;t open? Tap to retry</Text>
+          <Text style={[styles.settlingText, { color: colors.text }]}>
+            You&apos;ll be taken to PayMongo&apos;s secure checkout in a new tab.
+          </Text>
+          <TouchableOpacity
+            onPress={openWebCheckout}
+            style={[styles.webCheckoutBtn, { backgroundColor: colors.tint }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.webCheckoutBtnText}>Continue to Secure Checkout</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -229,4 +229,11 @@ const styles = StyleSheet.create({
   headerTitle: { ...Type.subtitle },
   settlingText: { ...Type.bodyLargeStrong, marginTop: Spacing.lg },
   settlingHint: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: Spacing.sm },
+  webCheckoutBtn: {
+    marginTop: Spacing.xl,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.md,
+    borderRadius: 8,
+  },
+  webCheckoutBtnText: { ...Type.bodyLargeStrong, color: '#fff' },
 });
