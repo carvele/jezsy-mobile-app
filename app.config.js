@@ -15,6 +15,12 @@ module.exports = {
     scheme: "jezsymobileapp",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    runtimeVersion: {
+      policy: "appVersion",
+    },
+    updates: {
+      url: "https://u.expo.dev/8c74360c-1d93-4a66-b20e-5507caad75b4",
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.jezsy.mobileapp",
