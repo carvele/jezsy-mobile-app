@@ -294,7 +294,10 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   skipBtn: {
-    padding: Spacing.xs,
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   skipText: {
     fontSize: 14,
@@ -303,7 +306,8 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: Spacing.xs,
     marginLeft: -Spacing.xs,
   },
   backText: {
@@ -415,6 +419,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dontShowBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.xl,
   },

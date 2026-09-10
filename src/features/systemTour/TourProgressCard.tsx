@@ -39,7 +39,7 @@ export function TourProgressCard({ progress, onContinue, onDismiss }: TourProgre
         <Text style={[styles.title, { color: colors.text }]}>
           Getting started — {completedCount} of {TOUR_MODULE_IDS.length} complete
         </Text>
-        <TouchableOpacity onPress={onDismiss} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss getting started card">
+        <TouchableOpacity onPress={onDismiss} hitSlop={14} accessibilityRole="button" accessibilityLabel="Dismiss getting started card">
           <IconSymbol name="xmark" size={16} color={colors.icon} />
         </TouchableOpacity>
       </View>
@@ -108,7 +108,9 @@ const styles = StyleSheet.create({
   },
   continueBtn: {
     alignSelf: 'flex-start',
-    paddingVertical: Spacing.xs,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     borderRadius: 10,
   },
