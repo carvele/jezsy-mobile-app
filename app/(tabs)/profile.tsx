@@ -13,6 +13,7 @@ import { useCart } from '@/src/context/CartContext';
 import { StreakBadge } from '@/src/components/StreakBadge';
 import { useToast } from '@/src/context/ToastContext';
 import { statusBucket } from '@/src/utils/reservationStatus';
+import { getMyUnratedItems } from '@/src/services/reservationService';
 import { SystemTourModal } from '@/src/components/SystemTourModal';
 
 export default function ProfileScreen() {
@@ -29,7 +30,7 @@ export default function ProfileScreen() {
     toPay: 0,
     preparing: 0,
     ready: 0,
-    completed: 0,
+    toRate: 0,
     activeTotal: 0,
   });
 
@@ -41,17 +42,20 @@ export default function ProfileScreen() {
     let isMounted = true;
 
     const fetchReservations = async () => {
-      const { data: resData } = await supabase
-        .from('reservations')
-        .select('status')
-        .eq('customer_id', user.id);
+      const [resResult, unratedResult] = await Promise.all([
+        supabase.from('reservations').select('status').eq('customer_id', user.id),
+        getMyUnratedItems(user.id).catch((err) => {
+          console.error('Error fetching items to rate:', err);
+          return [];
+        }),
+      ]);
+      const resData = resResult.data;
 
       if (resData && isMounted) {
         let pending = 0;
         let toPay = 0;
         let preparing = 0;
         let ready = 0;
-        let completed = 0;
 
         // Shared with reservations.tsx and the admin dashboard so a status
         // only ever needs to be classified in one place.
@@ -61,7 +65,6 @@ export default function ProfileScreen() {
           else if (bucket === 'toPay') toPay++;
           else if (bucket === 'preparing') preparing++;
           else if (bucket === 'ready') ready++;
-          else if (bucket === 'completed') completed++;
         });
 
         setCounts({
@@ -69,7 +72,7 @@ export default function ProfileScreen() {
           toPay,
           preparing,
           ready,
-          completed,
+          toRate: unratedResult.length,
           activeTotal: pending + toPay + preparing + ready,
         });
       }
@@ -209,16 +212,22 @@ export default function ProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.orderStatus}
-              onPress={() => router.push('/reservations?status=completed')}
+              onPress={() => router.push('/reservations/to-rate')}
               accessibilityRole="button"
-              accessibilityLabel="View completed reservations"
+              accessibilityLabel="View items to rate"
             >
-              {/* No badge here: Completed is a terminal state with nothing to
-                  act on, unlike the other three tiles. A count badge would
-                  only ever grow and never clear, which reads as a stuck
-                  notification rather than something needing attention. */}
-              <IconSymbol name="checkmark.circle" size={24} color={colors.icon} />
-              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>Completed</Text>
+              {/* Unlike a plain Completed count, this one is genuinely
+                  actionable and clears as items get rated -- a real
+                  notification, not a stuck one. */}
+              <View style={{ position: 'relative' }}>
+                <IconSymbol name="star" size={24} color={colors.icon} />
+                {counts.toRate > 0 && (
+                  <View style={[styles.statusBadgeBubble, { backgroundColor: colors.notification }]}>
+                    <Text style={styles.statusBadgeText}>{counts.toRate}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.orderStatusText, { color: colors.secondaryText }]}>To rate</Text>
             </TouchableOpacity>
           </View>
         </View>
