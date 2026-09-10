@@ -28,6 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { startReservationPayment } from '@/src/lib/payments';
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
+import { ReviewModal } from '@/src/components/ReviewModal';
 
 // Rounded up so a window of 59 minutes reads "1 hour left" rather than
 // "0 hours left".
@@ -67,6 +68,10 @@ export default function ReservationDetailScreen() {
   const payBusyRef = useRef(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
+  // The product being reviewed, not just a visible flag -- this reservation
+  // can hold several items, and each needs its own review submitted against
+  // its own product_id.
+  const [reviewProductId, setReviewProductId] = useState<string | null>(null);
 
   const fetchReservation = useCallback(async () => {
     if (!id) return;
@@ -395,13 +400,30 @@ export default function ReservationDetailScreen() {
                 Size: {item.size || 'Standard'} • Color: {item.color || 'Default'}
                 {(item.quantity ?? 1) > 1 ? ` • Qty ${item.quantity}` : ''}
               </Text>
-              {item.product_id && (
-                <Link href={`/product/${item.product_id}`} asChild>
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`View ${item.product_name}`}>
-                    <Text style={[styles.viewProductLink, { color: colors.tint }]}>View Product</Text>
+              <View style={styles.itemLinkRow}>
+                {item.product_id && (
+                  <Link href={`/product/${item.product_id}`} asChild>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`View ${item.product_name}`}>
+                      <Text style={[styles.viewProductLink, { color: colors.tint }]}>View Product</Text>
+                    </TouchableOpacity>
+                  </Link>
+                )}
+                {/* Matches the reservation-list's own "Completed" filter/bucket
+                    -- reviewable exactly when this reservation is the thing
+                    that filter shows, not a separate notion of "done". Also
+                    matches the reviews table's own RLS gate (r.status IN
+                    ('Completed', 'Active')), so this button never offers a
+                    submission the database would reject. */}
+                {item.product_id && reservationState === 'completed' && (
+                  <TouchableOpacity
+                    onPress={() => setReviewProductId(item.product_id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Write a review for ${item.product_name}`}
+                  >
+                    <Text style={[styles.viewProductLink, { color: colors.tint }]}>Write a Review</Text>
                   </TouchableOpacity>
-                </Link>
-              )}
+                )}
+              </View>
             </View>
           </View>
         ))}
@@ -640,6 +662,12 @@ export default function ReservationDetailScreen() {
           </View>
         )}
       </ScrollView>
+      <ReviewModal
+        visible={reviewProductId !== null}
+        productId={reviewProductId ?? ''}
+        onClose={() => setReviewProductId(null)}
+        onSuccess={() => setReviewProductId(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -721,6 +749,7 @@ const styles = StyleSheet.create({
   productName: { ...Type.bodyLargeStrong },
   productDetails: { ...Type.caption },
   viewProductLink: { fontSize: 13, fontWeight: '600', marginTop: Spacing.xs },
+  itemLinkRow: { flexDirection: 'row', gap: Spacing.lg },
   itemsHeading: { fontSize: 13, fontWeight: '600', marginBottom: 10 },
   askRow: { marginBottom: Spacing.lg },
   sectionCard: {
