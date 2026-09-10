@@ -1,0 +1,7 @@
+-- Rollback: 20260910210000_relocate_pg_trgm_extension.sql.rollback
+-- Restores pg_trgm to public schema and reverts search_path on search_catalog_fuzzy.
+
+ALTER EXTENSION pg_trgm SET SCHEMA public;
+
+ALTER FUNCTION public.search_catalog_fuzzy(text, integer)
+  SET search_path = public, pg_temp;
