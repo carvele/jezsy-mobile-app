@@ -1,4 +1,4 @@
--- Migration: 20260910230000_remediate_mpp_batch_f2
+-- Migration: 20260910320000_remediate_mpp_batch_f2
 -- Remediation for Pass F - Batch F2 multiple permissive policies
 -- Applies to tables: devices, saved_outfits, outfit_items, wardrobe_items, review_votes, connections
 
