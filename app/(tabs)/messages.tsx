@@ -13,6 +13,8 @@ import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';
 import { getDirectChatsPage, DirectChatSummary } from '@/src/services/chatService';
 import { getNotificationsPage, NotificationItem } from '@/src/services/notificationService';
+import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
+import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 
 export default function InboxScreen() {
   const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline } = useMessages();
@@ -21,6 +23,11 @@ export default function InboxScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
+  const tourCoachmark = useTourCoachmark('messages');
+
+  useEffect(() => {
+    emitTourEvent('messages_screen');
+  }, []);
 
   const [activeTab, setActiveTab] = useState<'shop' | 'friends' | 'notifications'>('shop');
   const [directChats, setDirectChats] = useState<DirectChatSummary[]>([]);
@@ -421,6 +428,17 @@ export default function InboxScreen() {
             }
           />
         )
+      )}
+
+      {tourCoachmark.step && (
+        <TourCoachmarkBanner
+          title={tourCoachmark.step.title}
+          description={tourCoachmark.step.description}
+          stepNumber={tourCoachmark.stepNumber}
+          totalSteps={tourCoachmark.totalSteps}
+          onNext={tourCoachmark.step.completion.type === 'next' ? tourCoachmark.advance : undefined}
+          onDismiss={tourCoachmark.dismiss}
+        />
       )}
     </SafeAreaView>
   );

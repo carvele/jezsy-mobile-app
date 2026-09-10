@@ -32,6 +32,8 @@ import { useGridCardWidth } from '@/src/utils/layout';
 import { useToast } from '@/src/context/ToastContext';
 import { MannequinView } from '@/src/components/Mannequin/MannequinView';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
+import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
+import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
@@ -57,6 +59,11 @@ export default function WardrobeScreen() {
   const { session } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
+  const tourCoachmark = useTourCoachmark('wardrobe');
+
+  useEffect(() => {
+    emitTourEvent('wardrobe_screen');
+  }, []);
 
   const initialTab = useMemo<Tab>(() => {
     // Explicit URL param takes priority (e.g. /wardrobe?tab=mannequin)
@@ -729,6 +736,17 @@ export default function WardrobeScreen() {
           )}
         </ScrollView>
       ) : null}
+
+      {tourCoachmark.step && (
+        <TourCoachmarkBanner
+          title={tourCoachmark.step.title}
+          description={tourCoachmark.step.description}
+          stepNumber={tourCoachmark.stepNumber}
+          totalSteps={tourCoachmark.totalSteps}
+          onNext={tourCoachmark.step.completion.type === 'next' ? tourCoachmark.advance : undefined}
+          onDismiss={tourCoachmark.dismiss}
+        />
+      )}
     </SafeAreaView>
   );
 }

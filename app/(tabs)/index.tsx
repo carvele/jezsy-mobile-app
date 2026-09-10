@@ -36,8 +36,15 @@ import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/
 import { StyleGallery } from '@/components/StyleGallery';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { SystemTourModal } from '@/src/components/SystemTourModal';
-import { hasSeenHint } from '@/src/utils/firstUseHints';
+import { SystemTourModal } from '@/src/features/systemTour/SystemTourModal';
+import { TourProgressCard } from '@/src/features/systemTour/TourProgressCard';
+import {
+  dismissSystemTour,
+  getTourProgress,
+  hasTourBeenIntroduced,
+  isSystemTourComplete,
+  TourProgressSnapshot,
+} from '@/src/features/systemTour/tourProgress';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -87,25 +94,50 @@ export default function HomeScreen() {
   const router = useRouter();
 
   const [showTour, setShowTour] = useState(false);
+  const [tourProgress, setTourProgress] = useState<TourProgressSnapshot | null>(null);
+  const [tourCardDismissed, setTourCardDismissed] = useState(false);
 
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    let isCancelled = false;
-    let timer: NodeJS.Timeout;
-    hasSeenHint(session.user.id, 'welcome:v1').then((seen) => {
-      if (!seen && !isCancelled) {
-        timer = setTimeout(() => {
-          if (!isCancelled) setShowTour(true);
-        }, 800);
-      }
-    });
-    return () => {
-      isCancelled = true;
-      if (timer) clearTimeout(timer);
-    };
+  // Re-checked on every focus (not just mount) so progress reflects modules
+  // completed on other screens since the last visit. The full modal only
+  // auto-opens the very first time (nothing started, never dismissed); after
+  // that the lighter TourProgressCard below takes over so returning to Home
+  // doesn't repeatedly interrupt the user with the full-screen hub.
+  useFocusEffect(
+    useCallback(() => {
+      const userId = session?.user?.id;
+      if (!userId) return;
+      let isCancelled = false;
+      let timer: NodeJS.Timeout;
+
+      Promise.all([isSystemTourComplete(userId), hasTourBeenIntroduced(userId), getTourProgress(userId)]).then(
+        ([complete, introduced, progress]) => {
+          if (isCancelled) return;
+          setTourProgress(complete ? null : progress);
+          if (!complete && !introduced) {
+            timer = setTimeout(() => {
+              if (!isCancelled) setShowTour(true);
+            }, 800);
+          }
+        }
+      );
+      return () => {
+        isCancelled = true;
+        if (timer) clearTimeout(timer);
+      };
+    }, [session?.user?.id])
+  );
+
+  const handleCloseTour = useCallback(() => {
+    setShowTour(false);
+    const userId = session?.user?.id;
+    if (userId) getTourProgress(userId).then(setTourProgress);
   }, [session?.user?.id]);
 
-  const handleCloseTour = useCallback(() => setShowTour(false), []);
+  const handleDismissTourCard = useCallback(() => {
+    setTourCardDismissed(true);
+    const userId = session?.user?.id;
+    if (userId) dismissSystemTour(userId);
+  }, [session?.user?.id]);
 
   const fetchProducts = useCallback(async (fromCache = false) => {
     // Immediately seed UI from cache so there's something to look at before the
@@ -300,6 +332,14 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={[styles.brandLogo, { color: colors.text }]}>JezSy</Text>
         </View>
+
+        {tourProgress && !tourCardDismissed && !showTour && (
+          <TourProgressCard
+            progress={tourProgress}
+            onContinue={() => setShowTour(true)}
+            onDismiss={handleDismissTourCard}
+          />
+        )}
 
         {/* 1. Featured Carousel. Auto-advances (see the effect above) but
             pauses the instant a finger touches it, so it never fights a

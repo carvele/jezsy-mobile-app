@@ -30,6 +30,8 @@ import { GRID_GUTTER, GRID_COLUMN_GAP, useGridCardWidth } from '@/src/utils/layo
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
+import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
+import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
@@ -78,11 +80,19 @@ export default function ExploreScreen() {
   const [sizingNudgeDismissed, setSizingNudgeDismissed] = useState(false);
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string; all?: string }>();
+  const tourCoachmark = useTourCoachmark('explore');
 
   // Search States
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
+
+  // Reports the real action ("the user opened search") that the Discover
+  // tour module's search step waits on, rather than completing on a tap of
+  // the coachmark itself.
+  useEffect(() => {
+    if (isSearchActive) emitTourEvent('discover_search_opened');
+  }, [isSearchActive]);
 
   // Navigation States
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -1785,6 +1795,17 @@ export default function ExploreScreen() {
           </View>
         </BottomSheetView>
       </BottomSheetModal>
+
+      {tourCoachmark.step && (
+        <TourCoachmarkBanner
+          title={tourCoachmark.step.title}
+          description={tourCoachmark.step.description}
+          stepNumber={tourCoachmark.stepNumber}
+          totalSteps={tourCoachmark.totalSteps}
+          onNext={tourCoachmark.step.completion.type === 'next' ? tourCoachmark.advance : undefined}
+          onDismiss={tourCoachmark.dismiss}
+        />
+      )}
     </SafeAreaView>
   );
 }

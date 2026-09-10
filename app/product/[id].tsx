@@ -41,6 +41,7 @@ import { recommendSize, ProductMeasurements } from "@/src/utils/sizeRecommender"
 import { SizeChartModal } from "@/src/components/SizeChartModal";
 import { ImageViewerModal } from "@/src/components/ImageViewerModal";
 import { useToast } from '@/src/context/ToastContext';
+import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 
 type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
 type Inventory = Database["public"]["Tables"]["inventory"]["Row"];
@@ -161,6 +162,12 @@ export default function ProductDetailScreen() {
   useEffect(() => {
     if (id) addRecentlyViewed(id, user?.id);
   }, [id, user?.id]);
+
+  // Reports the Discover tour module's "open a product" step as done - this
+  // screen is the completion signal, not the tap that got here.
+  useEffect(() => {
+    emitTourEvent('product_detail');
+  }, []);
 
   useEffect(() => {
     const checkNotifyRequest = async () => {
