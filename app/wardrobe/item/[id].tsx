@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -7,8 +7,10 @@ import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { useAuth } from '@/src/context/AuthContext';
 import { Database } from '@/src/types/database.types';
 import { useToast } from '@/src/context/ToastContext';
+import { ConfirmModal } from '@/src/components/ConfirmModal';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
@@ -29,11 +31,14 @@ export default function WardrobeItemDetailScreen() {
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const { session } = useAuth();
 
   const [item, setItem] = useState<WardrobeItem | null>(null);
+  const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [logging, setLogging] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
 
   const fetchItem = useCallback(async () => {
     if (!id) return;
@@ -58,40 +63,29 @@ export default function WardrobeItemDetailScreen() {
     fetchItem();
   }, [fetchItem]);
 
+  const fetchStreak = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const { data } = await supabase
+      .from('user_streaks')
+      .select('current_streak')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    setStreak(data?.current_streak || 0);
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    fetchStreak();
+  }, [fetchStreak]);
+
   const handleLogWear = async () => {
     if (!item) return;
     setLogging(true);
     try {
-      const now = new Date();
-      const lastWorn = item.last_worn_at ? new Date(item.last_worn_at) : null;
-      let newStreak = (item as any).current_streak || 1;
-
-      if (lastWorn) {
-        const diffMs = now.getTime() - lastWorn.getTime();
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        if (diffDays === 1) {
-          newStreak += 1;
-        } else if (diffDays > 1) {
-          newStreak = 1;
-        }
-      } else {
-        newStreak = 1;
-      }
-
-      const { data, error } = await supabase
-        .from('wardrobe_items')
-        .update({
-          wear_count: item.wear_count + 1,
-          last_worn_at: now.toISOString(),
-          current_streak: newStreak,
-          longest_streak: Math.max(newStreak, (item as any).longest_streak || 0),
-        } as any)
-        .eq('id', item.id)
-        .select('*')
-        .single();
+      const { data, error } = await supabase.rpc('increment_wear_count', { p_item_id: item.id });
       if (error) throw error;
       setItem(data);
-      showToast(`Logged! 🔥 ${newStreak}-day wear streak`, 'success');
+      await fetchStreak();
+      showToast('Wear logged for today.', 'success');
     } catch (err) {
       console.error('Error logging wear:', err);
       showToast('Could not log this wear. Please try again.', 'error');
@@ -115,25 +109,6 @@ export default function WardrobeItemDetailScreen() {
       console.error('Error deleting wardrobe item:', err);
       showToast('Could not remove this item. Please try again.', 'error');
       setDeleting(false);
-    }
-  };
-
-  const handleDelete = () => {
-    if (!item) return;
-    if (Platform.OS === 'web') {
-      const confirmed = typeof window !== 'undefined' ? window.confirm('Remove this item from your digital wardrobe?') : true;
-      if (confirmed) {
-        executeDelete();
-      }
-    } else {
-      Alert.alert('Remove Item', 'Remove this item from your digital wardrobe?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: executeDelete,
-        },
-      ]);
     }
   };
 
@@ -169,7 +144,7 @@ export default function WardrobeItemDetailScreen() {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Item Details</Text>
         <TouchableOpacity
-          onPress={handleDelete}
+          onPress={() => setConfirmDeleteVisible(true)}
           style={styles.deleteButton}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           disabled={deleting}
@@ -183,6 +158,18 @@ export default function WardrobeItemDetailScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      <ConfirmModal
+        visible={confirmDeleteVisible}
+        title="Remove Item"
+        message="Remove this item from your digital wardrobe?"
+        confirmLabel="Remove"
+        onCancel={() => setConfirmDeleteVisible(false)}
+        onConfirm={() => {
+          setConfirmDeleteVisible(false);
+          executeDelete();
+        }}
+      />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Image
@@ -224,9 +211,9 @@ export default function WardrobeItemDetailScreen() {
             <Text style={[styles.wearLabel, { color: colors.text }]}>{wearLabel}</Text>
           </View>
           <View style={[styles.wearCard, { backgroundColor: colors.card, borderColor: colors.border, marginLeft: Spacing.sm }]}>
-            <Text style={{ fontSize: 18 }}>🔥</Text>
+            <IconSymbol name="flame.fill" size={18} color={colors.tint} />
             <Text style={[styles.wearLabel, { color: colors.text }]}>
-              {(item as any).current_streak || 0}d streak
+              {streak}d streak
             </Text>
           </View>
         </View>

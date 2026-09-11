@@ -51,6 +51,13 @@ const CANVAS_HEIGHT = 450;
 // We need enough bottom padding so nothing hides behind it.
 const TAB_BAR_CLEARANCE = 100;
 
+// The garment drawer scrolls vertically with the rest of the page rather
+// than as its own side-scrolling strip, so it lays out as a grid instead.
+// Fixed width (not flex) so the last, possibly-partial row doesn't stretch
+// its cards wider than the full rows above it.
+const GARMENT_GRID_COLUMNS = 3;
+const GARMENT_CARD_WIDTH = (SCREEN_WIDTH - Spacing.lg * 2 - Spacing.sm * (GARMENT_GRID_COLUMNS - 1)) / GARMENT_GRID_COLUMNS;
+
 const CATEGORIES = ['All', 'Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'] as const;
 type CategoryFilter = (typeof CATEGORIES)[number];
 
@@ -69,9 +76,12 @@ export const CANVAS_BACKDROPS = [
 interface Props {
   wardrobeItems: WardrobeItem[];
   onRefreshWardrobe: () => void;
+  /** A saved_outfits id to load onto the canvas automatically, e.g. from the
+   * outfit detail screen's "Edit on Mannequin" button. Consumed once. */
+  initialLoadOutfitId?: string;
 }
 
-export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
+export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOutfitId }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const isDark = theme === 'dark';
@@ -148,6 +158,11 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
 
   // Stylist Critique Modal State
   const [stylistModalVisible, setStylistModalVisible] = useState(false);
+
+  // Consolidates the less-frequently-used Load/Clear/Share actions behind one
+  // button so the toolbar reads as two clear priorities (Stylist, Save)
+  // instead of five competing ones.
+  const [moreMenuVisible, setMoreMenuVisible] = useState(false);
 
   const wardrobeLookup = useMemo(() => {
     return Object.fromEntries(wardrobeItems.map((w) => [w.id, w]));
@@ -441,6 +456,33 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
     }
   };
 
+  // Consumed once per id -- the query param that triggered this stays in the
+  // URL (Expo Router doesn't strip it), so without the ref this would reload
+  // the same outfit on every re-render and stomp the user's in-progress edits.
+  const consumedLoadOutfitIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialLoadOutfitId || !session?.user?.id) return;
+    if (consumedLoadOutfitIdRef.current === initialLoadOutfitId) return;
+    consumedLoadOutfitIdRef.current = initialLoadOutfitId;
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('saved_outfits')
+          .select('*')
+          .eq('id', initialLoadOutfitId)
+          .eq('user_id', session.user.id)
+          .single();
+        if (error) throw error;
+        handleLoadSavedLook(data);
+      } catch (err) {
+        console.error('Error auto-loading outfit onto mannequin:', err);
+        showToast('Could not load that outfit onto the mannequin.', 'error');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLoadOutfitId, session?.user?.id]);
+
   return (
     <ScrollView
       style={styles.container}
@@ -453,28 +495,12 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
         <View style={styles.toolbarRow}>
           <TouchableOpacity
             style={[styles.toolBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={handleOpenLoadModal}
+            onPress={() => setMoreMenuVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="More actions: Load, Clear, Share"
           >
-            <IconSymbol name="folder.fill" size={14} color={colors.tint} />
-            <Text style={[styles.toolBtnText, { color: colors.text }]}>Load</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolBtn, { backgroundColor: colors.card, borderColor: colors.border, opacity: canvasItems.length === 0 ? 0.4 : 1 }]}
-            onPress={handleClearCanvas}
-            disabled={canvasItems.length === 0}
-          >
-            <IconSymbol name="trash" size={14} color={colors.error || '#EF4444'} />
-            <Text style={[styles.toolBtnText, { color: colors.text }]}>Clear</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolBtn, { backgroundColor: colors.card, borderColor: colors.border, opacity: canvasItems.length === 0 ? 0.4 : 1 }]}
-            onPress={handleShareLook}
-            disabled={canvasItems.length === 0}
-          >
-            <IconSymbol name="square.and.arrow.up" size={14} color={colors.tint} />
-            <Text style={[styles.toolBtnText, { color: colors.text }]}>Share</Text>
+            <IconSymbol name="ellipsis" size={14} color={colors.text} />
+            <Text style={[styles.toolBtnText, { color: colors.text }]}>More</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -516,7 +542,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
       <View style={styles.backdropBar}>
         <View style={styles.backdropTitleWrap}>
           <IconSymbol name="paintpalette.fill" size={12} color={colors.tint} />
-          <Text style={[styles.backdropLabel, { color: colors.secondaryText }]}>Backdrop:</Text>
+          <Text style={[styles.backdropLabel, { color: colors.secondaryText }]}>Background:</Text>
         </View>
         <ScrollView
           horizontal
@@ -535,7 +561,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
                 ]}
                 onPress={() => setCanvasBgColor(b.color)}
                 accessibilityRole="button"
-                accessibilityLabel={`Backdrop ${b.label}`}
+                accessibilityLabel={`Background ${b.label}`}
               >
                 {active && (
                   <IconSymbol
@@ -800,10 +826,14 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
               </View>
             ) : (
               <FlatList
-                horizontal
                 data={filteredItems}
                 keyExtractor={(item) => item.id}
-                showsHorizontalScrollIndicator={false}
+                numColumns={GARMENT_GRID_COLUMNS}
+                // This list scrolls with the page (below), not on its own --
+                // the point of the grid is that the whole drawer moves as one
+                // vertical scroll instead of a separate side-scroll region.
+                scrollEnabled={false}
+                columnWrapperStyle={styles.garmentGridRow}
                 contentContainerStyle={styles.garmentScroll}
                 renderItem={({ item }) => {
                   const onCanvas = activeOnCanvasIds.has(item.id);
@@ -940,6 +970,45 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe }: Props) {
         onClose={() => setStylistModalVisible(false)}
         onSaveLook={() => setSaveModalVisible(true)}
       />
+
+      {/* ── More Actions Menu (Load / Clear / Share) ── */}
+      {moreMenuVisible && (
+        <Modal visible={moreMenuVisible} transparent animationType="fade" onRequestClose={() => setMoreMenuVisible(false)}>
+          <TouchableOpacity
+            style={styles.moreMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setMoreMenuVisible(false)}
+          >
+            <View style={[styles.moreMenuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <TouchableOpacity
+                style={styles.moreMenuRow}
+                onPress={() => { setMoreMenuVisible(false); handleOpenLoadModal(); }}
+              >
+                <IconSymbol name="folder.fill" size={18} color={colors.tint} />
+                <Text style={[styles.moreMenuRowText, { color: colors.text }]}>Load</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.moreMenuRow, { opacity: canvasItems.length === 0 ? 0.4 : 1 }]}
+                onPress={() => { if (canvasItems.length === 0) return; setMoreMenuVisible(false); handleShareLook(); }}
+                disabled={canvasItems.length === 0}
+              >
+                <IconSymbol name="square.and.arrow.up" size={18} color={colors.tint} />
+                <Text style={[styles.moreMenuRowText, { color: colors.text }]}>Share</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.moreMenuRow, { opacity: canvasItems.length === 0 ? 0.4 : 1 }]}
+                onPress={() => { if (canvasItems.length === 0) return; setMoreMenuVisible(false); handleClearCanvas(); }}
+                disabled={canvasItems.length === 0}
+              >
+                <IconSymbol name="trash" size={18} color={colors.error || '#EF4444'} />
+                <Text style={[styles.moreMenuRowText, { color: colors.error || '#EF4444' }]}>Clear Canvas</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </ScrollView>
   );
 }
@@ -998,6 +1067,37 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+
+  /* ── More Actions Menu ── */
+  moreMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  moreMenuCard: {
+    position: 'absolute',
+    top: 56,
+    left: Spacing.lg,
+    minWidth: 180,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingVertical: Spacing.xs,
+    ...Platform.select({
+      ios: { shadowColor: 'black', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 },
+      android: { elevation: 6 },
+      web: { boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
+    }),
+  },
+  moreMenuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+  },
+  moreMenuRowText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   /* ── Studio Backdrop Swatches ── */
@@ -1202,8 +1302,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingBottom: Spacing.sm,
   },
+  garmentGridRow: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
   garmentCard: {
-    width: 88,
+    width: GARMENT_CARD_WIDTH,
     height: 112,
     borderRadius: Radius.md,
     borderWidth: 1,

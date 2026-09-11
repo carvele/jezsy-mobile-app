@@ -37,6 +37,10 @@ import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour
 
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
+// Saved outfits scroll horizontally, so their cards are narrower than the
+// suggestion cards above them -- wide enough to read, narrow enough that the
+// next card peeks in to hint there's more to scroll to.
+const SAVED_OUTFIT_CARD_WIDTH = Math.min(width * 0.74, 300);
 
 type Tab = 'items' | 'outfits' | 'capsules' | 'mannequin';
 
@@ -58,7 +62,7 @@ export default function WardrobeScreen() {
   const { showToast } = useToast();
   const { session } = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; loadOutfit?: string }>();
   const tourCoachmark = useTourCoachmark('wardrobe');
 
   useEffect(() => {
@@ -273,7 +277,25 @@ export default function WardrobeScreen() {
   );
 
   const stats = useMemo(() => computeStats(items), [items]);
-  const suggestions = useMemo(() => generateOutfits(items), [items]);
+  // Pulled from a larger pool than what's shown, so "Pass" on one of the
+  // visible 3 can reveal the next-best candidate instead of just shrinking
+  // the list.
+  const suggestionPool = useMemo(() => generateOutfits(items, 20), [items]);
+  const [passedKeys, setPassedKeys] = useState<Set<string>>(new Set());
+  const SUGGESTION_DISPLAY_LIMIT = 3;
+  const suggestions = useMemo(
+    () => suggestionPool.filter((o) => !passedKeys.has(o.key)).slice(0, SUGGESTION_DISPLAY_LIMIT),
+    [suggestionPool, passedKeys]
+  );
+  const handlePassSuggestion = useCallback((outfit: GeneratedOutfit) => {
+    setPassedKeys((prev) => new Set(prev).add(outfit.key));
+  }, []);
+  // A fresh wardrobe fetch can surface new candidates -- passed keys from a
+  // stale pool shouldn't linger forever and permanently hide a combination
+  // that's since come back into contention (e.g. after items change).
+  useEffect(() => {
+    setPassedKeys(new Set());
+  }, [items]);
 
   const handleSaveSuggestion = useCallback(async (outfit: GeneratedOutfit) => {
     if (!session?.user?.id) return;
@@ -344,17 +366,19 @@ export default function WardrobeScreen() {
     const outfitItems: any[] = Array.isArray(item.items) ? item.items : [];
     const isMannequinStyled = outfitItems.some((i) => typeof i.x === 'number');
 
+    const thumbSize = (SAVED_OUTFIT_CARD_WIDTH - 32 - 24) / 4; // 4 thumbs max visible, minus padding/gaps
+
     return (
       <TouchableOpacity
-        style={[styles.outfitCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[styles.outfitCard, { width: SAVED_OUTFIT_CARD_WIDTH, backgroundColor: colors.card, borderColor: colors.border }]}
         activeOpacity={0.8}
         onPress={() => router.push(`/wardrobe/outfit/${item.id}` as any)}
         accessibilityRole="button"
         accessibilityLabel={`${item.name || 'Outfit'}, ${outfitItems.length} items`}
       >
         <View style={styles.outfitHeader}>
-          <View>
-            <Text style={[styles.outfitName, { color: colors.text }]}>{item.name}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.outfitName, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
             {isMannequinStyled && (
               <Text style={{ fontSize: 10, color: colors.tint, fontWeight: '700', marginTop: 1 }}>
                 Styled on Mannequin ✨
@@ -368,7 +392,7 @@ export default function WardrobeScreen() {
           <View style={[styles.outfitMannequinThumb, { backgroundColor: outfitItems.find((i) => i.canvas_bg)?.canvas_bg || (theme === 'dark' ? '#1c1c1e' : '#FFFFFF'), borderColor: colors.border }]}>
             <MannequinOutfitPreview
               items={outfitItems}
-              canvasWidth={OUTFIT_CARD_WIDTH - 32}
+              canvasWidth={SAVED_OUTFIT_CARD_WIDTH - 32}
               canvasHeight={200}
               isDark={theme === 'dark'}
               backgroundColor={outfitItems.find((i) => i.canvas_bg)?.canvas_bg}
@@ -377,12 +401,12 @@ export default function WardrobeScreen() {
         ) : (
           <View style={styles.outfitGrid}>
             {outfitItems.slice(0, 4).map((i: any, index) => (
-              <View key={index} style={[styles.outfitThumb, { borderColor: colors.border }]}>
+              <View key={index} style={[styles.outfitThumb, { width: thumbSize, borderColor: colors.border }]}>
                 <Image source={{ uri: i.image_url }} style={styles.outfitThumbImg} contentFit="cover" />
               </View>
             ))}
             {outfitItems.length > 4 && (
-              <View style={[styles.outfitMore, { backgroundColor: colors.surface }]}>
+              <View style={[styles.outfitMore, { width: thumbSize, backgroundColor: colors.surface }]}>
                 <Text style={[styles.outfitMoreText, { color: colors.text }]}>+{outfitItems.length - 4}</Text>
               </View>
             )}
@@ -466,7 +490,7 @@ export default function WardrobeScreen() {
       </Text>
       {suggestions.map((o, i) => (
         <FadeInView key={o.key} index={i}>
-          <SuggestedOutfitCard outfit={o} onSave={handleSaveSuggestion} saving={savingKey === o.key} />
+          <SuggestedOutfitCard outfit={o} onSave={handleSaveSuggestion} onPass={handlePassSuggestion} saving={savingKey === o.key} />
         </FadeInView>
       ))}
       <View style={styles.dividerWrap}>
@@ -516,7 +540,7 @@ export default function WardrobeScreen() {
             }
             accessibilityRole="button"
             accessibilityLabel={
-              activeTab === 'capsules' ? 'Create capsule' : activeTab === 'outfits' ? 'Create outfit' : 'Add wardrobe item'
+              activeTab === 'capsules' ? 'Create collection' : activeTab === 'outfits' ? 'Create outfit' : 'Add wardrobe item'
             }
           >
             <IconSymbol name="plus" size={20} color={colors.onTint} />
@@ -533,7 +557,7 @@ export default function WardrobeScreen() {
           {([
             { key: 'items' as Tab, label: 'Items' },
             { key: 'outfits' as Tab, label: 'Outfits' },
-            { key: 'capsules' as Tab, label: 'Capsules' },
+            { key: 'capsules' as Tab, label: 'Collections' },
             { key: 'mannequin' as Tab, label: 'Mannequin', icon: 'sparkles' },
           ]).map((tabItem) => {
             const isSelected = activeTab === tabItem.key;
@@ -582,7 +606,7 @@ export default function WardrobeScreen() {
           another tab is active, so switching tabs doesn't discard an
           in-progress mannequin styling session. */}
       <View style={{ flex: 1, display: activeTab === 'mannequin' ? 'flex' : 'none' }}>
-        <MannequinView wardrobeItems={items} onRefreshWardrobe={fetchWardrobeData} />
+        <MannequinView wardrobeItems={items} onRefreshWardrobe={fetchWardrobeData} initialLoadOutfitId={params.loadOutfit} />
       </View>
 
       {activeTab === 'mannequin' ? null : loading ? (
@@ -639,41 +663,50 @@ export default function WardrobeScreen() {
         />
       ) : activeTab === 'outfits' ? (
         outfits.length > 0 || suggestions.length > 0 ? (
-          <FlatList
-            key="outfits-list"
-            data={outfits}
-            renderItem={renderOutfitItem}
-            keyExtractor={(item) => item.id}
+          <ScrollView
             contentContainerStyle={styles.listContent}
-            initialNumToRender={4}
-            ListHeaderComponent={outfitsHeader}
-            onEndReached={loadMoreOutfits}
-            onEndReachedThreshold={0.4}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} colors={[colors.tint]} />
             }
-            ListEmptyComponent={
+          >
+            {outfitsHeader}
+
+            {outfits.length > 0 ? (
+              <FlatList
+                key="saved-outfits-row"
+                horizontal
+                data={outfits}
+                renderItem={renderOutfitItem}
+                keyExtractor={(item) => item.id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.savedOutfitsRow}
+                snapToInterval={SAVED_OUTFIT_CARD_WIDTH + Spacing.lg}
+                decelerationRate="fast"
+                initialNumToRender={4}
+                onEndReached={loadMoreOutfits}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={
+                  loadingMoreOutfits ? (
+                    <ActivityIndicator color={colors.tint} style={{ marginHorizontal: Spacing.lg }} />
+                  ) : null
+                }
+              />
+            ) : (
               <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
                 No saved outfits yet -- save one of the suggestions above, or build your own.
               </Text>
-            }
-            ListFooterComponent={
-              <View>
-                {loadingMoreOutfits && (
-                  <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
-                )}
-                <TouchableOpacity
-                  style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/outfit-builder'); }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Create new outfit"
-                >
-                  <IconSymbol name="plus" size={20} color={colors.onTint} />
-                  <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Outfit</Text>
-                </TouchableOpacity>
-              </View>
-            }
-          />
+            )}
+
+            <TouchableOpacity
+              style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/outfit-builder'); }}
+              accessibilityRole="button"
+              accessibilityLabel="Create new outfit"
+            >
+              <IconSymbol name="plus" size={20} color={colors.onTint} />
+              <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Outfit</Text>
+            </TouchableOpacity>
+          </ScrollView>
         ) : (
           <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 }]}>
             <BrandEmptyState
@@ -713,7 +746,7 @@ export default function WardrobeScreen() {
                   {loadingMoreCapsules ? (
                     <ActivityIndicator size="small" color={colors.tint} />
                   ) : (
-                    <Text style={[styles.createOutfitBtnText, { color: colors.text }]}>Load More Capsules</Text>
+                    <Text style={[styles.createOutfitBtnText, { color: colors.text }]}>Load More Collections</Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -722,15 +755,15 @@ export default function WardrobeScreen() {
                 onPress={() => router.push('/wardrobe/create-capsule' as any)}
               >
                 <IconSymbol name="plus" size={20} color={colors.onTint} />
-                <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Capsule</Text>
+                <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Collection</Text>
               </TouchableOpacity>
             </>
           ) : (
             <BrandEmptyState
               icon="archivebox"
-              title="No Capsules Yet"
-              message="Build a focused capsule for a season, a trip, or a purpose -- fewer pieces, more looks."
-              actionLabel="Create First Capsule"
+              title="No Collections Yet"
+              message="Build a focused collection for a season, a trip, or a purpose -- fewer pieces, more looks."
+              actionLabel="Create First Collection"
               onAction={() => router.push('/wardrobe/create-capsule' as any)}
             />
           )}
@@ -850,6 +883,11 @@ const styles = StyleSheet.create({
   listContent: {
     padding: Spacing.xl,
     paddingBottom: 100,
+  },
+  savedOutfitsRow: {
+    gap: Spacing.lg,
+    paddingRight: Spacing.lg,
+    paddingBottom: Spacing.sm,
   },
   columnWrapper: {
     justifyContent: 'space-between',
