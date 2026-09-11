@@ -1,7 +1,7 @@
 export interface OutfitItemDto {
   slot: string;
   name: string;
-  image_url: string;
+  image_url?: string | null;
   product_id?: string | null;
   wardrobe_item_id?: string | null;
   color_tags?: string[] | null;

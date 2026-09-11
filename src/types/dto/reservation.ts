@@ -1,7 +1,7 @@
 export interface ReservationItemInput {
   product_id: string;
-  size: string;
-  color: string;
+  size?: string | null;
+  color?: string | null;
   quantity: number;
 }
 
