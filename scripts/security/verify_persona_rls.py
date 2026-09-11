@@ -12,7 +12,8 @@ Implements the multi-persona verification architecture approved in Phase B6:
       and execution-denial on mutating/command RPCs.
     - Customer Persona: Asserts authenticated access to own profile/measurements,
       denial on other-user private rows, fail-closed enforcement on direct table writes,
-      and safe verification of command RPC boundaries with zero residual state.
+      safe verification of command RPC boundaries, and snapshot-based restoration
+      guaranteeing zero residual database state.
     - Staff Persona: Asserts operational manager/inventory read access,
       and fail-closed denial on owner-only administrative tables (announcements).
 """
@@ -294,88 +295,135 @@ class PersonaHarness:
             )
             return
 
-        # Probe 2.6: Customer reading own profile
-        code, body = self.rest_request(f"profiles?id=eq.{cust_id}&select=id,email,role", cust_token)
-        passed_2_6 = (code == 200 and isinstance(body, list) and len(body) == 1 and body[0].get("id") == cust_id)
-        self.log_result(
-            "Layer 2", "customer",
-            "Own profile read access",
-            "PASS" if passed_2_6 else "FAIL",
-            f"HTTP {code} - Retrieved own profile record"
-        )
+        # Capture pre-probe snapshot of customer state to guarantee zero residual modification
+        code_prof, prof_rows = self.rest_request(f"profiles?id=eq.{cust_id}&select=fit_preference", cust_token)
+        initial_fit_pref = prof_rows[0].get("fit_preference") if (code_prof == 200 and prof_rows) else None
 
-        # Probe 2.7: Customer updating profile and measurements via RPC
-        code, body = self.rest_request(
-            "rpc/update_profile_and_measurements",
-            cust_token,
-            method="POST",
-            payload={
-                "_fit_preference": "Regular",
-                "_height": 175,
-                "_weight": 70
+        code_m, m_rows = self.rest_request(f"user_measurements?user_id=eq.{cust_id}&select=*", cust_token)
+        initial_measurement = m_rows[0] if (code_m == 200 and m_rows) else None
+
+        try:
+            # Probe 2.6: Customer reading own profile
+            code, body = self.rest_request(f"profiles?id=eq.{cust_id}&select=id,email,role", cust_token)
+            passed_2_6 = (code == 200 and isinstance(body, list) and len(body) == 1 and body[0].get("id") == cust_id)
+            self.log_result(
+                "Layer 2", "customer",
+                "Own profile read access",
+                "PASS" if passed_2_6 else "FAIL",
+                f"HTTP {code} - Retrieved own profile record"
+            )
+
+            # Probe 2.7: Customer updating profile and measurements via RPC
+            test_fit_pref = "Slim" if initial_fit_pref != "Slim" else "Relaxed"
+            test_height = 182
+            test_weight = 78
+            code, body = self.rest_request(
+                "rpc/update_profile_and_measurements",
+                cust_token,
+                method="POST",
+                payload={
+                    "_fit_preference": test_fit_pref,
+                    "_height": test_height,
+                    "_weight": test_weight
+                }
+            )
+            passed_2_7 = (code == 200 and isinstance(body, dict) and body.get("success") is True)
+            self.log_result(
+                "Layer 2", "customer",
+                "Own profile and measurement RPC update",
+                "PASS" if passed_2_7 else "FAIL",
+                f"HTTP {code} - Profile and measurements updated successfully"
+            )
+
+            # Probe 2.8: Customer reading other user's private measurements
+            staff_token, staff_id = self.login_persona(HARNESS_STAFF_EMAIL, HARNESS_STAFF_PASSWORD)
+            target_other_id = staff_id or str(uuid.uuid4())
+            code, body = self.rest_request(f"user_measurements?user_id=eq.{target_other_id}&select=*", cust_token)
+            is_other_denied = (code in (401, 403)) or (code == 200 and isinstance(body, list) and len(body) == 0)
+            self.log_result(
+                "Layer 2", "customer",
+                "Other-user private row read denial",
+                "PASS" if is_other_denied else "FAIL",
+                f"HTTP {code} - Rows visible: {len(body) if isinstance(body, list) else 'denied'}"
+            )
+
+            # Probe 2.9: Customer direct table write to reservations fails closed
+            code, body = self.rest_request(
+                "reservations",
+                cust_token,
+                method="POST",
+                payload={
+                    "id": str(uuid.uuid4()),
+                    "customer_id": cust_id,
+                    "status": "Pending"
+                }
+            )
+            is_direct_write_blocked = (code in (401, 403))
+            body_msg = body.get("message") if isinstance(body, dict) else str(body)[:80]
+            self.log_result(
+                "Layer 2", "customer",
+                "Direct table write to reservations fails closed",
+                "PASS" if is_direct_write_blocked else "FAIL",
+                f"HTTP {code} - {body_msg}"
+            )
+
+            # Probe 2.10: Customer reservation command execution probe
+            # Exercises create_reservation_multi_idempotent with empty items to verify execute grant and parameter validation with zero residual state
+            code, body = self.rest_request(
+                "rpc/create_reservation_multi_idempotent",
+                cust_token,
+                method="POST",
+                payload={
+                    "_idempotency_key": str(uuid.uuid4()),
+                    "_items": [],
+                    "_date": "2026-10-01",
+                    "_appointment_time": "10:00:00"
+                }
+            )
+            body_msg = body.get("message") if isinstance(body, dict) else str(body)
+            passed_2_10 = (code == 400 and "at least one item" in body_msg)
+            self.log_result(
+                "Layer 2", "customer",
+                "Reservation command authorization verified safely (zero residual state)",
+                "PASS" if passed_2_10 else "FAIL",
+                f"HTTP {code} - Execution authorized, validated cleanly ({body_msg})"
+            )
+        finally:
+            # Restore customer pre-probe profile and measurement state to guarantee zero residual modifications
+            restore_payload = {
+                "_fit_preference": initial_fit_pref or "",
+                "_height": initial_measurement.get("height") if initial_measurement else None,
+                "_weight": initial_measurement.get("weight") if initial_measurement else None,
+                "_measurements": initial_measurement.get("measurements") if initial_measurement else None,
+                "_scan_confidence": initial_measurement.get("scan_confidence") if initial_measurement else None,
+                "_per_field_confidence": initial_measurement.get("per_field_confidence") if initial_measurement else None,
+                "_measurement_source": initial_measurement.get("measurement_source") if initial_measurement else None,
             }
-        )
-        passed_2_7 = (code == 200 and isinstance(body, dict) and body.get("success") is True)
-        self.log_result(
-            "Layer 2", "customer",
-            "Own profile and measurement RPC update",
-            "PASS" if passed_2_7 else "FAIL",
-            f"HTTP {code} - Profile and measurements updated successfully"
-        )
+            code_res, body_res = self.rest_request(
+                "rpc/update_profile_and_measurements",
+                cust_token,
+                method="POST",
+                payload=restore_payload
+            )
+            code_v_p, v_p_rows = self.rest_request(f"profiles?id=eq.{cust_id}&select=fit_preference", cust_token)
+            code_v_m, v_m_rows = self.rest_request(f"user_measurements?user_id=eq.{cust_id}&select=*", cust_token)
 
-        # Probe 2.8: Customer reading other user's private measurements
-        staff_token, staff_id = self.login_persona(HARNESS_STAFF_EMAIL, HARNESS_STAFF_PASSWORD)
-        target_other_id = staff_id or str(uuid.uuid4())
-        code, body = self.rest_request(f"user_measurements?user_id=eq.{target_other_id}&select=*", cust_token)
-        is_other_denied = (code in (401, 403)) or (code == 200 and isinstance(body, list) and len(body) == 0)
-        self.log_result(
-            "Layer 2", "customer",
-            "Other-user private row read denial",
-            "PASS" if is_other_denied else "FAIL",
-            f"HTTP {code} - Rows visible: {len(body) if isinstance(body, list) else 'denied'}"
-        )
+            restored_fit = v_p_rows[0].get("fit_preference") if (code_v_p == 200 and v_p_rows) else None
+            restored_m = v_m_rows[0] if (code_v_m == 200 and v_m_rows) else None
 
-        # Probe 2.9: Customer direct table write to reservations fails closed
-        code, body = self.rest_request(
-            "reservations",
-            cust_token,
-            method="POST",
-            payload={
-                "id": str(uuid.uuid4()),
-                "customer_id": cust_id,
-                "status": "Pending"
-            }
-        )
-        is_direct_write_blocked = (code in (401, 403))
-        body_msg = body.get("message") if isinstance(body, dict) else str(body)[:80]
-        self.log_result(
-            "Layer 2", "customer",
-            "Direct table write to reservations fails closed",
-            "PASS" if is_direct_write_blocked else "FAIL",
-            f"HTTP {code} - {body_msg}"
-        )
+            is_restored = (
+                code_res == 200 and
+                (restored_fit == initial_fit_pref) and
+                ((restored_m.get("height") if restored_m else None) == (initial_measurement.get("height") if initial_measurement else None)) and
+                ((restored_m.get("weight") if restored_m else None) == (initial_measurement.get("weight") if initial_measurement else None))
+            )
 
-        # Probe 2.10: Customer reservation command execution probe
-        # Exercises create_reservation_multi_idempotent with empty items to verify execute grant and parameter validation with zero residual state
-        code, body = self.rest_request(
-            "rpc/create_reservation_multi_idempotent",
-            cust_token,
-            method="POST",
-            payload={
-                "_idempotency_key": str(uuid.uuid4()),
-                "_items": [],
-                "_date": "2026-10-01",
-                "_appointment_time": "10:00:00"
-            }
-        )
-        body_msg = body.get("message") if isinstance(body, dict) else str(body)
-        passed_2_10 = (code == 400 and "at least one item" in body_msg)
-        self.log_result(
-            "Layer 2", "customer",
-            "Reservation command authorization verified safely (zero residual state)",
-            "PASS" if passed_2_10 else "FAIL",
-            f"HTTP {code} - Execution authorized, validated cleanly ({body_msg})"
-        )
+            self.log_result(
+                "Layer 2", "customer",
+                "Customer state restored and verified (zero residual state)",
+                "PASS" if is_restored else "FAIL",
+                f"HTTP {code_res} - Pre-probe profile and measurement state restored cleanly"
+            )
 
         # =========================================================
         # 3. Staff Persona Probes (Authenticated Token)
@@ -390,20 +438,20 @@ class PersonaHarness:
             )
             return
 
-        # Probe 2.11: Representative staff manager/inventory access
+        # Probe 2.12: Representative staff manager/inventory access
         code, body = self.rest_request(
             "inventory?select=id,product_doc_id,size,color,total,available,reserved&limit=1",
             staff_token
         )
-        passed_2_11 = (code == 200 and isinstance(body, list) and len(body) > 0)
+        passed_2_12 = (code == 200 and isinstance(body, list) and len(body) > 0)
         self.log_result(
             "Layer 2", "staff",
             "Representative inventory manager read access",
-            "PASS" if passed_2_11 else "FAIL",
+            "PASS" if passed_2_12 else "FAIL",
             f"HTTP {code} - Retrieved inventory variant stock records"
         )
 
-        # Probe 2.12: Staff owner-only action denial (announcements mutation)
+        # Probe 2.13: Staff owner-only action denial (announcements mutation)
         code, body = self.rest_request(
             "announcements",
             staff_token,
