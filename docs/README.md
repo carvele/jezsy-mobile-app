@@ -28,7 +28,8 @@ This index categorizes all engineering documentation across the \jezsy-mobile-ap
 - [stock-check-at-reservation-tradeoffs.md](./stock-check-at-reservation-tradeoffs.md) — Architectural rationale for reservation inventory hold boundaries.
 - [supabase-project-state-2026-07-29.md](./supabase-project-state-2026-07-29.md) — Baseline project configuration and database settings reference.
 
-### Completed Immutable Audit Ledgers (\docs/audits/\)
+### Completed Immutable Audit Ledgers (`docs/audits/`)
+- [audits/b7-verification-closure.md](./audits/b7-verification-closure.md) — Phase B7 Feature Lifecycle, Zombie Pruning & Documentation Governance Closure Ledger.
 - [audits/b6-verification-closure.md](./audits/b6-verification-closure.md) — Phase B6 Security Hardening, Definer Search Path & Persona RLS Closure Ledger.
 - [audits/security-performance-hardening-closure-ledger.md](./audits/security-performance-hardening-closure-ledger.md) — Phase B4 Security & Performance Hardening Closure Ledger.
 - [audits/architecture-remediation-program-phase-1.md](./audits/architecture-remediation-program-phase-1.md) — Phase B1-B3 Foundation Remediation Synthesis.
