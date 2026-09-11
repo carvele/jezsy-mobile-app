@@ -22,8 +22,10 @@ export default function NetworkScreen() {
   
   const [connections, setConnections] = useState<Connection[]>([]);
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [suggestions, setSuggestions] = useState<(UserProfile & { mutuals?: number })[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -43,6 +45,20 @@ export default function NetworkScreen() {
       setLoading(false);
     }
   }, [user, showToast]);
+
+  const loadSuggestions = useCallback(async () => {
+    if (!user) return;
+    setSuggestionsLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_suggested_connections');
+      if (error) throw error;
+      setSuggestions(data || []);
+    } catch (err: any) {
+      console.log('Error loading suggested connections:', err?.message || err);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, [user]);
 
   const loadMoreConnections = useCallback(async () => {
     if (!user || loadingMore || !hasMore || loading) return;
@@ -66,8 +82,10 @@ export default function NetworkScreen() {
   useEffect(() => {
     if (user && (activeTab === 'connections' || activeTab === 'pending')) {
       loadConnections();
+    } else if (user && activeTab === 'search' && !searchQuery.trim() && suggestions.length === 0) {
+      loadSuggestions();
     }
-  }, [user, activeTab, loadConnections]);
+  }, [user, activeTab, searchQuery, suggestions.length, loadConnections, loadSuggestions]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim() || !user) return;
@@ -180,7 +198,7 @@ export default function NetworkScreen() {
     </TouchableOpacity>
   );
 
-  const renderSearchItem = ({ item }: { item: UserProfile }) => {
+  const renderSearchItem = ({ item }: { item: UserProfile & { mutuals?: number } }) => {
     // Check if we already have a connection
     const existing = connections.find(c => c.other_user.id === item.id);
     
@@ -190,16 +208,14 @@ export default function NetworkScreen() {
         onPress={() => router.push(`/user/${item.id}` as any)}
       >
         <View style={[styles.avatar, { backgroundColor: colors.border }]}>
-          {false ? (
-            <Image source={{ uri: '' }} style={styles.avatarImage} />
-          ) : (
-            <IconSymbol name="person.fill" size={24} color={colors.secondaryText} />
-          )}
+          <IconSymbol name="person.fill" size={24} color={colors.secondaryText} />
         </View>
         <View style={styles.userInfo}>
           <Text style={[styles.userName, { color: colors.text }]}>@{item.username}</Text>
           <Text style={[styles.userFullName, { color: colors.secondaryText }]}>
-            {item.first_name} {item.last_name}
+            {item.mutuals !== undefined && item.mutuals > 0
+              ? `${item.mutuals} mutual connection${item.mutuals > 1 ? 's' : ''}`
+              : `${item.first_name} ${item.last_name}`}
           </Text>
         </View>
 
@@ -283,17 +299,38 @@ export default function NetworkScreen() {
       {loading && activeTab !== 'search' ? (
         <ActivityIndicator color={colors.tint} style={{ marginTop: 40 }} />
       ) : activeTab === 'search' ? (
-        <FlatList
-          data={searchResults}
-          renderItem={renderSearchItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-              {searchLoading ? 'Searching...' : (searchQuery ? 'No users found' : 'Search for users to connect')}
-            </Text>
-          }
-        />
+        searchQuery.trim() ? (
+          <FlatList
+            data={searchResults}
+            renderItem={renderSearchItem}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                {searchLoading ? 'Searching...' : 'No users found'}
+              </Text>
+            }
+          />
+        ) : (
+          <FlatList
+            data={suggestions}
+            renderItem={renderSearchItem}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.list}
+            ListHeaderComponent={
+              suggestions.length > 0 ? (
+                <Text style={[styles.sectionHeader, { color: colors.secondaryText }]}>
+                  Suggested For You
+                </Text>
+              ) : null
+            }
+            ListEmptyComponent={
+              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                {suggestionsLoading ? 'Loading suggestions...' : 'No suggestions available right now.'}
+              </Text>
+            }
+          />
+        )
       ) : (
         <FlatList
           data={getFilteredConnections()}
@@ -414,6 +451,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: Spacing.md,
     marginLeft: Spacing.md,
+  },
+  sectionHeader: {
+    ...Type.label,
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   emptyText: {
     ...Type.body,

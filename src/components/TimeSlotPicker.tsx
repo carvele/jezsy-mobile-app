@@ -147,26 +147,23 @@ export function TimeSlotPicker({
         return;
       }
 
-      const { data: reservations, error: resError } = await supabase
-        .from("reservations")
-        .select("appointment_time, status, deleted")
-        .eq("date", dateStr)
-        .or("deleted.is.false,status.not.eq.Cancelled")
-        .neq("status", "Completed");
+      // Fetch slot booking counts from the authoritative server aggregate RPC.
+      // A raw reservations table query is constrained by customer RLS to
+      // customer_id = auth.uid(), which hides bookings made by other customers
+      // and causes fully booked slots to appear vacant. get_slot_booked_counts
+      // is a SECURITY DEFINER function returning global booking counts per slot.
+      const { data: slotCounts, error: slotCountsError } = await supabase
+        .rpc("get_slot_booked_counts", { _date: dateStr });
 
-      if (resError) throw resError;
+      if (slotCountsError) throw slotCountsError;
 
-      // Group reservations by time
+      // Group booking counts by normalised time value
       const bookedCounts: Record<string, number> = {};
-      if (reservations) {
-        reservations.forEach((r) => {
-          const status = (r.status || "Pending").toLowerCase();
-          const isActive =
-            !r.deleted && status !== "cancelled" && status !== "completed";
-          // Stored as timestamptz; key by wall clock so it matches the slots below.
-          const slotValue = toStoreTimeValue(r.appointment_time);
-          if (slotValue && isActive) {
-            bookedCounts[slotValue] = (bookedCounts[slotValue] || 0) + 1;
+      if (slotCounts) {
+        slotCounts.forEach((item) => {
+          const slotValue = toStoreTimeValue(item.slot_time);
+          if (slotValue) {
+            bookedCounts[slotValue] = item.booked_count;
           }
         });
       }

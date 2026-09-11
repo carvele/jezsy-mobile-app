@@ -373,7 +373,6 @@ function InitialLayout() {
       <Stack initialRouteName="(tabs)" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', headerShown: true, title: 'Modal' }} />
       </Stack>
       {/* Branded loading overlay: covers the Stack during cold bootstrap until routeSettled is confirmed */}
       {!routeSettled && (
