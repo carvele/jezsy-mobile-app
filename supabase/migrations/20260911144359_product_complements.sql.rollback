@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS public.product_complements;
+DROP FUNCTION IF EXISTS public.trg_product_complements_audit();
