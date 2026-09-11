@@ -45,11 +45,11 @@ SUPABASE_URL = os.environ.get("EXPO_PUBLIC_SUPABASE_URL") or os.environ.get("SUP
 SUPABASE_ANON_KEY = os.environ.get("EXPO_PUBLIC_SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
-HARNESS_CUSTOMER_EMAIL = os.environ.get("HARNESS_CUSTOMER_EMAIL", "test_harness_customer@jezsy.internal")
-HARNESS_CUSTOMER_PASSWORD = os.environ.get("HARNESS_CUSTOMER_PASSWORD", "VerifyPersonaTest123!")
+HARNESS_CUSTOMER_EMAIL = os.environ.get("HARNESS_CUSTOMER_EMAIL", "").strip()
+HARNESS_CUSTOMER_PASSWORD = os.environ.get("HARNESS_CUSTOMER_PASSWORD", "").strip()
 
-HARNESS_STAFF_EMAIL = os.environ.get("HARNESS_STAFF_EMAIL", "test_harness_staff@jezsy.internal")
-HARNESS_STAFF_PASSWORD = os.environ.get("HARNESS_STAFF_PASSWORD", "VerifyStaffTest123!")
+HARNESS_STAFF_EMAIL = os.environ.get("HARNESS_STAFF_EMAIL", "").strip()
+HARNESS_STAFF_PASSWORD = os.environ.get("HARNESS_STAFF_PASSWORD", "").strip()
 
 class PersonaHarness:
     def __init__(self, url: str, anon_key: str, service_key: str = ""):
@@ -430,6 +430,9 @@ class PersonaHarness:
         # =========================================================
         print("\n--- Persona: Authenticated Staff ---")
         if not staff_token:
+            staff_token, staff_id = self.login_persona(HARNESS_STAFF_EMAIL, HARNESS_STAFF_PASSWORD)
+
+        if not staff_token:
             self.log_result(
                 "Layer 2", "staff",
                 "Staff authentication",
@@ -497,6 +500,22 @@ class PersonaHarness:
         return failed == 0 and passed > 0
 
 def main():
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        print("[ERROR] Missing required database configuration: EXPO_PUBLIC_SUPABASE_URL / SUPABASE_ANON_KEY", file=sys.stderr)
+        sys.exit(1)
+
+    required_credentials = {
+        "HARNESS_CUSTOMER_EMAIL": HARNESS_CUSTOMER_EMAIL,
+        "HARNESS_CUSTOMER_PASSWORD": HARNESS_CUSTOMER_PASSWORD,
+        "HARNESS_STAFF_EMAIL": HARNESS_STAFF_EMAIL,
+        "HARNESS_STAFF_PASSWORD": HARNESS_STAFF_PASSWORD,
+    }
+    missing = [k for k, v in required_credentials.items() if not v]
+    if missing:
+        print(f"[ERROR] Fail-closed: missing required harness credential environment variables: {', '.join(missing)}", file=sys.stderr)
+        print("Set HARNESS_CUSTOMER_EMAIL, HARNESS_CUSTOMER_PASSWORD, HARNESS_STAFF_EMAIL, and HARNESS_STAFF_PASSWORD in your environment or gitignored .env before running.", file=sys.stderr)
+        sys.exit(1)
+
     harness = PersonaHarness(SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY)
     harness.run_catalog_checks()
     harness.run_runtime_probes()
