@@ -67,11 +67,29 @@ export interface GarmentRendererProps {
    * AR_LOAD_ERROR, AR_RENDER_ERROR, or AR_INTERNAL_ERROR.
    */
   onLoadError?: (error: string | { type: string; message: string }) => void;
+  /**
+   * AR Garment Recoloring (Phase 1): the selected commercial variant's
+   * `inventory.hex_color`, an AR-rendering approximation, not a
+   * colorimetric-exact record (see the migration's own comment). Derive
+   * this from the customer's selected sellable variant, never independent
+   * UI color-picker state -- switching color should mean switching which
+   * variant is selected, of which this is a read-only projection.
+   * null/undefined restores the GLB's own authored material color.
+   * Delivered by message (same as fitModifier/cameraCalibration below), so
+   * switching colors never reloads the GLB or resets tracking/smoothing
+   * state.
+   */
+  hexColor?: string | null;
 }
 
 export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererProps>(
-  ({ modelUrl, visible = true, metadata, fitModifier = 1, cameraCalibration, cameraDimensions, onLoadError }, ref) => {
+  ({ modelUrl, visible = true, metadata, fitModifier = 1, cameraCalibration, cameraDimensions, onLoadError, hexColor }, ref) => {
     const safeFitModifier = Number.isFinite(fitModifier) && fitModifier > 0 ? fitModifier : 1;
+    // Same #RRGGBB contract as the inventory.hex_color CHECK constraint.
+    // Validated here (not just left to THREE.Color.set's own silent
+    // fallback) so a malformed value predictably restores the authored
+    // baseline instead of doing whatever Three.js happens to do with it.
+    const safeHexColor = typeof hexColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(hexColor) ? hexColor : null;
     // metadata.restPoseMetricWidth used to be spliced into the injected script as a bare
     // JS expression with no validation at all -- a malformed DB value (string, object,
     // NaN) wouldn't just compute a wrong scale, it would produce invalid JS in that
@@ -252,6 +270,38 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // the calibration reload masked it (both async values tend to resolve close
           // together). 1 matches this file's own default silhouette-match behavior.
           let FIT_MODIFIER = 1;
+
+          // AR Garment Recoloring (Phase 1): materials explicitly authored with
+          // the Recolor_ prefix, discovered once at GLB-load time (see the
+          // loader.load callback below). Never "all materials, or all if
+          // simple" -- an incorrect garment color is worse than no recolor,
+          // so anything not on this explicit allowlist (buttons, trim, logos,
+          // lining) is left exactly as authored, always.
+          const RECOLOR_MATERIAL_PREFIX = 'Recolor_';
+          let recolorableMaterials = [];
+          // Set by SET_GARMENT_COLOR (delivered by message, same reasoning as
+          // CAMERA_CALIBRATION/FIT_MODIFIER above: this depends on the async
+          // selected-variant lookup in ar-tryon/[id].tsx, so baking it into
+          // this HTML string would force a full GLB reload on every color
+          // switch). null restores each material's authored baseline color.
+          let GARMENT_HEX_COLOR = null;
+
+          // Derives from the selected commercial variant's hex, applied
+          // uniformly to every discovered Recolor_ material. Each material's
+          // own cloned baseline (material.userData.originalColor, snapshotted
+          // once at load time) is always the restore target -- so repeated
+          // switching (White -> Navy -> Red -> White) never compounds, since
+          // .color.set() always starts from that same untouched clone, never
+          // from whatever the previous color left behind.
+          function applyGarmentColor() {
+            recolorableMaterials.forEach((material) => {
+              if (GARMENT_HEX_COLOR) {
+                material.color.set(GARMENT_HEX_COLOR);
+              } else if (material.userData.originalColor) {
+                material.color.copy(material.userData.originalColor);
+              }
+            });
+          }
 
           // Fix for open item #1 in the AR audit plan: landmarks are normalized to the
           // camera FRAME, but the preview renders that frame with 'cover' cropping (web
@@ -613,6 +663,42 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 }
               });
 
+              // AR Garment Recoloring (Phase 1): clone each mesh's material(s) --
+              // handling both a single material and Three.js's multi-material
+              // array case -- so recoloring this instance's clone can never
+              // mutate a shared/cached material object. Only materials whose
+              // authored name starts with Recolor_ are collected; everything
+              // else (buttons, trim, lining, logos) is left completely alone.
+              garmentModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                  child.material = Array.isArray(child.material)
+                    ? child.material.map((m) => m.clone())
+                    : child.material.clone();
+                  const materials = Array.isArray(child.material) ? child.material : [child.material];
+                  materials.forEach((material) => {
+                    if (material.name && material.name.indexOf(RECOLOR_MATERIAL_PREFIX) === 0 && ('color' in material)) {
+                      // Snapshot BEFORE any color is ever applied, so NULL (or
+                      // repeated switching) always restores this exact
+                      // authored baseline, never a compounded prior state.
+                      material.userData.originalColor = material.color.clone();
+                      recolorableMaterials.push(material);
+                    }
+                  });
+                }
+              });
+              if (recolorableMaterials.length === 0) {
+                // Never fall back to recoloring every material -- an incorrect
+                // garment color is worse than none. This GLB simply keeps its
+                // authored appearance regardless of the selected variant.
+                console.warn('[AR-RECOLOR] No ' + RECOLOR_MATERIAL_PREFIX + '-prefixed material found on this GLB; the selected variant color will not be reflected.');
+              } else if (AR_DEBUG) {
+                showDebug('Recolorable materials: ' + recolorableMaterials.map((m) => m.name).join(', '));
+              }
+              // A SET_GARMENT_COLOR message may have already arrived before
+              // this async load resolved (GARMENT_HEX_COLOR set, but nothing
+              // to apply it to yet) -- apply it now that materials exist.
+              applyGarmentColor();
+
               // Phase 5: Anatomical Anchoring
               // Derive the anatomical anchor from the garment's shoulder/arm bone midpoint
               // in model space. This guarantees 1:1 alignment with the wearer's shoulder
@@ -841,6 +927,13 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 FIT_MODIFIER = (typeof data.fitModifier === 'number' && isFinite(data.fitModifier) && data.fitModifier > 0)
                   ? data.fitModifier : 1;
                 showDebug('fit modifier applied: ' + FIT_MODIFIER.toFixed(3));
+                return;
+              }
+              if (data && data.type === 'SET_GARMENT_COLOR') {
+                GARMENT_HEX_COLOR = (typeof data.hexColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(data.hexColor))
+                  ? data.hexColor : null;
+                applyGarmentColor();
+                showDebug('garment color applied: ' + (GARMENT_HEX_COLOR || 'authored baseline'));
                 return;
               }
               if (data && data.type === 'UPDATE_TRANSFORM' && garmentGroup) {
@@ -1356,11 +1449,31 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
       sendCameraDimensions();
     }, [sendCameraDimensions]);
 
+    // Same message-based delivery as the others above, for the same reason:
+    // hexColor is derived from the selected variant (an async lookup in
+    // ar-tryon/[id].tsx), so baking it into htmlContent would reload the
+    // whole GLB on every color switch instead of just recoloring in place.
+    const sendGarmentColor = useCallback(() => {
+      const payload = { type: 'SET_GARMENT_COLOR', hexColor: safeHexColor };
+      if (Platform.OS === 'web') {
+        iframeRef.current?.contentWindow?.postMessage(payload, '*');
+      } else if (webviewRef.current) {
+        webviewRef.current.injectJavaScript(
+          "window.postMessage(" + JSON.stringify(payload) + ", '*'); true;"
+        );
+      }
+    }, [safeHexColor]);
+
+    useEffect(() => {
+      sendGarmentColor();
+    }, [sendGarmentColor]);
+
     const sendRuntimeConfig = useCallback(() => {
       sendCameraCalibration();
       sendFitModifier();
       sendCameraDimensions();
-    }, [sendCameraCalibration, sendFitModifier, sendCameraDimensions]);
+      sendGarmentColor();
+    }, [sendCameraCalibration, sendFitModifier, sendCameraDimensions, sendGarmentColor]);
 
     // Web has no ReactNativeWebView bridge -- the iframe posts errors to
     // window.parent directly (see notifyError in the injected script).

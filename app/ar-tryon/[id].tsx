@@ -322,9 +322,15 @@ function buildFallbackMetadata(p: Product | null | undefined): import('@/src/typ
 
 export default function ARTryOnScreen() {
   const { showToast } = useToast();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, color } = useLocalSearchParams<{ id: string; color?: string }>();
   const { session } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
+  // AR Garment Recoloring (Phase 1): the recolor hex is derived from the
+  // customer's selected commercial variant (see product/[id].tsx's AR
+  // button), never held as independent color-picker state here. null
+  // covers "no color selected" and "this color has no hex_color set" the
+  // same way -- both mean render the GLB's own authored appearance.
+  const [variantHexColor, setVariantHexColor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasConsented, setHasConsented] = useState<boolean | null>(null);
   const [stageLayout, setStageLayout] = useState<{ width: number; height: number }>({ width: 390, height: 600 });
@@ -839,6 +845,37 @@ export default function ARTryOnScreen() {
     fetchProduct();
   }, [fetchProduct]);
 
+  // AR Garment Recoloring (Phase 1): look up the selected variant's own
+  // hex_color rather than trusting anything read off the product record --
+  // color is a per-(product, size, color) inventory attribute, not a
+  // product-level one, and two sizes of the same color could in principle
+  // carry different hex values (see the migration's own note). Any single
+  // matching, non-deleted row is enough since hex_color doesn't vary by size.
+  useEffect(() => {
+    if (!id || !color) {
+      setVariantHexColor(null);
+      return;
+    }
+    let active = true;
+    supabase
+      .from('inventory')
+      .select('hex_color')
+      .eq('product_doc_id', id)
+      .eq('color', color)
+      .eq('deleted', false)
+      .limit(1)
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          console.error('Error fetching variant hex_color for AR:', error);
+          setVariantHexColor(null);
+          return;
+        }
+        setVariantHexColor(data?.[0]?.hex_color ?? null);
+      });
+    return () => { active = false; };
+  }, [id, color]);
+
   const [showHintModal, setShowHintModal] = useState(false);
 
   useEffect(() => {
@@ -1185,6 +1222,7 @@ export default function ARTryOnScreen() {
               modelUrl={validatedUrl}
               metadata={garmentMetadata}
               fitModifier={fitModifier}
+              hexColor={variantHexColor}
               cameraCalibration={cameraCalibration}
               cameraDimensions={cameraDimensions || (cameraCalibration ? { width: cameraCalibration.videoWidthPx, height: cameraCalibration.videoHeightPx } : undefined)}
               onLoadError={(err) => {
