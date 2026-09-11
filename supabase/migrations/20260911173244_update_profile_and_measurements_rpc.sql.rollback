@@ -1,0 +1,3 @@
+DROP FUNCTION IF EXISTS public.update_profile_and_measurements(
+    text, numeric, numeric, jsonb, real, jsonb, text
+);

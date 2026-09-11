@@ -8,6 +8,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/src/lib/supabase';
+import { profileService } from '@/src/services';
 import { sanitizeForStorage, validateMeasurementRanges } from '@/src/utils/measurementPrivacy';
 import { useToast } from '@/src/context/ToastContext';
 import { consumeScanSession } from '@/src/utils/scanSession';
@@ -401,48 +402,18 @@ export default function MeasurementsScreen() {
       measurement_source: source,
     };
 
-    // Both writes are idempotent (update by id, upsert on user_id), so a
-    // timed-out attempt can be safely retried without risking a duplicate or
-    // double-applied write -- this absorbs transient slow round-trips (e.g.
-    // marginal mobile signal) without making the user manually tap Save
-    // again. 15s per attempt (up from the original 12s) and up to 3 total
-    // attempts: confirmed live that a laptop on wifi saved fine while phones
-    // on cellular data kept timing out on the same build, so the DB-side fix
-    // alone wasn't enough headroom for genuinely higher-latency connections.
-    const attemptWrite = () => {
-      let timer: any = null;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          const timeoutErr: any = new Error('Request timed out while saving measurements.');
-          timeoutErr.isTimeout = true;
-          reject(timeoutErr);
-        }, 15000);
-      });
-      return Promise.race([
-        Promise.all([
-          supabase.from('profiles').update({ fit_preference: fitPreference }).eq('id', userId),
-          supabase.from('user_measurements').upsert(payload, { onConflict: 'user_id' }),
-        ]),
-        timeoutPromise,
-      ]).finally(() => {
-        if (timer) clearTimeout(timer);
-      });
-    };
-
     try {
-      let profileRes, measurementsRes;
-      const maxAttempts = 3;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          [profileRes, measurementsRes] = await attemptWrite();
-          break;
-        } catch (err: any) {
-          if (!err?.isTimeout || attempt === maxAttempts) throw err;
-        }
-      }
+      const result = await profileService.updateProfileAndMeasurements({
+        fitPreference,
+        height: rawMeasurements.height,
+        weight: rawMeasurements.weight,
+        measurements: payload.measurements,
+        scanConfidence: payload.scan_confidence,
+        perFieldConfidence: payload.per_field_confidence,
+        measurementSource: payload.measurement_source,
+      });
 
-      if (profileRes?.error) throw profileRes.error;
-      if (measurementsRes?.error) throw measurementsRes.error;
+      if (!result.ok) throw result.error;
 
       showToast('Measurements saved successfully ✨', 'success');
       // canGoBack()/back() is unreliable here: after a page reload, Expo

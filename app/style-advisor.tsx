@@ -6,6 +6,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { outfitService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { Database } from '@/src/types/database.types';
@@ -129,12 +130,12 @@ export default function StyleAdvisorScreen() {
         color_tags: i.color_tags,
       }));
 
-      const { error } = await supabase.from('saved_outfits').insert({
-        user_id: session.user.id,
+      const result = await outfitService.saveOutfit({
+        userId: session.user.id,
         name: `${activeOccasion?.label || 'Advisor'} look`,
         items: payload,
       });
-      if (error) throw error;
+      if (!result.ok) throw result.error;
       showToast('Outfit saved to your wardrobe.', 'success');
     } catch (err) {
       console.error('Error saving advisor outfit:', err);

@@ -23,6 +23,7 @@ import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { wardrobeService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
@@ -372,20 +373,20 @@ export default function AddWardrobeItemScreen() {
         .getPublicUrl(uploadData.path);
 
       setStatusMessage('Saving details...');
-      // Insert wardrobe item row
-      const { error: dbError } = await withTimeout(
-        supabase.from('wardrobe_items').insert({
-          user_id: userId,
+      // Insert wardrobe item row via wardrobeService with bounded timeout
+      const result = await withTimeout(
+        wardrobeService.addItem({
+          userId,
           category,
-          garment_type: garmentType,
-          sub_category: subCategory.trim() || null,
-          image_url: publicUrl,
-          color_tags: selectedColors,
+          garmentType,
+          subCategory: subCategory.trim() || null,
+          imageUrl: publicUrl,
+          colorTags: selectedColors,
         }),
         12000,
       );
 
-      if (dbError) throw dbError;
+      if (!result.ok) throw result.error;
 
       // If the visibility-recovery effect already declared this attempt
       // interrupted (tab was backgrounded past the recovery threshold) and

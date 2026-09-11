@@ -7,6 +7,7 @@ import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { outfitService, wardrobeService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { Database } from '@/src/types/database.types';
 import { generateOutfits, GeneratedOutfit } from '@/src/utils/outfitGenerator';
@@ -81,12 +82,12 @@ export default function CapsuleDetailScreen() {
         color_tags: i.color_tags,
         owned: true,
       }));
-      const { error } = await supabase.from('saved_outfits').insert({
-        user_id: session.user.id,
+      const result = await outfitService.saveOutfit({
+        userId: session.user.id,
         name: `${capsule?.name || 'Collection'} look`,
         items: payload,
       });
-      if (error) throw error;
+      if (!result.ok) throw result.error;
       showToast('Look saved to your outfits.', 'success');
       fetchSavedSignatures();
     } catch (err) {
@@ -155,11 +156,11 @@ export default function CapsuleDetailScreen() {
     if (!id) return;
     setAddingId(item.id);
     try {
-      const { error } = await supabase.from('capsule_items').insert({
-        capsule_id: id,
-        wardrobe_item_id: item.id,
+      const result = await wardrobeService.addCapsuleItem({
+        capsuleId: id,
+        wardrobeItemId: item.id,
       });
-      if (error) throw error;
+      if (!result.ok) throw result.error;
       setCapsuleItems((prev) => [...prev, item]);
     } catch (err) {
       console.error('Error adding item to capsule:', err);
@@ -172,12 +173,11 @@ export default function CapsuleDetailScreen() {
   const handleRemoveItem = async (item: WardrobeItem) => {
     if (!id) return;
     try {
-      const { error } = await supabase
-        .from('capsule_items')
-        .delete()
-        .eq('capsule_id', id)
-        .eq('wardrobe_item_id', item.id);
-      if (error) throw error;
+      const result = await wardrobeService.removeCapsuleItem({
+        capsuleId: id,
+        wardrobeItemId: item.id,
+      });
+      if (!result.ok) throw result.error;
       setCapsuleItems((prev) => prev.filter((i) => i.id !== item.id));
     } catch (err) {
       console.error('Error removing item from capsule:', err);
@@ -189,8 +189,8 @@ export default function CapsuleDetailScreen() {
     if (!capsule) return;
     setDeleting(true);
     try {
-      const { error } = await supabase.from('capsules').delete().eq('id', capsule.id);
-      if (error) throw error;
+      const result = await wardrobeService.deleteCapsule(capsule.id);
+      if (!result.ok) throw result.error;
       showToast('Collection deleted.', 'info');
       router.back();
     } catch (err) {

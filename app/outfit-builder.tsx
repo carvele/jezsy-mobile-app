@@ -22,6 +22,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { outfitService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { useWishlist } from '@/src/context/WishlistContext';
 import ViewShot from 'react-native-view-shot';
@@ -456,33 +457,18 @@ export default function OutfitBuilderScreen() {
 
     setSaving(true);
     try {
-      const { data: outfit, error } = await supabase
-        .from('saved_outfits')
-        .insert({
-          user_id: session.user.id,
-          name,
-          items,
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
+      const result = await outfitService.saveOutfit({
+        userId: session.user.id,
+        name,
+        items,
+      });
+      if (!result.ok) throw result.error;
 
       // Relational mirror of `items` for "Styled By" product-page lookups
       // (see get_public_outfits_for_product). Best-effort: a failure here
       // shouldn't undo an outfit the user already successfully saved.
-      if (outfit) {
-        const { error: itemsError } = await supabase.from('outfit_items').insert(
-          items.map((item) => ({
-            outfit_id: outfit.id,
-            product_id: item.product_id,
-            slot: item.slot,
-            image_url: item.image_url,
-            name: item.name,
-            color_tags: item.color_tags,
-            owned: item.owned,
-          }))
-        );
-        if (itemsError) console.error('Error saving outfit items (relational):', itemsError);
+      if (result.data?.id) {
+        await outfitService.saveOutfitItems(result.data.id, items);
       }
 
       setSaveVisible(false);

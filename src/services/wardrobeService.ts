@@ -1,6 +1,14 @@
 import { supabase } from '@/src/lib/supabase';
 import { OffsetPageResult } from '@/src/types/pagination';
 import { Database } from '@/src/types/database.types';
+import { AddWardrobeItemInput, CapsuleItemInput } from '@/src/types/dto/wardrobeItem';
+import {
+  DomainError,
+  DomainResult,
+  domainOk,
+  domainFail,
+  errorReporting,
+} from './observability';
 
 export type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 export type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
@@ -129,3 +137,147 @@ export async function getWardrobeCapsulesPage(
     nextOffset: offset + mappedCapsules.length,
   };
 }
+
+/**
+ * Adds a new item to the user's wardrobe.
+ */
+export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult<void>> {
+  try {
+    const { error } = await supabase.from('wardrobe_items').insert({
+      user_id: input.userId,
+      category: input.category,
+      garment_type: input.garmentType,
+      sub_category: input.subCategory ?? null,
+      image_url: input.imageUrl,
+      color_tags: input.colorTags ?? null,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return domainOk(undefined);
+  } catch (err: any) {
+    const domainError = new DomainError({
+      code: err?.code || 'ERR_WARDROBE_ITEM_ADD_FAILED',
+      message: err?.message || 'Failed to add wardrobe item',
+      domain: 'wardrobe',
+      context: { operation: 'addItem', userId: input.userId },
+      cause: err,
+    });
+
+    errorReporting.capture(domainError, {
+      domain: 'wardrobe',
+      operation: 'addItem',
+    });
+
+    return domainFail(domainError);
+  }
+}
+
+/**
+ * Adds a wardrobe item to a capsule collection.
+ */
+export async function addCapsuleItem(input: CapsuleItemInput): Promise<DomainResult<void>> {
+  try {
+    const { error } = await supabase.from('capsule_items').insert({
+      capsule_id: input.capsuleId,
+      wardrobe_item_id: input.wardrobeItemId,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return domainOk(undefined);
+  } catch (err: any) {
+    const domainError = new DomainError({
+      code: err?.code || 'ERR_CAPSULE_ITEM_ADD_FAILED',
+      message: err?.message || 'Failed to add item to capsule',
+      domain: 'wardrobe',
+      context: { operation: 'addCapsuleItem', capsuleId: input.capsuleId, wardrobeItemId: input.wardrobeItemId },
+      cause: err,
+    });
+
+    errorReporting.capture(domainError, {
+      domain: 'wardrobe',
+      operation: 'addCapsuleItem',
+    });
+
+    return domainFail(domainError);
+  }
+}
+
+/**
+ * Removes a wardrobe item from a capsule collection.
+ */
+export async function removeCapsuleItem(input: CapsuleItemInput): Promise<DomainResult<void>> {
+  try {
+    const { error } = await supabase
+      .from('capsule_items')
+      .delete()
+      .eq('capsule_id', input.capsuleId)
+      .eq('wardrobe_item_id', input.wardrobeItemId);
+
+    if (error) {
+      throw error;
+    }
+
+    return domainOk(undefined);
+  } catch (err: any) {
+    const domainError = new DomainError({
+      code: err?.code || 'ERR_CAPSULE_ITEM_REMOVE_FAILED',
+      message: err?.message || 'Failed to remove item from capsule',
+      domain: 'wardrobe',
+      context: { operation: 'removeCapsuleItem', capsuleId: input.capsuleId, wardrobeItemId: input.wardrobeItemId },
+      cause: err,
+    });
+
+    errorReporting.capture(domainError, {
+      domain: 'wardrobe',
+      operation: 'removeCapsuleItem',
+    });
+
+    return domainFail(domainError);
+  }
+}
+
+/**
+ * Deletes a capsule collection.
+ */
+export async function deleteCapsule(capsuleId: string): Promise<DomainResult<void>> {
+  try {
+    const { error } = await supabase.from('capsules').delete().eq('id', capsuleId);
+
+    if (error) {
+      throw error;
+    }
+
+    return domainOk(undefined);
+  } catch (err: any) {
+    const domainError = new DomainError({
+      code: err?.code || 'ERR_CAPSULE_DELETE_FAILED',
+      message: err?.message || 'Failed to delete capsule',
+      domain: 'wardrobe',
+      context: { operation: 'deleteCapsule', capsuleId },
+      cause: err,
+    });
+
+    errorReporting.capture(domainError, {
+      domain: 'wardrobe',
+      operation: 'deleteCapsule',
+    });
+
+    return domainFail(domainError);
+  }
+}
+
+export const wardrobeService = {
+  getItemsPage: getWardrobeItemsPage,
+  getOutfitsPage: getWardrobeOutfitsPage,
+  getCapsulesPage: getWardrobeCapsulesPage,
+  addItem,
+  addCapsuleItem,
+  removeCapsuleItem,
+  deleteCapsule,
+};

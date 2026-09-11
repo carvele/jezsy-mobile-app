@@ -5,6 +5,7 @@ import { Colors, Type, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { reviewService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { Database } from '@/src/types/database.types';
@@ -155,15 +156,12 @@ export function ReviewsList({ productId }: ReviewsListProps) {
     }));
 
     try {
-      const { data, error } = await supabase.rpc('vote_on_review', {
-        p_review_id: review.id,
-        p_vote_type: nextVote ?? undefined,
-      });
-      if (error) throw error;
-      const result = data as { likes: number; dislikes: number; user_vote: VoteType | null } | null;
-      if (result) {
+      const result = await reviewService.voteReview(review.id, nextVote);
+      if (!result.ok) throw result.error;
+      const resData = result.data;
+      if (resData) {
         setReviews(prev => prev.map(r => r.id === review.id
-          ? { ...r, likes: result.likes, dislikes: result.dislikes, user_vote: result.user_vote }
+          ? { ...r, likes: resData.likes, dislikes: resData.dislikes, user_vote: resData.user_vote as VoteType | null }
           : r));
       }
     } catch (err) {

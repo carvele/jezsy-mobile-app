@@ -22,7 +22,7 @@ import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
-import { Database } from '@/src/types/database.types';
+import { outfitService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { MannequinSilhouette } from '@/src/components/MannequinSilhouette';
@@ -333,18 +333,6 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       // has no canvas_layout column, so that attempt could only ever fail
       // with PGRST204. Removed it; this is the payload shape that actually
       // works, verified with a real insert.
-      const payload: Database['public']['Tables']['saved_outfits']['Insert'] = {
-        user_id: session.user.id,
-        name,
-        items: itemsPayload,
-      };
-
-      // Bounded so a stalled request (confirmed live: a client-side
-      // Supabase auth-lock stall can leave this hanging with zero network
-      // request ever sent, not a slow server) fails clearly and
-      // recoverably instead of leaving the Save button spinning forever
-      // with no feedback -- the exact "I can't save my outfits" symptom
-      // this was reported as.
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
           const err: any = new Error('The request took too long. Please try again.');
@@ -353,11 +341,15 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
         }, 15000);
       });
 
-      const { error } = await Promise.race([
-        supabase.from('saved_outfits').insert(payload),
+      const result = await Promise.race([
+        outfitService.saveOutfit({
+          userId: session.user.id,
+          name,
+          items: itemsPayload,
+        }),
         timeoutPromise,
       ]);
-      if (error) throw error;
+      if (!result.ok) throw result.error;
 
       // The visibility-recovery effect may have already declared this
       // attempt interrupted and reset the UI (bumping the generation) --
