@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.promote_product_complement_suggestion(uuid, uuid, text, integer);

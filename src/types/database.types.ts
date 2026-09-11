@@ -2562,6 +2562,20 @@ export type Database = {
         Returns: Json
       }
       process_account_deletion: { Args: { _request_id: string }; Returns: Json }
+      promote_product_complement_suggestion: {
+        Args: {
+          p_complementary_product_id: string
+          p_origin: string
+          p_product_id: string
+          p_sort_order?: number
+        }
+        Returns: {
+          out_complementary_product_id: string
+          out_id: string
+          out_product_id: string
+          out_sort_order: number
+        }[]
+      }
       recalculate_inventory_stock: { Args: never; Returns: Json }
       record_boutique_sale: {
         Args: {
