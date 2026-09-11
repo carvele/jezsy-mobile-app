@@ -8,11 +8,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Database } from '@/src/types/database.types';
-
-type DirectMessageRow = Database['public']['Tables']['direct_messages']['Row'] & {
-  _status?: 'sending' | 'failed';
-};
+import { chatService, DirectMessageRow } from '@/src/services';
 
 export default function P2PChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>(); // other user id
@@ -35,21 +31,16 @@ export default function P2PChatScreen() {
     let cancelled = false;
 
     const loadMessages = async (cId: string) => {
-      const { data, error } = await supabase
-        .from('direct_messages')
-        .select('*')
-        .eq('chat_id', cId)
-        .order('created_at', { ascending: false })
-        .limit(50);
+      const res = await chatService.getDirectMessagesPage(cId, 50);
       
       if (cancelled) return;
 
-      if (error) {
-        console.log('Error loading messages', error);
+      if (!res.ok) {
+        console.log('Error loading messages', res.error);
       } else {
-        setMessages(data || []);
+        setMessages(res.data);
         // Mark unread as read
-        data?.forEach(m => {
+        res.data.forEach(m => {
           if (m.sender_id !== user?.id && !m.read_at) markRead(m.id);
         });
       }
@@ -59,13 +50,10 @@ export default function P2PChatScreen() {
       try {
         setLoading(true);
 
-        // profiles' own RLS only allows a row's owner or staff to read it, so
-        // the other participant's row must go through this accessor.
-        const { data: profileRows } = await supabase
-          .rpc('get_public_profiles', { p_user_ids: [id] });
+        const profileRes = await chatService.resolveTargetUser(id);
         
         if (cancelled) return;
-        setOtherUser(profileRows?.[0] ?? null);
+        setOtherUser(profileRes.ok ? profileRes.data : null);
 
         // Check Connection
         const u1 = user.id < id ? user.id : id;
@@ -82,9 +70,10 @@ export default function P2PChatScreen() {
 
         if (conn?.status === 'accepted') {
           // RPC to get or create chat
-          const { data: cId, error: rpcError } = await supabase.rpc('get_or_create_direct_chat' as any, { other_user_id: id }) as any;
-          if (rpcError) throw rpcError;
+          const chatRes = await chatService.getOrCreateDirectChat(id);
+          if (!chatRes.ok) throw chatRes.error;
           if (cancelled) return;
+          const cId = chatRes.data;
           setChatId(cId);
 
           if (cId) {
@@ -154,7 +143,7 @@ export default function P2PChatScreen() {
   }, [chatId]);
 
   const markRead = async (msgId: string) => {
-    await supabase.rpc('mark_direct_message_read', { p_message_id: msgId });
+    await chatService.markDirectMessageRead(msgId);
   };
 
   const handleSend = async () => {
@@ -176,18 +165,11 @@ export default function P2PChatScreen() {
     };
     setMessages(prev => [tempMsg, ...prev]);
 
-    try {
-      const { data, error } = await supabase
-        .from('direct_messages')
-        .insert({ chat_id: chatId, sender_id: user.id, content })
-        .select()
-        .single();
-
-      if (error) throw error;
-
+    const sendRes = await chatService.sendDirectMessage(chatId, content, user.id);
+    if (sendRes.ok) {
       // Swap the temp row for the confirmed DB row.
-      setMessages(prev => prev.map(m => m.id === tempId ? { ...data } : m));
-    } catch {
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...sendRes.data } : m));
+    } else {
       // Mark the temp bubble as failed so the user can retry.
       setMessages(prev => prev.map(m => m.id === tempId ? { ...m, _status: 'failed' } : m));
       showToast('Failed to send message', 'error');
@@ -199,16 +181,10 @@ export default function P2PChatScreen() {
     if (!chatId || !user) return;
     setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, _status: 'sending' } : m));
 
-    try {
-      const { data, error } = await supabase
-        .from('direct_messages')
-        .insert({ chat_id: chatId, sender_id: user.id, content: msg.content })
-        .select()
-        .single();
-
-      if (error) throw error;
-      setMessages(prev => prev.map(m => m.id === msg.id ? { ...data } : m));
-    } catch {
+    const retryRes = await chatService.sendDirectMessage(chatId, msg.content, user.id);
+    if (retryRes.ok) {
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...retryRes.data } : m));
+    } else {
       setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, _status: 'failed' } : m));
       showToast('Failed to send message', 'error');
     }
