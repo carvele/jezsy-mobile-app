@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -9,59 +8,49 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { supabase } from "@/src/lib/supabase";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
-import { recommendCompleteTheLook, CatalogItem, LookRecommendation } from "@/src/utils/completeTheLook";
+import { getCompleteTheLook, CompleteTheLookItem } from "@/src/services/completeTheLookService";
+import { CompleteTheLookSheet } from "@/src/components/CompleteTheLookSheet";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 
 interface Props {
-  currentProduct: CatalogItem;
+  currentProduct: { id: string };
 }
 
+/**
+ * Teaser row on the product detail page: a preview of the Complete the Look
+ * hierarchy (Curated -> Styled Look Siblings -> Algorithmic, see
+ * completeTheLookService.ts). Tapping any card opens the full shoppable
+ * CompleteTheLookSheet rather than navigating away, since this is meant to
+ * be an in-context commerce flow, not a link-out.
+ */
 export default function CompleteTheLookSection({ currentProduct }: Props) {
-  const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const styles = React.useMemo(() => createStyles(colors), [colors]);
-  const [recommendations, setRecommendations] = useState<LookRecommendation[]>([]);
+  const [items, setItems] = useState<CompleteTheLookItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sheetVisible, setSheetVisible] = useState(false);
 
   useEffect(() => {
-    async function loadCatalogAndScore() {
+    let active = true;
+
+    async function load() {
       try {
         setLoading(true);
-        // RelatedProducts.tsx (the sibling recommendation component) filters
-        // deleted/visibility explicitly rather than relying on RLS alone --
-        // matching that here closes the one case RLS doesn't cover: a
-        // staff/owner account browsing the mobile app would otherwise get
-        // deleted or non-public products recommended, since
-        // is_staff_or_admin() bypasses the customer-facing RLS policy.
-        const { data, error } = await supabase
-          .from("products")
-          .select("id, name, category, category_id, color, price, sale_price, on_sale, image_url")
-          .eq("deleted", false)
-          .eq("visibility", "public")
-          .order("created_at", { ascending: false })
-          .limit(50);
-
-        if (error) throw error;
-
-        if (data && currentProduct) {
-          const scored = recommendCompleteTheLook(currentProduct, data as CatalogItem[], 5);
-          setRecommendations(scored);
-        }
+        const results = await getCompleteTheLook(currentProduct.id, 5);
+        if (active) setItems(results);
       } catch (err) {
-        console.error("Error generating Complete the Look recommendations:", err);
+        console.error("Error loading Complete the Look:", err);
+        if (active) setItems([]);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
 
-    if (currentProduct?.id) {
-      loadCatalogAndScore();
-    }
+    if (currentProduct?.id) load();
+    return () => { active = false; };
   }, [currentProduct?.id]);
 
   if (loading) {
@@ -72,40 +61,47 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
     );
   }
 
-  if (recommendations.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>✨ Complete the Look</Text>
-        <Text style={[styles.subtitle, { color: colors.secondaryText }]}>AI Stylist Matches</Text>
-      </View>
+      <TouchableOpacity
+        style={styles.headerRow}
+        onPress={() => setSheetVisible(true)}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Open Complete the Look"
+      >
+        <View>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>✨ Complete the Look</Text>
+          <Text style={[styles.subtitle, { color: colors.secondaryText }]}>Pieces that pair well with this item</Text>
+        </View>
+        <IconSymbol name="chevron.right" size={18} color={colors.icon} />
+      </TouchableOpacity>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollList}
       >
-        {recommendations.map((item) => (
+        {items.map((item) => (
           <TouchableOpacity
             key={item.product.id}
             style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => router.push(`/product/${item.product.id}`)}
+            onPress={() => setSheetVisible(true)}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.product.name}, view in Complete the Look`}
           >
-            <Image source={{ uri: item.product.image_url }} style={styles.image} resizeMode="cover" />
+            <Image
+              source={item.product.image_url ? { uri: item.product.image_url } : undefined}
+              style={[styles.image, { backgroundColor: colors.imagePlaceholder }]}
+              resizeMode="cover"
+            />
             <View style={styles.cardContent}>
-              <View style={[styles.harmonyBadge, { backgroundColor: colors.tint + "20" }]}>
-                <IconSymbol name="sparkles" size={12} color={colors.tint} />
-                <Text style={[styles.harmonyText, { color: colors.tint }]}>
-                  {item.harmony.label}
-                </Text>
-              </View>
-
               <Text style={[styles.productTitle, { color: colors.text }]} numberOfLines={1}>
                 {item.product.name}
               </Text>
-
               <Text style={[styles.priceText, { color: colors.tint }]}>
                 ₱{(item.product.sale_price || item.product.price || 0).toFixed(2)}
               </Text>
@@ -113,6 +109,12 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      <CompleteTheLookSheet
+        productId={currentProduct.id}
+        visible={sheetVisible}
+        onClose={() => setSheetVisible(false)}
+      />
     </View>
   );
 }
@@ -128,7 +130,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "baseline",
+    alignItems: "center",
     marginBottom: 12,
     paddingHorizontal: 4,
   },
@@ -139,6 +141,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   subtitle: {
     fontSize: 12,
     fontWeight: "500",
+    marginTop: 2,
   },
   scrollList: {
     gap: 12,
@@ -152,24 +155,10 @@ const createStyles = (colors: any) => StyleSheet.create({
   image: {
     width: 140,
     height: 160,
-    backgroundColor: colors.imagePlaceholder,
   },
   cardContent: {
     padding: 8,
     gap: 4,
-  },
-  harmonyBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    alignSelf: "flex-start",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  harmonyText: {
-    fontSize: 10,
-    fontWeight: "600",
   },
   productTitle: {
     fontSize: 13,
