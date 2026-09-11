@@ -32,12 +32,13 @@ import {
   isPoseValid,
   isSidePoseValid,
   getPoseOrientation,
+  getPoseConfidence,
   extractBodyRatios,
   type Landmark,
+  type WorldLandmark,
 } from "@/src/utils/poseDetector";
 import {
-  computeMeasurements,
-  ellipsePerimeter,
+  estimateCircumferenceFromCrossSection,
   type Gender,
 } from "@/src/utils/measurementCalculator";
 import { extractBodyExtents, type BodyExtents, type MaskLike } from "@/src/utils/bodyMask";
@@ -128,19 +129,52 @@ export default function BodyScanScreen() {
   // clipped a hand or a belt cannot skew the result.
   const frontExtentsRef = useRef<BodyExtents[]>([]);
   const sideExtentsRef = useRef<BodyExtents[]>([]);
-  const SIDE_TARGET = 5;
+  // Attempt ceiling alongside the timeout: a mask that never appears would
+  // otherwise loop forever, since "no mask this frame" alone was previously
+  // the only way to bail out of the side phase.
+  const SIDE_TARGET_SAMPLES = 5;
+  const SIDE_CAPTURE_TIMEOUT_MS = 4000;
+  const SIDE_MAX_ATTEMPTS = 60;
+  const sideAttemptCountRef = useRef(0);
+  const sidePhaseStartRef = useRef<number | null>(null);
 
   const setPhaseBoth = useCallback((next: "front" | "turn" | "side") => {
     phaseRef.current = next;
     setPhase(next);
   }, []);
 
+  /**
+   * Single place that clears every piece of per-attempt state: burst
+   * evidence, front/side extents, phase, side timers/attempt counters,
+   * capture state, progress, and the 1-Euro filters. A failed scan that
+   * only reset some of these (as the old finishScan failure branch did --
+   * it never cleared extents, filters, or side timers) let stale state from
+   * the failed attempt bleed into the next one.
+   */
+  const resetScanSession = useCallback(() => {
+    burstRef.current.reset();
+    frontExtentsRef.current = [];
+    sideExtentsRef.current = [];
+    sideAttemptCountRef.current = 0;
+    sidePhaseStartRef.current = null;
+    nativeFilterRef.current?.reset();
+    isCapturingRef.current = false;
+    setIsCapturing(false);
+    setProgress(0);
+    setPhaseBoth("front");
+    lastSpokenRef.current = "";
+  }, [setPhaseBoth]);
+
   useEffect(() => {
-    if (!height || !weight) {
-      showToast("Please enter your height and weight first.", 'info');
+    // Height calibrates every measurement and is mandatory. Weight is not
+    // consumed by the measurement math (see measurementCalculator.ts) --
+    // it stays part of the broader profile/scan-session record, but a scan
+    // must not block on it.
+    if (!height) {
+      showToast("Please enter your height first.", 'info');
       router.back();
     }
-  }, [height, weight, router, showToast]);
+  }, [height, router, showToast]);
 
   // Held until prep is finished, so the intro is not spoken over the wizard
   // (and not spoken at all if the customer backs out during it).
@@ -175,39 +209,41 @@ export default function BodyScanScreen() {
   };
 
   const finishScan = useCallback(() => {
-    const result = burstRef.current.getResult();
+    if (!height) return;
+    const result = burstRef.current.getResult(height, gender);
     if (!result) {
-      // Not enough valid frames; reset and let the user retry.
-      burstRef.current.reset();
-      setIsCapturing(false);
-      isCapturingRef.current = false;
-      setProgress(0);
+      // Not enough valid frames; reset everything and let the user retry.
+      resetScanSession();
       speakIfNew("Could not read your measurements clearly. Please reposition and try again.");
       lastSpokenRef.current = "";
       return;
     }
 
-    // Replace the BMI-inferred circumferences with measured ones when both
-    // passes produced a usable silhouette. Linear measurements are untouched:
-    // depth does not affect them, and re-deriving would only discard the
-    // burst's outlier rejection.
-    const width = medianExtents(frontExtentsRef.current);
-    const depth = medianExtents(sideExtentsRef.current);
+    // Replace the anthropometric-fallback circumferences with dual-view
+    // measured ones, but ONLY when the side pass actually reached its
+    // target sample count -- a side phase that ended via timeout/attempt
+    // ceiling before reaching SIDE_TARGET_SAMPLES must resolve as
+    // single_view_fallback, per the frozen plan, not be quietly upgraded
+    // just because a few partial extents happened to be collected before
+    // it gave up. Linear measurements are untouched: depth does not affect
+    // them, and re-deriving would only discard the burst's outlier rejection.
+    const reachedSideTarget = sideExtentsRef.current.length >= SIDE_TARGET_SAMPLES;
+    const width = reachedSideTarget ? medianExtents(frontExtentsRef.current) : null;
+    const depth = reachedSideTarget ? medianExtents(sideExtentsRef.current) : null;
     let final = result;
 
-    if (width && depth && height) {
-      // Re-calculate circumferences directly using the primary cross-section pipeline
-      const baseUncertainty = 4.8;
-      const bustVal = Math.round(ellipsePerimeter(width.bust * height, depth.bust * height));
-      const waistVal = Math.round(ellipsePerimeter(width.waist * height, depth.waist * height));
-      const hipsVal = Math.round(ellipsePerimeter(width.hips * height, depth.hips * height));
-      
+    if (width && depth) {
+      const bust = estimateCircumferenceFromCrossSection({ widthRatio: width.bust, depthRatio: depth.bust }, height);
+      const waist = estimateCircumferenceFromCrossSection({ widthRatio: width.waist, depthRatio: depth.waist }, height);
+      const hips = estimateCircumferenceFromCrossSection({ widthRatio: width.hips, depthRatio: depth.hips }, height);
+      const { shoulderWidth, armLength, torsoLength, legLength, inseam } = result;
+      const confidences = [shoulderWidth, armLength, torsoLength, legLength, inseam, bust, waist, hips].map((m) => m.confidence);
       final = {
         ...result,
-        bust: { valueCm: bustVal, uncertaintyCm: baseUncertainty },
-        waist: { valueCm: waistVal, uncertaintyCm: baseUncertainty },
-        hips: { valueCm: hipsVal, uncertaintyCm: baseUncertainty },
-        overallConfidence: 0.9,
+        bust,
+        waist,
+        hips,
+        overallConfidence: confidences.reduce((sum, c) => sum + c, 0) / confidences.length,
       };
     }
 
@@ -224,7 +260,7 @@ export default function BodyScanScreen() {
       pathname: "/profile/measurements",
       params: { scanId },
     });
-  }, [router, height, weight, gender, speakIfNew]);
+  }, [router, height, weight, gender, speakIfNew, resetScanSession]);
 
   // Front burst is done: pause and ask for a quarter turn rather than jumping
   // straight into capturing, because the pose is guaranteed invalid mid-turn.
@@ -261,10 +297,10 @@ export default function BodyScanScreen() {
 
       const landmarks = nativeFilterRef.current?.filterLandmarks(rawLandmarks) ?? rawLandmarks;
 
-      const rawWorldLandmarks: Landmark[] | undefined = worldPose?.map((p) => ({
+      const rawWorldLandmarks: WorldLandmark[] | undefined = worldPose?.map((p) => ({
         x: p.x,
         y: p.y,
-        z: p.z,
+        z: p.z ?? 0,
         visibility: p.visibility ?? p.presence ?? 0,
       }));
 
@@ -292,6 +328,8 @@ export default function BodyScanScreen() {
           setPhaseBoth("side");
           isCapturingRef.current = true;
           setIsCapturing(true);
+          sideAttemptCountRef.current = 0;
+          sidePhaseStartRef.current = Date.now();
           speakIfNew("Hold still.");
         }
         return;
@@ -303,15 +341,29 @@ export default function BodyScanScreen() {
           if (!isCapturingRef.current) speakIfNew("Turn so your side faces the camera.");
           return;
         }
-        if (mask) {
-          const extents = extractBodyExtents(landmarks, mask);
-          if (extents) sideExtentsRef.current.push(extents);
-        }
-        setProgress(Math.min(1, sideExtentsRef.current.length / SIDE_TARGET));
 
-        // Without a mask there is no depth to collect, so waiting would hang
-        // forever; finish on the front pass alone instead.
-        if (!mask || sideExtentsRef.current.length >= SIDE_TARGET) {
+        const extents = mask ? extractBodyExtents(landmarks, mask) : null;
+        if (extents) {
+          sideExtentsRef.current.push(extents);
+        } else {
+          // Counts both "mask missing entirely" and "mask present but
+          // extractBodyExtents() returned null" -- either way it's an
+          // attempt that failed to produce a usable extent.
+          sideAttemptCountRef.current += 1;
+        }
+        setProgress(Math.min(1, sideExtentsRef.current.length / SIDE_TARGET_SAMPLES));
+
+        const reachedTarget = sideExtentsRef.current.length >= SIDE_TARGET_SAMPLES;
+        const elapsedMs = sidePhaseStartRef.current ? Date.now() - sidePhaseStartRef.current : 0;
+        const timedOut = elapsedMs >= SIDE_CAPTURE_TIMEOUT_MS;
+        const ceilingHit = sideAttemptCountRef.current >= SIDE_MAX_ATTEMPTS;
+
+        // Reaching the target completes with dual_view_mask circumferences;
+        // timing out or hitting the attempt ceiling first deliberately
+        // completes on the front pass alone (single_view_fallback) rather
+        // than hanging the scan indefinitely -- finishScan() itself decides
+        // which, based on whether the target was actually reached.
+        if (reachedTarget || timedOut || ceilingHit) {
           finishScan();
         }
         return;
@@ -331,16 +383,18 @@ export default function BodyScanScreen() {
         speakIfNew("Hold still, scanning now.");
       }
 
-      if (!height || !weight) return;
+      if (!height) return;
       const bodyRatios = extractBodyRatios(landmarks);
-      const measurement = computeMeasurements({
+      // Offer raw evidence to the collector -- it decides acceptance
+      // (front orientation + pose confidence) and defers the measurement
+      // math to a single run over the aggregated, outlier-filtered burst
+      // in finishScan(), rather than recomputing it every frame.
+      burstRef.current.addSample({
         bodyRatios,
-        heightCm: height,
-        weightKg: weight,
-        gender,
-        worldLandmarks: worldLandmarks as any, // pass the One-Euro-filtered metric coordinates
+        worldLandmarks,
+        orientation: getPoseOrientation(landmarks),
+        poseConfidence: getPoseConfidence(landmarks),
       });
-      burstRef.current.addSample(measurement);
       if (mask) {
         const extents = extractBodyExtents(landmarks, mask);
         if (extents) frontExtentsRef.current.push(extents);
@@ -357,7 +411,7 @@ export default function BodyScanScreen() {
         finishScan();
       }
     },
-    [height, weight, gender, speakIfNew, finishScan, beginTurn, setPhaseBoth]
+    [height, speakIfNew, finishScan, beginTurn, setPhaseBoth]
   );
 
   const poseDetection = usePoseDetection(

@@ -25,7 +25,10 @@ export interface Landmark {
 }
 
 export interface WorldLandmark extends Landmark {
-  z: number;      // Metric depth in meters
+  // MediaPipe world-space coordinates.
+  // Nominal world units must not be trusted as absolute body scale;
+  // height calibration is required before measurement use.
+  z: number;
 }
 
 export interface StageLandmark extends Landmark {
@@ -55,6 +58,17 @@ const L = {
   leftKnee: 25,     rightKnee: 26,
   leftAnkle: 27,    rightAnkle: 28,
 } as const;
+
+// Exported so measurementCalculator.ts references the same joint indices
+// rather than redeclaring its own copy that could silently drift from this one.
+export const LANDMARK_INDEX = L;
+
+// Body-segment-proportion constant (Drillis & Contini-style anthropometry):
+// see extractBodyRatios below for the full rationale. Exported so
+// measurementCalculator.ts's world-space stature estimate uses the exact
+// same correction as the 2D ratio path, rather than a second copy that
+// could drift out of sync.
+export const STATURE_CORRECTION = 0.114; // ~3.9% ankle + ~7.5% nose-to-crown, both of stature
 
 // Key joints that must be visible for a "full body" pose
 const REQUIRED_JOINTS = [
@@ -153,6 +167,44 @@ export function getPoseConfidence(landmarks: Landmark[]): number {
     REQUIRED_JOINTS.reduce((sum: number, idx: number) => sum + landmarks[idx].visibility, 0) /
     REQUIRED_JOINTS.length
   );
+}
+
+// Visibility floor for joints load-bearing to world-space measurement.
+// World-landmark visibility runs noisier than the 2D landmarks isPoseValid
+// checks (hence the lower bar than that function's 0.85) -- heuristic
+// pending a real calibration study, like the other confidence constants
+// in measurementCalculator.ts.
+export const MIN_CALIBRATION_JOINT_VISIBILITY = 0.65;
+
+const CALIBRATION_JOINTS = [
+  L.nose, L.leftShoulder, L.rightShoulder,
+  L.leftHip, L.rightHip, L.leftAnkle, L.rightAnkle,
+];
+
+/**
+ * Whether the joints load-bearing for deriving a world-space scale (nose,
+ * shoulders, hips, ankles) are all present, finite, and visible.
+ *
+ * This is the GLOBAL calibration gate: it says the representative world
+ * skeleton has a sane scale to derive cm-per-world-unit from at all. It
+ * does NOT mean any specific measurement's own joints are individually
+ * trustworthy -- a global-gate pass with a poorly observed left wrist
+ * still must not trust a world-calibrated left arm length. See
+ * measurementCalculator.ts's per-measurement joint gate for that half of
+ * the contract.
+ */
+export function requiredCalibrationLandmarksAreVisible(landmarks: WorldLandmark[]): boolean {
+  if (landmarks.length < 33) return false;
+  return CALIBRATION_JOINTS.every((idx) => {
+    const lm = landmarks[idx];
+    return (
+      !!lm &&
+      Number.isFinite(lm.x) &&
+      Number.isFinite(lm.y) &&
+      Number.isFinite(lm.z) &&
+      lm.visibility >= MIN_CALIBRATION_JOINT_VISIBILITY
+    );
+  });
 }
 
 /**
@@ -296,7 +348,6 @@ export function extractBodyRatios(landmarks: Landmark[]): BodyRatios {
   // subjects) when available. Dividing by (1 - STATURE_CORRECTION) inflates the
   // denominator to approximate full stature, which reduces every ratio (and
   // therefore every derived cm measurement) by the same fraction.
-  const STATURE_CORRECTION = 0.114; // ~3.9% ankle + ~7.5% nose-to-crown, both of stature
   const visualBodySpan = Math.max(0.01, (headToShoulder + torsoLength + legLengthBase) / (1 - STATURE_CORRECTION));
 
   const shoulderWidth = dist2D(lm[L.leftShoulder], lm[L.rightShoulder]);
