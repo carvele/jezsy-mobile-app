@@ -205,6 +205,20 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
+          <View style={[styles.fieldGroup, { marginTop: Spacing.lg }]}>
+            <Text style={[styles.label, { color: colors.secondaryText }]}>Username</Text>
+            <TextInput keyboardAppearance={theme}
+              style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
+              value={data.username}
+              onChangeText={(v) => set('username', v)}
+              placeholder="e.g. mariasantos"
+              placeholderTextColor={colors.secondaryText}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="next"
+            />
+          </View>
+
           <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>Personal info</Text>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Mobile number</Text>
