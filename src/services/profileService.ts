@@ -32,12 +32,12 @@ export const profileService = {
       return Promise.race([
         supabase.rpc('update_profile_and_measurements', {
           _fit_preference: input.fitPreference ?? '',
-          _height: input.height,
-          _weight: input.weight,
-          _measurements: (input.measurements ?? null) as any,
-          _scan_confidence: input.scanConfidence ?? null,
-          _per_field_confidence: (input.perFieldConfidence ?? null) as any,
-          _measurement_source: input.measurementSource ?? null,
+          _height: input.height ?? undefined,
+          _weight: input.weight ?? undefined,
+          _measurements: (input.measurements ?? undefined) as any,
+          _scan_confidence: input.scanConfidence ?? undefined,
+          _per_field_confidence: (input.perFieldConfidence ?? undefined) as any,
+          _measurement_source: input.measurementSource ?? undefined,
         }),
         timeoutPromise,
       ]).finally(() => {

@@ -2867,6 +2867,18 @@ export type Database = {
         }
         Returns: Json
       }
+      update_profile_and_measurements: {
+        Args: {
+          _fit_preference: string
+          _height?: number
+          _measurement_source?: string
+          _measurements?: Json
+          _per_field_confidence?: Json
+          _scan_confidence?: number
+          _weight?: number
+        }
+        Returns: Json
+      }
       update_staff_role: {
         Args: { new_role: string; target_user_id: string }
         Returns: undefined

@@ -77,9 +77,9 @@ describe('profileService', () => {
       _height: 180,
       _weight: 75,
       _measurements: { hips: { valueCm: 95 } },
-      _scan_confidence: null,
-      _per_field_confidence: null,
-      _measurement_source: null,
+      _scan_confidence: undefined,
+      _per_field_confidence: undefined,
+      _measurement_source: undefined,
     });
   });
 
