@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -21,6 +20,7 @@ import { Database } from '@/src/types/database.types';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
+import { ConfirmModal } from '@/src/components/ConfirmModal';
 
 type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
 type OutfitSlotItem = {
@@ -55,6 +55,7 @@ export default function OutfitDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [loggingWear, setLoggingWear] = useState(false);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
 
   const fetchOutfit = useCallback(async () => {
     if (!id) return;
@@ -97,25 +98,6 @@ export default function OutfitDetailScreen() {
     }
   };
 
-  const handleDelete = () => {
-    if (!outfit) return;
-    if (Platform.OS === 'web') {
-      const confirmed = typeof window !== 'undefined' ? window.confirm(`Are you sure you want to delete "${outfit.name || 'this outfit'}"?`) : true;
-      if (confirmed) {
-        executeDelete();
-      }
-    } else {
-      Alert.alert('Delete Outfit', `Are you sure you want to delete "${outfit.name || 'this outfit'}"?`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: executeDelete,
-        },
-      ]);
-    }
-  };
-
   const handleLogWear = async () => {
     if (!outfit) return;
     setLoggingWear(true);
@@ -123,7 +105,7 @@ export default function OutfitDetailScreen() {
       const items: OutfitSlotItem[] = Array.isArray(outfit.items)
         ? (outfit.items as unknown as OutfitSlotItem[])
         : [];
-      
+
       const wardrobeItemIds = items
         .map((i) => i.wardrobe_item_id)
         .filter((wId): wId is string => Boolean(wId));
@@ -133,7 +115,7 @@ export default function OutfitDetailScreen() {
         // (expired session, RLS denial) surfaces a real error toast.
         const results = await Promise.allSettled(
           wardrobeItemIds.map((itemId) =>
-            supabase.rpc('increment_wear_count' as any, { item_id: itemId })
+            supabase.rpc('increment_wear_count', { p_item_id: itemId })
           )
         );
         const failures = results.filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error));
@@ -143,7 +125,7 @@ export default function OutfitDetailScreen() {
         }
       }
 
-      showToast(`Outfit wear logged! 🔥 Looking sharp today.`, 'success');
+      showToast('Outfit wear logged for today.', 'success');
     } catch (err) {
       console.error('Error logging outfit wear:', err);
       showToast('Could not log wear right now.', 'error');
@@ -213,7 +195,7 @@ export default function OutfitDetailScreen() {
         </View>
 
         <TouchableOpacity
-          onPress={handleDelete}
+          onPress={() => setConfirmDeleteVisible(true)}
           disabled={deleting}
           style={[styles.iconBtn, { backgroundColor: isDark ? 'rgba(255,69,58,0.15)' : '#FFF0F0', borderColor: isDark ? 'rgba(255,69,58,0.3)' : '#FFD2D2' }]}
           accessibilityRole="button"
@@ -222,6 +204,18 @@ export default function OutfitDetailScreen() {
           <IconSymbol name="trash.fill" size={18} color="#FF453A" />
         </TouchableOpacity>
       </View>
+
+      <ConfirmModal
+        visible={confirmDeleteVisible}
+        title="Delete Outfit"
+        message={`Are you sure you want to delete "${outfit.name || 'this outfit'}"?`}
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDeleteVisible(false)}
+        onConfirm={() => {
+          setConfirmDeleteVisible(false);
+          executeDelete();
+        }}
+      />
 
       <ScrollView
         contentContainerStyle={[styles.content, { alignItems: 'center' }]}
@@ -318,7 +312,7 @@ export default function OutfitDetailScreen() {
           {/* Action CTAs */}
           <View style={styles.actionsContainer}>
             <PrimaryButton
-              label="Log Outfit Wear 🔥"
+              label="Log Outfit Wear"
               onPress={handleLogWear}
               loading={loggingWear}
               dark={isDark}
@@ -326,11 +320,11 @@ export default function OutfitDetailScreen() {
 
             <TouchableOpacity
               style={[styles.remixBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => router.push('/outfit-builder' as any)}
+              onPress={() => router.push(`/wardrobe?tab=mannequin&loadOutfit=${outfit.id}` as any)}
               activeOpacity={0.8}
             >
-              <IconSymbol name="sparkles" size={18} color={colors.tint} />
-              <Text style={[styles.remixBtnText, { color: colors.text }]}>Mix New Outfit in Builder</Text>
+              <IconSymbol name="hanger" size={18} color={colors.tint} />
+              <Text style={[styles.remixBtnText, { color: colors.text }]}>Edit on Mannequin</Text>
             </TouchableOpacity>
           </View>
         </View>

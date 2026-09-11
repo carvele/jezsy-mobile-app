@@ -3,13 +3,18 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'rea
 import { Image } from 'expo-image';
 import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { GeneratedOutfit } from '@/src/utils/outfitGenerator';
-import { tapMedium } from '@/src/utils/haptics';
+import { tapMedium, tapLight } from '@/src/utils/haptics';
 
 interface Props {
   outfit: GeneratedOutfit;
   onSave: (outfit: GeneratedOutfit) => void;
   saving?: boolean;
+  /** True when this exact combination already exists in the user's saved outfits. */
+  alreadySaved?: boolean;
+  /** When provided, renders a secondary "Pass" action next to Save. */
+  onPass?: (outfit: GeneratedOutfit) => void;
 }
 
 const LABEL_COLOR: Record<GeneratedOutfit['label'], string> = {
@@ -19,7 +24,7 @@ const LABEL_COLOR: Record<GeneratedOutfit['label'], string> = {
   'Clashing Colors': '#DC2626',
 };
 
-export function SuggestedOutfitCard({ outfit, onSave, saving = false }: Props) {
+export function SuggestedOutfitCard({ outfit, onSave, saving = false, alreadySaved = false, onPass }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const accent = LABEL_COLOR[outfit.label];
@@ -46,19 +51,43 @@ export function SuggestedOutfitCard({ outfit, onSave, saving = false }: Props) {
           about is one they will not trust or learn from. */}
       <Text style={[styles.reason, { color: colors.secondaryText }]}>{outfit.reason}</Text>
 
-      <TouchableOpacity
-        style={[styles.saveBtn, { backgroundColor: colors.tint, opacity: saving ? 0.6 : 1 }]}
-        onPress={() => { tapMedium(); onSave(outfit); }}
-        disabled={saving}
-        accessibilityRole="button"
-        accessibilityLabel={`Save this ${outfit.items.length}-piece outfit`}
-      >
-        {saving ? (
-          <ActivityIndicator size="small" color={colors.onTint} />
-        ) : (
-          <Text style={[styles.saveBtnText, { color: colors.onTint }]}>Save Outfit</Text>
+      <View style={styles.actionRow}>
+        {onPass && (
+          <TouchableOpacity
+            style={[styles.passBtn, { borderColor: colors.border }]}
+            onPress={() => { tapLight(); onPass(outfit); }}
+            accessibilityRole="button"
+            accessibilityLabel="Pass on this suggestion"
+          >
+            <Text style={[styles.passBtnText, { color: colors.secondaryText }]}>Pass</Text>
+          </TouchableOpacity>
         )}
-      </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.saveBtn,
+            { flex: 1 },
+            alreadySaved
+              ? { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }
+              : { backgroundColor: colors.tint, opacity: saving ? 0.6 : 1 },
+          ]}
+          onPress={() => { if (alreadySaved) return; tapMedium(); onSave(outfit); }}
+          disabled={saving || alreadySaved}
+          accessibilityRole="button"
+          accessibilityLabel={alreadySaved ? 'Already saved to your outfits' : `Save this ${outfit.items.length}-piece outfit`}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color={colors.onTint} />
+          ) : alreadySaved ? (
+            <View style={styles.savedRow}>
+              <IconSymbol name="checkmark" size={14} color={colors.secondaryText} />
+              <Text style={[styles.saveBtnText, { color: colors.secondaryText }]}>Saved</Text>
+            </View>
+          ) : (
+            <Text style={[styles.saveBtnText, { color: colors.onTint }]}>Save Outfit</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -106,6 +135,10 @@ const styles = StyleSheet.create({
     ...Type.body,
     marginBottom: Spacing.lg,
   },
+  actionRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
   saveBtn: {
     // 44pt is the minimum comfortable touch target on both platforms.
     height: 44,
@@ -114,8 +147,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveBtnText: {
-    
+
     ...Type.bodyStrong,
     fontWeight: '700',
+  },
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  passBtn: {
+    height: 44,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  passBtnText: {
+    ...Type.bodyStrong,
+    fontWeight: '600',
   },
 });

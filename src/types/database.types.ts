@@ -1178,6 +1178,60 @@ export type Database = {
           },
         ]
       }
+      product_complements: {
+        Row: {
+          complementary_product_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          origin: string
+          product_id: string
+          sort_order: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          complementary_product_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          origin?: string
+          product_id: string
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          complementary_product_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          origin?: string
+          product_id?: string
+          sort_order?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_complements_complementary_product_id_fkey"
+            columns: ["complementary_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_complements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           ar_data: Json
@@ -2483,6 +2537,29 @@ export type Database = {
       }
       get_wardrobe_privacy: { Args: { p_user_id: string }; Returns: string }
       get_wishlist_privacy: { Args: { p_user_id: string }; Returns: string }
+      increment_wear_count: {
+        Args: { p_item_id: string }
+        Returns: {
+          category: string | null
+          color_tags: string[] | null
+          created_at: string
+          deleted: boolean | null
+          garment_type: string | null
+          id: string
+          image_url: string | null
+          last_worn_at: string | null
+          product_id: string | null
+          sub_category: string | null
+          user_id: string | null
+          wear_count: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "wardrobe_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       is_admin_or_owner: { Args: never; Returns: boolean }
       is_awaiting_payment_status: {
         Args: { _status: string }
@@ -2508,6 +2585,20 @@ export type Database = {
         Returns: Json
       }
       process_account_deletion: { Args: { _request_id: string }; Returns: Json }
+      promote_product_complement_suggestion: {
+        Args: {
+          p_complementary_product_id: string
+          p_origin: string
+          p_product_id: string
+          p_sort_order?: number
+        }
+        Returns: {
+          out_complementary_product_id: string
+          out_id: string
+          out_product_id: string
+          out_sort_order: number
+        }[]
+      }
       recalculate_inventory_stock: { Args: never; Returns: Json }
       record_boutique_sale: {
         Args: {

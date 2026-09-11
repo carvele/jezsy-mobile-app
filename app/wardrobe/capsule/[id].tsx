@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, FlatList, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -14,6 +14,7 @@ import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
 import { FadeInView } from '@/src/components/FadeInView';
 import { FlourishDivider } from '@/src/components/BrandFlourish';
 import { useToast } from '@/src/context/ToastContext';
+import { ConfirmModal } from '@/src/components/ConfirmModal';
 
 type Capsule = Database['public']['Tables']['capsules']['Row'];
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
@@ -36,8 +37,37 @@ export default function CapsuleDetailScreen() {
   const [pickerLoading, setPickerLoading] = useState(false);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
+  const [savedSignatures, setSavedSignatures] = useState<Set<string>>(new Set());
 
   const capsuleCombinations = useMemo(() => generateOutfits(capsuleItems, 4), [capsuleItems]);
+
+  // Saved-outfit rows only carry image_url per item (product_id is often
+  // null for wardrobe-only pieces), so that's the one field reliably present
+  // on both sides to match a generated combo against an already-saved look.
+  const signatureOf = (items: { image_url?: string | null }[]) =>
+    items.map((i) => i.image_url).filter(Boolean).sort().join('|');
+
+  const fetchSavedSignatures = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const { data, error } = await supabase
+      .from('saved_outfits')
+      .select('items')
+      .eq('user_id', session.user.id)
+      .eq('deleted', false);
+    if (error) {
+      console.error('Error fetching saved outfits for dedup:', error);
+      return;
+    }
+    const signatures = new Set(
+      (data || []).map((row) => signatureOf(Array.isArray(row.items) ? (row.items as any[]) : []))
+    );
+    setSavedSignatures(signatures);
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    fetchSavedSignatures();
+  }, [fetchSavedSignatures]);
 
   const handleSaveCombination = useCallback(async (outfit: GeneratedOutfit) => {
     if (!session?.user?.id) return;
@@ -53,18 +83,19 @@ export default function CapsuleDetailScreen() {
       }));
       const { error } = await supabase.from('saved_outfits').insert({
         user_id: session.user.id,
-        name: `${capsule?.name || 'Capsule'} look`,
+        name: `${capsule?.name || 'Collection'} look`,
         items: payload,
       });
       if (error) throw error;
       showToast('Look saved to your outfits.', 'success');
+      fetchSavedSignatures();
     } catch (err) {
       console.error('Error saving capsule look:', err);
       showToast('Could not save that look. Please try again.', 'error');
     } finally {
       setSavingKey(null);
     }
-  }, [session?.user?.id, capsule?.name, showToast]);
+  }, [session?.user?.id, capsule?.name, showToast, fetchSavedSignatures]);
 
   const fetchCapsule = useCallback(async () => {
     if (!id) return;
@@ -160,31 +191,12 @@ export default function CapsuleDetailScreen() {
     try {
       const { error } = await supabase.from('capsules').delete().eq('id', capsule.id);
       if (error) throw error;
-      showToast('Capsule deleted.', 'info');
+      showToast('Collection deleted.', 'info');
       router.back();
     } catch (err) {
       console.error('Error deleting capsule:', err);
-      showToast('Could not delete this capsule. Please try again.', 'error');
+      showToast('Could not delete this collection. Please try again.', 'error');
       setDeleting(false);
-    }
-  };
-
-  const handleDeleteCapsule = () => {
-    if (!capsule) return;
-    if (Platform.OS === 'web') {
-      const confirmed = typeof window !== 'undefined' ? window.confirm(`Delete "${capsule.name}"? Items stay in your wardrobe.`) : true;
-      if (confirmed) {
-        executeDeleteCapsule();
-      }
-    } else {
-      Alert.alert('Delete Capsule', `Delete "${capsule.name}"? Items stay in your wardrobe.`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: executeDeleteCapsule,
-        },
-      ]);
     }
   };
 
@@ -199,7 +211,7 @@ export default function CapsuleDetailScreen() {
   if (!capsule) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>Capsule not found.</Text>
+        <Text style={{ color: colors.text }}>Collection not found.</Text>
         <TouchableOpacity onPress={() => router.back()} style={{ marginTop: Spacing.xl }}>
           <Text style={{ color: colors.tint }}>Go Back</Text>
         </TouchableOpacity>
@@ -218,15 +230,27 @@ export default function CapsuleDetailScreen() {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{capsule.name}</Text>
         <TouchableOpacity
-          onPress={handleDeleteCapsule}
+          onPress={() => setConfirmDeleteVisible(true)}
           disabled={deleting}
           style={styles.iconBtn}
           accessibilityRole="button"
-          accessibilityLabel="Delete capsule"
+          accessibilityLabel="Delete collection"
         >
           <IconSymbol name="trash.fill" size={20} color="#FF453A" />
         </TouchableOpacity>
       </View>
+
+      <ConfirmModal
+        visible={confirmDeleteVisible}
+        title="Delete Collection"
+        message={`Delete "${capsule.name}"? Items stay in your wardrobe.`}
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDeleteVisible(false)}
+        onConfirm={() => {
+          setConfirmDeleteVisible(false);
+          executeDeleteCapsule();
+        }}
+      />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {capsule.description && (
@@ -242,7 +266,7 @@ export default function CapsuleDetailScreen() {
           style={[styles.addButton, { borderColor: colors.tint }]}
           onPress={openPicker}
           accessibilityRole="button"
-          accessibilityLabel="Add items to this capsule"
+          accessibilityLabel="Add items to this collection"
         >
           <IconSymbol name="plus" size={18} color={colors.tint} />
           <Text style={[styles.addButtonText, { color: colors.tint }]}>Add Items</Text>
@@ -251,7 +275,7 @@ export default function CapsuleDetailScreen() {
         {capsuleItems.length === 0 ? (
           <View style={styles.emptyState}>
             <IconSymbol name="archivebox" size={48} color={colors.secondaryText} />
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No items in this capsule yet.</Text>
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No items in this collection yet.</Text>
           </View>
         ) : (
           <View style={styles.grid}>
@@ -262,7 +286,7 @@ export default function CapsuleDetailScreen() {
                   style={styles.removeBtn}
                   onPress={() => handleRemoveItem(item)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Remove ${item.garment_type || item.category || 'item'} from capsule`}
+                  accessibilityLabel={`Remove ${item.garment_type || item.category || 'item'} from collection`}
                 >
                   <IconSymbol name="xmark.circle" size={22} color="#fff" />
                 </TouchableOpacity>
@@ -286,11 +310,16 @@ export default function CapsuleDetailScreen() {
               {capsuleCombinations.length} look{capsuleCombinations.length === 1 ? '' : 's'} from these pieces
             </Text>
             <Text style={[styles.combinationsSub, { color: colors.secondaryText }]}>
-              Scored on colour harmony within the capsule.
+              Scored on colour harmony within the collection.
             </Text>
             {capsuleCombinations.map((o, i) => (
               <FadeInView key={o.key} index={i}>
-                <SuggestedOutfitCard outfit={o} onSave={handleSaveCombination} saving={savingKey === o.key} />
+                <SuggestedOutfitCard
+                  outfit={o}
+                  onSave={handleSaveCombination}
+                  saving={savingKey === o.key}
+                  alreadySaved={savedSignatures.has(signatureOf(o.items))}
+                />
               </FadeInView>
             ))}
           </View>
@@ -301,7 +330,7 @@ export default function CapsuleDetailScreen() {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
           <View style={styles.header}>
             <View style={{ width: 32 }} />
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Add to Capsule</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Add to Collection</Text>
             <TouchableOpacity onPress={() => setPickerVisible(false)} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Done">
               <Text style={{ color: colors.tint, fontWeight: '700' }}>Done</Text>
             </TouchableOpacity>

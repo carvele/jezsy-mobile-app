@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS increment_wear_count(UUID);
