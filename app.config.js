@@ -66,6 +66,9 @@ module.exports = {
       "expo-font",
       "expo-web-browser",
       "expo-notifications",
+      "expo-image",
+      "expo-secure-store",
+      "expo-sharing",
       "./plugins/withMlkitManifestFix",
       [
         "react-native-mediapipe-posedetection",
