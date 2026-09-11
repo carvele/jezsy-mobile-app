@@ -4,7 +4,7 @@
 **Date:** 2026-09-12  
 **Repositories:** `carvele/jezsy-mobile-app` & `carvele/admin-dashboard`  
 **Database:** Shared Live Supabase Project (`wufcmtndotfvxvvxkamv`)  
-**Mobile Head on `main`:** `e9b0075` (PR #282, PR #283, PR #284)  
+**Mobile Head on `main`:** Verification baseline head: `e9b0075`; closure-ledger merge: `828b866` (PR #282, PR #283, PR #284, PR #285)  
 **Admin Head on `main`:** `d8ac041` (PR #132, PR #133)  
 **Live Database Ledger Version:** `20260912000002` (`prune_zombie_public_rpcs`)  
 
@@ -15,17 +15,17 @@
 Phase B7 has successfully executed the complete lifecycle cleanup, architectural remediation, zombie RPC pruning, type synchronization, and documentation governance across both repositories and the shared live Supabase database.
 
 ### Key Milestones Achieved:
-1. **P0/P1 Slot Booking Correctness Restored (`B7-RPC-007`, `B7-MOB-001`)**:  
+1. **P0/P1 Slot Booking Correctness Restored (`B7-RPC-009`, `B7-MOB-005`)**:  
    Refactored Mobile `TimeSlotPicker` to query `public.get_slot_booked_counts(_date)` (`SECURITY DEFINER`), eliminating the severe customer RLS bug where booked boutique slots appeared vacant to other customers.
-2. **Feature Surface Integration (`B7-MOB-002`, `B7-MOB-003`, `B7-MOB-004`)**:  
-   - Enabled username editing in `app/profile/edit.tsx` with accessible UI and database unique violation (`23505`) handling.  
-   - Wired mutual connection suggestions (`get_suggested_connections`) on empty Discover searches in `app/network.tsx`.  
-   - Enforced domain-separated Wardrobe vs. Wishlist collections in `app/user/[id].tsx` with proper privacy controls (`wardrobe_privacy` and `get_wishlist_privacy`).
-3. **Template & Dead Asset Pruning (`B7-MOB-005..008`, `B7-ADM-001..004`)**:  
-   - Pruned 8 orphaned Expo template starter files and removed unneeded route registration.  
-   - Deleted orphaned Admin CSS files, unused feedback service, dead soft-delete exports, and legacy Firestore `src/types/index.ts`.  
-   - Scoped Admin `softDeleteDocument` strictly to `products`.
-4. **Device Governance & Zero-Trust RPC Mutation (`B7-ADM-007`)**:  
+2. **Feature Surface Integration (`B7-MOB-002`, `B7-MOB-003`, `B7-MOB-004`, `B7-RPC-010`)**:  
+   - Enabled username editing in `app/profile/edit.tsx` (`B7-MOB-002`) with accessible UI and database unique violation (`23505`) handling.  
+   - Wired mutual connection suggestions (`B7-RPC-010` / `B7-MOB-004`) via `public.get_suggested_connections()` on empty Discover searches in `app/network.tsx`.  
+   - Enforced domain-separated Wardrobe vs. Wishlist collections in `app/user/[id].tsx` (`B7-MOB-003`) with proper privacy controls (`wardrobe_privacy` and `get_wishlist_privacy`).
+3. **Template & Dead Asset Pruning (`B7-MOB-001`, `B7-ADM-001..004`)**:  
+   - Pruned 8 orphaned Expo template starter files (`B7-MOB-001`) and removed unneeded route registration.  
+   - Deleted orphaned Admin CSS files (`B7-ADM-001`), unused feedback service (`B7-ADM-001`), dead soft-delete exports (`B7-ADM-003`), and legacy Firestore `src/types/index.ts` (`B7-ADM-002`).  
+   - Scoped Admin `softDeleteDocument` strictly to `products` (`B7-ADM-003`).
+4. **Device Governance & Zero-Trust RPC Mutation (`B7-RPC-014`, `B7-ADM-007`)**:  
    Refactored Admin `deviceService.js` from direct client DML on `public.devices` to audited canonical RPC procedures (`admin_manage_device`, `admin_prune_devices`).
 5. **Authorized Zombie RPC Pruning under Production Gate (`B7-e`)**:  
    With explicit user authorization, safely applied canonical migration `20260912000002_prune_zombie_public_rpcs.sql`, dropping 8 confirmed zombie/superseded procedures while preserving all 6 canonical replacements.
@@ -51,7 +51,7 @@ Phase B7 has successfully executed the complete lifecycle cleanup, architectural
 | **B7-e** | Database Pruning Migration Authoring | PR #283 (`9d5ce7c`) on `jezsy-mobile-app` | ✅ MERGED & CLOSED 🟢 |
 | **B7-e** | Live Database Migration Gate | Applied to live Supabase (`wufcmtndotfvxvvxkamv`) under explicit user approval | ✅ APPLIED & VERIFIED 🟢 |
 | **B7-f** | Type Parity & Documentation Taxonomy | PR #284 (`e9b0075`) on Mobile; PR #133 (`d8ac041`) on Admin | ✅ MERGED & CLOSED 🟢 |
-| **B7-g** | Final Verification & Closure Ledger | Multi-persona RLS & Layer 1 verification; author closure ledger | ✅ CLOSED & FROZEN 🧊 |
+| **B7-g** | Final Verification & Closure Ledger | Multi-persona RLS & Layer 1 verification; author closure ledger (PR #285 — `828b866`) | ✅ CLOSED & FROZEN 🧊 |
 
 ---
 
@@ -173,11 +173,12 @@ Total: 14 | Passed: 13 | Failed: 0 | Deferred: 1
   - PR #282: Run `34649913669` (1m36s) — SUCCESS
   - PR #283: Run `34651199385` (1m27s) — SUCCESS
   - PR #284: Run `34652331319` (1m30s) — SUCCESS
+  - PR #285: Run `34652814551` (1m34s) — SUCCESS
 
 ### Admin Dashboard (`admin-dashboard`)
 - **TypeScript (`npm run type-check`)**: PASSED (0 errors)
 - **ESLint (`npm run lint`)**: PASSED (0 errors, 92 warnings preserved)
-- **Vitest Unit & Integration (`npm test`)**: PASSED (29/29 suites, 217/217 tests)
+- **Jest Unit & Integration (`npm test`)**: PASSED (29/29 suites, 217/217 tests)
 - **Production Bundle Build (`npm run build`)**: PASSED (built in 2.92s)
 - **CI Run Status**:
   - PR #132: Run `34650833420` (1m12s) — SUCCESS
