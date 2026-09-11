@@ -669,6 +669,7 @@ export type Database = {
           deleted_at: string | null
           demand_score: number | null
           demand_scored_at: string | null
+          hex_color: string | null
           id: string
           item: string | null
           pattern: string
@@ -692,6 +693,7 @@ export type Database = {
           deleted_at?: string | null
           demand_score?: number | null
           demand_scored_at?: string | null
+          hex_color?: string | null
           id?: string
           item?: string | null
           pattern?: string
@@ -715,6 +717,7 @@ export type Database = {
           deleted_at?: string | null
           demand_score?: number | null
           demand_scored_at?: string | null
+          hex_color?: string | null
           id?: string
           item?: string | null
           pattern?: string
