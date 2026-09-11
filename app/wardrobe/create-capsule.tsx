@@ -25,7 +25,7 @@ export default function CreateCapsuleScreen() {
     if (!session?.user?.id) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
-      showToast('Please give your capsule a name.', 'error');
+      showToast('Please give your collection a name.', 'error');
       return;
     }
     const parsedTarget = parseInt(targetCount, 10);
@@ -50,7 +50,7 @@ export default function CreateCapsuleScreen() {
       router.replace(`/wardrobe/capsule/${data.id}` as any);
     } catch (err: any) {
       console.error('Error creating capsule:', err);
-      showToast(err.message || 'Could not create the capsule. Please try again.', 'error');
+      showToast(err.message || 'Could not create the collection. Please try again.', 'error');
     } finally {
       setSaving(false);
     }
@@ -62,7 +62,7 @@ export default function CreateCapsuleScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>New Capsule</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>New Collection</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -72,7 +72,7 @@ export default function CreateCapsuleScreen() {
             <Text style={[styles.label, { color: colors.text }]}>Name</Text>
             <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="e.g. Work Capsule, Summer Trip"
+              placeholder="e.g. Work Collection, Summer Trip"
               placeholderTextColor={colors.secondaryText}
               value={name}
               onChangeText={setName}
@@ -83,7 +83,7 @@ export default function CreateCapsuleScreen() {
             <Text style={[styles.label, { color: colors.text }]}>Description (Optional)</Text>
             <TextInput keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="What's this capsule for?"
+              placeholder="What's this collection for?"
               placeholderTextColor={colors.secondaryText}
               value={description}
               onChangeText={setDescription}
@@ -108,7 +108,7 @@ export default function CreateCapsuleScreen() {
             onPress={handleSave}
             disabled={saving}
           >
-            {saving ? <ActivityIndicator color={colors.onTint} /> : <Text style={[styles.saveButtonText, { color: colors.onTint }]}>Create Capsule</Text>}
+            {saving ? <ActivityIndicator color={colors.onTint} /> : <Text style={[styles.saveButtonText, { color: colors.onTint }]}>Create Collection</Text>}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
