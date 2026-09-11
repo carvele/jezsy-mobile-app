@@ -385,7 +385,17 @@ export default function ProductDetailScreen() {
           {product.model_3d_url && (
             <TouchableOpacity
               style={[styles.arButton, { backgroundColor: "rgba(201,169,110,0.9)" }]}
-              onPress={() => router.push(`/ar-tryon/${product.id}`)}
+              onPress={() => router.push({
+                pathname: '/ar-tryon/[id]',
+                // AR Garment Recoloring (Phase 1): the AR screen derives its
+                // recolor hex from the selected commercial variant, not an
+                // independent color state of its own -- see GarmentRenderer's
+                // hexColor prop. selectedColor may be null (no color chosen
+                // yet); the AR screen's own variant lookup handles that by
+                // simply not recoloring, same as any color with no
+                // inventory.hex_color set.
+                params: { id: product.id, color: selectedColor || '' },
+              })}
               accessibilityRole="button"
               accessibilityLabel="Try on in Augmented Reality"
               accessibilityHint="Launches the AR viewer to see this clothing item on your camera feed"
