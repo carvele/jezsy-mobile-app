@@ -1,8 +1,8 @@
 # Jezsy Mobile App — System Architecture
 
-Audit date: 2026-07-19. Stack: Expo SDK 54, React Native 0.81.5, Expo Router 6, Supabase (PostgreSQL, Auth, Storage, Realtime, Edge Functions).
+Audit date: 2026-09-12 (Phase B7 Lifecycle & Architecture Refresh). Stack: Expo SDK 54, React Native 0.81.5, Expo Router 6, Supabase (PostgreSQL 15, Auth, Storage, Realtime, Edge Functions).
 
-This document describes the system as implemented in the repository and verified against the live Supabase project (table list and RLS policies were queried directly). Parts 1-3 are descriptive and suitable for adaptation into a thesis System Design chapter. The final section, Recommendations, is a technical audit for development use.
+This document describes the system as implemented in the repository and verified against the live Supabase project (48 tables and RLS policies verified directly). Parts 1-3 are descriptive and suitable for adaptation into a thesis System Design chapter. The final section, Recommendations, is a technical audit for development use.
 
 ---
 
@@ -10,7 +10,7 @@ This document describes the system as implemented in the repository and verified
 
 ### 1.1 Architecture Pattern
 
-The system is a **client-server architecture using a Backend-as-a-Service (BaaS) model**, with a **layered client**. There is no custom application server: the mobile client communicates directly with Supabase, which provides authentication, a PostgreSQL database, file storage, realtime subscriptions, and one serverless Edge Function. Server-side business rules are enforced inside the database itself through Row Level Security (RLS) policies and a SECURITY DEFINER stored procedure (`create_order`), rather than in a middle-tier API.
+The system is a **client-server architecture using a Backend-as-a-Service (BaaS) model**, with a **layered client**. There is no custom middle-tier application server: the mobile client communicates directly with Supabase, which provides authentication, a PostgreSQL database, file storage, realtime subscriptions, and serverless Edge Functions. Server-side business rules are enforced inside the database itself through Row Level Security (RLS) policies and SECURITY DEFINER stored procedures (`create_reservation_multi_idempotent`, `settle_payment_webhook`, `get_slot_booked_counts`), maintaining zero trust at the client boundary.
 
 Within the client, the code is organized in layers:
 
@@ -18,7 +18,7 @@ Within the client, the code is organized in layers:
 2. **State management** — React Context providers (`src/context/`) for cross-screen state (auth session, cart, wishlist, conversations).
 3. **Business logic / utilities** — pure TypeScript modules (`src/utils/`) for size recommendation, color harmony, measurement math, date formatting, and push-notification registration.
 4. **Data access** — a single configured Supabase client (`src/lib/supabase.ts`) with generated database types (`src/types/database.types.ts`).
-5. **Native/device integration** — Expo modules (camera, sensors, speech, secure storage, notifications) plus an on-device ML library for background removal.
+5. **Native/device integration** — Expo modules (camera, sensors, speech, secure storage, notifications) plus native MediaPipe and MLKit libraries for pose detection and background removal.
 
 A design constraint documented in `docs/free-tier-audit.md` shapes the whole architecture: the project runs on a strict zero-cost budget, so all ML/AR processing happens **on-device** and all backend services stay within Supabase's free tier.
 
@@ -27,25 +27,26 @@ A design constraint documented in `docs/free-tier-audit.md` shapes the whole arc
 The diagram has four horizontal zones:
 
 **Zone 1 — Mobile Client (Expo / React Native, Android and iOS)**
-- UI layer: Expo Router screens (tab navigator + stacked detail screens + modals)
+- UI layer: Expo Router screens (tab navigator + stacked detail screens, direct chat, user network profiles)
 - State layer: `AuthProvider → WishlistProvider → CartProvider → MessagesProvider` (nested in that order)
-- Utility layer: `sizeRecommender`, `colorMatcher`, `measurementCalculator`, `pushNotifications`, etc.
+- Utility layer: `sizeRecommender`, `colorMatcher`, `measurementCalculator`, `pushNotifications`, `poseNormalizer`, `paymentSecurity`, etc.
 - Data access: single `supabase` client instance (PostgREST + Auth + Storage + Realtime channels over WebSocket)
 - Local persistence: SecureStore (session tokens) and AsyncStorage (cart, session user object)
 
 **Zone 2 — On-Device ML / Native Capabilities (inside the phone, no network)**
 - Background removal: `@six33/react-native-bg-removal` (Google MLKit subject segmentation)
-- Pose/measurement pipeline (scaffolded): `react-native-fast-tflite` + BlazePose Lite parsing utilities (see 2.6 — declared but not yet wired to a screen)
+- Pose & body tracking pipeline: native MediaPipe pose detection via `react-native-vision-camera`, `react-native-mediapipe-posedetection`, and `react-native-worklets-core` for body measurements and real-time live length/fit signals
 - Device capabilities: expo-camera (body scan, QR scanner, AR 2D overlay), expo-sensors accelerometer (tilt guidance), expo-speech (voice-guided scan), expo-secure-store, expo-notifications, expo-haptics, WebView hosting Google `model-viewer` for 3D try-on
 
 **Zone 3 — Supabase (BaaS, free tier)**
 - Auth: email/password, email OTP, Google OAuth (via expo-auth-session / signInWithOAuth)
-- PostgreSQL: 31 tables, all with RLS enabled; `create_order` RPC for atomic order creation
-- Storage buckets: `payment_receipts` (private), `wardrobe-images`, `products`
-- Realtime: `supabase_realtime` publication on `messages` and `conversations`
+- PostgreSQL: 48 tables, all 48 with RLS enabled; canonical RPC boundaries for atomic transactions (`create_reservation_multi_idempotent`, `settle_payment_webhook`, `get_slot_booked_counts`)
+- Storage buckets: `payment_receipts` (private), `wardrobe-images`, `products`, `pose-images`
+- Realtime: `supabase_realtime` publication on `messages`, `conversations`, `direct_messages`, and `notifications`
 - Edge Function: `notify-status` (Deno), triggered by database webhooks on `reservations` UPDATE
 
 **Zone 4 — External services**
+- PayMongo: Electronic payment gateway (GCash, GrabPay, Maya, Card) with webhook signature verification
 - Expo Push Notification service (`exp.host/--/api/v2/push/send`) — called by the Edge Function; free
 - Google OAuth — identity provider; free
 - Expo EAS Build — development/production builds (`eas.json`); free tier
@@ -57,13 +58,15 @@ Arrows: Client ↔ Supabase (HTTPS REST + WebSocket); Edge Function → Expo Pus
 | Service | Purpose | Tier |
 |---|---|---|
 | Supabase | Auth, DB, Storage, Realtime, Edge Functions | Free tier (500MB DB, 1GB storage, 50k MAU) |
+| PayMongo | Payment gateway (GCash, GrabPay, Maya, Cards, Webhooks) | Standard transaction tier |
 | Expo EAS | Cloud builds (`eas.json`) | Free tier |
 | Expo Push Service | Push notification delivery | Free |
 | Google OAuth | Social sign-in | Free |
 | Google MLKit (bundled on-device) | Background removal | Free, on-device |
+| MediaPipe (bundled on-device) | Real-time skeletal pose detection and fit tracking | Free, on-device |
 | Google `model-viewer` (WebView) | 3D/AR model rendering | Free, open source |
 
-No paid services are integrated. There is no payment gateway: payment is handled out-of-band (user uploads a proof-of-downpayment receipt image; staff verify manually).
+Dual payment model: automated PayMongo checkout sessions and payment intents with database webhook settlement (`settle_payment_webhook`), plus out-of-band manual receipt upload with administrative verification.
 
 ---
 
@@ -143,36 +146,45 @@ Client-side validation lives in the screens themselves (e.g. `checkout.tsx` vali
 
 **Client initialization** — [src/lib/supabase.ts](../src/lib/supabase.ts): a single typed client (`createClient<Database>`) built from `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` env vars (fails fast if missing). A custom `ExpoSecureStoreAdapter` splits the session: tokens go to **SecureStore** (with an AsyncStorage fallback when the payload exceeds SecureStore's 2048-byte limit) while the larger `user` object is stored in **AsyncStorage** under a `_user` suffix key. `autoRefreshToken` and `persistSession` are enabled; on web it falls back to `localStorage`.
 
-**Tables in use** (verified against the live project — 31 tables, RLS enabled on all):
+**Tables in use** (verified against the live project — 48 tables, RLS enabled on all 48):
 
 | Feature area | Tables |
 |---|---|
-| Auth / Users | `profiles`, `user_measurements`, `devices`, `settings`, `logs`, `staff_status_history` |
-| Catalog | `products`, `categories`, `inventory`, `stock_movements`, `color_options`, `color_list`, `pattern_list` |
-| Commerce | `reservations`, `wishlists`, `reviews` |
-| Wardrobe / Styling | `wardrobe_items`, `saved_outfits`, `suggested_outfits`, `capsules`, `capsule_items`, `user_streaks` |
-| Messaging / Notifications | `conversations`, `messages`, `notifications`, `feedback` |
-| AR / Scan | `ar_assets`, `ar_sessions`, `pose_guides` |
+| Auth & Users | `profiles`, `user_measurements`, `devices`, `settings`, `logs`, `staff_status_history`, `account_deletion_requests`, `rate_limits` |
+| Catalog & Inventory | `products`, `categories`, `inventory`, `stock_movements`, `product_complements`, `color_options`, `color_list`, `pattern_list`, `stock_notify_requests` |
+| Commerce & Boutique | `reservations`, `reservation_items`, `payments`, `processed_payment_webhook_events`, `store_hours`, `store_closures` |
+| Wardrobe & Outfits | `wardrobe_items`, `saved_outfits`, `outfit_items`, `suggested_outfits`, `capsules`, `capsule_items`, `user_streaks` |
+| Social & Community | `connections`, `wishlists`, `reviews`, `review_votes` |
+| Messaging & Notifications | `conversations`, `messages`, `direct_chats`, `direct_chat_participants`, `direct_messages`, `notifications`, `admin_notifications`, `announcements`, `announcement_dismissals`, `feedback` |
+| AR & Pose Tracking | `ar_assets`, `ar_sessions`, `pose_guides`, `pose_guide_products` |
 
-**RLS policy summary** (one line each; all tables have RLS enabled):
+**RLS policy summary** (one line each; 48/48 tables have RLS enabled):
 
-- `profiles` — public read; users update their own row; insert for authenticated; owner full access. *(Note: read is open to all users — see Recommendations.)*
-- `products`, `categories`, `inventory`, `color_options`, `color_list`, `pattern_list`, `pose_guides`, `suggested_outfits`, `ar_assets`, `settings` — public/all-user read, owner-only write.
-- `stock_movements` — public read, owner insert, updates/deletes explicitly denied (append-only ledger).
-- `reservations` — owner (customer_id/user_id) read/insert/update, owner full access; reservation delete is owner-only.
-- `wishlists`, `capsules`, `capsule_items`, `user_streaks`, `notifications` — strict owner-only CRUD.
-- `user_measurements` — owner-only read/write (plus owner); 9 overlapping policies from successive migrations.
-- `wardrobe_items`, `saved_outfits` — owner-or-owner policies, but also a broader "all authenticated users" policy coexists (see Recommendations).
-- `conversations`, `messages` — participant (customer) or owner/staff read/insert/update.
-- `reviews` — public read, owner-managed write.
-- `devices`, `feedback`, `logs`, `ar_sessions` — authenticated insert, owner read/manage.
-- `staff_status_history` — staff/owner read only.
+- `profiles` — authenticated own-profile update, public/authenticated safe profile read, owner full administrative management.
+- `products`, `categories`, `inventory`, `color_options`, `color_list`, `pattern_list`, `pose_guides`, `suggested_outfits`, `ar_assets`, `settings`, `product_complements`, `store_hours`, `store_closures` — public/all-user read, owner/staff-only write.
+- `stock_movements` — append-only ledger; public read, owner insert, updates/deletes strictly denied.
+- `reservations`, `reservation_items`, `payments` — customer own-record read/insert, owner/staff management; customer writes gated by canonical RPC boundaries.
+- `processed_payment_webhook_events` — service-role and DEFINER RPC access only; direct client read/write closed.
+- `wishlists`, `capsules`, `capsule_items`, `user_streaks`, `notifications`, `account_deletion_requests` — strict owner-only CRUD.
+- `wardrobe_items`, `saved_outfits`, `outfit_items` — owner CRUD, with privacy-controlled visibility for connected users (`wardrobe_privacy` gating).
+- `connections` — authenticated user mutual and pending connection management.
+- `conversations`, `messages` — Boutique Support channel; customer participant or boutique staff/admin read/write.
+- `direct_chats`, `direct_chat_participants`, `direct_messages` — P2P direct chat; strict participant-only access with blocking checks.
+- `reviews`, `review_votes` — public read, authenticated author write, verified completed reservation gating.
+- `devices`, `feedback`, `logs`, `ar_sessions` — authenticated insert/register, owner/staff read/manage.
+- `staff_status_history`, `admin_notifications` — staff/owner administrative read and audit trail.
 
-**Storage buckets:** `payment_receipts` (private; per-user folder paths; used by `reserve/[id]`), `wardrobe-images` (used by `wardrobe/add-item`), `products` (product imagery; also currently used for chat image uploads — see Recommendations).
+**Storage buckets:** `payment_receipts` (private; per-user folder paths; used by `reserve/[id]`), `wardrobe-images` (used by `wardrobe/add-item`), `products` (product imagery), `pose-images` (pose guide assets).
 
-**RPC:** `create_order(_shipping_address, _items)` — SECURITY DEFINER function (grant to `authenticated` only) that creates the order and its items atomically server-side; the client sends only product IDs and quantities, never prices.
+**Canonical RPC Boundaries:**
+- `create_reservation_multi_idempotent(_idempotency_key, _items, _date, _appointment_time, _receipt_path, _payment_option, _customer_id)` — atomic reservation creation with server-resolved pricing.
+- `settle_payment_webhook(_event_id, _payment_id, _provider_payment_id, _method, _next_status, _event)` — idempotent payment settlement.
+- `get_slot_booked_counts(_date)` — SECURITY DEFINER slot booking aggregation for accurate schedule rendering across customer RLS boundaries.
+- `complete_reservation_handover(_reservation_id, _method)` — boutique handover and balance settlement.
+- `update_staff_role_v2(target_user_id, new_role)` — administrative RBAC assignment with audit logging.
+- `admin_manage_device(_fingerprint, _action, _value)` & `admin_prune_devices(_cutoff)` — trusted device security governance.
 
-**Edge Function:** `supabase/functions/notify-status/index.ts` — invoked by database webhooks on `reservations` UPDATE; when `status` changes it inserts an in-app `notifications` row and sends an Expo push to the user's stored `expo_push_token` using the service-role key.
+**Edge Function:** `supabase/functions/notify-status/index.ts` — invoked by database webhooks on `reservations` UPDATE; sends push notifications via Expo push service.
 
 ### 2.5 Native / Device Integration Layer
 
@@ -181,26 +193,23 @@ Client-side validation lives in the screens themselves (e.g. `checkout.tsx` vali
 | `expo-camera` (`CameraView`) | `profile/body-scan` (front camera capture), `(tabs)/scanner` (QR), `ar-tryon/[id]` (2D overlay mode) | Yes |
 | `expo-sensors` (Accelerometer) | `TiltGuide` in body scan (vertical-phone gating) | Yes |
 | `expo-speech` | Body scan voice guidance ("tilt phone down", countdown) | Yes |
-| `expo-secure-store` | Supabase session tokens, local PIN, last-login timestamp | Yes |
+| `expo-secure-store` | Supabase session tokens, last-login timestamp | Yes |
 | `expo-notifications` + `expo-device` | Push registration (`pushNotifications.ts`), reservation reminders; explicitly skipped in Expo Go via `Constants.appOwnership` guard and lazy imports | **Dev build only** |
 | `expo-image-picker` | Receipt upload (`reserve`), wardrobe photos (`add-item`), chat images | Yes |
 | `expo-haptics` | Tab bar feedback (`HapticTab`) | Yes |
 | `react-native-webview` | `ar-tryon` 3D mode (Google `model-viewer` rendering .glb/.usdz) | Yes |
-| `@six33/react-native-bg-removal` (MLKit) | `wardrobe/add-item`, `outfit-builder` background removal | **Dev build only** (native MLKit; `plugins/withMlkitManifestFix.js` patches the Android manifest) |
+| `@six33/react-native-bg-removal` (MLKit) | `wardrobe/add-item`, `outfit-builder` background removal | **Dev build only** (native MLKit) |
+| `react-native-vision-camera`, `react-native-mediapipe-posedetection`, `react-native-worklets-core` | Native live skeletal tracking, body scan, and real-time length/fit calibration | **Dev build only** |
 | `expo-auth-session` / `expo-web-browser` | Google OAuth flow (`welcome.tsx`) | Yes |
-| `react-native-vision-camera`, `react-native-fast-tflite`, `react-native-worklets(-core)` | **Declared in package.json but not imported by any screen** — reserved for the live pose-estimation pipeline | Dev build only (unused) |
 
-Because of MLKit and push notifications, the app is effectively a **development-build app** (EAS builds configured in `eas.json`); Expo Go can run most of it but with wardrobe background removal and push disabled.
+Because of native MediaPipe pose tracking, MLKit background removal, and push notifications, the app is a **prebuilt development-build application** (run with `expo run:android` / dev client, not standard Expo Go).
 
 ### 2.6 ML / AI Layer
 
-Two on-device pipelines exist; one is fully live, one is partially implemented.
+Two primary on-device native pipelines are operational:
 
-**Background removal (live).** In `wardrobe/add-item` (and `outfit-builder`), the user picks/takes a photo → `removeBackground()` runs MLKit subject segmentation locally → the cut-out PNG is uploaded to the `wardrobe-images` bucket → a `wardrobe_items` row stores the public URL and color tags. No image leaves the device for processing.
-
-**Body measurement (hybrid, TFLite path scaffolded).** The intended pipeline is: Vision Camera frame → BlazePose Lite TFLite model (`react-native-fast-tflite`) → `parseLandmarks` (33 landmarks) → body ratios (`poseDetector.ts`) → anthropometric regression (`measurementCalculator.ts`) → burst averaging (`burstAverager.ts`) → sanitized storage (`measurementPrivacy.ts`) in `user_measurements` with per-field confidence. The supporting math modules, the confidence schema (migration `20260629083800`), and the `PoseLandmarkOverlay` component are all in place.
-
-**As currently shipped**, however, the body-scan screen uses a simpler sensor-guided capture: `ConsentModal` (biometric consent) → `expo-camera` preview with `TiltGuide` (accelerometer keeps the phone vertical) and a silhouette overlay → voice countdown → single photo capture → navigation to the measurements form. The TFLite inference step is not yet wired in — the measurements screen accepts `scanData` params but the scan screen currently passes only a `photoUri`, so measurements are entered/adjusted manually and saved with `measurement_source` metadata. The downstream consumer is `sizeRecommender`, which combines stored measurements with each product's size chart on the product detail screen.
+1. **Background removal (MLKit).** In `wardrobe/add-item` (and `outfit-builder`), `removeBackground()` runs MLKit subject segmentation locally on-device. The transparent PNG is uploaded to `wardrobe-images`, and metadata is indexed in `wardrobe_items`.
+2. **Body measurement & pose tracking (MediaPipe).** Native MediaPipe pose detection processes camera frames in real time using `react-native-vision-camera` and `react-native-worklets-core`. The 33 normalized skeletal landmarks feed `poseDetector.ts`, `measurementCalculator.ts`, and `burstAverager.ts` to derive user dimensions with confidence scores, feeding `sizeRecommender.ts` and AR garment calibration.
 
 ---
 
@@ -210,28 +219,32 @@ Two on-device pipelines exist; one is fully live, one is partially implemented.
 
 1. `(tabs)/index` or `(tabs)/explore` reads `products` (and `categories`) and renders the catalog.
 2. Tapping a card opens `product/[id]`, which reads `products` + `inventory` (stock per size/color) and, if signed in, `profiles` + `user_measurements` to show a size recommendation via `recommendSize()`.
-3. "Reserve" opens `reserve/[id]`: it re-reads the product, and `TimeSlotPicker` queries `reservations` for the chosen date to compute slot availability.
-4. The user picks a receipt image (`expo-image-picker`); on submit, the image is uploaded to the private `payment_receipts` bucket under `userId/timestamp.ext`.
-5. The screen inserts a `reservations` row (status `Pending`, 50% deposit, generated `display_id`); RLS ensures `customer_id = auth.uid()`. A local reminder notification is scheduled.
-6. Later, when staff change the reservation status (owner side), a database webhook fires the `notify-status` Edge Function, which inserts a `notifications` row (shown in the Inbox tab) and sends an Expo push. The user sees the reservation in `reservations.tsx`.
-
-*The purchase variant:* `product/[id]` -> `reserve/[id].tsx`, which validates input and calls the `create_reservation_multi` RPC; the database creates reservations atomically with server-computed prices; the client routes to `reservations`.
+3. "Reserve" opens `reserve/[id]`: `TimeSlotPicker` calls `public.get_slot_booked_counts(_date)` (`SECURITY DEFINER`), guaranteeing accurate slot booking counts regardless of customer-level reservation RLS.
+4. Downpayment is handled either via automated PayMongo checkout (creating a payment record) or manual receipt upload (`expo-image-picker`) to the private `payment_receipts` bucket.
+5. The screen invokes `create_reservation_multi_idempotent` with an idempotency key; the database creates reservations atomically with server-computed prices and holds inventory.
+6. When staff transition the reservation status, a database webhook fires the `notify-status` Edge Function, which inserts a `notifications` row and dispatches an Expo push notification.
 
 ### 3.2 Body Scan → Measurements → Size Recommendation
 
-1. `profile/measurements` (opened from Profile) loads existing data from `profiles` (fit preference, gender) and `user_measurements`.
+1. `profile/measurements` loads existing data from `profiles` (fit preference, gender) and `user_measurements`.
 2. "Scan" navigates to `profile/body-scan` with height/weight params. A `ConsentModal` collects explicit biometric-processing consent before the camera activates.
-3. `expo-camera` shows the front camera; `TiltGuide` (accelerometer) and a silhouette overlay gate the capture; `expo-speech` gives spoken guidance and a countdown; a photo is captured.
-4. Control returns to `profile/measurements`, where values are confirmed/edited manually. On save: `profiles.fit_preference` is updated and a sanitized payload (via `sanitizeForStorage`) is upserted into `user_measurements` (JSON `measurements`, `scan_confidence`, `per_field_confidence`, `measurement_source`), keyed on `user_id`.
-5. On any `product/[id]` visit thereafter, `recommendSize(userMeasurements, product.measurements, fitPreference)` runs locally and displays the recommended size badge, closing the loop.
+3. Front camera capture is assisted by `TiltGuide` (accelerometer) and `expo-speech` audio countdown.
+4. MediaPipe extracts skeletal landmarks; measurements are calculated and confirmed. On save, values are sanitized and persisted in `user_measurements` via `update_profile_and_measurements` RPC.
+5. On any `product/[id]` visit, `recommendSize(userMeasurements, product.measurements, fitPreference)` executes locally to render the personalized fit badge.
 
-### 3.3 Message the Boutique (realtime chat)
+### 3.3 Messaging & Realtime Communication
 
-1. `(tabs)/messages` (Inbox) lists `notifications` and the user's conversations from `MessagesContext`.
-2. Starting a chat calls `getOrCreateConversation()`, which finds or inserts the user's `conversations` row (one conversation per customer, RLS-scoped).
-3. `messages/[conversationId]` loads the thread from `messages` and subscribes to a Realtime channel filtered to that conversation; `MessagesContext` separately subscribes to `conversations` changes to keep the list and unread badge fresh (both tables are in the `supabase_realtime` publication).
-4. `sendMessage()` inserts a `messages` row, then updates the parent conversation's `last_message` / `last_message_time`. Image attachments are uploaded to storage first and sent as a URL.
-5. Opening a thread triggers `markAsRead()`: resets `conversations.unread_count` and stamps `read_at` on unread incoming messages. The staff side (a separate owner app) sees the same rows via its owner RLS policies; the tab badge updates live via the subscription.
+The application features a frozen dual-channel messaging architecture:
+
+1. **Boutique Support (`conversations` & `messages`):**
+   - Dedicated support channel between a customer and boutique staff/admin.
+   - Initialized via `getOrCreateConversation()`.
+   - Realtime updates subscribed on `messages` table filtered by `conversation_id`.
+2. **P2P Direct Chat (`direct_chats`, `direct_chat_participants`, `direct_messages`):**
+   - Direct communication between connected users.
+   - Initialized via `get_or_create_direct_chat(other_user_id)` with blocking verification (`is_blocked_between`).
+   - Realtime subscriptions on `direct_messages` filtered by `chat_id`.
+   - Dedicated read receipts (`mark_direct_message_read`) and unread aggregations (`get_direct_chat_summaries`).
 
 ---
 
