@@ -2,7 +2,8 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
-import { errorReporting } from '@/src/services/observability';
+import { chatService } from '@/src/services';
+import { usePresence } from '@/src/hooks/usePresence';
 import { useAuth } from './AuthContext';
 
 type Conversation = Database['public']['Tables']['conversations']['Row'];
@@ -38,7 +39,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const { session, profile } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [onlineUsers, setOnlineUsers] = useState<Record<string, string>>({});
+  const onlineUsers = usePresence(session?.user?.id, profile?.role);
 
   const isStaff = profile?.role === 'staff' || profile?.role === 'owner';
   const unreadCount = conversations.reduce(
@@ -49,58 +50,6 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const isStaffOnline = Object.values(onlineUsers).some(
     (role) => role === 'staff' || role === 'owner'
   );
-
-  // Shared presence channel: 'presence:online' is the same channel name the
-  // admin dashboard tracks itself on, so a staff member's browser tab and a
-  // customer's phone see each other's live online state through Supabase
-  // Realtime -- no extra table or polling needed.
-  useEffect(() => {
-    if (!session?.user.id) {
-      setOnlineUsers({});
-      return;
-    }
-
-    const channel = supabase.channel('presence:online', {
-      config: { presence: { key: session.user.id } },
-    });
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState<{ user_id: string; role: string }>();
-        const next: Record<string, string> = {};
-        for (const presences of Object.values(state)) {
-          const p = presences[0];
-          if (p) next[p.user_id] = p.role;
-        }
-        setOnlineUsers(next);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          try {
-            await channel.track({
-              user_id: session.user.id,
-              role: profile?.role || 'customer',
-              online_at: new Date().toISOString(),
-            });
-          } catch (err) {
-            errorReporting.capture(err instanceof Error ? err : new Error(String(err)), {
-              domain: 'messages',
-              operation: 'trackPresence',
-            });
-          }
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          errorReporting.capture(new Error(`Presence channel error: ${status}`), {
-            domain: 'messages',
-            operation: 'subscribePresence',
-            status,
-          });
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user.id, profile?.role]);
 
   const refreshConversations = useCallback(async () => {
     if (!session?.user.id) return;
@@ -245,19 +194,9 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     if (!session?.user.id) return null;
 
-    try {
-      const { data, error } = await supabase.rpc('merge_message_reaction', {
-        p_message_id: messageId,
-        p_user_id: session.user.id,
-        p_emoji: emoji,
-      });
-
-      if (error) throw error;
-      return (data ?? {}) as Record<string, string>;
-    } catch (error) {
-      console.error('Error toggling reaction:', error);
-      return null;
-    }
+    const res = await chatService.toggleReaction(messageId, emoji, session.user.id);
+    if (!res.ok) return null;
+    return res.data;
   }, [session?.user.id]);
 
   const markAsRead = useCallback(async (conversationId: string) => {

@@ -5,3 +5,4 @@ export * from './wardrobeService';
 export * from './announcementService';
 export * from './reservationService';
 export * from './reviewService';
+export * from './chatService';

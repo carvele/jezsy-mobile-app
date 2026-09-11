@@ -9,6 +9,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ProductCard } from '@/src/components/ProductCard';
+import { chatService } from '@/src/services';
 
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -54,23 +55,15 @@ export default function UserProfileScreen() {
 
   const loadProfileAndConnection = useCallback(async () => {
     try {
-      let targetId = id;
-      
-      // Resolve @username to UUID
-      if (id?.startsWith('@')) {
-        const username = id.substring(1).toLowerCase();
-        const { data: resolvedId, error } = await supabase.rpc('resolve_username', { p_username: username });
-        if (error || !resolvedId) throw new Error('User not found');
-        targetId = resolvedId;
+      if (!id) throw new Error('User not found');
+
+      const profileRes = await chatService.resolveTargetUser(id);
+      if (!profileRes.ok) {
+        throw new Error(profileRes.error.message);
       }
-
-      // profiles' own RLS only allows a row's owner or staff to read it, so
-      // another user's row must go through this SECURITY DEFINER accessor.
-      const { data: profileRows, error: profileError } = await supabase
-        .rpc('get_public_profiles', { p_user_ids: [targetId] });
-
-      if (profileError || !profileRows?.[0]) throw profileError || new Error('User not found');
-      setProfile(profileRows[0]);
+      const profileData = profileRes.data;
+      const targetId = profileData.id;
+      setProfile(profileData);
 
       // Load Connection
       const u1 = user!.id < targetId! ? user!.id : targetId!;
@@ -88,7 +81,7 @@ export default function UserProfileScreen() {
       if (connData?.status === 'blocked') {
         setAccessDenied(true);
       } else {
-        loadWardrobe(targetId!, profileRows[0].wardrobe_privacy as string, connData?.status);
+        loadWardrobe(targetId!, profileData.wardrobe_privacy as string, connData?.status);
       }
     } catch (err: any) {
       console.log('Error loading profile:', err.message);

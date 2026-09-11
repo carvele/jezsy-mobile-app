@@ -21,6 +21,7 @@ import { formatDateSeparator, formatReceiptTime, shouldStartMessageGroup } from 
 import { useToast } from '@/src/context/ToastContext';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 import { getConversationMessagesPage, MessageRow } from '@/src/services/chatService';
+import { useTypingIndicator } from '@/src/hooks/useTypingIndicator';
 
 // One reaction per person per message, so this is a shortlist rather than a
 // full picker -- matching the set the admin dashboard already offers.
@@ -279,51 +280,21 @@ export default function ChatScreen() {
     }
   }, [conversationId, hasOlderMessages, loadingOlder, messages]);
 
-  // Typing indicator: ephemeral broadcast on a per-conversation channel, not
-  // a DB write -- the admin dashboard joins the same channel name/shape when
-  // viewing this conversation, so typing is visible across both apps without
-  // a table or extra Realtime traffic on `messages`.
-  const [otherTyping, setOtherTyping] = useState(false);
-  const typingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const otherTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastTypingSentRef = useRef(0);
-
-  useEffect(() => {
-    if (!conversationId) return;
-
-    const channel = supabase.channel(`typing:${conversationId}`);
-    channel
-      .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        if (payload?.sender_id === session?.user.id) return;
-        setOtherTyping(true);
-        if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current);
-        otherTypingTimeoutRef.current = setTimeout(() => setOtherTyping(false), 4000);
-      })
-      .subscribe();
-    typingChannelRef.current = channel;
-
-    return () => {
-      supabase.removeChannel(channel);
-      typingChannelRef.current = null;
-      if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current);
-      setOtherTyping(false);
-    };
-  }, [conversationId, session?.user.id]);
+  // Typing indicator managed via decoupled hook with throttling, timeouts,
+  // error reporting, and AppState reconnect recovery.
+  const { isOtherTyping: otherTyping, sendTyping } = useTypingIndicator({
+    conversationId,
+    userId: session?.user?.id,
+  });
 
   // Throttled so every keystroke doesn't open a broadcast -- one every 2s is
   // plenty to keep the other side's "typing..." indicator alive.
   const handleInputChange = useCallback((text: string) => {
     setInputText(text);
-    if (editingId) return;
-    const now = Date.now();
-    if (now - lastTypingSentRef.current < 2000) return;
-    lastTypingSentRef.current = now;
-    typingChannelRef.current?.send({
-      type: 'broadcast',
-      event: 'typing',
-      payload: { sender_id: session?.user.id },
-    });
-  }, [editingId, session?.user.id]);
+    if (!editingId) {
+      sendTyping();
+    }
+  }, [editingId, sendTyping]);
 
   // Prime the subject from the "Ask about this" entry point; it rides along on
   // the next message the user sends, then clears.
