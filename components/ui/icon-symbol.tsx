@@ -62,6 +62,7 @@ const MAPPING = {
   'trash.fill': 'delete',
   'trash': 'delete',
   'square.and.arrow.up': 'share',
+  'ellipsis': 'more-horiz',
   'delete.left': 'backspace',
 
   // Status & Alerts
