@@ -8,13 +8,13 @@ The root layout relies on several boolean flags (latches) to prevent "flicker" a
 
 ### Core Flags
 
-1. `isLoading` & `isProfileLoading`: Handled by `AuthContext`. True when Supabase is fetching the session or profile from the database.
+1. `isLoading`, `isProfileLoading` & `isProfileInitialized`: Handled by `AuthContext`. True when Supabase is fetching the session or profile from the database, or hydrating from secure cache. `isProfileInitialized` indicates the user's profile lookup has completed at least once.
 2. `onboardingSeen`: Resolved via local storage. True if the user has completed the swipeable onboarding tutorial.
 3. `isPasswordRecovery`: Set by a deep-link listener when a Supabase password recovery URL is intercepted.
-4. `flagsReady`: Evaluates to `true` when the session, profile, and onboarding status are fully resolved.
+4. `flagsReady`: Evaluates to `true` when the session, profile (via `profileReady = !session || isProfileInitialized`), and onboarding status are fully resolved.
 5. `hasBootstrapped`: Gates the initial mount of the navigation `Stack`. It latches to `true` once `flagsReady` is met and *never flips back to false*. This prevents a later profile refresh from entirely unmounting the navigation tree (which causes extreme flicker and resets component state).
 6. `routeSettled`: Used to hide the branded bootstrap loader. Latches to `true` only when the `segments` array confirms that the router has successfully navigated the user to their final mandated destination (e.g., `/(tabs)` or `/(auth)/profile-setup`).
-7. `hasAuthenticated`: Latches to `true` once a user is confirmed to have a valid session, a completed profile, and is actively navigating inside `/(tabs)`. Once set, the routing gate suspends itself, preventing silent background token refreshes from accidentally kicking the user back to the auth group.
+7. `hasAuthenticated`: Latches to `true` once a user is confirmed to have a valid session, a completed profile, and is actively navigating inside `/(tabs)`. Once set, the routing gate suspends itself, preventing silent background token refreshes or tab transitions from accidentally kicking the user back to `profile-setup` or the auth group.
 
 ### Sequence of Operations (The Routing Effect)
 
@@ -27,11 +27,12 @@ When the routing `useEffect` evaluates, it processes states in strict precedence
    - If `onboardingSeen`, redirect to `/(auth)/welcome`.
    - If `!onboardingSeen`, redirect to `/(auth)/onboarding`.
 5. **Authenticated (Session Exists)**:
-   - **Incomplete Profile**: If `profile.first_name` is missing, redirect to `/(auth)/profile-setup`.
+   - **Incomplete Profile**: If `profile.first_name` is missing AND the user is not already established in the app (`!hasAuthenticated.current`), redirect to `/(auth)/profile-setup`.
    - **Complete Profile**: If the user is inside the `AUTH_SCREENS` group, redirect them to `/(tabs)`.
 
 ### Race Condition Mitigations
 
+* **Cache Pre-hydration**: `AuthContext` immediately pre-fills `profile` from SecureStore cache on session restore, preventing transient `profile === null` states while the network query completes.
 * **Redundant Navigations:** `lastRedirectTargetRef` prevents the router from firing duplicate `replace()` calls on consecutive renders before Expo Router's `segments` update.
 * **The "Stuck Loading" Warning:** If `routeSettled` fails to latch within 10 seconds, `__DEV__` mode will emit a console warning to debug edge cases where the destination screen name changed but `AUTH_SCREENS` was not updated.
 * **Deep Links**: Handled both on cold start `Linking.getInitialURL()` and in the background via `Linking.addEventListener('url')`. They bypass standard auth checks and force `isPasswordRecovery`.
