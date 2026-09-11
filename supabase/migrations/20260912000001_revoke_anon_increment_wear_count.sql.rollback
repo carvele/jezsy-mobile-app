@@ -1,0 +1,4 @@
+-- ROLLBACK COMPANION: 20260912000001_revoke_anon_increment_wear_count.sql
+-- WARNING: Executing this rollback reintroduces B6-GRANT-LEAK-001 by restoring anonymous EXECUTE privileges on increment_wear_count(uuid).
+
+GRANT EXECUTE ON FUNCTION public.increment_wear_count(uuid) TO anon;

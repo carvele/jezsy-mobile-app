@@ -1,52 +1,40 @@
-# Migration conventions
+# Supabase Canonical Migration Lineage
 
-This directory is applied against a **live, shared** Supabase Postgres project — a
-second repo (owner-dashboard) reads and writes the same database, and applying a
-migration can silently drift the ledger version away from the filename (see the
-project's shared-DB workflow notes). Because of that drift, any migration can end
-up re-applied against a database where its objects already exist. Every migration
-in this directory must be safe to run twice.
+> **CANONICAL STATUS: THIS REPOSITORY IS THE SINGLE CANONICAL SOURCE OF TRUTH FOR DATABASE SCHEMA MIGRATIONS.**
 
-## The four required patterns
+All database migrations for the shared live Supabase project (`wufcmtndotfvxvvxkamv`) are authored, reviewed, sequenced, and applied exclusively from this directory (`jezsy-mobile-app/supabase/migrations/`). The admin-dashboard migrations directory is deprecated and deactivated.
 
-### 1. `CREATE POLICY` — always preceded by `DROP POLICY IF EXISTS`
+Because this database is shared and live across Mobile, Admin Dashboard, and background services, every migration must adhere to strict idempotency, disaster-recovery, and authorization standards.
 
-`CREATE POLICY` has no `IF NOT EXISTS` form. Without a preceding drop, a re-apply
-fails with `policy already exists`.
+---
 
+## Canonical Authoring & Lifecycle Rules
+
+### 1. File Naming Conventions
+- **Forward Migration:** `<timestamp>_<name>.sql`
+- **Disaster Recovery Companion:** `<timestamp>_<name>.sql.rollback`
+- **Naming Rule:** The companion MUST use the extension `.sql.rollback` (extension first, never `.rollback.sql`). The Supabase CLI detects any `*.sql` file as an active forward migration, which causes phantom unapplied migration errors if `.rollback.sql` is used.
+- **Timestamps:** Every new migration must use a sequential timestamp strictly greater than the frozen live baseline (`20260911181020`).
+
+### 2. Mandatory Idempotency Patterns
+
+Every migration must be safe to execute multiple times against a live database where objects may already exist:
+
+#### A. Policies — Always `DROP POLICY IF EXISTS` Before `CREATE POLICY`
 ```sql
--- Bad
-CREATE POLICY "Staff can view devices" ON public.devices FOR SELECT
-  USING (public.is_staff_or_admin());
-
--- Good
 DROP POLICY IF EXISTS "Staff can view devices" ON public.devices;
 CREATE POLICY "Staff can view devices" ON public.devices FOR SELECT
   USING (public.is_staff_or_admin());
 ```
 
-### 2. `CREATE TABLE` / `ADD COLUMN` — always `IF NOT EXISTS`
-
+#### B. Tables & Columns — Always `IF NOT EXISTS`
 ```sql
--- Bad
-CREATE TABLE capsules ( ... );
-ALTER TABLE user_measurements ADD COLUMN scan_confidence real DEFAULT 0;
-
--- Good
 CREATE TABLE IF NOT EXISTS capsules ( ... );
-ALTER TABLE user_measurements ADD COLUMN IF NOT EXISTS scan_confidence real DEFAULT 0;
+ALTER TABLE public.user_measurements ADD COLUMN IF NOT EXISTS scan_confidence real DEFAULT 0;
 ```
 
-### 3. `ADD CONSTRAINT` — wrapped in a `DO $$ ... IF NOT EXISTS` guard
-
-`ADD CONSTRAINT` has no `IF NOT EXISTS` form either. Check `pg_constraint` first.
-
+#### C. Constraints — Always Wrapped in `DO $$` Guard or Drop First
 ```sql
--- Bad
-ALTER TABLE public.reservations
-  ADD CONSTRAINT reservations_display_id_key UNIQUE (display_id);
-
--- Good
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -58,31 +46,25 @@ BEGIN
 END $$;
 ```
 
-If you also need to `DROP CONSTRAINT` first (e.g. widening a `CHECK`), use
-`DROP CONSTRAINT IF EXISTS` — the unconditional `ADD CONSTRAINT` that follows is
-then safe on its own, since the drop guarantees a clean slate every time.
+#### D. Functions — Restate All Grants and Security Settings
+`CREATE OR REPLACE FUNCTION` is inherently idempotent, but a replace silently reverts to default SQL settings. Always explicitly restate:
+- `SECURITY DEFINER` / `SECURITY INVOKER`
+- Explicit pinned `SET search_path = public, pg_temp` (or `SET search_path = ''`)
+- Explicit grants: `REVOKE EXECUTE ON FUNCTION ... FROM anon, PUBLIC;` and `GRANT EXECUTE ON FUNCTION ... TO authenticated;`
 
-### 4. Every forward migration needs a matching `.rollback.sql`
+### 3. Grant Revocation Hygiene
+- PostgreSQL defaults to granting `EXECUTE` to `PUBLIC`.
+- `REVOKE EXECUTE ... FROM anon` alone can be a no-op if the default `PUBLIC` grant is intact.
+- Always revoke from both `anon, PUBLIC` explicitly and verify using:
+  ```sql
+  SELECT has_function_privilege('anon', 'public.my_function(uuid)'::regprocedure, 'EXECUTE');
+  ```
 
-`<name>.sql` and `<name>.rollback.sql`, same base filename. The rollback should
-restore the previous state (e.g. drop what the forward migration created, or
-`CREATE OR REPLACE` the function body back to its prior version) — not just be a
-placeholder.
-
-## Other things this ledger has been bitten by before
-
-- **`CREATE OR REPLACE FUNCTION` doesn't need a guard** (it's inherently
-  idempotent) — but check whether an earlier migration set `SECURITY DEFINER` or
-  specific `GRANT`/`REVOKE`s that your replace needs to restate. A bare
-  `CREATE OR REPLACE` silently reverts to the SQL you wrote, not to whatever
-  grants/security mode were layered on afterward. This exact bug shipped twice
-  in this repo's history (`create_reservation`, `create_order`).
-- **`REVOKE ... FROM anon` alone is a no-op** if the function still has its
-  default `PUBLIC` grant — revoke from `PUBLIC, anon, authenticated` explicitly
-  and verify with `has_function_privilege('anon', '...', 'EXECUTE')` before
-  trusting it's closed.
-- **New migrations should be sequenced after the functions/columns they
-  reference actually exist in this ledger**, not just on the live DB. A
-  migration applied ad hoc outside this ledger (common during incident response)
-  needs a follow-up migration recording it here — otherwise a fresh-database
-  replay from this directory alone will fail partway through.
+### 4. Post-Migration Synchronization Workflow
+After any migration is applied to the live Supabase project:
+1. Regenerate TypeScript definitions:
+   ```bash
+   npx supabase gen types typescript --linked > src/types/database.types.ts
+   ```
+2. Mirror the exact generated `database.types.ts` into `admin-dashboard/src/types/database.types.ts`.
+3. Verify type-checking and contract guards across both repositories.

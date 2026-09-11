@@ -65,3 +65,8 @@ app-example
 
 # typescript compiler output, not source
 tsc-out.txt
+
+# Python
+__pycache__/
+*.pyc
+
