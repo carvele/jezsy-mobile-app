@@ -5,6 +5,7 @@ import { TimeSlotPicker } from "@/src/components/TimeSlotPicker";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
 import { supabase } from "@/src/lib/supabase";
+import { reservationService } from "@/src/services";
 import { Database } from "@/src/types/database.types";
 import {
     formatManilaDate,
@@ -324,25 +325,20 @@ export default function ReservationScreen() {
       const attempt = getReservationAttempt(reservationAttemptRef.current, request);
       reservationAttemptRef.current = attempt;
 
-      // Every line's price and the resulting deposit are resolved server-side.
-      // Retrying this exact request reuses the key and returns the first result.
-      const { data, error } = await supabase.rpc("create_reservation_multi_idempotent", {
-        _idempotency_key: attempt.key,
-        _items: request.items,
-        _date: request.date,
-        _appointment_time: request.appointmentTime,
-        _payment_option: request.paymentOption,
+      const result = await reservationService.reserve({
+        idempotencyKey: attempt.key,
+        items: request.items,
+        date: request.date,
+        appointmentTime: request.appointmentTime,
+        paymentOption: request.paymentOption,
+        customerId: request.customerId,
       });
 
-      if (error) {
-        if (
-          error.message.includes("fully booked") ||
-          error.message.includes("closed")
-        ) {
-          throw new Error(error.message);
-        }
-        throw error;
+      if (!result.ok) {
+        throw result.error;
       }
+
+      const data = result.data;
 
       const displayId = (data as any)?.display_id;
 

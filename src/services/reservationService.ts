@@ -2,6 +2,14 @@ import { supabase } from '@/src/lib/supabase';
 import { OffsetPageResult } from '@/src/types/pagination';
 import { Database } from '@/src/types/database.types';
 import { StatusFilter, statusBucket } from '@/src/utils/reservationStatus';
+import { CreateReservationInput, ReservationResult } from '@/src/types/dto/reservation';
+import {
+  DomainError,
+  DomainResult,
+  domainOk,
+  domainFail,
+  errorReporting,
+} from './observability';
 
 export type CustomerReservation = Database['public']['Tables']['reservations']['Row'] & {
   reservation_items?: { count: number }[] | null;
@@ -139,3 +147,75 @@ export async function getMyUnratedItems(userId: string): Promise<UnratedItem[]> 
 
   return unrated;
 }
+
+export interface ReserveParams extends CreateReservationInput {
+  idempotencyKey: string;
+  customerId?: string | null;
+}
+
+/**
+ * Creates a reservation idempotently via the create_reservation_multi_idempotent RPC.
+ * Normalizes only actual, evidenced database errors without stale string mappings.
+ */
+export async function reserve(input: ReserveParams): Promise<DomainResult<ReservationResult>> {
+  try {
+    const { data, error } = await supabase.rpc('create_reservation_multi_idempotent', {
+      _idempotency_key: input.idempotencyKey,
+      _items: input.items as any,
+      _date: input.date,
+      _appointment_time: input.appointmentTime,
+      _receipt_path: input.receiptPath ?? undefined,
+      _payment_option: input.paymentOption,
+      _customer_id: input.customerId ?? undefined,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return domainOk(data as ReservationResult);
+  } catch (err: any) {
+    let code = 'ERR_RESERVATION_FAILED';
+    const message: string = err?.message || 'Failed to create reservation';
+
+    if (message.includes('Authentication required')) {
+      code = 'ERR_AUTH_REQUIRED';
+    } else if (message.includes('idempotency key is required')) {
+      code = 'ERR_IDEMPOTENCY_REQUIRED';
+    } else if (message.includes('Payment option must be deposit or full')) {
+      code = 'ERR_INVALID_PAYMENT_OPTION';
+    } else if (message.includes('contain at least one item')) {
+      code = 'ERR_EMPTY_RESERVATION';
+    } else if (message.includes('access required') || err?.code === '42501') {
+      code = 'ERR_FORBIDDEN';
+    } else if (message.includes('different reservation details')) {
+      code = 'ERR_IDEMPOTENCY_CONFLICT';
+    }
+
+    const domainError = new DomainError({
+      code,
+      message,
+      domain: 'reservation',
+      context: {
+        operation: 'reserve',
+        idempotencyKey: input.idempotencyKey,
+        itemCount: input.items?.length,
+      },
+      cause: err,
+    });
+
+    errorReporting.capture(domainError, {
+      domain: 'reservation',
+      operation: 'reserve',
+    });
+
+    return domainFail(domainError);
+  }
+}
+
+export const reservationService = {
+  getMyReservationsPage,
+  getMyReservationStatusCounts,
+  getMyUnratedItems,
+  reserve,
+};

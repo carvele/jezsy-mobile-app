@@ -7,6 +7,7 @@ import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { reviewService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
@@ -73,15 +74,15 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
       });
       const uploadedUrls = await Promise.all(uploadPromises);
 
-      const { error } = await supabase.from('reviews').insert({
-        product_id: productId,
-        user_id: user.id,
+      const result = await reviewService.submitReview({
+        productId,
+        userId: user.id,
         rating,
         comment: comment.trim() || null,
         images: uploadedUrls,
       });
 
-      if (error) throw error;
+      if (!result.ok) throw result.error;
 
       showToast('Thank you for your review!', 'success');
       setRating(5);

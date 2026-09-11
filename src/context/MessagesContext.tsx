@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
+import { errorReporting } from '@/src/services/observability';
 import { useAuth } from './AuthContext';
 
 type Conversation = Database['public']['Tables']['conversations']['Row'];
@@ -75,10 +76,23 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({
-            user_id: session.user.id,
-            role: profile?.role || 'customer',
-            online_at: new Date().toISOString(),
+          try {
+            await channel.track({
+              user_id: session.user.id,
+              role: profile?.role || 'customer',
+              online_at: new Date().toISOString(),
+            });
+          } catch (err) {
+            errorReporting.capture(err instanceof Error ? err : new Error(String(err)), {
+              domain: 'messages',
+              operation: 'trackPresence',
+            });
+          }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          errorReporting.capture(new Error(`Presence channel error: ${status}`), {
+            domain: 'messages',
+            operation: 'subscribePresence',
+            status,
           });
         }
       });

@@ -6,7 +6,7 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { supabase } from '@/src/lib/supabase';
+import { outfitService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -312,12 +312,12 @@ export default function WardrobeScreen() {
         color_tags: i.color_tags,
       }));
 
-      const { error } = await supabase.from('saved_outfits').insert({
-        user_id: session.user.id,
+      const result = await outfitService.saveOutfit({
+        userId: session.user.id,
         name: `${outfit.label} look`,
         items: payload,
       });
-      if (error) throw error;
+      if (!result.ok) throw result.error;
 
       showToast('Outfit saved to your wardrobe.', 'success');
       fetchWardrobeData();

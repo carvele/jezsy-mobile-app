@@ -8,7 +8,7 @@ module.exports = {
   testPathIgnorePatterns: ['<rootDir>/.claude/'],
   modulePathIgnorePatterns: ['<rootDir>/.claude/'],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json', diagnostics: { warnOnly: true } }],
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',

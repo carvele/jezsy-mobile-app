@@ -8,6 +8,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { announcementService } from '@/src/services';
 import { formatPHDate } from '@/src/utils/dateTime';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';
@@ -146,7 +147,8 @@ export default function InboxScreen() {
     if (!user) return;
     setNotifications(prev => prev.filter(n => !(n.kind === 'announcement' && n.id === id)));
     try {
-      await supabase.from('announcement_dismissals').insert({ user_id: user.id, announcement_id: id });
+      const result = await announcementService.dismiss({ userId: user.id, announcementId: id });
+      if (!result.ok) console.error(result.error);
     } catch (e) {
       console.error(e);
     }
