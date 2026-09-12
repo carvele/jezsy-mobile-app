@@ -1,0 +1,71 @@
+-- 20260912070029_harden_social_discovery_bilateral_blocks.sql
+-- Remediates [SOC-003]: Enforces bilateral block check via is_blocked_between(auth.uid(), p.id)
+-- across public discovery RPCs: get_public_profiles, search_public_profiles, and resolve_username.
+-- Also ensures resolve_username checks global moderation (profiles.is_blocked) and deletion state.
+
+-- 1. get_public_profiles(uuid[])
+CREATE OR REPLACE FUNCTION public.get_public_profiles(p_user_ids uuid[])
+ RETURNS TABLE(id uuid, username text, first_name text, last_name text, wardrobe_privacy text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  SELECT p.id, p.username, p.first_name, p.last_name, p.wardrobe_privacy
+  FROM public.profiles p
+  WHERE p.id = ANY(p_user_ids)
+    AND COALESCE(p.deleted, false) = false
+    AND COALESCE(p.is_blocked, false) = false
+    AND (
+      auth.uid() IS NULL
+      OR NOT public.is_blocked_between(auth.uid(), p.id)
+    );
+$function$;
+
+REVOKE ALL ON FUNCTION public.get_public_profiles(uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_public_profiles(uuid[]) TO authenticated;
+
+-- 2. search_public_profiles(text, uuid)
+CREATE OR REPLACE FUNCTION public.search_public_profiles(p_query text, p_exclude_id uuid)
+ RETURNS TABLE(id uuid, username text, first_name text, last_name text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  SELECT p.id, p.username, p.first_name, p.last_name
+  FROM public.profiles p
+  WHERE (p.username ILIKE '%' || p_query || '%'
+      OR p.first_name ILIKE '%' || p_query || '%'
+      OR p.last_name ILIKE '%' || p_query || '%')
+    AND p.id != p_exclude_id
+    AND COALESCE(p.deleted, false) = false
+    AND COALESCE(p.is_blocked, false) = false
+    AND (
+      auth.uid() IS NULL
+      OR NOT public.is_blocked_between(auth.uid(), p.id)
+    )
+  LIMIT 20;
+$function$;
+
+REVOKE ALL ON FUNCTION public.search_public_profiles(text, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.search_public_profiles(text, uuid) TO authenticated;
+
+-- 3. resolve_username(text)
+CREATE OR REPLACE FUNCTION public.resolve_username(p_username text)
+ RETURNS uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  SELECT p.id FROM public.profiles p
+  WHERE p.username = p_username
+    AND COALESCE(p.deleted, false) = false
+    AND COALESCE(p.is_blocked, false) = false
+    AND (
+      auth.uid() IS NULL
+      OR NOT public.is_blocked_between(auth.uid(), p.id)
+    )
+  LIMIT 1;
+$function$;
+
+REVOKE ALL ON FUNCTION public.resolve_username(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.resolve_username(text) TO authenticated;

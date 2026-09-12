@@ -30,6 +30,8 @@ This index categorizes all engineering documentation across the \jezsy-mobile-ap
 
 ### Completed Immutable Audit Ledgers (`docs/audits/`)
 - [audits/b7-verification-closure.md](./audits/b7-verification-closure.md) — Phase B7 Feature Lifecycle, Zombie Pruning & Documentation Governance Closure Ledger.
+- [audits/b7-design-freeze.md](./audits/b7-design-freeze.md) — Phase B7-b Architecture & Design Freeze Specification.
+- [audits/b7-feature-lifecycle-inventory.md](./audits/b7-feature-lifecycle-inventory.md) — Phase B7-a Feature Lifecycle, Zombie Architecture & Doc Hygiene Inventory.
 - [audits/b6-verification-closure.md](./audits/b6-verification-closure.md) — Phase B6 Security Hardening, Definer Search Path & Persona RLS Closure Ledger.
 - [audits/security-performance-hardening-closure-ledger.md](./audits/security-performance-hardening-closure-ledger.md) — Phase B4 Security & Performance Hardening Closure Ledger.
 - [audits/architecture-remediation-program-phase-1.md](./audits/architecture-remediation-program-phase-1.md) — Phase B1-B3 Foundation Remediation Synthesis.
