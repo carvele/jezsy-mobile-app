@@ -262,6 +262,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let CAMERA_CALIBRATION = null;
           let CAMERA_DIMENSIONS = null;
 
+          // Baked in directly (not delivered by message like the values above): a
+          // garment's category never changes mid-session for a given GLB, so there's
+          // no async-value-arrives-after-mount race to avoid here. Drives which body
+          // landmarks this scene anchors/scales the garment against -- hips for
+          // pants/skirt, shoulders (the original, only) behavior for everything else.
+          const GARMENT_CATEGORY = ${metadata ? safeStringify(metadata.category) : 'null'};
+          const IS_BOTTOM_GARMENT = GARMENT_CATEGORY === 'pants' || GARMENT_CATEGORY === 'skirt';
+
           // Same reasoning and same fix as CAMERA_CALIBRATION above, for the same root
           // cause: fitModifier is ALSO computed from the async Supabase sizing profile
           // (see the fitModifier useMemo in ar-tryon/[id].tsx), so baking it into this
@@ -826,7 +834,12 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   ownPrefix: bindPrefix(bone),
                 };
               };
-              ['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm'].forEach(registerCorrection);
+              // Leg bones registered unconditionally alongside the arms: a garment
+              // whose skeleton has no LeftUpLeg/RightUpLeg (every existing
+              // shirt/jacket/dress) simply finds no bone for them and
+              // registerCorrection no-ops, same as it already does for a garment
+              // missing any of the arm bones.
+              ['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm', 'LeftUpLeg', 'LeftLeg', 'RightUpLeg', 'RightLeg'].forEach(registerCorrection);
 
               // One-shot: log the ancestor chain the prefix actually walked, and where the
               // LeftArm points at bind once that prefix is applied. That direction must come
@@ -1081,15 +1094,40 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       return new THREE.Vector3().copy(camera.position).add(vec.multiplyScalar(dist));
                     };
 
-                    // 1. Position at midpoint of shoulders
-                    const midX = (l11.x + l12.x) / 2;
-                    const midY = (l11.y + l12.y) / 2;
+                    // 1. Position at midpoint of shoulders -- or hips, for a
+                    // pants/skirt garment. l11/l12 above stay the real shoulder
+                    // landmarks throughout (the distance-triangulation math above
+                    // is calibrated against the wearer's actual shoulder width
+                    // regardless of what garment is being tried on); this is a
+                    // separate anchor pair used only for placing/scaling the
+                    // garment itself.
+                    const hip23 = normalizedLandmarks[23];
+                    const hip24 = normalizedLandmarks[24];
+                    const useHipAnchor = IS_BOTTOM_GARMENT && hip23 && hip24;
+                    const aL = useHipAnchor ? hip23 : l11;
+                    const aR = useHipAnchor ? hip24 : l12;
+                    // Same visibility floor poseNormalizer.ts uses (MIN_JOINT_VISIBILITY)
+                    // before trusting a landmark for the skeleton -- nothing on this
+                    // separate position/scale path previously checked it at all. A hip
+                    // landmark can be non-null but momentarily low-confidence (occluded by
+                    // an arm, a loose shirt hem, turning past profile) without ever going
+                    // fully missing, and using it anyway is exactly the kind of noisy input
+                    // that shows up as drift/jitter in the rendered anchor. Feeds into
+                    // transformValid below so a bad frame just holds the last good smoothed
+                    // position instead of jumping -- not a fallback to shoulder anchoring,
+                    // which would jump the anchor between two different body points instead.
+                    const MIN_HIP_VISIBILITY = 0.3;
+                    const hipAnchorConfident = !useHipAnchor
+                      || ((hip23.visibility ?? 1) >= MIN_HIP_VISIBILITY && (hip24.visibility ?? 1) >= MIN_HIP_VISIBILITY);
+
+                    const midX = (aL.x + aR.x) / 2;
+                    const midY = (aL.y + aR.y) / 2;
                     const midCrop = mapCoverCrop(midX, midY);
                     const targetPos = unprojectToZ0(midCrop.nx, midCrop.ny);
 
                     // 2. Exact scale based on Three.js world distance
-                    const lCrop = mapCoverCrop(l11.x, l11.y);
-                    const rCrop = mapCoverCrop(l12.x, l12.y);
+                    const lCrop = mapCoverCrop(aL.x, aL.y);
+                    const rCrop = mapCoverCrop(aR.x, aR.y);
                     const targetL = unprojectToZ0(lCrop.nx, lCrop.ny);
                     const targetR = unprojectToZ0(rCrop.nx, rCrop.ny);
                     
@@ -1148,7 +1186,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       const exactScale = (targetWorldWidth / garmentMetricWidth) * fitModifier;
 
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
-                      const transformValid = !isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x);
+                      const transformValid = !isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x) && hipAnchorConfident;
                       // rot NaN protection, added separately from transformValid on purpose: a
                       // NaN quaternion (from poseNormalizer's quaternionFromBasis under a large
                       // bend -- see its own hardening comment) must never reach smoothedQuat.slerp
@@ -1227,8 +1265,12 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // correctly. Every other joint inherits that offset, preserving
                       // MediaPipe's real relative proportions.
                       if (occlusionMaterial && normalizedLandmarks && worldLandmarks) {
-                        const wl11 = worldLandmarks[11];
-                        const wl12 = worldLandmarks[12];
+                        // Match whichever anchor pair targetPos was actually placed
+                        // from above (hips for a bottom garment) -- otherwise this
+                        // offset assumes targetPos is the shoulder midpoint even
+                        // when it isn't, misplacing every occlusion capsule.
+                        const wl11 = worldLandmarks[useHipAnchor ? 23 : 11];
+                        const wl12 = worldLandmarks[useHipAnchor ? 24 : 12];
                         if (wl11 && wl12) {
                           const offsetX = targetPos.x - (wl11.x + wl12.x) / 2;
                           const offsetY = targetPos.y - (-(wl11.y + wl12.y) / 2);
@@ -1339,7 +1381,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     const targetBoneName = skeletonBones[boneName] ? boneName : (boneMap[boneName] || ('mixamorig' + boneName));
                     const bone = skeletonBones[targetBoneName];
                     if (bone && quat && !isNaN(quat.x) && !isNaN(quat.y) && !isNaN(quat.z) && !isNaN(quat.w)) {
-                      const bc = boneCorrection[boneName]; // set for LeftArm/RightArm/LeftForeArm/RightForeArm
+                      const bc = boneCorrection[boneName]; // set for the arm and leg bones (see registerCorrection above)
                       if (bc) {
                         // corrected = invert(parentBindPrefix) * delta * ownBindPrefix -- see
                         // the capture comment above for the full derivation. Verified: an

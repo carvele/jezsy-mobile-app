@@ -72,14 +72,21 @@ describe('Filament arm bind correction', () => {
 });
 
 describe('synthetic comparison fixture', () => {
-  it('is repeatable and produces valid existing canonical poses and four arm deltas', () => {
+  it('is repeatable and produces valid existing canonical poses and eight arm/leg deltas', () => {
     for (let index = 0; index < FILAMENT_REPLAY_FRAMES; index++) {
       const frame = filamentReplayFrame(index);
       expect(frame.worldLandmarks).toEqual(filamentReplayFrame(index + FILAMENT_REPLAY_FRAMES).worldLandmarks);
       const pose = normalizePose(frame.worldLandmarks);
       expect(pose.torso.valid).toBe(true);
       const bones = calculateBoneRotationsFromCanonical(pose, 'A_POSE', 0);
-      expect(Object.keys(bones).sort()).toEqual(['LeftArm', 'LeftForeArm', 'RightArm', 'RightForeArm']);
+      // Legs joined arms as of the pants/skirt AR tracking work -- see
+      // skeletalRetargeter.ts. Every existing consumer only ever reads the
+      // arm keys it asks for, so this addition is the intended new surface,
+      // not a regression this fixture should keep pinning against.
+      expect(Object.keys(bones).sort()).toEqual([
+        'LeftArm', 'LeftForeArm', 'LeftLeg', 'LeftUpLeg',
+        'RightArm', 'RightForeArm', 'RightLeg', 'RightUpLeg',
+      ]);
       expect(Object.values(bones).flatMap(Object.values).every(Number.isFinite)).toBe(true);
     }
   });
