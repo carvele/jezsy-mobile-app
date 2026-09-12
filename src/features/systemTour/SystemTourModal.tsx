@@ -258,10 +258,18 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
               </ScrollView>
 
               <View style={[styles.footer, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+                {/* The footer's `alignItems: 'center'` (needed to center the
+                    hub screen's "Don't show again" link below) also stops
+                    this button from getting RN's default full-width stretch
+                    -- it collapsed to its own label width with no padding,
+                    looking like an unstyled placeholder. Explicit width
+                    restores the same full-width pill every other primary
+                    CTA in the app already has. */}
                 <PrimaryButton
                   label={TOUR_MODULES[activeModule].actionLabel}
                   onPress={handleModuleAction}
                   dark={isDark}
+                  style={styles.actionButton}
                 />
               </View>
             </>
@@ -426,6 +434,9 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xl,
     borderTopWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
+  },
+  actionButton: {
+    width: '100%',
   },
   dontShowBtn: {
     minHeight: 44,
