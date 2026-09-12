@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { BottomSheetModal, BottomSheetScrollView, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import {
   StyleSheet,
   View,
@@ -43,6 +43,7 @@ const PAGE_SIZE = 20;
 const PRODUCT_ROW_INSET = 4;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const FilterScroll = Platform.OS === 'web' ? ScrollView : BottomSheetScrollView;
 
 type Category = {
   id: string;
@@ -1457,8 +1458,9 @@ export default function ExploreScreen() {
         backgroundStyle={{ backgroundColor: colors.background }}
         handleIndicatorStyle={{ backgroundColor: colors.border }}
         keyboardBehavior="extend"
+        enableContentPanningGesture={Platform.OS !== 'web'}
       >
-        <BottomSheetView style={{ flex: 1 }}>
+        <View style={styles.modalContentContainer}>
           {/* Modal Header */}
           <View style={styles.modalHeader}>
             <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
@@ -1471,7 +1473,11 @@ export default function ExploreScreen() {
             </TouchableOpacity>
           </View>
 
-          <BottomSheetScrollView style={styles.modalScroll}>
+          <FilterScroll
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={true}
+          >
             {/* Special Offers Section */}
             <View style={styles.filterSection}>
               <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Collections & Offers</Text>
@@ -1736,7 +1742,7 @@ export default function ExploreScreen() {
             </View>
 
             <View style={{ height: 40 }} />
-          </BottomSheetScrollView>
+          </FilterScroll>
 
           {/* Bottom Actions */}
           <View style={[styles.modalFooter, { borderTopColor: colors.border, paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}>
@@ -1749,7 +1755,7 @@ export default function ExploreScreen() {
               <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
             </TouchableOpacity>
           </View>
-        </BottomSheetView>
+        </View>
       </BottomSheetModal>
 
       {/* SORT OPTIONS BOTTOM SHEET MODAL */}
@@ -1759,8 +1765,9 @@ export default function ExploreScreen() {
         backdropComponent={renderSheetBackdrop}
         backgroundStyle={{ backgroundColor: colors.background }}
         handleIndicatorStyle={{ backgroundColor: colors.border }}
+        enableContentPanningGesture={Platform.OS !== 'web'}
       >
-        <BottomSheetView style={{ flex: 1, paddingBottom: Platform.OS === 'ios' ? 40 : 24 }}>
+        <View style={{ flex: 1, paddingBottom: Platform.OS === 'ios' ? 40 : 24 }}>
           {/* Modal Header */}
           <View style={styles.modalHeader}>
             <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Sort Options</Text>
@@ -1800,7 +1807,7 @@ export default function ExploreScreen() {
               );
             })}
           </View>
-        </BottomSheetView>
+        </View>
       </BottomSheetModal>
 
       {tourCoachmark.step && (
@@ -2133,8 +2140,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  modalContentContainer: {
+    flex: 1,
+    minHeight: 0,
+  },
   modalScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  modalScrollContent: {
     paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xl,
   },
   filterSection: {
     marginBottom: Spacing.xl,
