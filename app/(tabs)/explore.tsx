@@ -1234,7 +1234,10 @@ export default function ExploreScreen() {
       ) : (
         // Hierarchical Browsing Mode
         <View style={styles.flexOne}>
-          {renderBreadcrumbs()}
+          {/* At the root level this would be a lone "Explore" label doing
+              nothing -- the tab bar already reads "Explore". Only worth
+              showing once there's an actual path under it. */}
+          {(selectedCategory || showAllProducts) && renderBreadcrumbs()}
 
           {/* Level 0: Categories Grid */}
           {!selectedCategory && !showAllProducts && (
