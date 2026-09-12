@@ -32,7 +32,6 @@ import { useGridCardWidth } from '@/src/utils/layout';
 import { useToast } from '@/src/context/ToastContext';
 import { MannequinView } from '@/src/components/Mannequin/MannequinView';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
-import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 
 const { width } = Dimensions.get('window');
@@ -66,9 +65,7 @@ export default function WardrobeScreen() {
   const params = useLocalSearchParams<{ tab?: string; loadOutfit?: string }>();
   const tourCoachmark = useTourCoachmark('wardrobe');
 
-  useEffect(() => {
-    emitTourEvent('wardrobe_screen');
-  }, []);
+
 
   const initialTab = useMemo<Tab>(() => {
     // Explicit URL param takes priority (e.g. /wardrobe?tab=mannequin)

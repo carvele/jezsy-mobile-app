@@ -14,7 +14,7 @@ import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';
 import { getDirectChatsPage, DirectChatSummary } from '@/src/services/chatService';
 import { getNotificationsPage, NotificationItem } from '@/src/services/notificationService';
-import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
+
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 
 export default function InboxScreen() {
@@ -26,9 +26,7 @@ export default function InboxScreen() {
   const { showToast } = useToast();
   const tourCoachmark = useTourCoachmark('messages');
 
-  useEffect(() => {
-    emitTourEvent('messages_screen');
-  }, []);
+
 
   const [activeTab, setActiveTab] = useState<'shop' | 'friends' | 'notifications'>('shop');
   const [directChats, setDirectChats] = useState<DirectChatSummary[]>([]);

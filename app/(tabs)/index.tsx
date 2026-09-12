@@ -42,6 +42,7 @@ import {
   dismissSystemTour,
   getTourProgress,
   hasTourBeenIntroduced,
+  isTourDismissed,
   isSystemTourComplete,
   TourProgressSnapshot,
 } from '@/src/features/systemTour/tourProgress';
@@ -109,10 +110,11 @@ export default function HomeScreen() {
       let isCancelled = false;
       let timer: NodeJS.Timeout;
 
-      Promise.all([isSystemTourComplete(userId), hasTourBeenIntroduced(userId), getTourProgress(userId)]).then(
-        ([complete, introduced, progress]) => {
+      Promise.all([isSystemTourComplete(userId), hasTourBeenIntroduced(userId), getTourProgress(userId), isTourDismissed(userId)]).then(
+        ([complete, introduced, progress, dismissed]) => {
           if (isCancelled) return;
           setTourProgress(complete ? null : progress);
+          setTourCardDismissed(dismissed);
           if (!complete && !introduced) {
             timer = setTimeout(() => {
               if (!isCancelled) setShowTour(true);
