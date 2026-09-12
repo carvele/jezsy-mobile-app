@@ -1,0 +1,38 @@
+-- Rollback for 20260912095500_chat_images_rls_scoping.sql
+
+DROP POLICY IF EXISTS "Authorized participants can view chat images" ON storage.objects;
+DROP POLICY IF EXISTS "Authorized users can upload chat images" ON storage.objects;
+
+CREATE POLICY "Auth upload to own chat-images folder"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+    bucket_id = 'chat-images'
+    AND (storage.foldername(name))[1] = (auth.uid())::text
+);
+
+CREATE POLICY "Auth delete own chat-images"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+    bucket_id = 'chat-images'
+    AND (storage.foldername(name))[1] = (auth.uid())::text
+);
+
+CREATE POLICY "Participants can view chat images"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'chat-images'
+  AND (
+    is_staff_or_admin()
+    OR (storage.foldername(name))[1] = (auth.uid())::text
+    OR EXISTS (
+      SELECT 1
+      FROM public.messages m
+      JOIN public.conversations c ON c.id = m.conversation_id
+      WHERE c.customer_id = auth.uid()
+        AND right(m.image_url, length(name)) = name
+    )
+  )
+);

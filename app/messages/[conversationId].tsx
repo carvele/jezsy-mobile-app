@@ -446,7 +446,7 @@ export default function ChatScreen() {
 
       const { contentType, ext } = resolveImageFileInfo(asset.uri);
       const fileName = `${Date.now()}.${ext}`;
-      const filePath = `${session?.user.id}/${fileName}`;
+      const filePath = `support/${conversationId}/${fileName}`;
 
       let uploadedPath = '';
       const { error } = await supabase.storage.from('chat-images').upload(filePath, decode(asset.base64), { contentType });
