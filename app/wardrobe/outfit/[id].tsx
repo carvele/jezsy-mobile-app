@@ -163,14 +163,13 @@ export default function OutfitDetailScreen() {
   const items: OutfitSlotItem[] = Array.isArray(outfit.items) ? (outfit.items as unknown as OutfitSlotItem[]) : [];
   const savedBackdrop = (outfit.items as any[])?.find((i) => i.canvas_bg)?.canvas_bg;
   const cardBg = savedBackdrop || (isDark ? '#1c1c1e' : '#F9F8F5');
-  
-  // Responsive grid calculation:
-  // Compact screens / phones: 2 columns with 12px gap
-  // Wide screens / tablets: max 440px width centered
+
   const horizontalPadding = Spacing.xl * 2;
-  const gridGap = Spacing.md;
   const contentWidth = Math.min(windowWidth - horizontalPadding, 600);
-  const cardWidth = (contentWidth - gridGap) / 2;
+  // Pieces scroll horizontally rather than wrapping into rows, so a fixed
+  // card width (not a column-count calc) -- matches the saved-outfits
+  // carousel pattern on the wardrobe tab.
+  const cardWidth = 150;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
@@ -250,8 +249,14 @@ export default function OutfitDetailScreen() {
             </Text>
           </View>
 
-          {/* 2-Column Responsive Grid */}
-          <View style={[styles.grid, { gap: gridGap }]}>
+          {/* Horizontally-scrolling pieces strip */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.grid}
+            style={{ marginHorizontal: -Spacing.xl }}
+          >
+            <View style={{ width: Spacing.xl }} />
             {items.map((slotItem, index) => {
               const isProduct = Boolean(slotItem.product_id);
               const isOwned = slotItem.owned !== false;
@@ -307,7 +312,8 @@ export default function OutfitDetailScreen() {
                 </TouchableOpacity>
               );
             })}
-          </View>
+            <View style={{ width: Spacing.xl }} />
+          </ScrollView>
 
           {/* Action CTAs */}
           <View style={styles.actionsContainer}>
@@ -452,7 +458,8 @@ const styles = StyleSheet.create({
   },
   grid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    gap: Spacing.md,
+    alignItems: 'flex-start',
   },
   itemCard: {
     borderRadius: Radius.lg,
