@@ -29,7 +29,7 @@ BEGIN
     RAISE EXCEPTION 'wardrobe item % not found or not owned by caller', p_item_id;
   END IF;
 
-  PERFORM update_user_streak();
+  PERFORM update_user_streak(auth.uid());
 
   RETURN v_row;
 END;

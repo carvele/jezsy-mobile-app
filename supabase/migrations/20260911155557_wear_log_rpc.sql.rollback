@@ -1,0 +1,2 @@
+-- Rollback for the version recorded in the shared live ledger.
+DROP FUNCTION IF EXISTS increment_wear_count(UUID);
