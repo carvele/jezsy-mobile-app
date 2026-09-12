@@ -1,6 +1,6 @@
-# Welcome to your Expo app 👋
+# JezSy Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+An [Expo](https://expo.dev) project using a **dev client with prebuild (CNG)** -- not Expo Go. `android/` is generated and gitignored; there is no committed `ios/`.
 
 ## Get started
 
@@ -10,30 +10,15 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Run the app (builds and installs the dev client on a connected device/emulator)
 
    ```bash
-   npx expo start
+   npm run android
    ```
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+**Do not use `expo start` / Expo Go** for this project. Three load-bearing native modules -- `react-native-vision-camera`, `react-native-mediapipe-posedetection`, `react-native-worklets-core` -- back the body scan and AR try-on features and are unavailable in Expo Go. `npm start` still works for iterating on screens that don't touch those modules, but always verify camera/pose/AR changes with `npm run android` against a real dev-client build.
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
 ## Environment setup
 
