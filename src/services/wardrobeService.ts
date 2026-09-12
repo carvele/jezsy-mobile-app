@@ -272,6 +272,42 @@ export async function deleteCapsule(capsuleId: string): Promise<DomainResult<voi
   }
 }
 
+/**
+ * Updates a capsule's personal item-count goal. Not an enforced cap --
+ * capsule_items has no limit check -- just the number shown on the
+ * progress bar, editable after creation for when the user under- or
+ * over-estimated it at creation time.
+ */
+export async function updateCapsuleGoal(capsuleId: string, targetCount: number): Promise<DomainResult<void>> {
+  try {
+    const { error } = await supabase
+      .from('capsules')
+      .update({ target_count: targetCount })
+      .eq('id', capsuleId);
+
+    if (error) {
+      throw error;
+    }
+
+    return domainOk(undefined);
+  } catch (err: any) {
+    const domainError = new DomainError({
+      code: err?.code || 'ERR_CAPSULE_GOAL_UPDATE_FAILED',
+      message: err?.message || 'Failed to update capsule goal',
+      domain: 'wardrobe',
+      context: { operation: 'updateCapsuleGoal', capsuleId, targetCount },
+      cause: err,
+    });
+
+    errorReporting.capture(domainError, {
+      domain: 'wardrobe',
+      operation: 'updateCapsuleGoal',
+    });
+
+    return domainFail(domainError);
+  }
+}
+
 export const wardrobeService = {
   getItemsPage: getWardrobeItemsPage,
   getOutfitsPage: getWardrobeOutfitsPage,
@@ -280,4 +316,5 @@ export const wardrobeService = {
   addCapsuleItem,
   removeCapsuleItem,
   deleteCapsule,
+  updateCapsuleGoal,
 };

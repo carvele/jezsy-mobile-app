@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
+  FlatList,
   ActivityIndicator,
   Platform,
   useWindowDimensions,
@@ -16,6 +17,7 @@ import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
+import { useAuth } from '@/src/context/AuthContext';
 import { Database } from '@/src/types/database.types';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
@@ -50,35 +52,48 @@ export default function OutfitDetailScreen() {
   const colors = Colors[theme];
   const isDark = theme === 'dark';
   const { width: windowWidth } = useWindowDimensions();
+  const { session } = useAuth();
+  const flatListRef = useRef<FlatList<SavedOutfit>>(null);
 
-  const [outfit, setOutfit] = useState<SavedOutfit | null>(null);
+  // Viewing one saved outfit swipes to the next/previous rather than
+  // requiring a trip back to the list -- so this fetches the user's whole
+  // saved-outfits list (same order as the wardrobe tab) rather than a
+  // single row, and pages through it horizontally.
+  const [outfits, setOutfits] = useState<SavedOutfit[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [loggingWear, setLoggingWear] = useState(false);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
 
-  const fetchOutfit = useCallback(async () => {
-    if (!id) return;
+  const fetchOutfits = useCallback(async () => {
+    if (!session?.user?.id) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('saved_outfits')
         .select('*')
-        .eq('id', id)
-        .single();
+        .eq('user_id', session.user.id)
+        .eq('deleted', false)
+        .order('created_at', { ascending: false });
       if (error) throw error;
-      setOutfit(data);
+      const list = data || [];
+      setOutfits(list);
+      const idx = list.findIndex((o) => o.id === id);
+      setCurrentIndex(idx >= 0 ? idx : 0);
     } catch (err) {
-      console.error('Error fetching outfit:', err);
-      setOutfit(null);
+      console.error('Error fetching outfits:', err);
+      setOutfits([]);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [session?.user?.id, id]);
 
   useEffect(() => {
-    fetchOutfit();
-  }, [fetchOutfit]);
+    fetchOutfits();
+  }, [fetchOutfits]);
+
+  const outfit = outfits[currentIndex] as SavedOutfit | undefined;
 
   const executeDelete = async () => {
     if (!outfit) return;
@@ -90,20 +105,38 @@ export default function OutfitDetailScreen() {
         .eq('id', outfit.id);
       if (error) throw error;
       showToast('Outfit deleted.', 'success');
-      router.back();
+      const remaining = outfits.filter((o) => o.id !== outfit.id);
+      if (remaining.length === 0) {
+        router.back();
+        return;
+      }
+      const nextIndex = Math.min(currentIndex, remaining.length - 1);
+      setOutfits(remaining);
+      setCurrentIndex(nextIndex);
+      // Removing a page shifts every later page left by one page-width, but
+      // the FlatList's own scroll offset doesn't move on its own -- without
+      // this it'd land showing whatever now sits at that stale offset.
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToIndex({ index: nextIndex, animated: false });
+      });
     } catch (err) {
       console.error('Error deleting outfit:', err);
       showToast('Could not delete this outfit. Please try again.', 'error');
+    } finally {
       setDeleting(false);
     }
   };
 
-  const handleLogWear = async () => {
-    if (!outfit) return;
+  // Takes the target outfit explicitly rather than closing over the outer
+  // `outfit` (= outfits[currentIndex]) state: renderOutfitPage is memoized
+  // and doesn't depend on currentIndex, so a closure over `outfit` there
+  // would still reference whichever outfit was current when that render
+  // was memoized -- stale the instant the user swipes to a different page.
+  const handleLogWear = async (targetOutfit: SavedOutfit) => {
     setLoggingWear(true);
     try {
-      const items: OutfitSlotItem[] = Array.isArray(outfit.items)
-        ? (outfit.items as unknown as OutfitSlotItem[])
+      const items: OutfitSlotItem[] = Array.isArray(targetOutfit.items)
+        ? (targetOutfit.items as unknown as OutfitSlotItem[])
         : [];
 
       const wardrobeItemIds = items
@@ -134,36 +167,6 @@ export default function OutfitDetailScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.tint} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!outfit) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-        <View style={styles.center}>
-          <Text style={[styles.errorTitle, { color: colors.text }]}>Outfit Not Found</Text>
-          <Text style={[styles.errorSubtitle, { color: colors.secondaryText }]}>
-            This outfit may have been removed or is no longer available.
-          </Text>
-          <TouchableOpacity onPress={() => router.back()} style={[styles.backHomeBtn, { backgroundColor: colors.tint }]}>
-            <Text style={[styles.backHomeText, { color: colors.onTint }]}>Back to Wardrobe</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const items: OutfitSlotItem[] = Array.isArray(outfit.items) ? (outfit.items as unknown as OutfitSlotItem[]) : [];
-  const savedBackdrop = (outfit.items as any[])?.find((i) => i.canvas_bg)?.canvas_bg;
-  const cardBg = savedBackdrop || (isDark ? '#1c1c1e' : '#F9F8F5');
-
   const horizontalPadding = Spacing.xl * 2;
   const contentWidth = Math.min(windowWidth - horizontalPadding, 600);
   // Pieces scroll horizontally rather than wrapping into rows, so a fixed
@@ -171,52 +174,14 @@ export default function OutfitDetailScreen() {
   // carousel pattern on the wardrobe tab.
   const cardWidth = 150;
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-      {/* Header Bar */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <IconSymbol name="chevron.left" size={20} color={colors.text} />
-        </TouchableOpacity>
+  const renderOutfitPage = useCallback(({ item }: { item: SavedOutfit }) => {
+    const items: OutfitSlotItem[] = Array.isArray(item.items) ? (item.items as unknown as OutfitSlotItem[]) : [];
+    const savedBackdrop = (item.items as any[])?.find((i) => i.canvas_bg)?.canvas_bg;
+    const cardBg = savedBackdrop || (isDark ? '#1c1c1e' : '#F9F8F5');
 
-        <View style={styles.headerTitleWrap}>
-          <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
-            {outfit.name || 'Saved Outfit'}
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: colors.secondaryText }]}>
-            {items.length} piece{items.length === 1 ? '' : 's'}
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          onPress={() => setConfirmDeleteVisible(true)}
-          disabled={deleting}
-          style={[styles.iconBtn, { backgroundColor: isDark ? 'rgba(255,69,58,0.15)' : '#FFF0F0', borderColor: isDark ? 'rgba(255,69,58,0.3)' : '#FFD2D2' }]}
-          accessibilityRole="button"
-          accessibilityLabel="Delete outfit"
-        >
-          <IconSymbol name="trash.fill" size={18} color="#FF453A" />
-        </TouchableOpacity>
-      </View>
-
-      <ConfirmModal
-        visible={confirmDeleteVisible}
-        title="Delete Outfit"
-        message={`Are you sure you want to delete "${outfit.name || 'this outfit'}"?`}
-        confirmLabel="Delete"
-        onCancel={() => setConfirmDeleteVisible(false)}
-        onConfirm={() => {
-          setConfirmDeleteVisible(false);
-          executeDelete();
-        }}
-      />
-
+    return (
       <ScrollView
+        style={{ width: windowWidth }}
         contentContainerStyle={[styles.content, { alignItems: 'center' }]}
         showsVerticalScrollIndicator={false}
       >
@@ -319,14 +284,14 @@ export default function OutfitDetailScreen() {
           <View style={styles.actionsContainer}>
             <PrimaryButton
               label="Log Outfit Wear"
-              onPress={handleLogWear}
+              onPress={() => handleLogWear(item)}
               loading={loggingWear}
               dark={isDark}
             />
 
             <TouchableOpacity
               style={[styles.remixBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => router.push(`/wardrobe?tab=mannequin&loadOutfit=${outfit.id}` as any)}
+              onPress={() => router.push(`/wardrobe?tab=mannequin&loadOutfit=${item.id}` as any)}
               activeOpacity={0.8}
             >
               <IconSymbol name="hanger" size={18} color={colors.tint} />
@@ -335,6 +300,106 @@ export default function OutfitDetailScreen() {
           </View>
         </View>
       </ScrollView>
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowWidth, contentWidth, colors, isDark, loggingWear]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.tint} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!outfit) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+        <View style={styles.center}>
+          <Text style={[styles.errorTitle, { color: colors.text }]}>Outfit Not Found</Text>
+          <Text style={[styles.errorSubtitle, { color: colors.secondaryText }]}>
+            This outfit may have been removed or is no longer available.
+          </Text>
+          <TouchableOpacity onPress={() => router.back()} style={[styles.backHomeBtn, { backgroundColor: colors.tint }]}>
+            <Text style={[styles.backHomeText, { color: colors.onTint }]}>Back to Wardrobe</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const currentItems: OutfitSlotItem[] = Array.isArray(outfit.items) ? (outfit.items as unknown as OutfitSlotItem[]) : [];
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      {/* Header Bar -- reflects whichever outfit is currently swiped into view */}
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <IconSymbol name="chevron.left" size={20} color={colors.text} />
+        </TouchableOpacity>
+
+        <View style={styles.headerTitleWrap}>
+          <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
+            {outfit.name || 'Saved Outfit'}
+          </Text>
+          <Text style={[styles.headerSubtitle, { color: colors.secondaryText }]}>
+            {currentItems.length} piece{currentItems.length === 1 ? '' : 's'}
+            {outfits.length > 1 ? ` · ${currentIndex + 1} of ${outfits.length}` : ''}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => setConfirmDeleteVisible(true)}
+          disabled={deleting}
+          style={[styles.iconBtn, { backgroundColor: isDark ? 'rgba(255,69,58,0.15)' : '#FFF0F0', borderColor: isDark ? 'rgba(255,69,58,0.3)' : '#FFD2D2' }]}
+          accessibilityRole="button"
+          accessibilityLabel="Delete outfit"
+        >
+          <IconSymbol name="trash.fill" size={18} color="#FF453A" />
+        </TouchableOpacity>
+      </View>
+
+      {outfits.length > 1 && (
+        <Text style={[styles.swipeHint, { color: colors.secondaryText }]}>Swipe to browse your other saved outfits</Text>
+      )}
+
+      <ConfirmModal
+        visible={confirmDeleteVisible}
+        title="Delete Outfit"
+        message={`Are you sure you want to delete "${outfit.name || 'this outfit'}"?`}
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDeleteVisible(false)}
+        onConfirm={() => {
+          setConfirmDeleteVisible(false);
+          executeDelete();
+        }}
+      />
+
+      <FlatList
+        ref={flatListRef}
+        data={outfits}
+        keyExtractor={(o) => o.id}
+        renderItem={renderOutfitPage}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={currentIndex}
+        getItemLayout={(_, index) => ({ length: windowWidth, offset: windowWidth * index, index })}
+        onMomentumScrollEnd={(e) => {
+          const newIndex = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
+          setCurrentIndex(Math.max(0, Math.min(newIndex, outfits.length - 1)));
+        }}
+        windowSize={3}
+        initialNumToRender={1}
+        removeClippedSubviews
+      />
     </SafeAreaView>
   );
 }
@@ -374,6 +439,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  swipeHint: {
+    fontSize: 12,
+    textAlign: 'center',
+    paddingVertical: Spacing.xs,
   },
   iconBtn: {
     width: 40,

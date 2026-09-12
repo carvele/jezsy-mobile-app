@@ -290,12 +290,15 @@ export default function WardrobeScreen() {
   const handlePassSuggestion = useCallback((outfit: GeneratedOutfit) => {
     setPassedKeys((prev) => new Set(prev).add(outfit.key));
   }, []);
-  // A fresh wardrobe fetch can surface new candidates -- passed keys from a
-  // stale pool shouldn't linger forever and permanently hide a combination
-  // that's since come back into contention (e.g. after items change).
-  useEffect(() => {
-    setPassedKeys(new Set());
-  }, [items]);
+  // Deliberately no effect resetting passedKeys on `items` changing: the
+  // wardrobe refetches on every screen focus (useFocusEffect below), which
+  // hands back a brand-new array reference each time even when the
+  // underlying data is identical. An earlier version reset passedKeys
+  // whenever that reference changed, which meant navigating away and back
+  // to this tab silently un-dismissed everything the user had just passed
+  // on -- confirmed live, reported as suggestions "ghosting" back after
+  // being passed. A passed suggestion now stays passed for the rest of the
+  // session, the same as dismissing anything else.
 
   const handleSaveSuggestion = useCallback(async (outfit: GeneratedOutfit) => {
     if (!session?.user?.id) return;
