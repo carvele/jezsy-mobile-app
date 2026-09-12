@@ -335,13 +335,11 @@ export default function CapsuleDetailScreen() {
             <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No items in this collection yet.</Text>
           </View>
         ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.grid}
-            style={{ marginHorizontal: -Spacing.xl }}
-          >
-            <View style={{ width: Spacing.xl }} />
+          // Vertical wrapping grid, not a horizontal strip: unlike an
+          // outfit's fixed handful of pieces, a collection can reasonably
+          // hold 20-30+ items -- side-scrolling through all of them would
+          // be worse than what this replaced, not better.
+          <View style={styles.grid}>
             {capsuleItems.map((item) => (
               <View key={item.id} style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Image source={{ uri: item.image_url || undefined }} style={[styles.itemImage, { backgroundColor: colors.surface }]} contentFit="cover" />
@@ -358,8 +356,7 @@ export default function CapsuleDetailScreen() {
                 </View>
               </View>
             ))}
-            <View style={{ width: Spacing.xl }} />
-          </ScrollView>
+          </View>
         )}
 
         {/* The point of a capsule is how many looks a small set yields, so the
@@ -492,10 +489,12 @@ const styles = StyleSheet.create({
   emptyText: { ...Type.bodyStrong, textAlign: 'center' },
   grid: {
     flexDirection: 'row',
-    gap: Spacing.md,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: Spacing.lg,
   },
   itemCard: {
-    width: 150,
+    width: '48%',
     borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
