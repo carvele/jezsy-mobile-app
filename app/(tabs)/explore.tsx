@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetScrollView, BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import {
   StyleSheet,
   View,
@@ -43,7 +43,6 @@ const PAGE_SIZE = 20;
 const PRODUCT_ROW_INSET = 4;
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const FilterScroll = Platform.OS === 'web' ? ScrollView : BottomSheetScrollView;
 
 type Category = {
   id: string;
@@ -1458,12 +1457,12 @@ export default function ExploreScreen() {
         backgroundStyle={{ backgroundColor: colors.background }}
         handleIndicatorStyle={{ backgroundColor: colors.border }}
         keyboardBehavior="extend"
-        enableContentPanningGesture={Platform.OS !== 'web'}
+        enableDynamicSizing={false}
       >
-        <View style={styles.modalContentContainer}>
-          {/* Modal Header */}
-          <View style={styles.modalHeader}>
-            <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
+        {/* Modal Header */}
+        <BottomSheetView style={styles.modalHeader}>
+          <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
             <TouchableOpacity
               onPress={clearAllFilters}
               accessibilityRole="button"
@@ -1471,13 +1470,21 @@ export default function ExploreScreen() {
             >
               <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={applyFilters}
+              accessibilityRole="button"
+              accessibilityLabel="Apply filters"
+              style={[styles.headerApplyButton, { backgroundColor: colors.tint }]}
+            >
+              <Text style={[styles.headerApplyButtonText, { color: colors.onTint }]}>Apply</Text>
+            </TouchableOpacity>
           </View>
+        </BottomSheetView>
 
-          <FilterScroll
-            style={styles.modalScroll}
-            contentContainerStyle={styles.modalScrollContent}
-            showsVerticalScrollIndicator={true}
-          >
+        <BottomSheetScrollView
+          style={styles.modalScroll}
+          contentContainerStyle={styles.modalScrollContent}
+        >
             {/* Special Offers Section */}
             <View style={styles.filterSection}>
               <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Collections & Offers</Text>
@@ -1741,74 +1748,72 @@ export default function ExploreScreen() {
               </View>
             </View>
 
-            <View style={{ height: 40 }} />
-          </FilterScroll>
+            <View style={{ height: 20 }} />
 
-          {/* Bottom Actions */}
-          <View style={[styles.modalFooter, { borderTopColor: colors.border, paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}>
-            <TouchableOpacity
-              style={[styles.footerButton, { backgroundColor: colors.tint }]}
-              onPress={applyFilters}
-              accessibilityRole="button"
-              accessibilityLabel="Apply filters"
-            >
-              <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </BottomSheetModal>
+            {/* Bottom Actions */}
+            <View style={[styles.modalFooter, { borderTopColor: colors.border, paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}>
+              <TouchableOpacity
+                style={[styles.footerButton, { backgroundColor: colors.tint }]}
+                onPress={applyFilters}
+                accessibilityRole="button"
+                accessibilityLabel="Apply filters"
+              >
+                <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </BottomSheetScrollView>
+        </BottomSheetModal>
 
-      {/* SORT OPTIONS BOTTOM SHEET MODAL */}
-      <BottomSheetModal
-        ref={sortSheetRef}
-        snapPoints={sortSnapPoints}
-        backdropComponent={renderSheetBackdrop}
-        backgroundStyle={{ backgroundColor: colors.background }}
-        handleIndicatorStyle={{ backgroundColor: colors.border }}
-        enableContentPanningGesture={Platform.OS !== 'web'}
-      >
-        <View style={{ flex: 1, paddingBottom: Platform.OS === 'ios' ? 40 : 24 }}>
-          {/* Modal Header */}
-          <View style={styles.modalHeader}>
-            <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Sort Options</Text>
-            <TouchableOpacity
-              onPress={() => sortSheetRef.current?.dismiss()}
-              accessibilityRole="button"
-              accessibilityLabel="Close sort options"
-              hitSlop={12}
-            >
-              <IconSymbol name="xmark" size={20} color={colors.icon} />
-            </TouchableOpacity>
-          </View>
+        {/* SORT OPTIONS BOTTOM SHEET MODAL */}
+        <BottomSheetModal
+          ref={sortSheetRef}
+          snapPoints={sortSnapPoints}
+          backdropComponent={renderSheetBackdrop}
+          backgroundStyle={{ backgroundColor: colors.background }}
+          handleIndicatorStyle={{ backgroundColor: colors.border }}
+        >
+          <BottomSheetView style={{ flex: 1, paddingBottom: Platform.OS === 'ios' ? 40 : 24 }}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Sort Options</Text>
+              <TouchableOpacity
+                onPress={() => sortSheetRef.current?.dismiss()}
+                accessibilityRole="button"
+                accessibilityLabel="Close sort options"
+                hitSlop={12}
+              >
+                <IconSymbol name="xmark" size={20} color={colors.icon} />
+              </TouchableOpacity>
+            </View>
 
-          {/* Sort Options List */}
-          <View style={styles.sortListContainer}>
-            {SORT_OPTIONS.map((option) => {
-              const isSelected = selectedSort === option.id;
-              return (
-                <TouchableOpacity
-                  key={option.id}
-                  style={[styles.sortOptionRow, { borderBottomColor: colors.border }]}
-                  onPress={() => {
-                    setSelectedSort(option.id);
-                    sortSheetRef.current?.dismiss();
-                  }}
-                  accessibilityRole="radio"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ checked: isSelected }}
-                >
-                  <Text style={[styles.sortOptionLabel, { color: isSelected ? colors.tint : colors.text, fontWeight: isSelected ? '700' : '500' }]}>
-                    {option.label}
-                  </Text>
-                  {isSelected && (
-                    <IconSymbol name="checkmark" size={18} color={colors.tint} />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      </BottomSheetModal>
+            {/* Sort Options List */}
+            <View style={styles.sortListContainer}>
+              {SORT_OPTIONS.map((option) => {
+                const isSelected = selectedSort === option.id;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[styles.sortOptionRow, { borderBottomColor: colors.border }]}
+                    onPress={() => {
+                      setSelectedSort(option.id);
+                      sortSheetRef.current?.dismiss();
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityLabel={option.label}
+                    accessibilityState={{ checked: isSelected }}
+                  >
+                    <Text style={[styles.sortOptionLabel, { color: isSelected ? colors.tint : colors.text, fontWeight: isSelected ? '700' : '500' }]}>
+                      {option.label}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol name="checkmark" size={18} color={colors.tint} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </BottomSheetView>
+        </BottomSheetModal>
 
       {tourCoachmark.step && (
         <TourCoachmarkBanner
@@ -2140,13 +2145,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  modalContentContainer: {
-    flex: 1,
-    minHeight: 0,
+  headerApplyButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  headerApplyButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   modalScroll: {
     flex: 1,
-    minHeight: 0,
   },
   modalScrollContent: {
     paddingHorizontal: Spacing.xl,
