@@ -69,7 +69,7 @@ export default function ChatScreen() {
     ctxLabel?: string;
   }>();
   const { session } = useAuth();
-  const { sendMessage, editMessage, toggleReaction, markAsRead, isStaffOnline } = useMessages();
+  const { sendMessage, editMessage, toggleReaction, markAsRead, markDelivered, isStaffOnline } = useMessages();
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -213,6 +213,7 @@ export default function ChatScreen() {
       } catch (err) {
         console.error('Error fetching conversation messages:', err);
       }
+      markDelivered(conversationId);
       markAsRead(conversationId);
     };
 
@@ -234,6 +235,7 @@ export default function ChatScreen() {
             return [...prev, payload.new];
           });
           if (payload.new.sender_id !== session?.user.id) {
+            markDelivered(conversationId);
             markAsRead(conversationId);
           }
         }
@@ -250,13 +252,25 @@ export default function ChatScreen() {
           setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`
+        },
+        (payload: any) => {
+          setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+        }
+      )
       .subscribe();
 
     return () => {
       cancelled = true;
       supabase.removeChannel(messageSubscription);
     };
-  }, [conversationId, markAsRead, session?.user.id, reconnectTick]);
+  }, [conversationId, markAsRead, markDelivered, session?.user.id, reconnectTick]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!conversationId || !hasOlderMessages || loadingOlder) return;

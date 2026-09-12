@@ -135,6 +135,22 @@ export default function P2PChatScreen() {
         setMessages(prev => [payload.new as DirectMessageRow, ...prev]);
         markRead(payload.new.id);
       })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: `chat_id=eq.${chatId}`
+      }, (payload) => {
+        setMessages(prev => prev.map(m => m.id === payload.new.id ? (payload.new as DirectMessageRow) : m));
+      })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'direct_messages',
+        filter: `chat_id=eq.${chatId}`
+      }, (payload) => {
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+      })
       .subscribe();
 
     return () => {

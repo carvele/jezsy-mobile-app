@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { chatService } from '@/src/services';
@@ -79,54 +78,32 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
     refreshConversations();
 
-    // Realtime subscription for conversation and message updates
-    const subscription = supabase
-      .channel(`user-conversations:${session.user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
+    // Realtime subscription for conversation updates
+    // Customers strictly listen to their own conversation row; staff listen to all conversations.
+    const channelConfig = isStaff
+      ? {
+          event: '*' as const,
           schema: 'public',
           table: 'conversations',
-        },
-        () => {
-          refreshConversations();
         }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
+      : {
+          event: '*' as const,
           schema: 'public',
-          table: 'messages',
-        },
-        (payload: RealtimePostgresChangesPayload<Message>) => {
-          refreshConversations();
+          table: 'conversations',
+          filter: `customer_id=eq.${session.user.id}`,
+        };
 
-          // Marks a message Delivered the instant it lands while this app is
-          // running and subscribed, regardless of whether the recipient has
-          // that specific conversation open -- the same live signal the
-          // admin dashboard uses on its side. A message sent while this app
-          // is fully closed still gets caught by the conversation screen's
-          // catch-up call to markDelivered on open.
-          if (payload.eventType !== 'INSERT') return;
-          const msg = payload.new;
-          if (msg && msg.sender_id && msg.sender_id !== session.user.id && !msg.delivered_at) {
-            supabase.rpc('mark_support_messages_delivered', {
-              p_conversation_id: msg.conversation_id,
-              p_message_ids: [msg.id],
-            }).then(({ error }) => {
-              if (error) console.error('Error marking message delivered:', error);
-            });
-          }
-        }
-      )
+    const subscription = supabase
+      .channel(`user-conversations:${session.user.id}`)
+      .on('postgres_changes', channelConfig, () => {
+        refreshConversations();
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [session?.user.id, refreshConversations]);
+  }, [session?.user.id, isStaff, refreshConversations]);
 
   const sendMessage = useCallback(async (
     conversationId: string,
