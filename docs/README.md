@@ -29,6 +29,7 @@ This index categorizes all engineering documentation across the \jezsy-mobile-ap
 - [supabase-project-state-2026-07-29.md](./supabase-project-state-2026-07-29.md) — Baseline project configuration and database settings reference.
 
 ### Completed Immutable Audit Ledgers (`docs/audits/`)
+- [audits/b8-final-phase-b-closure.md](./audits/b8-final-phase-b-closure.md) — Phase B8 Final Cross-Platform Verification & Program Closure Ledger.
 - [audits/b7-verification-closure.md](./audits/b7-verification-closure.md) — Phase B7 Feature Lifecycle, Zombie Pruning & Documentation Governance Closure Ledger.
 - [audits/b7-design-freeze.md](./audits/b7-design-freeze.md) — Phase B7-b Architecture & Design Freeze Specification.
 - [audits/b7-feature-lifecycle-inventory.md](./audits/b7-feature-lifecycle-inventory.md) — Phase B7-a Feature Lifecycle, Zombie Architecture & Doc Hygiene Inventory.
