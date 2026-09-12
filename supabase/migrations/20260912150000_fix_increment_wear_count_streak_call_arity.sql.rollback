@@ -1,0 +1,29 @@
+-- Reverts to the prior (broken) update_user_streak(auth.uid()) call.
+-- Only for symmetry with migration governance -- there is no reason to
+-- apply this rollback outside of reverting the migration ledger itself.
+CREATE OR REPLACE FUNCTION increment_wear_count(p_item_id UUID)
+RETURNS wardrobe_items
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row wardrobe_items;
+BEGIN
+  UPDATE wardrobe_items
+  SET wear_count = wear_count + 1,
+      last_worn_at = now()
+  WHERE id = p_item_id
+    AND user_id = auth.uid()
+    AND deleted = false
+  RETURNING * INTO v_row;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'wardrobe item % not found or not owned by caller', p_item_id;
+  END IF;
+
+  PERFORM update_user_streak(auth.uid());
+
+  RETURN v_row;
+END;
+$$;
