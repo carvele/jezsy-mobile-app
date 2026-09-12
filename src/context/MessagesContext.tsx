@@ -112,14 +112,12 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
           if (payload.eventType !== 'INSERT') return;
           const msg = payload.new;
           if (msg && msg.sender_id && msg.sender_id !== session.user.id && !msg.delivered_at) {
-            supabase
-              .from('messages')
-              .update({ delivered_at: new Date().toISOString() })
-              .eq('id', msg.id)
-              .is('delivered_at', null)
-              .then(({ error }) => {
-                if (error) console.error('Error marking message delivered:', error);
-              });
+            supabase.rpc('mark_support_messages_delivered', {
+              p_conversation_id: msg.conversation_id,
+              p_message_ids: [msg.id],
+            }).then(({ error }) => {
+              if (error) console.error('Error marking message delivered:', error);
+            });
           }
         }
       )
@@ -177,7 +175,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { data, error } = await supabase
         .from('messages')
-        .update({ text: trimmed, edited_at: new Date().toISOString() })
+        .update({ text: trimmed })
         .eq('id', messageId)
         .eq('sender_id', session.user.id)
         .select()
@@ -201,55 +199,28 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
   const markAsRead = useCallback(async (conversationId: string) => {
     try {
-      // Only the current side's unread count clears -- a staff member
-      // reading a conversation shouldn't silently mark it read for the
-      // customer, and vice versa.
-      await supabase
-        .from('conversations')
-        .update(isStaff ? { unread_staff: 0 } : { unread_customer: 0 })
-        .eq('id', conversationId);
-
-      const nowIso = new Date().toISOString();
-
-      // Reading implies delivery -- catches the case where read_at is being
-      // set without delivered_at ever having been stamped (e.g. the app was
-      // closed when the message arrived, so no realtime INSERT fired for
-      // it). is('delivered_at', null) means an earlier, real delivery time
-      // is never overwritten.
-      await supabase
-        .from('messages')
-        .update({ delivered_at: nowIso })
-        .eq('conversation_id', conversationId)
-        .is('delivered_at', null)
-        .neq('sender_id', session?.user.id || '');
-
-      await supabase
-        .from('messages')
-        .update({ read_at: nowIso })
-        .eq('conversation_id', conversationId)
-        .is('read_at', null)
-        .neq('sender_id', session?.user.id || '');
-
+      const { error } = await supabase.rpc('mark_support_conversation_read', {
+        p_conversation_id: conversationId,
+      });
+      if (error) throw error;
     } catch (error) {
       console.error('Error marking as read:', error);
     }
-  }, [session?.user.id, isStaff]);
+  }, []);
 
   // Bulk catch-up for messages that arrived while this app was fully closed
   // (so no realtime INSERT could have marked them) -- called when the chat
   // screen fetches a conversation's history.
   const markDelivered = useCallback(async (conversationId: string) => {
     try {
-      await supabase
-        .from('messages')
-        .update({ delivered_at: new Date().toISOString() })
-        .eq('conversation_id', conversationId)
-        .is('delivered_at', null)
-        .neq('sender_id', session?.user.id || '');
+      const { error } = await supabase.rpc('mark_support_messages_delivered', {
+        p_conversation_id: conversationId,
+      });
+      if (error) throw error;
     } catch (error) {
       console.error('Error marking delivered:', error);
     }
-  }, [session?.user.id]);
+  }, []);
 
   const getOrCreateConversation = useCallback(async () => {
     if (!session?.user.id) return null;
