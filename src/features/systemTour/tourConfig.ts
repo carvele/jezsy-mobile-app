@@ -99,7 +99,7 @@ export const TOUR_MODULES: Record<TourModuleId, TourModuleDefinition> = {
       },
     ],
     actionRoute: '/(tabs)/explore',
-    actionLabel: 'Browse Catalog',
+    actionLabel: 'Find an AR-Ready Item',
     steps: [
       {
         id: 'find_ar_item',

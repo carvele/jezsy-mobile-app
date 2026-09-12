@@ -105,6 +105,12 @@ export async function isSystemTourComplete(userId?: string | null): Promise<bool
   return TOUR_MODULE_IDS.every((id) => progress[id].completed);
 }
 
+/** True when the user soft-dismissed the tour card (\"Skip for now\"). */
+export async function isTourDismissed(userId: string): Promise<boolean> {
+  const dismissal = await readDismissal(userId);
+  return !!dismissal.skippedAt;
+}
+
 /** True once the tour has been surfaced at least once (started a module or was dismissed). */
 export async function hasTourBeenIntroduced(userId: string): Promise<boolean> {
   const dismissal = await readDismissal(userId);
