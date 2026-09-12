@@ -46,6 +46,7 @@ type Tab = 'items' | 'outfits' | 'capsules' | 'mannequin';
 
 const VALID_TABS: Tab[] = ['items', 'outfits', 'capsules', 'mannequin'];
 const STORAGE_KEY = 'jezsy_wardrobe_active_tab';
+const PASSED_SUGGESTIONS_KEY_PREFIX = 'jezsy_wardrobe_passed_suggestions_';
 
 function persistTab(tab: Tab) {
   AsyncStorage.setItem(STORAGE_KEY, tab).catch(() => {});
@@ -287,9 +288,29 @@ export default function WardrobeScreen() {
     () => suggestionPool.filter((o) => !passedKeys.has(o.key)).slice(0, SUGGESTION_DISPLAY_LIMIT),
     [suggestionPool, passedKeys]
   );
+  // Loaded once per user so a passed suggestion stays passed across app
+  // restarts and page reloads, not just within one in-memory session --
+  // outfit keys are a sorted join of wardrobe_item ids (outfitGenerator.ts),
+  // stable across reloads, so they still match after this loads.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+    AsyncStorage.getItem(`${PASSED_SUGGESTIONS_KEY_PREFIX}${userId}`)
+      .then((saved: string | null) => {
+        if (saved) setPassedKeys(new Set(JSON.parse(saved)));
+      })
+      .catch(() => {});
+  }, [session?.user?.id]);
   const handlePassSuggestion = useCallback((outfit: GeneratedOutfit) => {
-    setPassedKeys((prev) => new Set(prev).add(outfit.key));
-  }, []);
+    setPassedKeys((prev) => {
+      const next = new Set(prev).add(outfit.key);
+      const userId = session?.user?.id;
+      if (userId) {
+        AsyncStorage.setItem(`${PASSED_SUGGESTIONS_KEY_PREFIX}${userId}`, JSON.stringify([...next])).catch(() => {});
+      }
+      return next;
+    });
+  }, [session?.user?.id]);
   // Deliberately no effect resetting passedKeys on `items` changing: the
   // wardrobe refetches on every screen focus (useFocusEffect below), which
   // hands back a brand-new array reference each time even when the
@@ -297,8 +318,8 @@ export default function WardrobeScreen() {
   // whenever that reference changed, which meant navigating away and back
   // to this tab silently un-dismissed everything the user had just passed
   // on -- confirmed live, reported as suggestions "ghosting" back after
-  // being passed. A passed suggestion now stays passed for the rest of the
-  // session, the same as dismissing anything else.
+  // being passed. A passed suggestion now stays passed for good, the same
+  // as dismissing anything else, persisted per-user via AsyncStorage above.
 
   const handleSaveSuggestion = useCallback(async (outfit: GeneratedOutfit) => {
     if (!session?.user?.id) return;
