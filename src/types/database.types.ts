@@ -2632,7 +2632,7 @@ export type Database = {
         Returns: undefined
       }
       mark_support_messages_delivered: {
-        Args: { p_conversation_id: string; p_message_ids?: string[] }
+        Args: { p_conversation_id?: string; p_message_ids?: string[] }
         Returns: undefined
       }
       merge_message_reaction: {
