@@ -465,27 +465,16 @@ describe('chatService', () => {
   });
 
   describe('toggleReaction', () => {
-    test('returns ERR_AUTH_REQUIRED if userId is empty', async () => {
-      const result = await toggleReaction('msg-1', '👍', '');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('ERR_AUTH_REQUIRED');
-      }
-      expect(supabase.rpc).not.toHaveBeenCalled();
-    });
-
     test('calls merge_message_reaction with exact live parameters', async () => {
       (supabase.rpc as jest.Mock).mockResolvedValue({
         data: { 'user-1': '❤️' },
         error: null,
       });
 
-      const result = await toggleReaction('msg-1', '❤️', 'user-1');
+      const result = await toggleReaction('msg-1', '❤️');
 
       expect(supabase.rpc).toHaveBeenCalledWith('merge_message_reaction', {
         p_message_id: 'msg-1',
-        p_user_id: 'user-1',
         p_emoji: '❤️',
       });
       expect(result.ok).toBe(true);
@@ -500,7 +489,7 @@ describe('chatService', () => {
         error: new Error('RPC failure'),
       });
 
-      const result = await toggleReaction('msg-1', '❤️', 'user-1');
+      const result = await toggleReaction('msg-1', '❤️');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

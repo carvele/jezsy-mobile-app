@@ -305,26 +305,11 @@ export async function resolveTargetUser(
 export async function toggleReaction(
   messageId: string,
   emoji: string,
-  userId: string
+  _userId?: string
 ): Promise<DomainResult<Record<string, string>>> {
-  if (!userId || typeof userId !== 'string' || !userId.trim()) {
-    const domainError = new DomainError({
-      code: 'ERR_AUTH_REQUIRED',
-      message: 'Authentication required to react to message',
-      domain: 'chat',
-      context: { operation: 'toggleReaction', messageId },
-    });
-    errorReporting.capture(domainError, {
-      domain: 'chat',
-      operation: 'toggleReaction',
-    });
-    return domainFail(domainError);
-  }
-
   try {
     const { data, error } = await supabase.rpc('merge_message_reaction', {
       p_message_id: messageId,
-      p_user_id: userId,
       p_emoji: emoji,
     });
 

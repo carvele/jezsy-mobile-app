@@ -69,7 +69,7 @@ export default function ChatScreen() {
     ctxLabel?: string;
   }>();
   const { session } = useAuth();
-  const { sendMessage, editMessage, toggleReaction, markAsRead, isStaffOnline } = useMessages();
+  const { sendMessage, editMessage, toggleReaction, markAsRead, markDelivered, isStaffOnline } = useMessages();
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -90,7 +90,16 @@ export default function ChatScreen() {
   // isn't the last message of its group (where that row is hidden by
   // default). Tapping the same bubble again, or any other bubble, closes it.
   const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
-  const [pendingContext, setPendingContext] = useState<MessageContext | null>(null);
+  const [pendingContext, setPendingContext] = useState<MessageContext | null>(() => {
+    if (ctxType && ctxRef && ctxLabel) {
+      return {
+        type: ctxType as 'product' | 'order' | 'reservation',
+        ref: ctxRef,
+        label: ctxLabel,
+      };
+    }
+    return null;
+  });
   const [resolvedImageUrls, setResolvedImageUrls] = useState<Record<string, string>>({});
   const resolvedImageUrlsRef = useRef(resolvedImageUrls);
   resolvedImageUrlsRef.current = resolvedImageUrls;
@@ -140,13 +149,14 @@ export default function ChatScreen() {
   // Product-context messages render as a card, which needs the product itself.
   // Same shape as the image resolution above: fetch only what is missing.
   useEffect(() => {
-    const missing = [
-      ...new Set(
-        messages
-          .filter(m => m.context_type === 'product' && m.context_ref)
-          .map(m => m.context_ref as string)
-      ),
-    ].filter(id => productPreviewsRef.current[id] === undefined);
+    const refsToFetch = messages
+      .filter(m => m.context_type === 'product' && m.context_ref)
+      .map(m => m.context_ref as string);
+    if (pendingContext?.type === 'product' && pendingContext.ref) {
+      refsToFetch.push(pendingContext.ref);
+    }
+    
+    const missing = [...new Set(refsToFetch)].filter(id => productPreviewsRef.current[id] === undefined);
     if (missing.length === 0) return;
 
     let cancelled = false;
@@ -168,7 +178,7 @@ export default function ChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [messages]);
+  }, [messages, pendingContext?.type, pendingContext?.ref]);
 
   // Chrome can freeze this tab into the back-forward cache while backgrounded
   // (confirmed live: "WebSocket connection ... failed: Page entered
@@ -203,6 +213,7 @@ export default function ChatScreen() {
       } catch (err) {
         console.error('Error fetching conversation messages:', err);
       }
+      markDelivered(conversationId);
       markAsRead(conversationId);
     };
 
@@ -224,6 +235,7 @@ export default function ChatScreen() {
             return [...prev, payload.new];
           });
           if (payload.new.sender_id !== session?.user.id) {
+            markDelivered(conversationId);
             markAsRead(conversationId);
           }
         }
@@ -240,13 +252,25 @@ export default function ChatScreen() {
           setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`
+        },
+        (payload: any) => {
+          setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+        }
+      )
       .subscribe();
 
     return () => {
       cancelled = true;
       supabase.removeChannel(messageSubscription);
     };
-  }, [conversationId, markAsRead, session?.user.id, reconnectTick]);
+  }, [conversationId, markAsRead, markDelivered, session?.user.id, reconnectTick]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!conversationId || !hasOlderMessages || loadingOlder) return;
@@ -436,7 +460,7 @@ export default function ChatScreen() {
 
       const { contentType, ext } = resolveImageFileInfo(asset.uri);
       const fileName = `${Date.now()}.${ext}`;
-      const filePath = `${session?.user.id}/${fileName}`;
+      const filePath = `support/${conversationId}/${fileName}`;
 
       let uploadedPath = '';
       const { error } = await supabase.storage.from('chat-images').upload(filePath, decode(asset.base64), { contentType });
@@ -541,25 +565,47 @@ export default function ChatScreen() {
       jsonContext?.type === 'reservation' ||
       (item.context_label && item.context_label.toLowerCase().includes('reservation'));
 
+    const isSystemMessage = !item.sender_id || item.sender_name === 'Jezsy System';
+    const isFirstInGroup = !previous || previous.sender_id !== item.sender_id || showDateSeparator;
+
     return (
       <>
         {showDateSeparator ? (
           <View style={styles.dateSeparator}>
+            <View style={styles.dateSeparatorLine} />
             <Text style={[styles.dateSeparatorText, { color: colors.secondaryText }]}>
               {formatDateSeparator(item.created_at)}
             </Text>
+            <View style={styles.dateSeparatorLine} />
           </View>
         ) : null}
-        <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem]}>
-        <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
-          {!isMe && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, marginLeft: Spacing.xs }}>
-              <IconSymbol name="checkmark.seal.fill" size={12} color={colors.tint} />
-              <Text style={{ fontSize: 11, fontWeight: '600', color: colors.secondaryText, marginLeft: 3 }}>
-                {item.sender_name && item.sender_name !== 'Staff' ? item.sender_name : 'Boutique Support'}
-              </Text>
+        
+        {isSystemMessage ? (
+          <View style={[styles.systemMessageContainer, { backgroundColor: 'rgba(127,127,127,0.08)' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <IconSymbol name="checkmark" size={14} color={colors.secondaryText} style={{ marginRight: 4 }} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.secondaryText }}>Message received</Text>
             </View>
-          )}
+            <Text style={[styles.systemMessageText, { color: colors.secondaryText }]}>
+              {displayText}
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowThem, { marginBottom: isLastInGroup ? Spacing.lg : 2 }]}>
+          <View style={isMe ? styles.messageContentMe : styles.messageContentThem}>
+            {!isMe && isFirstInGroup && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, marginLeft: Spacing.xs }}>
+                {item.sender_name && item.sender_name !== 'Staff' && item.sender_name !== 'Boutique Support' ? (
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: colors.secondaryText, marginLeft: 3 }}>
+                    {item.sender_name} • JezSy Support <IconSymbol name="checkmark.seal.fill" size={11} color={colors.tint} />
+                  </Text>
+                ) : (
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: colors.secondaryText, marginLeft: 3 }}>
+                    Boutique Support <IconSymbol name="checkmark.seal.fill" size={11} color={colors.tint} />
+                  </Text>
+                )}
+              </View>
+            )}
           <TouchableOpacity
             activeOpacity={canAct(item) ? 0.7 : 1}
             onPress={() => {
@@ -579,6 +625,7 @@ export default function ChatScreen() {
             }
             style={[
               styles.messageBubble,
+              { minWidth: 48 },
               isMe
                 ? [styles.messageBubbleMe, { backgroundColor: colors.tint }]
                 : [styles.messageBubbleThem, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }],
@@ -704,25 +751,19 @@ export default function ChatScreen() {
                       <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sending • </Text>
                     ) : item.read_at ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={[styles.readReceiptText, { color: colors.tint, fontWeight: '700' }]}>
-                          Seen{expandedMessageId === item.id ? ` ${formatReceiptTime(item.read_at)}` : ''}{' '}
+                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>
+                          Seen by Boutique{expandedMessageId === item.id ? ` · ${formatReceiptTime(item.read_at)}` : ''}
                         </Text>
-                        <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
-                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
                       </View>
                     ) : item.delivered_at ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>
-                          Delivered{expandedMessageId === item.id ? ` ${formatReceiptTime(item.delivered_at)}` : ''}{' '}
+                          Delivered{expandedMessageId === item.id ? ` · ${formatReceiptTime(item.delivered_at)}` : ''}
                         </Text>
-                        <IconSymbol name="checkmark.circle" size={11} color={colors.secondaryText} />
-                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
                       </View>
                     ) : (
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sent </Text>
-                        <IconSymbol name="checkmark" size={11} color={colors.secondaryText} />
-                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}> • </Text>
+                        <Text style={[styles.readReceiptText, { color: colors.secondaryText }]}>Sent</Text>
                       </View>
                     )}
                   </View>
@@ -736,6 +777,7 @@ export default function ChatScreen() {
           )}
         </View>
         </View>
+        )}
       </>
     );
   };
@@ -764,7 +806,7 @@ export default function ChatScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
               {isStaffOnline && <View style={[styles.presenceDot, { backgroundColor: colors.success }]} />}
               <Text style={{ fontSize: 11, color: colors.secondaryText }}>
-                {isStaffOnline ? 'Active now' : 'Verified Staff Team'}
+                {isStaffOnline ? 'Online' : 'Typically replies within a few hours'}
               </Text>
             </View>
           )}
@@ -939,46 +981,46 @@ export default function ChatScreen() {
           </View>
         )}
 
-        <View style={[styles.inputContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-          {/* Attaching an image mid-edit would send a new message rather than
-              change the one being edited, so it is hidden while editing. */}
-          {!editingId && (
-            <TouchableOpacity
-              style={styles.attachButton}
-              onPress={handlePickImage}
-              accessibilityRole="button"
-              accessibilityLabel="Attach image"
-            >
-              <IconSymbol name="camera.fill" size={24} color={colors.secondaryText} />
-            </TouchableOpacity>
-          )}
-          <TextInput keyboardAppearance={theme}
-            style={[styles.input, { backgroundColor: colors.card, color: colors.text }]}
-            placeholder={editingId ? 'Edit your message...' : 'Type a message...'}
-            placeholderTextColor={colors.secondaryText}
-            value={inputText}
-            onChangeText={handleInputChange}
-            multiline
-            maxLength={500}
-            returnKeyType={editingId ? 'done' : 'send'}
-            blurOnSubmit={false}
-            onSubmitEditing={handleSend}
-            accessibilityLabel={editingId ? 'Edit message' : 'Message input'}
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, { backgroundColor: inputText.trim() ? colors.tint : colors.border }]}
-            onPress={handleSend}
-            disabled={!inputText.trim()}
-            accessibilityRole="button"
-            accessibilityLabel={editingId ? 'Save changes' : 'Send message'}
-          >
-            <IconSymbol
-              name={editingId ? 'checkmark' : 'arrow.up.circle.fill'}
-              size={22}
-              color={inputText.trim() ? colors.onTint : colors.secondaryText}
+          <View style={[styles.inputContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+            {/* Attaching an image mid-edit would send a new message rather than
+                change the one being edited, so it is hidden while editing. */}
+            {!editingId && (
+              <TouchableOpacity
+                style={styles.attachButton}
+                onPress={handlePickImage}
+                accessibilityRole="button"
+                accessibilityLabel="Attach media"
+              >
+                <IconSymbol name="plus" size={24} color={colors.secondaryText} />
+              </TouchableOpacity>
+            )}
+            <TextInput keyboardAppearance={theme}
+              style={[styles.input, { backgroundColor: 'rgba(127,127,127,0.08)', color: colors.text }]}
+              placeholder={editingId ? 'Edit your message...' : 'Type a message...'}
+              placeholderTextColor={colors.secondaryText}
+              value={inputText}
+              onChangeText={handleInputChange}
+              multiline
+              maxLength={500}
+              returnKeyType={editingId ? 'done' : 'send'}
+              blurOnSubmit={false}
+              onSubmitEditing={handleSend}
+              accessibilityLabel={editingId ? 'Edit message' : 'Message input'}
             />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.sendButton, { backgroundColor: inputText.trim() ? colors.tint : 'transparent' }]}
+              onPress={handleSend}
+              disabled={!inputText.trim()}
+              accessibilityRole="button"
+              accessibilityLabel={editingId ? 'Save changes' : 'Send message'}
+            >
+              <IconSymbol
+                name={editingId ? 'checkmark' : 'paperplane.fill'}
+                size={22}
+                color={inputText.trim() ? '#FFF' : colors.secondaryText}
+              />
+            </TouchableOpacity>
+          </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1132,14 +1174,32 @@ const styles = StyleSheet.create({
   },
   actionRowText: { ...Type.bodyStrong },
   dateSeparator: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.lg,
+    marginVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+  },
+  dateSeparatorLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(127,127,127,0.2)',
   },
   dateSeparatorText: {
     fontSize: 12,
     fontWeight: '600',
-    letterSpacing: 0.3,
+    marginHorizontal: Spacing.md,
+  },
+  systemMessageContainer: {
+    alignItems: 'center',
+    padding: Spacing.md,
+    marginVertical: Spacing.sm,
+    marginHorizontal: Spacing.xl,
+    borderRadius: Radius.lg,
+  },
+  systemMessageText: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   productCard: {
     flexDirection: 'row',
@@ -1207,7 +1267,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: Spacing.md,
+    padding: Spacing.sm,
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     alignItems: 'flex-end',
@@ -1215,14 +1275,14 @@ const styles = StyleSheet.create({
   attachButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    height: 40,
-    width: 40,
-    marginRight: Spacing.sm,
+    height: 44,
+    width: 44,
+    marginRight: Spacing.xs,
   },
   input: {
     flex: 1,
     borderRadius: 20,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.md,
     paddingTop: 10,
     paddingBottom: 10,
     minHeight: 40,

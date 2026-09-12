@@ -443,6 +443,7 @@ export type Database = {
           customer_id: string | null
           id: string
           last_message: string | null
+          last_message_id: string | null
           last_message_time: string | null
           unread_customer: number
           unread_staff: number
@@ -453,6 +454,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           last_message?: string | null
+          last_message_id?: string | null
           last_message_time?: string | null
           unread_customer?: number
           unread_staff?: number
@@ -463,6 +465,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           last_message?: string | null
+          last_message_id?: string | null
           last_message_time?: string | null
           unread_customer?: number
           unread_staff?: number
@@ -474,6 +477,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: true
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_last_message_id_fkey"
+            columns: ["last_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
         ]
@@ -2627,8 +2637,16 @@ export type Database = {
         Args: { p_message_id: string }
         Returns: undefined
       }
+      mark_support_conversation_read: {
+        Args: { p_conversation_id: string }
+        Returns: undefined
+      }
+      mark_support_messages_delivered: {
+        Args: { p_conversation_id?: string; p_message_ids?: string[] }
+        Returns: undefined
+      }
       merge_message_reaction: {
-        Args: { p_emoji: string; p_message_id: string; p_user_id: string }
+        Args: { p_emoji: string; p_message_id: string }
         Returns: Json
       }
       process_account_deletion: { Args: { _request_id: string }; Returns: Json }
