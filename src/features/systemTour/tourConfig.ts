@@ -82,7 +82,7 @@ export const TOUR_MODULES: Record<TourModuleId, TourModuleDefinition> = {
   },
   ar_try_on: {
     id: 'ar_try_on',
-    version: 1,
+    version: 2,
     icon: 'cube.fill',
     title: 'AR Fitting Room',
     subtitle: 'Experience how luxury garments look and fit before reserving.',
@@ -113,13 +113,18 @@ export const TOUR_MODULES: Record<TourModuleId, TourModuleDefinition> = {
         screen: 'ar-tryon',
         title: 'Enter the fitting room',
         description: 'Point your camera at yourself and hold still for pose tracking to lock on.',
-        completion: { type: 'navigation', route: 'ar_tryon_screen' },
+        // Not `navigation`: that route event fires the instant this screen
+        // mounts (see app/ar-tryon/[id].tsx), before the user has consented
+        // to camera access, let alone read this tip -- the coachmark would
+        // complete itself before ever being visible. `next` requires an
+        // actual "Got it" tap.
+        completion: { type: 'next' },
       },
     ],
   },
   wardrobe: {
     id: 'wardrobe',
-    version: 1,
+    version: 2,
     icon: 'tshirt',
     title: 'Digital Wardrobe',
     subtitle: 'Turn your physical closet into an intelligent digital wardrobe powered by AI.',
@@ -132,7 +137,7 @@ export const TOUR_MODULES: Record<TourModuleId, TourModuleDefinition> = {
       {
         icon: 'square.grid.2x2.fill',
         title: 'Outfit Builder',
-        description: 'Generate daily outfit pairings from your wardrobe and wishlist.',
+        description: 'Generate outfit pairings from your own wardrobe pieces.',
       },
     ],
     actionRoute: '/(tabs)/wardrobe',
@@ -143,13 +148,17 @@ export const TOUR_MODULES: Record<TourModuleId, TourModuleDefinition> = {
         screen: 'wardrobe',
         title: "Your digital closet",
         description: 'Everything you add here is available for outfit pairing and AR try-on.',
-        completion: { type: 'navigation', route: 'wardrobe_screen' },
+        // Not `navigation`: wardrobe.tsx emits that route event on its own
+        // mount, so a step displayed on that same screen would complete
+        // itself before the coachmark ever painted. `next` requires an
+        // actual "Got it" tap instead.
+        completion: { type: 'next' },
       },
     ],
   },
   concierge: {
     id: 'concierge',
-    version: 1,
+    version: 2,
     icon: 'sparkles',
     title: 'Concierge & Support',
     subtitle: 'Get help with reservations, styling, and returns.',
@@ -173,7 +182,11 @@ export const TOUR_MODULES: Record<TourModuleId, TourModuleDefinition> = {
         screen: 'messages',
         title: 'Reach the concierge',
         description: 'Ask about sizing, reservations, or styling advice any time.',
-        completion: { type: 'navigation', route: 'messages_screen' },
+        // Not `navigation`: messages.tsx emits that route event on its own
+        // mount, so a step displayed on that same screen would complete
+        // itself before the coachmark ever painted. `next` requires an
+        // actual "Got it" tap instead.
+        completion: { type: 'next' },
       },
     ],
   },

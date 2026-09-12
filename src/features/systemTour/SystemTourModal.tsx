@@ -23,6 +23,7 @@ import {
   TourProgressSnapshot,
 } from './tourProgress';
 import { reportTourAnalyticsEvent } from './tourAnalytics';
+import { startTourReplay } from './tourEvents';
 
 interface SystemTourModalProps {
   visible: boolean;
@@ -87,6 +88,14 @@ export function SystemTourModal({ visible, onClose, isReplay = false }: SystemTo
   const handleModuleAction = async () => {
     if (!activeModule) return;
     const moduleDef = TOUR_MODULES[activeModule];
+
+    // Replay never writes stored progress (see tourProgress.ts), so without
+    // this the destination screen's on-screen coachmark would never have
+    // anything to show -- the primer screen's own "we'll show quick tips
+    // right on the screen as you go" would be an empty promise.
+    if (isReplay) {
+      startTourReplay(activeModule);
+    }
 
     onClose();
     // small delay to allow modal to close before navigating

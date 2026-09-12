@@ -129,6 +129,7 @@ const MAPPING = {
   // nothing at all, so every icon used by ScanPrep has to be listed here.
   'eyeglasses': 'face',
   'square.grid.2x2': 'grid-on',
+  'square.grid.2x2.fill': 'grid-on',
   'shoe': 'directions-walk',
   'lightbulb': 'lightbulb',
   'speaker.wave.2.fill': 'volume-up',
