@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,7 +10,7 @@ import { useFloatingTabBarMetrics } from '@/src/hooks/useFloatingTabBarMetrics';
 import { TOUR_MODULE_IDS, TOUR_MODULES, TourModuleId, TourStep } from './tourConfig';
 import { markTourStepComplete } from './tourProgress';
 import { readModuleProgress, TourModuleProgress } from './tourStorage';
-import { subscribeTourEvent } from './tourEvents';
+import { clearTourReplay, completeTourReplayStep, getActiveTourReplay, subscribeTourEvent } from './tourEvents';
 
 interface PendingStep {
   moduleId: TourModuleId;
@@ -45,9 +46,22 @@ export function useTourCoachmark(screenName: string) {
       return;
     }
     const next: PendingStep[] = [];
+    // A module being replayed (Profile's Replay Tour) never has stored
+    // progress to read -- see tourEvents.ts's startTourReplay -- so its
+    // steps are sourced from the in-memory replay session instead, entirely
+    // bypassing progress.started/completed for that one module.
+    const replay = getActiveTourReplay();
     for (const moduleId of TOUR_MODULE_IDS) {
       if (dismissedModules.has(moduleId)) continue;
       const moduleDef = TOUR_MODULES[moduleId];
+      if (replay?.moduleId === moduleId) {
+        moduleDef.steps.forEach((step, stepIndex) => {
+          if (step.screen === screenName && !replay.completedStepIds.has(step.id)) {
+            next.push({ moduleId, step, stepIndex, totalSteps: moduleDef.steps.length });
+          }
+        });
+        continue;
+      }
       const progress: TourModuleProgress = await readModuleProgress(userId, moduleId);
       if (!progress.started || progress.completed || progress.version !== moduleDef.version) continue;
       moduleDef.steps.forEach((step, stepIndex) => {
@@ -59,11 +73,22 @@ export function useTourCoachmark(screenName: string) {
     setPendingSteps(next);
   }, [userId, screenName, dismissedModules]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // Focus, not mount: a tab screen (or a pushed screen navigated back into)
+  // usually stays mounted between visits, so a mount-only effect would miss
+  // a replay session started while this screen was already alive in the
+  // background.
+  useFocusEffect(
+    React.useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
 
   const advanceTo = async (moduleId: TourModuleId, stepId: string) => {
+    if (getActiveTourReplay()?.moduleId === moduleId) {
+      completeTourReplayStep(moduleId, stepId);
+      refresh();
+      return;
+    }
     if (!userId) return;
     await markTourStepComplete(userId, moduleId, stepId);
     refresh();
@@ -102,6 +127,9 @@ export function useTourCoachmark(screenName: string) {
 
   const dismiss = () => {
     if (!active) return;
+    if (getActiveTourReplay()?.moduleId === active.moduleId) {
+      clearTourReplay();
+    }
     setDismissedModules((prev) => new Set(prev).add(active.moduleId));
   };
 
