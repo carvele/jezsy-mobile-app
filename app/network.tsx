@@ -9,6 +9,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { getConnectionsPage, Connection, UserProfile } from '@/src/services/connectionService';
+import { errorReporting } from '@/src/services/observability';
 
 export default function NetworkScreen() {
   const { user } = useAuth();
@@ -39,7 +40,10 @@ export default function NetworkScreen() {
       setOffset(res.nextOffset);
       setHasMore(res.hasMore);
     } catch (err: any) {
-      console.log('Error loading connections:', err?.message || err);
+      errorReporting.capture(err instanceof Error ? err : new Error(String(err)), {
+        domain: 'network',
+        operation: 'load_connections',
+      });
       showToast('Could not load connections.', 'error');
     } finally {
       setLoading(false);
@@ -54,7 +58,10 @@ export default function NetworkScreen() {
       if (error) throw error;
       setSuggestions(data || []);
     } catch (err: any) {
-      console.log('Error loading suggested connections:', err?.message || err);
+      errorReporting.capture(err instanceof Error ? err : new Error(String(err)), {
+        domain: 'network',
+        operation: 'load_suggestions',
+      });
     } finally {
       setSuggestionsLoading(false);
     }
@@ -73,7 +80,10 @@ export default function NetworkScreen() {
       setOffset(res.nextOffset);
       setHasMore(res.hasMore);
     } catch (err: any) {
-      console.log('Error loading more connections:', err?.message || err);
+      errorReporting.capture(err instanceof Error ? err : new Error(String(err)), {
+        domain: 'network',
+        operation: 'load_more_connections',
+      });
     } finally {
       setLoadingMore(false);
     }
@@ -96,8 +106,12 @@ export default function NetworkScreen() {
 
       if (error) throw error;
       setSearchResults(data || []);
-    } catch (err: any) { console.log(err);
-      console.log('Error searching users:', err.message);
+    } catch (err: any) {
+      errorReporting.capture(err instanceof Error ? err : new Error(String(err)), {
+        domain: 'network',
+        operation: 'search_public_profiles',
+      });
+      showToast('Error searching users', 'error');
     } finally {
       setSearchLoading(false);
     }
@@ -128,7 +142,11 @@ export default function NetworkScreen() {
         showToast('Request sent', 'success');
         if (activeTab !== 'search') loadConnections();
       }
-    } catch (err: any) { console.log(err);
+    } catch (err: any) {
+      errorReporting.capture(err instanceof Error ? err : new Error(String(err)), {
+        domain: 'network',
+        operation: 'send_connection_request',
+      });
       showToast('Failed to send request', 'error');
     }
   };
@@ -148,7 +166,11 @@ export default function NetworkScreen() {
       if (error) throw error;
       showToast('Request accepted', 'success');
       loadConnections();
-    } catch (err: any) { console.log(err);
+    } catch (err: any) {
+      errorReporting.capture(err instanceof Error ? err : new Error(String(err)), {
+        domain: 'network',
+        operation: 'accept_connection_request',
+      });
       showToast('Failed to accept request', 'error');
     }
   };
