@@ -45,13 +45,21 @@ export function calculateGarmentFit(
 
   const canonicalPose = canonical ?? normalizePose(pose.worldLandmarks);
 
+  // Pants/skirt anchor at the hips (landmarks 23/24), not the shoulders --
+  // everything else (jacket/shirt/dress, and any category-less caller) keeps
+  // the exact prior shoulder-anchored behavior unchanged. Falls back to
+  // shoulders if a hip landmark is unexpectedly missing, same fail-safe
+  // posture as the rest of this function.
+  const isBottomGarment = metadata?.category === 'pants' || metadata?.category === 'skirt';
+
   // Use the canonical stage-mapped landmarks for 2D UI positioning only
   const L = pose.stageLandmarks;
-  const leftShoulder = L[11];
-  const rightShoulder = L[12];
-  
-  // Calculate apparent 2D pixel width of the shoulders
-  const apparentShoulderWidthPx = Math.abs(leftShoulder.x - rightShoulder.x);
+  const useHipAnchor = isBottomGarment && L[23] && L[24];
+  const leftAnchorPoint = useHipAnchor ? L[23] : L[11];
+  const rightAnchorPoint = useHipAnchor ? L[24] : L[12];
+
+  // Calculate apparent 2D pixel width of the anchor pair (shoulders, or hips for bottoms)
+  const apparentShoulderWidthPx = Math.abs(leftAnchorPoint.x - rightAnchorPoint.x);
 
   // Foreshortening correction using orientation
   // Orientation was established robustly in BodyCoordinateFrame
@@ -59,21 +67,22 @@ export function calculateGarmentFit(
   const correctedShoulderWidthPx = apparentShoulderWidthPx / cosYaw;
 
   // 1. Anchoring Logic driven by GarmentFitProfile (2D pixel coordinates for HUD)
-  let anchorX = (leftShoulder.x + rightShoulder.x) / 2;
-  let anchorY = (leftShoulder.y + rightShoulder.y) / 2;
+  let anchorX = (leftAnchorPoint.x + rightAnchorPoint.x) / 2;
+  let anchorY = (leftAnchorPoint.y + rightAnchorPoint.y) / 2;
 
   if (profile.anchors.neck) {
      // example override if rig provides specific attachment offsets
   }
-  
+
 
   // 2. Metric Anthropometric Scaling (Phase 3 -> Phase 6 3D)
   const wl = pose.worldLandmarks;
+  const [aIdx, bIdx] = useHipAnchor ? [23, 24] : [11, 12];
   let userShoulderWidthMeters = 0.4; // fallback for average human
-  if (wl && wl[11] && wl[12]) {
-    const dx = wl[12].x - wl[11].x;
-    const dy = wl[12].y - wl[11].y;
-    const dz = wl[12].z - wl[11].z;
+  if (wl && wl[aIdx] && wl[bIdx]) {
+    const dx = wl[bIdx].x - wl[aIdx].x;
+    const dy = wl[bIdx].y - wl[aIdx].y;
+    const dz = wl[bIdx].z - wl[aIdx].z;
     userShoulderWidthMeters = Math.sqrt(dx*dx + dy*dy + dz*dz);
   }
 
