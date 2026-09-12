@@ -158,23 +158,18 @@ export function formatDateSeparator(iso: string): string {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const daysAgo = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
 
-  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-
-  if (daysAgo === 0) return time;
-  if (daysAgo === 1) return `YESTERDAY AT ${time}`;
+  if (daysAgo === 0) return 'Today';
+  if (daysAgo === 1) return 'Yesterday';
 
   if (daysAgo > 1 && daysAgo < 7) {
-    const weekday = date.toLocaleDateString(undefined, { weekday: 'short' });
-    return `${weekday.toUpperCase()} AT ${time}`;
+    return date.toLocaleDateString(undefined, { weekday: 'long' });
   }
 
-  const datePart = date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
   });
-
-  return `${datePart.toUpperCase()} AT ${time}`;
 }
 
 // Same day-bucket logic as formatDateSeparator, but sentence case for an
