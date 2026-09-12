@@ -54,6 +54,14 @@ export default function OutfitDetailScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const { session } = useAuth();
   const flatListRef = useRef<FlatList<SavedOutfit>>(null);
+  // A horizontal FlatList's cross-axis height doesn't reliably flow down
+  // through flex:1 to its rendered items on web -- confirmed live: each
+  // page's ScrollView sized itself to its own content instead of the space
+  // actually available, and the FlatList's overflow:hidden then clipped
+  // whatever didn't fit, with no way to scroll to it. Measuring the real
+  // pixel height via onLayout and passing that down explicitly sidesteps
+  // the whole flex-resolution question.
+  const [pagerHeight, setPagerHeight] = useState(0);
 
   // Viewing one saved outfit swipes to the next/previous rather than
   // requiring a trip back to the list -- so this fetches the user's whole
@@ -181,7 +189,7 @@ export default function OutfitDetailScreen() {
 
     return (
       <ScrollView
-        style={{ width: windowWidth, flex: 1 }}
+        style={{ width: windowWidth, height: pagerHeight || undefined }}
         contentContainerStyle={[styles.content, { alignItems: 'center' }]}
         showsVerticalScrollIndicator={false}
       >
@@ -302,7 +310,7 @@ export default function OutfitDetailScreen() {
       </ScrollView>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowWidth, contentWidth, colors, isDark, loggingWear]);
+  }, [windowWidth, contentWidth, colors, isDark, loggingWear, pagerHeight]);
 
   if (loading) {
     return (
@@ -382,25 +390,28 @@ export default function OutfitDetailScreen() {
         }}
       />
 
-      <FlatList
-        ref={flatListRef}
-        style={{ flex: 1 }}
-        data={outfits}
-        keyExtractor={(o) => o.id}
-        renderItem={renderOutfitPage}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        initialScrollIndex={currentIndex}
-        getItemLayout={(_, index) => ({ length: windowWidth, offset: windowWidth * index, index })}
-        onMomentumScrollEnd={(e) => {
-          const newIndex = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
-          setCurrentIndex(Math.max(0, Math.min(newIndex, outfits.length - 1)));
-        }}
-        windowSize={3}
-        initialNumToRender={1}
-        removeClippedSubviews
-      />
+      <View style={{ flex: 1 }} onLayout={(e) => setPagerHeight(e.nativeEvent.layout.height)}>
+        {pagerHeight > 0 && (
+          <FlatList
+            ref={flatListRef}
+            data={outfits}
+            keyExtractor={(o) => o.id}
+            renderItem={renderOutfitPage}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={currentIndex}
+            getItemLayout={(_, index) => ({ length: windowWidth, offset: windowWidth * index, index })}
+            onMomentumScrollEnd={(e) => {
+              const newIndex = Math.round(e.nativeEvent.contentOffset.x / windowWidth);
+              setCurrentIndex(Math.max(0, Math.min(newIndex, outfits.length - 1)));
+            }}
+            windowSize={3}
+            initialNumToRender={1}
+            removeClippedSubviews
+          />
+        )}
+      </View>
     </SafeAreaView>
   );
 }
