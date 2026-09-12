@@ -64,6 +64,7 @@ const MAPPING = {
   'square.and.arrow.up': 'share',
   'ellipsis': 'more-horiz',
   'delete.left': 'backspace',
+  'pencil': 'edit',
 
   // Status & Alerts
   'bell': 'notifications-none',

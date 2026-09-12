@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Modal, FlatList, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -40,6 +40,9 @@ export default function CapsuleDetailScreen() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
   const [savedSignatures, setSavedSignatures] = useState<Set<string>>(new Set());
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
+  const [savingGoal, setSavingGoal] = useState(false);
 
   const capsuleCombinations = useMemo(() => generateOutfits(capsuleItems, 4), [capsuleItems]);
 
@@ -185,6 +188,33 @@ export default function CapsuleDetailScreen() {
     }
   };
 
+  const startEditingGoal = () => {
+    setGoalInput(String(capsule?.target_count || 30));
+    setEditingGoal(true);
+  };
+
+  const saveGoal = async () => {
+    if (!capsule) return;
+    const parsed = parseInt(goalInput, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      showToast('Goal must be a positive number.', 'error');
+      return;
+    }
+    setSavingGoal(true);
+    try {
+      const result = await wardrobeService.updateCapsuleGoal(capsule.id, parsed);
+      if (!result.ok) throw result.error;
+      setCapsule((prev) => (prev ? { ...prev, target_count: parsed } : prev));
+      setEditingGoal(false);
+      showToast('Goal updated.', 'success');
+    } catch (err) {
+      console.error('Error updating capsule goal:', err);
+      showToast('Could not update the goal. Please try again.', 'error');
+    } finally {
+      setSavingGoal(false);
+    }
+  };
+
   const executeDeleteCapsule = async () => {
     if (!capsule) return;
     setDeleting(true);
@@ -259,8 +289,32 @@ export default function CapsuleDetailScreen() {
 
         {/* target_count is a personal styling goal the user set when
             creating the collection, not an enforced cap -- adding past it
-            is always allowed, the bar just fills past 100%. */}
-        <Text style={[styles.progressLabel, { color: colors.tint }]}>Goal: {capsuleItems.length} of {target} items</Text>
+            is always allowed, the bar just fills past 100%. Editable here
+            in case they under- or over-estimated it at creation time. */}
+        {editingGoal ? (
+          <View style={styles.goalEditRow}>
+            <Text style={[styles.progressLabel, { color: colors.tint }]}>Goal:</Text>
+            <TextInput keyboardAppearance={theme}
+              style={[styles.goalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+              value={goalInput}
+              onChangeText={(t) => setGoalInput(t.replace(/[^0-9]/g, ''))}
+              keyboardType="number-pad"
+              autoFocus
+              maxLength={4}
+            />
+            <TouchableOpacity onPress={saveGoal} disabled={savingGoal} accessibilityRole="button" accessibilityLabel="Save goal">
+              {savingGoal ? <ActivityIndicator size="small" color={colors.tint} /> : <IconSymbol name="checkmark" size={18} color={colors.tint} />}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditingGoal(false)} accessibilityRole="button" accessibilityLabel="Cancel editing goal">
+              <IconSymbol name="xmark" size={18} color={colors.secondaryText} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={startEditingGoal} style={styles.goalEditRow} accessibilityRole="button" accessibilityLabel="Edit item goal">
+            <Text style={[styles.progressLabel, { color: colors.tint }]}>Goal: {capsuleItems.length} of {target} items</Text>
+            <IconSymbol name="pencil" size={14} color={colors.secondaryText} />
+          </TouchableOpacity>
+        )}
         <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
           <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: colors.tint }]} />
         </View>
@@ -406,7 +460,17 @@ const styles = StyleSheet.create({
   headerTitle: { ...Type.subtitle, fontWeight: '700', flex: 1, textAlign: 'center' },
   content: { padding: Spacing.xl, paddingBottom: 60 },
   description: { ...Type.body, marginBottom: Spacing.lg, lineHeight: 20 },
-  progressLabel: { ...Type.bodyStrong, fontWeight: '700', marginBottom: Spacing.sm },
+  progressLabel: { ...Type.bodyStrong, fontWeight: '700' },
+  goalEditRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },
+  goalInput: {
+    borderWidth: 1,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    minWidth: 50,
+    fontSize: 15,
+    fontWeight: '700',
+  },
   progressTrack: { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: Spacing.xl },
   progressFill: { height: '100%', borderRadius: 4 },
   addButton: {
