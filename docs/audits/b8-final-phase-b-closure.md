@@ -6,7 +6,8 @@
 **Date**: September 12, 2026  
 **Repositories**: `carvele/jezsy-mobile-app` & `carvele/admin-dashboard`  
 **Shared Production Database**: Supabase (`wufcmtndotfvxvvxkamv`)  
-**Mobile Head on `main`**: `3316e96` (following PRs #295, #296, #297)  
+**Mobile Verification Baseline Head**: `3316e96` (following PRs #295, #296, #297)  
+**Mobile Closure Ledger Merged via PR #298**: `1ae9b53`  
 **Admin Head on `main`**: `b1c30d4` (following PRs #134, #135, #136)  
 **Live Database Ledger Head**: `20260912071818` (`harden_social_discovery_bilateral_blocks`)  
 **Single-Source Type Parity**: Git blob SHA `fbe5eccfc62dfddd5b3d60daffd6d103d187e8a3` (89,741 bytes in both repositories)  
@@ -32,7 +33,7 @@ Executing strictly under the governing principles of `code-verification-ultra` a
    - Codified `jezsy-mobile-app/supabase/migrations/` as the single authoritative schema repository (249 migration files matching the live ledger versions byte-for-byte).
    - Deprecated Admin migration directory, relocating legacy files to `docs/schema-history/` and enforcing automated CI AST contract checks (`migrationGovernance.test.js` and `contractVerification.test.js`).
 5. **Security Definer Search Path Hardening (`SEC-F`)**:
-   - Enforced 100% search path pinning across all 87 `SECURITY DEFINER` functions in `public` (`SET search_path = public, pg_temp`), reducing unpinned functions to 0.
+   - Enforced 100% explicit search path pinning across all 87 `SECURITY DEFINER` functions in `public` (reducing unpinned functions to 0). Pinned values vary by function according to implementation requirements; SOC-003 discovery functions use `public, pg_temp`.
 6. **Secret Exposure Governance & Credential Isolation (`B6-SECRET-EXPOSURE-001`)**:
    - Rotated encrypted passwords in live `auth.users` for both test harness accounts, eliminated all hardcoded credential fallbacks, and instituted an automated CI governance guard.
 7. **Zombie Architecture & Dead Code Pruning (`B7-e`, `B7-c`, `B7-d`)**:
@@ -69,7 +70,7 @@ The following matrix maps every systemic anti-pattern and immutable finding from
 | `[STRAT-003]` | Command Boundaries | Admin views executed raw DML queries directly from UI event handlers. | Refactored presentation components to call typed command services (`deviceService.js`, `customerService.js`, `variantService.js`). | Jest integration tests + code review | ✅ Resolved |
 | `[STRAT-005]` | Schema Drift | Admin `src/types/index.ts` retained legacy Firestore definitions (`createdAt: Timestamp`). | Purged legacy Firestore types file and unified both codebases on Supabase generated `database.types.ts`. | Ephemeral worktree typecheck + build | ✅ Resolved |
 | `[SEC-A1..E]` | Security Hardening | 83 multiple permissive policies, unindexed RLS InitPlans, and anonymous RPC attack surfaces. | Eliminated all redundant permissive policies (`MPP = 0`), wrapped `auth.uid()` calls, revoked public execution on sensitive functions, and enabled HaveIBeenPwned protection. | Security advisor audit (`get_advisors`) | ✅ Resolved |
-| `[SEC-F]` | Security Definer | `SECURITY DEFINER` functions lacked explicit search path pinning, creating search_path escalation vulnerabilities. | Authored migration pinning `SET search_path = public, pg_temp` across 100% of definer functions (87/87 pinned, 0 unpinned). | Live catalog query on `pg_proc` | ✅ Resolved |
+| `[SEC-F]` | Security Definer | `SECURITY DEFINER` functions lacked explicit search path pinning, creating search_path escalation vulnerabilities. | Enforced explicit `search_path` pinning across 100% of definer functions (87/87 pinned, 0 unpinned; implementation varies by function, SOC-003 uses `public, pg_temp`). | Live catalog query on `pg_proc` | ✅ Resolved |
 | `[B6-SECRET-001]` | Credential Governance | Test harness credentials exposed in committed test scripts with usable fallback defaults. | Rotated harness passwords in live `auth.users`, eliminated fallbacks, isolated credentials to `.env`, and added automated CI governance guard. | Automated CI governance test + live rotation check | ✅ Resolved |
 | `[AST-001]` | Contract Governance | RPC signatures and callers drifted silently across repository boundaries. | Implemented static AST contract test in Admin CI (`contractVerification.test.js`) parsing all 21 `supabase.rpc` call sites with TypeScript Compiler API. | Admin Jest test suite (`29/29 passed`) | ✅ Resolved |
 | `[B7-RPC-009]` / `[B7-MOB-005]` | Slot Correctness | Customer RLS caused booked boutique slots to appear vacant to other customers. | Refactored Mobile `TimeSlotPicker` to query `public.get_slot_booked_counts(_date)` (`SECURITY DEFINER`), restoring global occupancy visibility. | Static typecheck + component unit test | ✅ Resolved |
@@ -89,6 +90,7 @@ The following matrix maps every systemic anti-pattern and immutable finding from
 - **Application Method**: Canonical Supabase MCP workflow (`apply_migration`)
 - **Forward File**: `supabase/migrations/20260912071818_harden_social_discovery_bilateral_blocks.sql`
 - **Rollback Companion**: `supabase/migrations/20260912071818_harden_social_discovery_bilateral_blocks.sql.rollback`
+- **Provenance & Lineage Note**: The canonical applied migration file is named `20260912071818_harden_social_discovery_bilateral_blocks.sql`, exactly matching the live ledger version `20260912071818`. The initial authoring comment in the SQL header retains the earlier authoring timestamp `20260912070029` from initial creation prior to the PR #297 rename. In accordance with strict migration governance, the applied migration file is preserved immutable without post-application cosmetic edits.
 
 #### Database Catalog Metrics
 | Invariant / Metric | Program Target | Live Production Value | Status |
@@ -97,7 +99,7 @@ The following matrix maps every systemic anti-pattern and immutable finding from
 | **RLS-Enabled Tables** | 48 (100%) | 48 / 48 (100%) | ✅ 100% RLS ENFORCED |
 | **Total Public Schema Functions** | 119 | 119 | ✅ EXACT MATCH |
 | **SECURITY DEFINER Functions** | 87 | 87 | ✅ EXACT MATCH |
-| **Pinned `search_path` Definers** | 87 (100%) | 87 / 87 (100%) | ✅ 100% PINNED (`public, pg_temp`) |
+| **Pinned `search_path` Definers** | 87 (100%) | 87 / 87 (100%) | ✅ 100% EXPLICITLY PINNED |
 | **Unpinned Definers** | 0 | 0 | ✅ ZERO UNPINNED |
 | **`increment_wear_count` anon Execute** | Revoked (`false`) | `false` | ✅ LEAST-PRIVILEGE PRESERVED |
 | **`increment_wear_count` authenticated** | Granted (`true`) | `true` | ✅ AUTHORIZED CALLERS PRESERVED |
@@ -105,6 +107,9 @@ The following matrix maps every systemic anti-pattern and immutable finding from
 | **SOC-003 Discovery anon Execute** | Revoked (`false`) | `false` (all 3 RPCs) | ✅ ANONYMOUS EXECUTION DENIED |
 | **SOC-003 Discovery authenticated Execute** | Granted (`true`) | `true` (all 3 RPCs) | ✅ AUTHENTICATED ACCESS PRESERVED |
 | **SOC-003 Discovery PUBLIC Execute** | Revoked (`false`) | `false` (all 3 RPCs) | ✅ DEFAULT PUBLIC PRIVILEGES REVOKED |
+
+> [!NOTE]
+> All 87/87 `SECURITY DEFINER` functions have an explicit pinned `search_path` (0 unpinned). Pinned values vary by function according to implementation requirements (e.g. `public`, `pg_catalog`, or empty search path); SOC-003 discovery functions use `public, pg_temp`.
 
 #### Empirical SOC-003 Bilateral Block Runtime Proof
 Executed dedicated runtime probe across test harness identities (`Customer` and `Staff`):
@@ -193,7 +198,7 @@ Total: 14 | Passed: 13 | Failed: 0 | Deferred: 1
 
 ## 5. Cross-Platform Local & CI Verification Summary
 
-### Mobile Application (`carvele/jezsy-mobile-app` on `main` at `3316e96`)
+### Mobile Application (`carvele/jezsy-mobile-app` baseline `3316e96`, closure merge `1ae9b53`)
 - **TypeScript (`npx tsc --noEmit`)**: PASSED (0 errors).
 - **ESLint (`expo lint`)**: PASSED (0 errors).
 - **Jest Test Suites (`npm test`)**: PASSED (41/41 suites, 324/324 tests).
@@ -201,6 +206,7 @@ Total: 14 | Passed: 13 | Failed: 0 | Deferred: 1
   - PR #295: Run `34679886538` (1m44s) — SUCCESS
   - PR #296: Run `34680008749` (1m16s) — SUCCESS
   - PR #297: Run `34680389627` (1m36s) — SUCCESS
+  - PR #298: Run `34680839832` (1m25s) — SUCCESS
 
 ### Admin Dashboard (`carvele/admin-dashboard` on `origin/main` at `b1c30d4`)
 - **TypeScript (`npm run type-check`)**: PASSED (0 errors).
