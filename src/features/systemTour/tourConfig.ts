@@ -160,7 +160,7 @@ export const TOUR_MODULES: Record<TourModuleId, TourModuleDefinition> = {
     id: 'concierge',
     version: 2,
     icon: 'sparkles',
-    title: 'Concierge & Support',
+    title: 'Customer Support',
     subtitle: 'Get help with reservations, styling, and returns.',
     highlights: [
       {
@@ -175,12 +175,12 @@ export const TOUR_MODULES: Record<TourModuleId, TourModuleDefinition> = {
       },
     ],
     actionRoute: '/(tabs)/messages',
-    actionLabel: 'Message Concierge',
+    actionLabel: 'Message Support',
     steps: [
       {
         id: 'enter_concierge',
         screen: 'messages',
-        title: 'Reach the concierge',
+        title: 'Reach our support team',
         description: 'Ask about sizing, reservations, or styling advice any time.',
         // Not `navigation`: messages.tsx emits that route event on its own
         // mount, so a step displayed on that same screen would complete

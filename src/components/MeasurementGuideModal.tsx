@@ -57,7 +57,7 @@ const GUIDE_ITEMS: GuideItem[] = [
   },
   {
     id: 'inseam',
-    title: 'Inseam Length',
+    title: 'Pants Length',
     category: 'Primary',
     howTo: 'Measure from the highest point inside your crotch down along the inner leg to the bottom of your ankle bone.',
     tip: 'For greatest accuracy, measure along the inner seam of a well-fitting pair of pants.',

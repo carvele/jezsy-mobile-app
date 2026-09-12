@@ -652,7 +652,7 @@ export default function MeasurementsScreen() {
 
             <View style={styles.row}>
               {renderInput("Hips", hips, setHips, 'hips')}
-              {renderInput("Inseam", inseam, setInseam, 'inseam')}
+              {renderInput("Pants Length", inseam, setInseam, 'inseam')}
             </View>
 
             <TouchableOpacity

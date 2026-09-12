@@ -19,7 +19,7 @@ const COLUMNS: { key: 'bust' | 'waist' | 'hips' | 'inseam' | 'length'; label: st
   { key: 'bust', label: 'Bust' },
   { key: 'waist', label: 'Waist' },
   { key: 'hips', label: 'Hips' },
-  { key: 'inseam', label: 'Inseam' },
+  { key: 'inseam', label: 'Pants' },
   { key: 'length', label: 'Length' },
 ];
 
