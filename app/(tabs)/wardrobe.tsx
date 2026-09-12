@@ -506,28 +506,6 @@ export default function WardrobeScreen() {
         <Text style={[styles.headerTitle, { color: colors.tint }]}>Digital Wardrobe</Text>
         
         <View style={styles.headerRightActions}>
-          {/* Mannequin Studio Button beside Add (+) Button */}
-          <TouchableOpacity
-            style={[
-              styles.mannequinHeaderButton,
-              activeTab === 'mannequin'
-                ? { backgroundColor: colors.tint }
-                : { backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : '#F5EFE6', borderWidth: 1.5, borderColor: colors.tint }
-            ]}
-            onPress={() => {
-              tapLight();
-              setActiveTab(activeTab === 'mannequin' ? 'items' : 'mannequin');
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle Mannequin Studio"
-          >
-            <IconSymbol
-              name="hanger"
-              size={20}
-              color={activeTab === 'mannequin' ? colors.onTint : colors.tint}
-            />
-          </TouchableOpacity>
-
           {/* Add (+) Button */}
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.tint }]}
@@ -800,14 +778,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  mannequinHeaderButton: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.pill,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Elevation.sm,
   },
   addButton: {
     // 44pt keeps the primary add action at the minimum comfortable target.

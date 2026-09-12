@@ -257,7 +257,10 @@ export default function CapsuleDetailScreen() {
           <Text style={[styles.description, { color: colors.secondaryText }]}>{capsule.description}</Text>
         )}
 
-        <Text style={[styles.progressLabel, { color: colors.tint }]}>{capsuleItems.length} / {target} items</Text>
+        {/* target_count is a personal styling goal the user set when
+            creating the collection, not an enforced cap -- adding past it
+            is always allowed, the bar just fills past 100%. */}
+        <Text style={[styles.progressLabel, { color: colors.tint }]}>Goal: {capsuleItems.length} of {target} items</Text>
         <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
           <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: colors.tint }]} />
         </View>
@@ -278,7 +281,13 @@ export default function CapsuleDetailScreen() {
             <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No items in this collection yet.</Text>
           </View>
         ) : (
-          <View style={styles.grid}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.grid}
+            style={{ marginHorizontal: -Spacing.xl }}
+          >
+            <View style={{ width: Spacing.xl }} />
             {capsuleItems.map((item) => (
               <View key={item.id} style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <Image source={{ uri: item.image_url || undefined }} style={[styles.itemImage, { backgroundColor: colors.surface }]} contentFit="cover" />
@@ -295,7 +304,8 @@ export default function CapsuleDetailScreen() {
                 </View>
               </View>
             ))}
-          </View>
+            <View style={{ width: Spacing.xl }} />
+          </ScrollView>
         )}
 
         {/* The point of a capsule is how many looks a small set yields, so the
@@ -418,12 +428,10 @@ const styles = StyleSheet.create({
   emptyText: { ...Type.bodyStrong, textAlign: 'center' },
   grid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: Spacing.lg,
+    gap: Spacing.md,
   },
   itemCard: {
-    width: '48%',
+    width: 150,
     borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
