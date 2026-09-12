@@ -78,32 +78,27 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
 
     refreshConversations();
 
-    // Realtime subscription for conversation updates
-    // Customers strictly listen to their own conversation row; staff listen to all conversations.
-    const channelConfig = isStaff
-      ? {
-          event: '*' as const,
-          schema: 'public',
-          table: 'conversations',
-        }
-      : {
-          event: '*' as const,
+    // Realtime subscription for conversation updates, scoped strictly to the current user's conversation
+    const subscription = supabase
+      .channel(`user-conversations:${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
           schema: 'public',
           table: 'conversations',
           filter: `customer_id=eq.${session.user.id}`,
-        };
-
-    const subscription = supabase
-      .channel(`user-conversations:${session.user.id}`)
-      .on('postgres_changes', channelConfig, () => {
-        refreshConversations();
-      })
+        },
+        () => {
+          refreshConversations();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(subscription);
     };
-  }, [session?.user.id, isStaff, refreshConversations]);
+  }, [session?.user.id, refreshConversations]);
 
   const sendMessage = useCallback(async (
     conversationId: string,
@@ -169,7 +164,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     if (!session?.user.id) return null;
 
-    const res = await chatService.toggleReaction(messageId, emoji, session.user.id);
+    const res = await chatService.toggleReaction(messageId, emoji);
     if (!res.ok) return null;
     return res.data;
   }, [session?.user.id]);
