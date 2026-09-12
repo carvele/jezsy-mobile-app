@@ -80,7 +80,7 @@ function hexToHsl(hex: string): Hsl | null {
   return { h: h * 360, s, l };
 }
 
-function resolve(input: string): ResolvedColor {
+export function resolve(input: string): ResolvedColor {
   const name = input.trim();
   const key = name.toLowerCase();
   const hex = key.startsWith('#') ? key : NAMED_HEX[key];
@@ -124,6 +124,27 @@ const HARMONY_NOTE: Record<Harmony, string> = {
   triadic: 'These hues are evenly spaced on the colour wheel -- lively, but still balanced.',
   discordant: 'These hues are close enough to compete but too far apart to read as intentional. A neutral between them settles it.',
 };
+
+export type Undertone = 'warm' | 'cool' | 'neutral' | 'unknown';
+
+/**
+ * Heuristic affinity between a colour and a skin undertone, via hue position
+ * on the wheel: -1 (fights the undertone), 0 (neutral/metallic/unresolvable,
+ * suits any undertone), or +1 (flatters it). Not colorimetric fact -- a
+ * reasonable starting rule until real user-tested affinity data exists, in
+ * the same spirit as this app's other named placeholder constants (see
+ * STATURE_CORRECTION in poseDetector.ts, LENGTH_TYPICAL_HIP_DROP_CM in
+ * sizeRecommender.ts).
+ */
+export function undertoneAffinity(colorNameOrHex: string, undertone: Undertone): -1 | 0 | 1 {
+  if (undertone === 'unknown') return 0;
+  const resolved = resolve(colorNameOrHex);
+  if (!resolved.hsl || resolved.isNeutral || resolved.isMetallic) return 0;
+  const isWarmHue = resolved.hsl.h < 90 || resolved.hsl.h >= 330; // reds, oranges, yellows
+  if (undertone === 'neutral') return 0;
+  if (undertone === 'warm') return isWarmHue ? 1 : -1;
+  return isWarmHue ? -1 : 1; // undertone === 'cool'
+}
 
 /**
  * Scores a set of colours. Accepts palette names (case-insensitive) or raw
