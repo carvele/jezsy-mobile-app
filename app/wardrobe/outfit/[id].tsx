@@ -181,7 +181,7 @@ export default function OutfitDetailScreen() {
 
     return (
       <ScrollView
-        style={{ width: windowWidth }}
+        style={{ width: windowWidth, flex: 1 }}
         contentContainerStyle={[styles.content, { alignItems: 'center' }]}
         showsVerticalScrollIndicator={false}
       >
@@ -384,6 +384,7 @@ export default function OutfitDetailScreen() {
 
       <FlatList
         ref={flatListRef}
+        style={{ flex: 1 }}
         data={outfits}
         keyExtractor={(o) => o.id}
         renderItem={renderOutfitPage}
