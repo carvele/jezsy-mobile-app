@@ -37,7 +37,9 @@ import { useMessages } from "@/src/context/MessagesContext";
 import { supabase } from "@/src/lib/supabase";
 import { Database } from "@/src/types/database.types";
 import { CATEGORY_SELECT, getMainCategoryId, getMainCategoryName, WithCategoryEmbed } from "@/src/utils/categoryDisplay";
-import { recommendSize, ProductMeasurements } from "@/src/utils/sizeRecommender";
+import { ProductMeasurements } from "@/src/utils/sizeRecommender";
+import { getStylistRecommendation, StylistRecommendation } from "@/src/services/virtualStylistService";
+import { StylistSummary } from "@/src/components/StylistSummary";
 import { SizeChartModal } from "@/src/components/SizeChartModal";
 import { ImageViewerModal } from "@/src/components/ImageViewerModal";
 import { useToast } from '@/src/context/ToastContext';
@@ -67,6 +69,7 @@ export default function ProductDetailScreen() {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const { user } = useAuth();
   const [recommendedSize, setRecommendedSize] = useState<string | null>(null);
+  const [stylistRecommendation, setStylistRecommendation] = useState<StylistRecommendation | null>(null);
   const [addedToBag, setAddedToBag] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -124,27 +127,15 @@ export default function ProductDetailScreen() {
               setSelectedSize((prev) => prev || data.sizes![0]);
             }
 
-            // Compute size recommendation if user is logged in
+            // Compute size + color recommendations if user is logged in
             if (user?.id && data.measurements) {
-              const [{ data: profile }, { data: metrics }] = await Promise.all([
-                supabase.from("profiles").select("fit_preference").eq("id", user.id).maybeSingle(),
-                supabase.from("user_measurements").select("measurements").eq("user_id", user.id).maybeSingle(),
-              ]);
+              const stylist = await getStylistRecommendation(user.id, id!);
+              setStylistRecommendation(stylist);
 
-              const pref = profile?.fit_preference || "regular";
-
-              if (metrics && metrics.measurements) {
-                const categoryName = (data.category as any)?.name || (data as any).category_id || data.name || "";
-                const rec = recommendSize(
-                  metrics.measurements as any,
-                  data.measurements as any,
-                  pref,
-                  categoryName
-                );
-                if (rec) {
-                  setRecommendedSize(rec);
-                  setSelectedSize((prev) => (!prev || prev === data.sizes?.[0] ? rec : prev));
-                }
+              const rec = stylist.sizeRecommendation?.size;
+              if (rec) {
+                setRecommendedSize(rec);
+                setSelectedSize((prev) => (!prev || prev === data.sizes?.[0] ? rec : prev));
               }
             }
           }
@@ -607,6 +598,8 @@ export default function ProductDetailScreen() {
               </ScrollView>
             </View>
           )}
+
+          <StylistSummary recommendation={stylistRecommendation} />
 
           {/* Quantity */}
           {canPurchase && (
