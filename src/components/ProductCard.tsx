@@ -103,7 +103,12 @@ export function ProductCard({
 
           {/* Left column of badges so they never collide with the heart. */}
           <View style={styles.badgeColumn}>
-            {isNew && (
+            {outOfStock && (
+              <View style={[styles.badge, styles.badgeSoldOut]}>
+                <Text style={[styles.badgeText, styles.badgeSoldOutText]}>SOLD OUT</Text>
+              </View>
+            )}
+            {isNew && !outOfStock && (
               <View style={[styles.badge, { backgroundColor: colors.tint }]}>
                 <Text style={[styles.badgeText, { color: colors.onTint }]}>NEW</Text>
               </View>
@@ -131,7 +136,9 @@ export function ProductCard({
             onPress={() => toggleWishlist(product.id)}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={saved ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
+            accessibilityLabel={outOfStock
+              ? `Save ${product.name} — notify me when available`
+              : saved ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
             accessibilityState={{ selected: saved }}
           >
             {/* tint="dark" (not "light"): the blur must darken whatever
@@ -149,15 +156,9 @@ export function ProductCard({
               />
             </BlurView>
           </Pressable>
-
-          {outOfStock && (
-            <View style={styles.soldOutOverlay}>
-              <Text style={styles.soldOutText}>SOLD OUT</Text>
-            </View>
-          )}
         </View>
 
-        <View style={styles.info}>
+        <View style={[styles.info, outOfStock && styles.infoMuted]}>
           <Text style={[styles.category, { color: colors.secondaryText }]} numberOfLines={1}>
             {getCategoryLabel(product, 'COLLECTION').toUpperCase()}
           </Text>
@@ -166,7 +167,7 @@ export function ProductCard({
           </Text>
 
           <View style={styles.priceRow}>
-            <Text style={[styles.price, { color: onSale ? colors.notification : colors.text }]}>
+            <Text style={[styles.price, { color: onSale ? colors.notification : colors.text }, outOfStock && styles.priceMuted]}>
               ₱{Number(price).toLocaleString()}
             </Text>
             {onSale && (
@@ -176,7 +177,7 @@ export function ProductCard({
             )}
           </View>
 
-          {recommendedSize ? (
+          {recommendedSize && !outOfStock ? (
             <View style={styles.fitRow}>
               <IconSymbol name="checkmark.circle.fill" size={11} color={colors.tint} />
               <Text style={[styles.fitText, { color: colors.tint }]} numberOfLines={1}>
@@ -185,7 +186,9 @@ export function ProductCard({
             </View>
           ) : null}
 
-          {showStock && stockLabel ? (
+          {showStock && outOfStock ? (
+            <Text style={styles.notifyText}>Notify me when available</Text>
+          ) : showStock && stockLabel ? (
             <Text style={[styles.stock, { color: stockColor }]}>{stockLabel}</Text>
           ) : null}
         </View>
@@ -207,11 +210,15 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   image: { width: '100%', height: '100%' },
-  imageDimmed: { opacity: 0.45 },
+  // 25% dim — preserves the product photography while signalling unavailability.
+  imageDimmed: { opacity: 0.75 },
   badgeColumn: { position: 'absolute', top: 8, left: 8, gap: Spacing.xs, alignItems: 'flex-start' },
   badge: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: Radius.sm },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   badgeText: { ...Type.caption, fontWeight: '800' },
+  // Neutral grey badge — same badge system as NEW/SALE, just a disabled treatment.
+  badgeSoldOut: { backgroundColor: 'rgba(0,0,0,0.45)' },
+  badgeSoldOutText: { color: '#FFF', letterSpacing: 1 },
   heart: { position: 'absolute', top: 6, right: 6 },
   // Real backdrop blur (expo-blur BlurView), not a flat rgba(0,0,0,0.45)
   // fill: floats over a product photo in every card variant, the one case
@@ -230,33 +237,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  soldOutOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '45%',
-    alignItems: 'center',
-  },
-  soldOutText: {
-      ...Type.caption,
-      fontWeight: '800',
-      letterSpacing: 1.5,
-      color: '#FFF',
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.xs,
-      borderRadius: Radius.sm,
-    overflow: 'hidden',
-  },
   info: { paddingTop: Spacing.sm, paddingHorizontal: Spacing.xs, gap: 3 },
+  // Sold-out info block is slightly muted so it reads as non-actionable.
+  infoMuted: { opacity: 0.7 },
   category: { ...Type.label },
   name: { ...Type.body },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   price: { ...Type.bodyStrong },
+  priceMuted: { opacity: 0.55 },
   priceWas: { ...Type.caption, textDecorationLine: 'line-through' },
   fitRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   fitText: { ...Type.caption, fontWeight: '700' },
   stock: { ...Type.caption, fontWeight: '600' },
+  notifyText: { ...Type.caption, fontWeight: '600', fontStyle: 'italic', color: '#888' },
 });
 
 
