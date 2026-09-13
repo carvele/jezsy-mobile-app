@@ -25,7 +25,7 @@ import { useMessages } from '@/src/context/MessagesContext';
 import { TimeSlotPicker } from '@/src/components/TimeSlotPicker';
 import { useToast } from '@/src/context/ToastContext';
 import * as ImagePicker from 'expo-image-picker';
-import { startReservationPayment } from '@/src/lib/payments';
+import { startReservationPayment, submitReservationBalanceReceipt } from '@/src/lib/payments';
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
 import type { PaymentPurpose } from '@/src/utils/reservationPayment';
@@ -110,6 +110,16 @@ export default function ReservationDetailScreen() {
   const [confirmedSent, setConfirmedSent] = useState(false);
   const [confirmedReceiptReady, setConfirmedReceiptReady] = useState(false);
 
+  // Remaining balance manual receipt state
+  const [showBalanceManualPayment, setShowBalanceManualPayment] = useState(false);
+  const [balanceManualMethod, setBalanceManualMethod] = useState<ManualMethod | null>(null);
+  const [balanceManualAmount, setBalanceManualAmount] = useState('');
+  const [balanceManualReference, setBalanceManualReference] = useState('');
+  const [balanceConfirmedSent, setBalanceConfirmedSent] = useState(false);
+  const [balanceConfirmedReceiptReady, setBalanceConfirmedReceiptReady] = useState(false);
+  const [uploadingBalanceReceipt, setUploadingBalanceReceipt] = useState(false);
+  const [balanceReceiptUri, setBalanceReceiptUri] = useState<string | null>(null);
+
   const fetchPaymentInstructions = useCallback(async () => {
     const { data, error } = await supabase
       .from('settings')
@@ -173,6 +183,27 @@ export default function ReservationDetailScreen() {
         cancelled = true;
       };
     }, [receiptPath])
+  );
+
+  const balanceReceiptPath = reservation?.balance_receipt_url;
+  useFocusEffect(
+    useCallback(() => {
+      if (!balanceReceiptPath) {
+        setBalanceReceiptUri(null);
+        setBalanceReceiptLoadFailed(false);
+        return;
+      }
+
+      let cancelled = false;
+      resolveSignedStorageUrl('payment_receipts', balanceReceiptPath).then((url) => {
+        if (cancelled) return;
+        setBalanceReceiptUri(url);
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [balanceReceiptPath])
   );
 
   useFocusEffect(
@@ -341,6 +372,70 @@ export default function ReservationDetailScreen() {
     }
   };
 
+  const openBalanceManualPayment = () => {
+    if (!paymentInstructions?.manual_payment_enabled) return;
+    const onlyMethod: ManualMethod | null =
+      paymentInstructions.gcash_enabled && !paymentInstructions.bank_transfer_enabled
+        ? 'gcash'
+        : paymentInstructions.bank_transfer_enabled && !paymentInstructions.gcash_enabled
+          ? 'bank_transfer'
+          : null;
+    const rawBal = (reservation?.rental_price || 0) - (reservation?.deposit || 0);
+    setBalanceManualMethod(onlyMethod);
+    setBalanceManualAmount(rawBal > 0 ? rawBal.toFixed(2) : '');
+    setBalanceManualReference('');
+    setBalanceConfirmedSent(false);
+    setBalanceConfirmedReceiptReady(false);
+    setShowBalanceManualPayment(true);
+  };
+
+  const balanceManualAmountValue = Number(balanceManualAmount);
+  const canSubmitBalanceManualPayment =
+    !!balanceManualMethod &&
+    Number.isFinite(balanceManualAmountValue) &&
+    balanceManualAmountValue > 0 &&
+    balanceManualReference.trim().length > 0 &&
+    balanceConfirmedSent &&
+    balanceConfirmedReceiptReady;
+
+  const handleUploadBalanceReceipt = async () => {
+    const userId = session?.user?.id;
+    if (!id || !userId || !canSubmitBalanceManualPayment || !balanceManualMethod) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.length) return;
+
+    const asset = result.assets[0];
+    if (!asset.base64) {
+      showToast('Could not read that image. Please pick another.', 'error');
+      return;
+    }
+
+    setUploadingBalanceReceipt(true);
+    try {
+      const path = await uploadPaymentReceipt(userId, asset.uri, asset.base64);
+      await submitReservationBalanceReceipt({
+        reservationId: id,
+        receiptPath: path,
+        method: balanceManualMethod,
+        amountClaimed: balanceManualAmountValue,
+        referenceNumber: balanceManualReference.trim(),
+      });
+      setShowBalanceManualPayment(false);
+      await fetchReservation();
+      showToast('Balance receipt sent. We will confirm once it has been checked.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Could not send the balance receipt.', 'error');
+    } finally {
+      setUploadingBalanceReceipt(false);
+    }
+  };
+
   const getStatusColor = (status: string | null) => {
     switch (statusBucket(status)) {
       case 'toPay': return colors.notification;
@@ -380,7 +475,10 @@ export default function ReservationDetailScreen() {
   // forever, even for a Completed reservation staff had already been paid
   // for in person.
   const rawBalanceDue = (reservation.rental_price || 0) - (reservation.deposit || 0);
-  const isBalanceSettled = Boolean(reservation.balance_settled_at);
+  const balanceStatus = (reservation.balance_payment_status || '').toLowerCase();
+  const isBalanceUnderReview = balanceStatus === 'submitted';
+  const isBalanceRejected = balanceStatus === 'rejected';
+  const isBalanceSettled = Boolean(reservation.balance_settled_at) || balanceStatus === 'paid';
   const balanceDue = isBalanceSettled ? 0 : rawBalanceDue;
   // Matches the dashboard's CAN_RESCHEDULE_STATUSES. The old list stopped at
   // 'confirmed', so a customer whose item was already waiting for collection
@@ -403,12 +501,20 @@ export default function ReservationDetailScreen() {
   const canUpgradeToFullPayment = initialPaymentPurpose === 'initial_deposit' && rawBalanceDue > 0;
   const canPayRemainingBalance =
     paymentState === 'paid' &&
+    !isBalanceSettled &&
+    !isBalanceUnderReview &&
     balanceDue > 0 &&
     reservationState !== 'cancelled' &&
     reservationState !== 'completed';
-  const paymentDisplayStatus = paymentState === 'paid'
-    ? (balanceDue > 0 ? 'Reservation payment received' : 'Paid in full')
-    : reservation.payment_status || 'Pending';
+  const paymentDisplayStatus = isBalanceSettled
+    ? 'Paid in full'
+    : paymentState === 'paid'
+      ? (isBalanceUnderReview
+          ? 'Deposit verified · Balance proof under review'
+          : isBalanceRejected
+            ? 'Deposit verified · Balance proof needs attention'
+            : (balanceDue > 0 ? 'Reservation payment received' : 'Paid in full'))
+      : reservation.payment_status || 'Pending';
 
   // Falls back to the reservation's own denormalised product columns if the
   // lines could not be read, so the screen still shows the item rather than
@@ -866,6 +972,91 @@ export default function ReservationDetailScreen() {
           </View>
         )}
 
+        {/* Remaining Balance Domain */}
+        {isBalanceUnderReview && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              <IconSymbol name="clock.arrow.circlepath" size={18} color={colors.warning} />
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                Remaining balance proof under review
+              </Text>
+            </View>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
+              Your deposit is confirmed. Staff are checking your balance payment proof for ₱{rawBalanceDue.toFixed(2)}.
+            </Text>
+            {(reservation.balance_payment_method || reservation.balance_reference_number || reservation.balance_amount_claimed) && (
+              <View style={[styles.pendingRequest, { borderColor: colors.border, marginBottom: Spacing.md }]}>
+                {reservation.balance_amount_claimed != null && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
+                    <Text style={{ color: colors.secondaryText, fontSize: 13 }}>Amount claimed</Text>
+                    <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>
+                      ₱{Number(reservation.balance_amount_claimed).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+                {reservation.balance_payment_method && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 4 }}>
+                    <Text style={{ color: colors.secondaryText, fontSize: 13 }}>Method</Text>
+                    <Text style={{ color: colors.text, fontSize: 13 }}>
+                      {reservation.balance_payment_method === 'gcash' ? 'GCash' : 'Bank Transfer'}
+                    </Text>
+                  </View>
+                )}
+                {reservation.balance_reference_number && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 4 }}>
+                    <Text style={{ color: colors.secondaryText, fontSize: 13 }}>Reference</Text>
+                    <Text style={{ color: colors.text, fontSize: 13 }} selectable>
+                      {reservation.balance_reference_number}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+            {balanceReceiptUri && (
+              <Image source={{ uri: balanceReceiptUri }} style={styles.receiptImage} contentFit="contain" />
+            )}
+          </View>
+        )}
+
+        {isBalanceRejected && !showBalanceManualPayment && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.error }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              <IconSymbol name="exclamationmark.circle" size={18} color={colors.error} />
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                Balance proof needs attention
+              </Text>
+            </View>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
+              {reservation.balance_payment_issue === 'image_unclear'
+                ? 'The receipt image could not be verified. Please ensure the full receipt is clear and legible.'
+                : reservation.balance_payment_issue === 'amount_mismatch'
+                  ? `The amount shown does not match your remaining balance of ₱${balanceDue.toFixed(2)}.`
+                  : reservation.balance_payment_issue === 'reference_unverified'
+                    ? 'The payment reference could not be verified.'
+                    : "We couldn't verify your balance payment proof. You can upload a new receipt or pay at the boutique."}
+            </Text>
+            <TouchableOpacity
+              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy ? 0.6 : 1, marginBottom: Spacing.sm }]}
+              onPress={() => handlePayNow('remaining_balance')}
+              disabled={payBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Pay remaining balance with GCash"
+            >
+              {payBusy ? <ActivityIndicator color={colors.onTint} /> : <Text style={[styles.payPrimaryText, { color: colors.onTint }]}>Pay balance with GCash</Text>}
+            </TouchableOpacity>
+            {paymentInstructions?.manual_payment_enabled && (
+              <TouchableOpacity
+                style={[styles.paySecondary, { borderColor: colors.tint }]}
+                onPress={openBalanceManualPayment}
+                accessibilityRole="button"
+                accessibilityLabel="Upload another balance receipt"
+              >
+                <Text style={[styles.paySecondaryText, { color: colors.tint }]}>Upload another receipt</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {canPayRemainingBalance && (
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.tint }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Remaining balance</Text>
@@ -873,12 +1064,12 @@ export default function ReservationDetailScreen() {
               Pay ₱{balanceDue.toFixed(2)} now, or settle it with the boutique before collecting your item.
             </Text>
             <TouchableOpacity
-              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy ? 0.6 : 1 }]}
+              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy || uploadingBalanceReceipt ? 0.6 : 1 }]}
               onPress={() => handlePayNow('remaining_balance')}
-              disabled={payBusy}
+              disabled={payBusy || uploadingBalanceReceipt}
               accessibilityRole="button"
               accessibilityLabel="Pay remaining balance with GCash"
-              accessibilityState={{ disabled: payBusy }}
+              accessibilityState={{ disabled: payBusy || uploadingBalanceReceipt }}
             >
               {payBusy ? (
                 <ActivityIndicator color={colors.onTint} />
@@ -886,6 +1077,157 @@ export default function ReservationDetailScreen() {
                 <Text style={[styles.payPrimaryText, { color: colors.onTint }]}>Pay balance with GCash</Text>
               )}
             </TouchableOpacity>
+
+            {paymentInstructions?.manual_payment_enabled && !showBalanceManualPayment && (
+              <TouchableOpacity
+                style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingBalanceReceipt ? 0.6 : 1 }]}
+                onPress={openBalanceManualPayment}
+                disabled={payBusy || uploadingBalanceReceipt}
+                accessibilityRole="button"
+                accessibilityLabel="Pay remaining balance by manual transfer"
+                accessibilityHint="Shows where to send remaining balance, then lets you upload a receipt for staff to check"
+                accessibilityState={{ disabled: payBusy || uploadingBalanceReceipt }}
+              >
+                <Text style={[styles.paySecondaryText, { color: colors.text }]}>
+                  I&apos;ll pay balance by transfer
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {showBalanceManualPayment && (
+              <View style={styles.manualPaymentPanel}>
+                {paymentInstructions?.gcash_enabled && (
+                  <TouchableOpacity
+                    style={[
+                      styles.methodChip,
+                      { borderColor: balanceManualMethod === 'gcash' ? colors.tint : colors.border },
+                      balanceManualMethod === 'gcash' && { backgroundColor: colors.tint + '15' },
+                    ]}
+                    onPress={() => setBalanceManualMethod('gcash')}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: balanceManualMethod === 'gcash' }}
+                    accessibilityLabel="Pay via GCash"
+                  >
+                    <Text style={[styles.methodChipLabel, { color: colors.text }]}>GCash</Text>
+                    <Text style={[styles.rowText, { color: colors.secondaryText }]} selectable>
+                      {paymentInstructions.gcash_account_name} · {paymentInstructions.gcash_number}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {paymentInstructions?.bank_transfer_enabled && (
+                  <TouchableOpacity
+                    style={[
+                      styles.methodChip,
+                      { borderColor: balanceManualMethod === 'bank_transfer' ? colors.tint : colors.border },
+                      balanceManualMethod === 'bank_transfer' && { backgroundColor: colors.tint + '15' },
+                    ]}
+                    onPress={() => setBalanceManualMethod('bank_transfer')}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: balanceManualMethod === 'bank_transfer' }}
+                    accessibilityLabel="Pay via bank transfer"
+                  >
+                    <Text style={[styles.methodChipLabel, { color: colors.text }]}>Bank Transfer</Text>
+                    <Text style={[styles.rowText, { color: colors.secondaryText }]} selectable>
+                      {paymentInstructions.bank_name} · {paymentInstructions.bank_account_name} · {paymentInstructions.bank_account_number}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {paymentInstructions?.manual_payment_instructions ? (
+                  <Text style={[styles.rowText, { color: colors.secondaryText, marginTop: Spacing.sm }]}>
+                    {paymentInstructions.manual_payment_instructions}
+                  </Text>
+                ) : null}
+
+                <Text style={[styles.rescheduleLabel, { color: colors.secondaryText, marginTop: Spacing.lg }]}>
+                  Amount sent (₱)
+                </Text>
+                <TextInput
+                  style={[styles.textInput, { color: colors.text, borderColor: colors.border }]}
+                  keyboardType="decimal-pad"
+                  value={balanceManualAmount}
+                  onChangeText={setBalanceManualAmount}
+                  placeholder={`e.g. ${balanceDue.toFixed(2)}`}
+                  placeholderTextColor={colors.secondaryText}
+                  accessibilityLabel="Amount sent"
+                />
+
+                <Text style={[styles.rescheduleLabel, { color: colors.secondaryText, marginTop: Spacing.md }]}>
+                  Reference number
+                </Text>
+                <TextInput
+                  style={[styles.textInput, { color: colors.text, borderColor: colors.border }]}
+                  value={balanceManualReference}
+                  onChangeText={setBalanceManualReference}
+                  placeholder="e.g. 1002 9847 1234"
+                  placeholderTextColor={colors.secondaryText}
+                  accessibilityLabel="Payment reference number"
+                />
+
+                <TouchableOpacity
+                  style={styles.checklistRow}
+                  onPress={() => setBalanceConfirmedSent((v) => !v)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: balanceConfirmedSent }}
+                  accessibilityLabel="I sent payment to the account shown above"
+                >
+                  <IconSymbol
+                    name={balanceConfirmedSent ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                    size={20}
+                    color={balanceConfirmedSent ? colors.tint : colors.secondaryText}
+                  />
+                  <Text style={[styles.rowText, { color: colors.text, flex: 1 }]}>
+                    I sent balance payment to the account shown above
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.checklistRow}
+                  onPress={() => setBalanceConfirmedReceiptReady((v) => !v)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: balanceConfirmedReceiptReady }}
+                  accessibilityLabel="I have a receipt or screenshot ready"
+                >
+                  <IconSymbol
+                    name={balanceConfirmedReceiptReady ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                    size={20}
+                    color={balanceConfirmedReceiptReady ? colors.tint : colors.secondaryText}
+                  />
+                  <Text style={[styles.rowText, { color: colors.text, flex: 1 }]}>
+                    I have a receipt or screenshot ready
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={styles.rescheduleActions}>
+                  <TouchableOpacity
+                    style={[styles.rescheduleCancel, { borderColor: colors.border }]}
+                    onPress={() => setShowBalanceManualPayment(false)}
+                    disabled={uploadingBalanceReceipt}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel balance manual payment"
+                  >
+                    <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.rescheduleConfirm,
+                      { backgroundColor: !canSubmitBalanceManualPayment || uploadingBalanceReceipt ? colors.border : colors.tint },
+                    ]}
+                    onPress={handleUploadBalanceReceipt}
+                    disabled={!canSubmitBalanceManualPayment || uploadingBalanceReceipt}
+                    accessibilityRole="button"
+                    accessibilityLabel="Upload balance receipt"
+                    accessibilityState={{ disabled: !canSubmitBalanceManualPayment || uploadingBalanceReceipt }}
+                  >
+                    {uploadingBalanceReceipt ? (
+                      <ActivityIndicator color={colors.background} />
+                    ) : (
+                      <Text style={{ fontWeight: '700' }}>Upload Balance Receipt</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         )}
 
