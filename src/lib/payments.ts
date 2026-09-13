@@ -55,7 +55,20 @@ export async function startReservationPayment(
     body: { reservation_id: reservationId, purpose, platform: Platform.OS },
   });
 
-  if (error) throw new Error(error.message || 'Could not start the payment.');
+  if (error) {
+    let message = error.message;
+    try {
+      if ('context' in error && error.context && typeof error.context.json === 'function') {
+        const errorBody = await error.context.json();
+        if (errorBody?.error && typeof errorBody.error === 'string') {
+          message = errorBody.error;
+        }
+      }
+    } catch {
+      // Keep original error message if context body cannot be read
+    }
+    throw new Error(message || 'Could not start the payment.');
+  }
   if (!data?.checkout_url || !data?.payment_id) {
     throw new Error(data?.error || 'Could not start the payment.');
   }
