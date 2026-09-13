@@ -1,0 +1,924 @@
+-- ============================================================================
+-- Migration: split the reservation/payment RBAC boundary into an operational
+-- tier (staff, admin, owner) and a privileged tier (admin, owner only).
+--
+-- is_admin_or_owner() previously gated every reservation/payment RPC
+-- uniformly, which meant an ordinary `staff` account could not Start
+-- preparing, verify/reject a manual receipt, hand over a pickup, look up a
+-- duplicate payment reference, book on a customer's behalf, or resolve a
+-- reschedule -- all routine day-to-day boutique fulfillment work, not
+-- privileged management actions.
+--
+-- Adds public.can_operate_reservations() (staff, admin, owner) and switches
+-- the operational RPCs to it. Device management (admin_manage_device,
+-- admin_prune_devices) and suspected-fraud cancellation stay on
+-- is_admin_or_owner() -- fraud-cancel gets its own explicit check since it
+-- previously had none of its own, inheriting cancel_reservation_as_manager's
+-- guard by delegation; without adding it here, loosening the manager-cancel
+-- guard below would have implicitly let staff cancel for fraud too.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.can_operate_reservations()
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  user_role text;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN false;
+  END IF;
+
+  SELECT role INTO user_role
+  FROM public.profiles
+  WHERE id = auth.uid()
+    AND deleted = false
+    AND is_blocked = false
+    AND coalesce(employment_status, 'active') = 'active';
+
+  RETURN coalesce(user_role IN ('staff', 'admin', 'owner'), false);
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.can_operate_reservations() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.can_operate_reservations() TO authenticated;
+
+-- --- Operational: Start preparing / Mark ready -----------------------------
+CREATE OR REPLACE FUNCTION public.transition_reservation_status(_reservation_id uuid, _expected_status text, _next_status text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+  v_old text;
+  v_next text;
+  v_stored_next text;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+
+  v_old := lower(trim(coalesce(v_res.status, '')));
+  v_next := lower(trim(coalesce(_next_status, '')));
+  IF v_old <> lower(trim(coalesce(_expected_status, ''))) THEN
+    RAISE EXCEPTION 'Reservation changed since it was loaded. Refresh and try again.'
+      USING ERRCODE = 'serialization_failure';
+  END IF;
+  IF v_old IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be changed.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_old IN ('pending', 'request approval') AND v_next IN ('to pay', 'confirmed') THEN
+    v_stored_next := 'To Pay';
+  ELSIF v_old IN ('to pay', 'confirmed', 'approved') AND v_next = 'preparing' THEN
+    IF lower(coalesce(v_res.payment_status, '')) <> 'paid' THEN
+      RAISE EXCEPTION 'Payment must be confirmed before preparation starts.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    v_stored_next := 'Preparing';
+  ELSIF v_old = 'preparing' AND v_next IN ('ready', 'to pickup') THEN
+    v_stored_next := 'Ready';
+  ELSE
+    RAISE EXCEPTION 'Unsupported reservation transition from % to %.', v_res.status, _next_status
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  UPDATE public.reservations
+  SET status = v_stored_next,
+      confirmed_by_id = CASE
+        WHEN v_stored_next = 'To Pay' THEN v_actor ELSE confirmed_by_id
+      END,
+      confirmed_by_name = CASE
+        WHEN v_stored_next = 'To Pay' THEN coalesce(v_actor_name, 'Owner') ELSE confirmed_by_name
+      END,
+      confirmed_at = CASE
+        WHEN v_stored_next = 'To Pay' THEN now() ELSE confirmed_at
+      END,
+      assigned_staff_id = CASE
+        WHEN v_stored_next = 'Preparing' THEN v_actor ELSE assigned_staff_id
+      END,
+      countdown = CASE
+        WHEN v_stored_next = 'Preparing' THEN false ELSE countdown
+      END,
+      updated_at = now()
+  WHERE id = _reservation_id
+  RETURNING * INTO v_res;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Changed reservation status',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object('previous_status', _expected_status, 'status', v_res.status)
+  );
+
+  RETURN jsonb_build_object(
+    'reservation_id', v_res.id,
+    'previous_status', _expected_status,
+    'status', v_res.status
+  );
+END;
+$function$;
+
+-- --- Operational: verify/reject a manually-uploaded receipt ----------------
+CREATE OR REPLACE FUNCTION public.review_reservation_receipt(_reservation_id uuid, _approve boolean, _reason_code text DEFAULT NULL::text, _staff_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+  v_amount_centavos bigint;
+  v_purpose text;
+  v_retry_minutes integer;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT _approve AND _reason_code IS NULL THEN
+    RAISE EXCEPTION 'A reason is required to reject a receipt.';
+  END IF;
+  IF _reason_code IS NOT NULL AND _reason_code NOT IN (
+    'unreadable_receipt', 'wrong_amount', 'invalid_reference', 'wrong_account',
+    'duplicate_receipt', 'suspected_fraud', 'other'
+  ) THEN
+    RAISE EXCEPTION 'Unrecognized rejection reason.';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+  IF lower(coalesce(v_res.status, '')) NOT IN ('to pay', 'confirmed', 'approved') THEN
+    RAISE EXCEPTION 'Only a reservation awaiting payment can have its receipt reviewed.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF lower(coalesce(v_res.payment_status, '')) NOT IN ('submitted', 'processing') THEN
+    RAISE EXCEPTION 'This receipt is no longer awaiting review.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  IF _approve THEN
+    v_amount_centavos := round(coalesce(v_res.deposit, 0) * 100)::bigint;
+    v_purpose := CASE
+      WHEN lower(coalesce(v_res.payment_type, '')) = 'full' THEN 'full_payment'
+      ELSE 'initial_deposit'
+    END;
+    IF v_amount_centavos <= 0 THEN
+      RAISE EXCEPTION 'The reservation has no payable amount.' USING ERRCODE = 'check_violation';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.payments p
+      WHERE p.reservation_id = v_res.id
+        AND p.status = 'paid'
+        AND coalesce(p.requires_refund, false) = false
+        AND p.purpose IN ('initial_deposit', 'full_payment')
+    ) THEN
+      RAISE EXCEPTION 'The initial reservation payment is already recorded.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+
+    INSERT INTO public.payments (
+      user_id, reservation_id, provider, provider_ref, amount_centavos,
+      currency, status, method, purpose, attempt_started_at
+    ) VALUES (
+      v_res.customer_id, v_res.id, 'manual', 'receipt:' || v_res.id::text,
+      v_amount_centavos, 'PHP', 'paid', 'transfer', v_purpose, now()
+    );
+
+    UPDATE public.reservations
+    SET payment_status = 'Paid',
+        status = 'Preparing',
+        assigned_staff_id = v_actor,
+        countdown = false,
+        balance_settled_at = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint
+            THEN coalesce(balance_settled_at, now())
+          ELSE balance_settled_at
+        END,
+        balance_settled_by = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint THEN v_actor
+          ELSE balance_settled_by
+        END,
+        balance_settled_by_name = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint
+            THEN coalesce(v_actor_name, 'Owner')
+          ELSE balance_settled_by_name
+        END,
+        balance_settled_method = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint THEN 'transfer'
+          ELSE balance_settled_method
+        END,
+        updated_at = now()
+    WHERE id = _reservation_id
+    RETURNING * INTO v_res;
+  ELSE
+    v_retry_minutes := coalesce(
+      (SELECT (value->>'retry_minutes')::integer FROM public.settings WHERE key = 'reservationPaymentWindow'),
+      60
+    );
+
+    UPDATE public.reservations
+    SET payment_status = 'Pending',
+        receipt_url = NULL,
+        payment_due_at = now() + make_interval(mins => v_retry_minutes),
+        last_receipt_rejection_reason = _reason_code,
+        last_receipt_rejected_at = now(),
+        updated_at = now()
+    WHERE id = _reservation_id
+    RETURNING * INTO v_res;
+  END IF;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    CASE WHEN _approve THEN 'Approved reservation receipt' ELSE 'Rejected reservation receipt' END,
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'approved', _approve,
+      'status', v_res.status,
+      'payment_status', v_res.payment_status,
+      'payment_purpose', CASE WHEN _approve THEN v_purpose ELSE NULL END,
+      'reason_code', CASE WHEN _approve THEN NULL ELSE _reason_code END,
+      'staff_note', CASE WHEN _approve THEN NULL ELSE _staff_note END,
+      'payment_due_at', CASE WHEN _approve THEN NULL ELSE v_res.payment_due_at END
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'reservation_id', v_res.id,
+    'approved', _approve,
+    'status', v_res.status,
+    'payment_status', v_res.payment_status,
+    'payment_due_at', v_res.payment_due_at
+  );
+END;
+$function$;
+
+-- --- Operational: hand over a paid, ready item ------------------------------
+CREATE OR REPLACE FUNCTION public.complete_reservation_handover(_reservation_id uuid, _method text DEFAULT 'cash'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+  v_outstanding numeric;
+  v_previous_status text;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Reservation not found or deleted.'; END IF;
+  IF lower(coalesce(v_res.status, '')) NOT IN ('ready', 'to pickup', 'fitting') THEN
+    RAISE EXCEPTION 'Only an item ready for pickup can be handed over.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF lower(coalesce(v_res.payment_status, '')) <> 'paid' THEN
+    RAISE EXCEPTION 'Payment must be confirmed before handover.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  v_outstanding := coalesce(v_res.rental_price, 0) - coalesce(v_res.deposit, 0);
+  IF v_outstanding > 0 AND v_res.balance_settled_at IS NULL THEN
+    RAISE EXCEPTION 'Record the remaining balance and payment method before handover.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  v_previous_status := v_res.status;
+  UPDATE public.reservations
+  SET status = 'Completed', updated_at = now()
+  WHERE id = _reservation_id
+  RETURNING * INTO v_res;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Completed reservation handover',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'previous_status', v_previous_status,
+      'status', v_res.status,
+      'balance_method', v_res.balance_settled_method
+    )
+  );
+
+  RETURN jsonb_build_object('reservation_id', v_res.id, 'status', v_res.status);
+END;
+$function$;
+
+-- --- Operational: general cancellation (not the fraud path) ----------------
+-- The business-rule guard just below (no money at risk) is unaffected by
+-- role and stays exactly as strict; only who may invoke it at all widens.
+CREATE OR REPLACE FUNCTION public.cancel_reservation_as_manager(_reservation_id uuid, _expected_status text, _reason text DEFAULT 'Cancelled by owner'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+  IF lower(trim(coalesce(v_res.status, ''))) <> lower(trim(coalesce(_expected_status, ''))) THEN
+    RAISE EXCEPTION 'Reservation changed since it was loaded. Refresh and try again.'
+      USING ERRCODE = 'serialization_failure';
+  END IF;
+  IF lower(coalesce(v_res.status, '')) IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be cancelled.' USING ERRCODE = 'check_violation';
+  END IF;
+  IF lower(coalesce(v_res.payment_status, '')) IN ('paid', 'refund required')
+     OR EXISTS (
+       SELECT 1 FROM public.payments p
+       WHERE p.reservation_id = _reservation_id
+         AND p.status IN ('awaiting_payment', 'processing', 'paid')
+     ) THEN
+    RAISE EXCEPTION 'Resolve or refund the payment before cancelling this reservation.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  UPDATE public.reservations
+  SET status = 'Cancelled',
+      countdown = false,
+      cancellation_reason = left(coalesce(nullif(trim(_reason), ''), 'Cancelled by owner'), 500),
+      updated_at = now()
+  WHERE id = _reservation_id
+  RETURNING * INTO v_res;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Cancelled reservation',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object('previous_status', _expected_status, 'reason', v_res.cancellation_reason)
+  );
+
+  RETURN jsonb_build_object('reservation_id', v_res.id, 'status', v_res.status);
+END;
+$function$;
+
+-- --- Privileged: suspected-fraud cancellation stays admin/owner only -------
+-- Previously had no auth check of its own, relying entirely on
+-- cancel_reservation_as_manager's guard by delegation. Now checked explicitly
+-- so loosening that guard above doesn't implicitly hand this to staff.
+CREATE OR REPLACE FUNCTION public.cancel_reservation_for_fraud(_reservation_id uuid, _expected_status text, _reason_code text, _staff_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_res public.reservations%rowtype;
+  v_reason text;
+BEGIN
+  IF NOT public.is_admin_or_owner() THEN
+    RAISE EXCEPTION 'Owner or administrator access required to cancel for suspected fraud.' USING ERRCODE = '42501';
+  END IF;
+  IF _reason_code IS NULL OR _reason_code NOT IN (
+    'unreadable_receipt', 'wrong_amount', 'invalid_reference', 'wrong_account',
+    'duplicate_receipt', 'suspected_fraud', 'other'
+  ) THEN
+    RAISE EXCEPTION 'A recognized reason is required to cancel for suspected fraud.';
+  END IF;
+
+  SELECT * INTO v_res FROM public.reservations WHERE id = _reservation_id AND coalesce(deleted, false) = false;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+  IF lower(coalesce(v_res.payment_status, '')) NOT IN ('submitted', 'processing') THEN
+    RAISE EXCEPTION 'This action is for a receipt currently under review.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  v_reason := 'Suspected fraud (' || _reason_code || ')'
+    || CASE WHEN nullif(trim(coalesce(_staff_note, '')), '') IS NOT NULL THEN ': ' || trim(_staff_note) ELSE '' END;
+
+  RETURN public.cancel_reservation_as_manager(_reservation_id, _expected_status, v_reason);
+END;
+$function$;
+
+-- --- Operational: duplicate-reference lookup supporting receipt review -----
+CREATE OR REPLACE FUNCTION public.find_duplicate_payment_reference(_reference_number text, _exclude_reservation_id uuid DEFAULT NULL::uuid)
+ RETURNS TABLE(reservation_id uuid, display_id text, customer_name text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  IF NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT r.id, r.display_id, r.customer_name
+  FROM public.reservations r
+  WHERE coalesce(r.deleted, false) = false
+    AND (_exclude_reservation_id IS NULL OR r.id <> _exclude_reservation_id)
+    AND lower(trim(r.manual_reference_number)) = lower(trim(_reference_number))
+    AND lower(coalesce(r.payment_status, '')) = 'paid';
+END;
+$function$;
+
+-- --- Operational: booking on a customer's behalf (front-desk / walk-in) ----
+CREATE OR REPLACE FUNCTION public.create_reservation_multi(_items jsonb, _date text, _appointment_time text, _receipt_path text DEFAULT NULL::text, _payment_option text DEFAULT 'deposit'::text, _customer_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_user_id uuid;
+  v_profile record;
+  v_product record;
+  v_reservation public.reservations%rowtype;
+  v_display_id text;
+  v_attempt integer := 0;
+  v_appointment timestamptz;
+  v_payment_due_at timestamptz;
+  v_manual_max_minutes integer;
+  v_option text := lower(coalesce(_payment_option, 'deposit'));
+  v_payment_type text;
+  v_item jsonb;
+  v_quantity integer;
+  v_total numeric := 0;
+  v_deposit numeric;
+  v_line_count integer;
+  v_first jsonb;
+  v_items_resolved jsonb := '[]'::jsonb;
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.';
+  END IF;
+  v_user_id := coalesce(_customer_id, v_actor_id);
+  IF _customer_id IS NOT NULL
+     AND _customer_id <> v_actor_id
+     AND NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+  IF v_option NOT IN ('deposit', 'full') THEN
+    RAISE EXCEPTION 'Payment option must be deposit or full.';
+  END IF;
+  IF jsonb_typeof(_items) <> 'array' OR jsonb_array_length(_items) = 0 THEN
+    RAISE EXCEPTION 'A reservation must contain at least one item.';
+  END IF;
+
+  v_line_count := jsonb_array_length(_items);
+  IF v_line_count > 20 THEN
+    RAISE EXCEPTION 'A reservation cannot contain more than 20 items.';
+  END IF;
+
+  FOR v_item IN SELECT value FROM jsonb_array_elements(_items)
+  LOOP
+    IF coalesce((v_item->>'quantity')::integer, 1) < 1 THEN
+      RAISE EXCEPTION 'Quantity must be positive.';
+    END IF;
+    IF nullif(v_item->>'product_id', '') IS NULL THEN
+      RAISE EXCEPTION 'Every reservation item needs a product.';
+    END IF;
+  END LOOP;
+
+  IF _receipt_path IS NOT NULL AND _receipt_path <> ''
+     AND (string_to_array(_receipt_path, '/'))[1] <> v_user_id::text THEN
+    RAISE EXCEPTION 'Receipt does not belong to the current user.';
+  END IF;
+  IF _date IS NULL OR _date = '' OR _appointment_time IS NULL OR _appointment_time = '' THEN
+    RAISE EXCEPTION 'A reservation date and appointment time are required.';
+  END IF;
+
+  v_appointment := (_date::date + _appointment_time::time) AT TIME ZONE 'Asia/Manila';
+
+  v_manual_max_minutes := coalesce(
+    (SELECT (value->>'manual_max_minutes')::integer FROM public.settings WHERE key = 'reservationPaymentWindow'),
+    120
+  );
+  v_payment_due_at := LEAST(v_appointment - interval '30 minutes', now() + make_interval(mins => v_manual_max_minutes));
+  IF v_payment_due_at < now() + interval '90 minutes' THEN
+    v_payment_due_at := LEAST(now() + interval '90 minutes', v_appointment);
+  END IF;
+
+  FOR v_item IN
+    WITH raw AS (
+      SELECT
+        (entry.value->>'product_id')::uuid AS product_id,
+        nullif(trim(entry.value->>'size'), '') AS size,
+        nullif(trim(entry.value->>'color'), '') AS color,
+        coalesce((entry.value->>'quantity')::integer, 1) AS quantity
+      FROM jsonb_array_elements(_items) entry
+    )
+    SELECT jsonb_build_object(
+      'product_id', product_id,
+      'size', size,
+      'color', color,
+      'quantity', sum(quantity)::integer
+    )
+    FROM raw
+    GROUP BY product_id, size, color
+    ORDER BY product_id, size, color
+  LOOP
+    v_quantity := (v_item->>'quantity')::integer;
+
+    SELECT p.id, p.name, p.image_url,
+      CASE
+        WHEN coalesce(p.on_sale, false) AND p.sale_price IS NOT NULL AND p.sale_price > 0
+          THEN p.sale_price
+        ELSE coalesce(p.price, 0)
+      END::numeric AS price
+    INTO v_product
+    FROM public.products p
+    WHERE p.id = (v_item->>'product_id')::uuid
+      AND p.visibility = 'public'
+      AND coalesce(p.deleted, false) = false
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'One of the selected products is unavailable.';
+    END IF;
+    IF v_product.price <= 0 THEN
+      RAISE EXCEPTION 'One of the selected products has an invalid price.';
+    END IF;
+
+    v_total := v_total + (v_product.price * v_quantity);
+    v_items_resolved := v_items_resolved || jsonb_build_object(
+      'product_id', v_product.id,
+      'product_name', v_product.name,
+      'image_url', v_product.image_url,
+      'size', v_item->>'size',
+      'color', v_item->>'color',
+      'quantity', v_quantity,
+      'unit_price', v_product.price
+    );
+  END LOOP;
+
+  IF v_option = 'full' THEN
+    v_deposit := round(v_total, 2);
+    v_payment_type := 'Full';
+  ELSE
+    v_deposit := round(v_total * 0.5, 2);
+    v_payment_type := 'Deposit';
+  END IF;
+
+  SELECT p.first_name, p.last_name
+  INTO v_profile
+  FROM public.profiles p
+  WHERE p.id = v_user_id
+    AND p.role = 'customer'
+    AND coalesce(p.deleted, false) = false
+    AND coalesce(p.is_blocked, false) = false;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Customer account is unavailable.';
+  END IF;
+
+  LOOP
+    v_attempt := v_attempt + 1;
+    v_display_id := 'RES-' || upper(to_hex(floor(extract(epoch from clock_timestamp()) * 1000)::bigint))
+      || '-' || lpad(floor(random() * 1000)::text, 3, '0');
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM public.reservations r WHERE r.display_id = v_display_id);
+    IF v_attempt > 10 THEN
+      RAISE EXCEPTION 'Could not allocate reservation number.';
+    END IF;
+  END LOOP;
+
+  v_first := v_items_resolved -> 0;
+
+  INSERT INTO public.reservations (
+    display_id, customer_id, customer_name, product_id, product_name,
+    image_url, size, color, quantity, rental_price, deposit,
+    date, return_date, appointment_time, receipt_url, status,
+    payment_status, payment_type, payment_due_at,
+    purchase_mode, sales_channel
+  ) VALUES (
+    v_display_id,
+    v_user_id,
+    coalesce(nullif(trim(concat_ws(' ', v_profile.first_name, v_profile.last_name)), ''), 'Customer'),
+    (v_first->>'product_id')::uuid,
+    v_first->>'product_name',
+    v_first->>'image_url',
+    v_first->>'size',
+    v_first->>'color',
+    (v_first->>'quantity')::integer,
+    round(v_total, 2),
+    v_deposit,
+    _date::date,
+    NULL,
+    v_appointment,
+    nullif(_receipt_path, ''),
+    'To Pay',
+    'Pending',
+    v_payment_type,
+    v_payment_due_at,
+    'reservation', 'mobile'
+  ) RETURNING * INTO v_reservation;
+
+  INSERT INTO public.reservation_items (
+    reservation_id, product_id, product_name, image_url,
+    size, color, quantity, unit_price
+  )
+  SELECT
+    v_reservation.id,
+    (line->>'product_id')::uuid,
+    line->>'product_name',
+    line->>'image_url',
+    line->>'size',
+    line->>'color',
+    (line->>'quantity')::integer,
+    (line->>'unit_price')::numeric
+  FROM jsonb_array_elements(v_items_resolved) line;
+
+  RETURN to_jsonb(v_reservation) || jsonb_build_object('items', v_items_resolved);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.create_reservation_multi_idempotent(_idempotency_key uuid, _items jsonb, _date text, _appointment_time text, _receipt_path text DEFAULT NULL::text, _payment_option text DEFAULT 'deposit'::text, _customer_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_user_id uuid;
+  v_existing public.reservations%rowtype;
+  v_result jsonb;
+  v_items jsonb;
+  v_appointment timestamptz;
+  v_payment_type text := CASE lower(coalesce(_payment_option, 'deposit'))
+    WHEN 'full' THEN 'Full'
+    ELSE 'Deposit'
+  END;
+  v_payload_mismatch boolean;
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.';
+  END IF;
+  IF _idempotency_key IS NULL THEN
+    RAISE EXCEPTION 'An idempotency key is required.';
+  END IF;
+  IF lower(coalesce(_payment_option, 'deposit')) NOT IN ('deposit', 'full') THEN
+    RAISE EXCEPTION 'Payment option must be deposit or full.';
+  END IF;
+  IF jsonb_typeof(_items) <> 'array' OR jsonb_array_length(_items) = 0 THEN
+    RAISE EXCEPTION 'A reservation must contain at least one item.';
+  END IF;
+
+  v_user_id := coalesce(_customer_id, v_actor_id);
+  IF _customer_id IS NOT NULL
+     AND _customer_id <> v_actor_id
+     AND NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(_idempotency_key::text, 0)
+  );
+
+  SELECT * INTO v_existing
+  FROM public.reservations
+  WHERE idempotency_key = _idempotency_key;
+
+  IF FOUND THEN
+    v_appointment := (_date::date + _appointment_time::time) AT TIME ZONE 'Asia/Manila';
+
+    WITH requested AS (
+      SELECT
+        (entry.value->>'product_id')::uuid AS product_id,
+        nullif(trim(entry.value->>'size'), '') AS size,
+        nullif(trim(entry.value->>'color'), '') AS color,
+        sum(coalesce((entry.value->>'quantity')::integer, 1))::integer AS quantity
+      FROM jsonb_array_elements(_items) entry
+      GROUP BY 1, 2, 3
+    ), existing AS (
+      SELECT
+        ri.product_id,
+        nullif(trim(ri.size), '') AS size,
+        nullif(trim(ri.color), '') AS color,
+        sum(ri.quantity)::integer AS quantity
+      FROM public.reservation_items ri
+      WHERE ri.reservation_id = v_existing.id
+      GROUP BY 1, 2, 3
+    ), differences AS (
+      (SELECT * FROM requested EXCEPT SELECT * FROM existing)
+      UNION ALL
+      (SELECT * FROM existing EXCEPT SELECT * FROM requested)
+    )
+    SELECT EXISTS (SELECT 1 FROM differences) INTO v_payload_mismatch;
+
+    IF v_existing.customer_id IS DISTINCT FROM v_user_id
+       OR v_existing.date IS DISTINCT FROM _date::date
+       OR v_existing.appointment_time IS DISTINCT FROM v_appointment
+       OR v_existing.payment_type IS DISTINCT FROM v_payment_type
+       OR v_payload_mismatch THEN
+      RAISE EXCEPTION 'Idempotency key reuse with different reservation details.';
+    END IF;
+
+    SELECT coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'product_id', ri.product_id,
+          'product_name', ri.product_name,
+          'image_url', ri.image_url,
+          'size', ri.size,
+          'color', ri.color,
+          'quantity', ri.quantity,
+          'unit_price', ri.unit_price
+        ) ORDER BY ri.product_id, ri.size, ri.color
+      ),
+      '[]'::jsonb
+    ) INTO v_items
+    FROM public.reservation_items ri
+    WHERE ri.reservation_id = v_existing.id;
+
+    RETURN to_jsonb(v_existing) || jsonb_build_object('items', v_items);
+  END IF;
+
+  v_result := public.create_reservation_multi(
+    _items,
+    _date,
+    _appointment_time,
+    _receipt_path,
+    _payment_option,
+    _customer_id
+  );
+
+  UPDATE public.reservations
+  SET idempotency_key = _idempotency_key
+  WHERE id = (v_result->>'id')::uuid
+    AND customer_id = v_user_id
+    AND idempotency_key IS NULL;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Could not attach the reservation idempotency key.';
+  END IF;
+
+  RETURN v_result || jsonb_build_object('idempotency_key', _idempotency_key);
+END;
+$function$;
+
+-- --- Operational: resolve a customer's reschedule request -------------------
+CREATE OR REPLACE FUNCTION public.resolve_reschedule(_reservation_id uuid, _approve boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_res public.reservations%rowtype;
+  v_new_due_at timestamptz;
+  v_manual_max_minutes integer;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.';
+  END IF;
+
+  SELECT * INTO v_res FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Reservation not found or deleted.'; END IF;
+  IF lower(coalesce(v_res.status, '')) IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'Cannot resolve a reschedule request on a % reservation.', v_res.status;
+  END IF;
+  IF v_res.reschedule_requested_at IS NULL THEN
+    RAISE EXCEPTION 'No pending reschedule request for this reservation.';
+  END IF;
+
+  IF _approve THEN
+    PERFORM public.assert_bookable_slot(
+      v_res.reschedule_requested_date,
+      v_res.reschedule_requested_at_time,
+      _reservation_id
+    );
+    v_new_due_at := NULL;
+    IF public.is_awaiting_payment_status(v_res.status)
+       AND lower(coalesce(v_res.payment_status, '')) NOT IN ('paid', 'submitted', 'processing') THEN
+      v_manual_max_minutes := coalesce(
+        (SELECT (value->>'manual_max_minutes')::integer FROM public.settings WHERE key = 'reservationPaymentWindow'),
+        120
+      );
+      v_new_due_at := LEAST(v_res.reschedule_requested_at_time - interval '30 minutes', now() + make_interval(mins => v_manual_max_minutes));
+      IF v_new_due_at < now() + interval '90 minutes' THEN
+        v_new_due_at := LEAST(now() + interval '90 minutes', v_res.reschedule_requested_at_time);
+      END IF;
+    END IF;
+
+    UPDATE public.reservations
+    SET date = v_res.reschedule_requested_date,
+        appointment_time = v_res.reschedule_requested_at_time,
+        payment_due_at = coalesce(v_new_due_at, payment_due_at),
+        reschedule_requested_date = NULL,
+        reschedule_requested_at_time = NULL,
+        reschedule_requested_at = NULL
+    WHERE id = _reservation_id;
+  ELSE
+    UPDATE public.reservations
+    SET reschedule_requested_date = NULL,
+        reschedule_requested_at_time = NULL,
+        reschedule_requested_at = NULL
+    WHERE id = _reservation_id;
+  END IF;
+
+  RETURN jsonb_build_object('reservation_id', _reservation_id, 'approved', _approve);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.resolve_reschedule_as_manager(_reservation_id uuid, _approve boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_result jsonb;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  v_result := public.resolve_reschedule(_reservation_id, _approve);
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    CASE WHEN _approve THEN 'Approved reschedule request' ELSE 'Declined reschedule request' END,
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object('approved', _approve)
+  );
+
+  RETURN v_result;
+END;
+$function$;
