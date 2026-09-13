@@ -5,6 +5,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
+import { normalizeSizes } from '@/src/utils/sizeOrder';
 
 type Product = Database['public']['Tables']['products']['Row'];
 
@@ -49,7 +50,7 @@ export function EditVariantModal({ visible, product, currentSize, currentColor, 
     return () => { cancelled = true; };
   }, [visible, product.id]);
 
-  const sizes = product.sizes || [];
+  const sizes = normalizeSizes(product.sizes || []);
   const colorOptions = product.color
     ? [...new Set(product.color.split(',').map(c => c.trim()).filter(Boolean))]
     : [];

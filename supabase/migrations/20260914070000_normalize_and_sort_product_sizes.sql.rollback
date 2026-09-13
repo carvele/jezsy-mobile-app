@@ -1,0 +1,7 @@
+-- Rollback for 20260914070000_normalize_and_sort_product_sizes.sql
+-- Note: Data sorting and alias cleanup is non-destructive and cannot be restored to arbitrary scrambled ordering without a snapshot.
+-- This rollback cleans up helper functions.
+
+DROP FUNCTION IF EXISTS public.canonicalize_product_sizes(text[]);
+DROP FUNCTION IF EXISTS public.canonicalize_size_rank(text);
+DROP FUNCTION IF EXISTS public.canonicalize_size_token(text);

@@ -233,11 +233,27 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
           .single();
 
         if (createError) {
+          if (createError.code === '23505' && session?.user.id) {
+            const { data: raceConv } = await supabase
+              .from('conversations')
+              .select('*')
+              .eq('customer_id', session.user.id)
+              .maybeSingle();
+            if (raceConv) return raceConv;
+          }
           console.error('Error creating conversation:', createError);
           return null;
         }
         setConversations(prev => [newConv, ...prev]);
         return newConv;
+      }
+      if ((error as { code?: string } | null)?.code === '23505' && session?.user.id) {
+        const { data: raceConv } = await supabase
+          .from('conversations')
+          .select('*')
+          .eq('customer_id', session.user.id)
+          .maybeSingle();
+        if (raceConv) return raceConv;
       }
       console.error('Error getting/creating conversation:', error);
       return null;

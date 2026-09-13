@@ -19,7 +19,7 @@ import { resolveNotificationRoute } from '@/src/utils/notificationRouting';
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 
 export default function InboxScreen() {
-  const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline } = useMessages();
+  const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline, getOrCreateConversation } = useMessages();
   const { user, profile } = useAuth();
   const { unreadNonChatCount, markAsRead: markNotifReadInContext } = useNotifications();
   const router = useRouter();
@@ -35,6 +35,30 @@ export default function InboxScreen() {
   );
 
   const [activeTab, setActiveTab] = useState<'shop' | 'friends' | 'notifications'>('shop');
+  const [startingShopChat, setStartingShopChat] = useState(false);
+
+  const handleStartShopChat = useCallback(async () => {
+    if (isStaff) return;
+    if (!user) {
+      showToast('Please sign in to message boutique staff.', 'info');
+      return;
+    }
+    if (startingShopChat) return;
+    setStartingShopChat(true);
+    try {
+      const conv = await getOrCreateConversation();
+      if (conv) {
+        router.push(`/messages/${conv.id}` as any);
+      } else {
+        showToast('Unable to open support chat right now. Please try again.', 'error');
+      }
+    } catch (err) {
+      console.error('Error starting boutique conversation:', err);
+      showToast('Unable to connect with boutique staff.', 'error');
+    } finally {
+      setStartingShopChat(false);
+    }
+  }, [isStaff, user, startingShopChat, getOrCreateConversation, router, showToast]);
   const [directChats, setDirectChats] = useState<DirectChatSummary[]>([]);
   const [directChatsLoading, setDirectChatsLoading] = useState(true);
   const [directChatsOffset, setDirectChatsOffset] = useState(0);
@@ -318,7 +342,27 @@ export default function InboxScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <Text style={[styles.title, { color: colors.text }]}>Inbox</Text>
+      <View style={styles.headerRow}>
+        <Text style={[styles.title, { color: colors.text }]}>Inbox</Text>
+        {!isStaff && activeTab === 'shop' && (
+          <TouchableOpacity
+            style={[styles.headerSupportButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={handleStartShopChat}
+            disabled={startingShopChat}
+            accessibilityRole="button"
+            accessibilityLabel="Chat with Boutique Staff"
+          >
+            {startingShopChat ? (
+              <ActivityIndicator size="small" color={colors.tint} />
+            ) : (
+              <>
+                <IconSymbol name="bubble.left.and.bubble.right" size={13} color={colors.tint} style={{ marginRight: 6 }} />
+                <Text style={[styles.headerSupportText, { color: colors.tint }]}>Chat with Staff</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
       
 
       {/* Segmented Control */}
@@ -373,11 +417,54 @@ export default function InboxScreen() {
           </View>
         ) : conversations.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <IconSymbol name="envelope.fill" size={48} color={colors.border} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No messages yet</Text>
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-              Message a shop owner from any product page to start a conversation.
-            </Text>
+            {isStaff ? (
+              <>
+                <IconSymbol name="envelope.fill" size={48} color={colors.border} />
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>No customer messages yet</Text>
+                <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                  Customer inquiries and fitting messages will appear here.
+                </Text>
+              </>
+            ) : (
+              <>
+                <View style={[styles.emptyIconBadge, { backgroundColor: colors.tint + '18' }]}>
+                  <IconSymbol name="bubble.left.and.bubble.right" size={32} color={colors.tint} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>Connect with Boutique Staff</Text>
+                <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                  Need help with sizing, fitting, reservations, styling, or your order? Our boutique team is here to assist you.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.primaryEmptyButton, { backgroundColor: colors.tint }]}
+                  onPress={handleStartShopChat}
+                  disabled={startingShopChat}
+                  accessibilityRole="button"
+                  accessibilityLabel="Message Boutique Staff"
+                >
+                  {startingShopChat ? (
+                    <ActivityIndicator size="small" color={colors.onTint} />
+                  ) : (
+                    <>
+                      <IconSymbol name="bubble.left.and.bubble.right" size={16} color={colors.onTint} style={{ marginRight: Spacing.sm }} />
+                      <Text style={[styles.primaryEmptyButtonText, { color: colors.onTint }]}>
+                        Message Boutique Staff
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.secondaryEmptyButton, { borderColor: colors.border }]}
+                  onPress={() => router.push('/explore' as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Browse Collection"
+                >
+                  <IconSymbol name="bag.fill" size={15} color={colors.text} style={{ marginRight: Spacing.sm }} />
+                  <Text style={[styles.secondaryEmptyButtonText, { color: colors.text }]}>
+                    Browse Collection
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         ) : (
           <FlatList
@@ -478,14 +565,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  title: {
-    // 28 was the odd one out: wardrobe and profile both set their page title
-    // from Type.display, so this aligns the three rather than keeping a
-    // fourth size for one screen.
-    ...Type.display,
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginHorizontal: Spacing.xl,
     marginTop: Spacing.sm,
     marginBottom: Spacing.lg,
+  },
+  headerSupportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  headerSupportText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  title: {
+    ...Type.display,
+    marginBottom: 0,
   },
   segmentedControl: {
     flexDirection: 'row',
@@ -624,11 +726,51 @@ const styles = StyleSheet.create({
   emptyTitle: {
     ...Type.title,
     marginTop: Spacing.sm,
+    textAlign: 'center',
   },
   emptyText: {
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
+    marginBottom: Spacing.xs,
+  },
+  emptyIconBadge: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  primaryEmptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 14,
+    borderRadius: Radius.md,
+    width: '100%',
+    maxWidth: 280,
+    marginTop: Spacing.xs,
+  },
+  primaryEmptyButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  secondaryEmptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    width: '100%',
+    maxWidth: 280,
+  },
+  secondaryEmptyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   // Notifications styles
   notificationCard: {

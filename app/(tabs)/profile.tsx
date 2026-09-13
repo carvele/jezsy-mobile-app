@@ -15,10 +15,12 @@ import { useToast } from '@/src/context/ToastContext';
 import { statusBucket } from '@/src/utils/reservationStatus';
 import { getMyUnratedItems } from '@/src/services/reservationService';
 import { SystemTourModal } from '@/src/features/systemTour/SystemTourModal';
+import { useMessages } from '@/src/context/MessagesContext';
 
 export default function ProfileScreen() {
   const { showToast } = useToast();
   const { user, profile, signOut } = useAuth();
+  const { getOrCreateConversation } = useMessages();
   const [showTour, setShowTour] = useState(false);
   const router = useRouter();
   const { wishlistIds } = useWishlist();
@@ -317,6 +319,19 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Support & About</Text>
             <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
+              {profile?.role !== 'staff' && profile?.role !== 'owner' && renderSettingItem(
+                'bubble.left.and.bubble.right',
+                'Message Boutique Support',
+                'Chat directly with our styling and fitting team',
+                async () => {
+                  try {
+                    const conv = await getOrCreateConversation();
+                    if (conv) router.push(`/messages/${conv.id}` as any);
+                  } catch {
+                    showToast('Could not open chat with staff.', 'error');
+                  }
+                },
+              )}
               {renderSettingItem(
                 'sparkles',
                 'App Tour & Feature Guide',

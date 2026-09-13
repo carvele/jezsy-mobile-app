@@ -43,6 +43,7 @@ import { StylistSummary } from "@/src/components/StylistSummary";
 import { SizeChartModal } from "@/src/components/SizeChartModal";
 import { ImageViewerModal } from "@/src/components/ImageViewerModal";
 import { useToast } from '@/src/context/ToastContext';
+import { normalizeSizes } from "@/src/utils/sizeOrder";
 import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 
 type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
@@ -584,7 +585,7 @@ export default function ProductDetailScreen() {
 
               {/* Size Buttons */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
-                {Array.from(new Set(product.sizes)).map((s, index) => {
+                {normalizeSizes(product.sizes).map((s, index) => {
                   const isSelected = selectedSize === s;
                   const isRecommended = recommendedSize === s;
                   const stock = getStockInfo(s, selectedColor || undefined);
