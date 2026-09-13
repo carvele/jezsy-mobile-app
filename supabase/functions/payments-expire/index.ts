@@ -51,7 +51,7 @@ serve(async (req) => {
 
     const { data: attempts, error: attemptsError } = await admin
       .from("payments")
-      .select("id, provider_ref, status")
+      .select("id, provider_ref, status, created_at")
       .eq("reservation_id", reservationId)
       .eq("provider", "paymongo")
       .in("status", ["awaiting_payment", "processing", "failed"]);
@@ -67,7 +67,18 @@ serve(async (req) => {
     for (const attempt of attempts ?? []) {
       if (!attempt.provider_ref) {
         if (["awaiting_payment", "processing"].includes(attempt.status)) {
-          return json(req, { error: "A payment session is still being prepared. Try again shortly." }, 409);
+          const ageMs = Date.now() - new Date(attempt.created_at).getTime();
+          if (ageMs < 120_000) {
+            return json(req, { error: "A payment session is still being prepared. Try again shortly." }, 409);
+          }
+          
+          // If it's been more than 2 minutes without a provider_ref, the session
+          // creation crashed. Fail it locally to unblock staff actions.
+          const { error: closeError } = await admin
+            .from("payments")
+            .update({ status: "failed" })
+            .eq("id", attempt.id);
+          if (closeError) throw closeError;
         }
         continue;
       }
