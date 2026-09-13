@@ -1,0 +1,2 @@
+-- Rollback for 20260914000500_pose_images_storage_policy.sql
+DROP POLICY IF EXISTS "Admin/staff can manage pose images" ON storage.objects;
