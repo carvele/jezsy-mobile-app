@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
@@ -29,6 +29,14 @@ import { startReservationPayment } from '@/src/lib/payments';
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
 import type { PaymentPurpose } from '@/src/utils/reservationPayment';
+
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental &&
+  !(globalThis as Record<string, unknown>).nativeFabricUIManager
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Rounded up so a window of 59 minutes reads "1 hour left" rather than
 // "0 hours left".
@@ -83,6 +91,12 @@ export default function ReservationDetailScreen() {
   const payBusyRef = useRef(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
+  const [isPickupPassExpanded, setIsPickupPassExpanded] = useState(true);
+
+  const togglePickupPass = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsPickupPassExpanded((prev) => !prev);
+  }, []);
 
   // Manual payment: the customer must see where to send money and give
   // staff structured context (method/amount/reference) before a receipt
@@ -238,7 +252,11 @@ export default function ReservationDetailScreen() {
         params: { paymentId, url: checkoutUrl },
       } as any);
     } catch (err: any) {
+      console.warn('[handlePayNow] Payment start failed:', err?.message);
       showToast(err.message || 'Could not start the payment.', 'error');
+      // If payment failed (e.g. 409 conflict, cancelled, expired), refresh
+      // reservation state to reflect latest server status and disable stale actions.
+      await fetchReservation();
     } finally {
       payBusyRef.current = false;
       setPayBusy(false);
@@ -438,20 +456,43 @@ export default function ReservationDetailScreen() {
             and still unpaid, so this was showing a pickup pass to customers who
             owed money and hiding it from the ones who had paid. */}
         {reservationState === 'ready' && (
-          <View style={[styles.pickupCard, { backgroundColor: colors.tint }]}>
-            <View style={styles.pickupHeader}>
-              <IconSymbol name="checkmark.circle.fill" size={18} color={colors.onTint} />
-              <Text style={[styles.pickupTitle, { color: colors.onTint }]}>PICKUP PASS</Text>
-            </View>
-            {reservation.pickup_token && (
-              <View style={styles.pickupQrWrap}>
-                <QRCode value={`jezsy-pickup:${reservation.pickup_token}`} size={140} backgroundColor="#FFFFFF" color="#0D0D0D" />
+          <View style={[styles.pickupCard, { backgroundColor: colors.tint }, !isPickupPassExpanded && styles.pickupCardCollapsed]}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={togglePickupPass}
+              style={[styles.pickupHeader, !isPickupPassExpanded && styles.pickupHeaderCollapsed]}
+              accessibilityRole="button"
+              accessibilityLabel={isPickupPassExpanded ? 'Collapse pickup pass' : 'Expand pickup pass'}
+              accessibilityState={{ expanded: isPickupPassExpanded }}
+            >
+              <View style={styles.pickupHeaderLeft}>
+                <IconSymbol name="checkmark.circle.fill" size={18} color={colors.onTint} />
+                <Text style={[styles.pickupTitle, { color: colors.onTint }]}>PICKUP PASS</Text>
               </View>
+              <View style={styles.pickupHeaderRight}>
+                <Text style={[styles.pickupToggleText, { color: colors.onTint }]}>
+                  {isPickupPassExpanded ? 'Hide' : 'Show'}
+                </Text>
+                <IconSymbol
+                  name={isPickupPassExpanded ? 'chevron.up' : 'chevron.down'}
+                  size={16}
+                  color={colors.onTint}
+                />
+              </View>
+            </TouchableOpacity>
+            {isPickupPassExpanded && (
+              <>
+                {reservation.pickup_token && (
+                  <View style={styles.pickupQrWrap}>
+                    <QRCode value={`jezsy-pickup:${reservation.pickup_token}`} size={140} backgroundColor="#FFFFFF" color="#0D0D0D" />
+                  </View>
+                )}
+                <Text style={[styles.pickupRef, { color: colors.onTint }]}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
+                <Text style={[styles.pickupHint, { color: colors.onTint }]}>
+                  Show this code at the boutique to collect your item. Bring a valid ID and your remaining balance.
+                </Text>
+              </>
             )}
-            <Text style={[styles.pickupRef, { color: colors.onTint }]}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
-            <Text style={[styles.pickupHint, { color: colors.onTint }]}>
-              Show this code at the boutique to collect your item. Bring a valid ID and your remaining balance.
-            </Text>
           </View>
         )}
 
@@ -957,8 +998,30 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
     marginBottom: Spacing.xl,
   },
-  pickupHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md },
+  pickupCardCollapsed: {
+    paddingVertical: Spacing.lg,
+  },
+  pickupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  pickupHeaderCollapsed: {
+    marginBottom: 0,
+  },
+  pickupHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  pickupHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
   pickupTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1 },
+  pickupToggleText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
   pickupQrWrap: { alignSelf: 'center', padding: Spacing.md, borderRadius: Radius.md, backgroundColor: '#FFFFFF', marginBottom: Spacing.lg },
   pickupRef: { fontSize: 28, fontWeight: '900', letterSpacing: 2, marginBottom: Spacing.sm, textAlign: 'center' },
   pickupHint: { fontSize: 12, lineHeight: 17 },
