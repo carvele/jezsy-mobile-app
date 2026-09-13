@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { BlurView } from "expo-blur";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,14 +23,15 @@ import { ConsentModal } from "@/src/components/ConsentModal";
 import { TiltGuide } from "@/src/components/TiltGuide";
 import { PoseLandmarkOverlay } from "@/src/components/PoseLandmarkOverlay";
 import { SilhouetteOverlay } from "@/src/components/SilhouetteOverlay";
+import { BodyAlignmentGuide } from "@/src/components/BodyAlignmentGuide";
+import { useBodyAlignment } from "@/src/hooks/useBodyAlignment";
+import { evaluatePoseOrientation, ALIGNMENT_CONFIG, type RequestedPose } from "@/src/utils/bodyAlignmentEvaluator";
 import { FirstUseHintModal } from "@/src/components/FirstUseHintModal";
 import { useAuth } from "@/src/context/AuthContext";
 import { hasSeenHint, markHintSeen } from "@/src/utils/firstUseHints";
 import { ScanPrep } from "@/src/components/ScanPrep";
 import { PoseLandmarkFilter } from "@/src/utils/oneEuroFilter";
 import {
-  isPoseValid,
-  isSidePoseValid,
   getPoseOrientation,
   getPoseConfidence,
   extractBodyRatios,
@@ -42,6 +43,7 @@ import {
   type Gender,
 } from "@/src/utils/measurementCalculator";
 import { extractBodyExtents, type BodyExtents, type MaskLike } from "@/src/utils/bodyMask";
+import { applyNativePoseCompatibility } from "@/src/utils/nativePoseCompatibility";
 import { BurstCollector } from "@/src/utils/burstAverager";
 import { useToast } from '@/src/context/ToastContext';
 import { createScanSession } from '@/src/utils/scanSession';
@@ -52,6 +54,18 @@ import { createScanSession } from '@/src/utils/scanSession';
 // hardware (same rationale as the original tflite pipeline this replaced).
 const POSE_DELEGATE = Delegate.CPU;
 const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
+
+// Multi-view scan flow phases:
+// pre_scan_intro -> front_positioning -> front_capturing -> turn_to_side -> side_positioning -> side_capturing -> processing -> complete
+export type BodyScanPhase =
+  | "pre_scan_intro"
+  | "front_positioning"
+  | "front_capturing"
+  | "turn_to_side"
+  | "side_positioning"
+  | "side_capturing"
+  | "processing"
+  | "complete";
 
 export default function BodyScanScreen() {
   const { showToast } = useToast();
@@ -121,35 +135,27 @@ export default function BodyScanScreen() {
   // Burst collector persists across frames.
   const burstRef = useRef(new BurstCollector());
 
-  // Two-phase capture: front for widths, side for depths. 'turn' is the pause
-  // between them while the customer rotates.
-  const [phase, setPhase] = useState<"front" | "turn" | "side">("front");
-  const phaseRef = useRef<"front" | "turn" | "side">("front");
+  const [phase, setPhase] = useState<BodyScanPhase>("pre_scan_intro");
+  const phaseRef = useRef<BodyScanPhase>("pre_scan_intro");
   // Extents are collected per frame and reduced at the end, so one frame that
   // clipped a hand or a belt cannot skew the result.
   const frontExtentsRef = useRef<BodyExtents[]>([]);
   const sideExtentsRef = useRef<BodyExtents[]>([]);
-  // Attempt ceiling alongside the timeout: a mask that never appears would
-  // otherwise loop forever, since "no mask this frame" alone was previously
-  // the only way to bail out of the side phase.
   const SIDE_TARGET_SAMPLES = 5;
   const SIDE_CAPTURE_TIMEOUT_MS = 4000;
   const SIDE_MAX_ATTEMPTS = 60;
   const sideAttemptCountRef = useRef(0);
   const sidePhaseStartRef = useRef<number | null>(null);
+  const sideOrientationConfirmedStartRef = useRef<number | null>(null);
+  const lastNudgeTimeRef = useRef<number>(0);
 
-  const setPhaseBoth = useCallback((next: "front" | "turn" | "side") => {
+  const setPhaseBoth = useCallback((next: BodyScanPhase) => {
     phaseRef.current = next;
     setPhase(next);
   }, []);
 
   /**
-   * Single place that clears every piece of per-attempt state: burst
-   * evidence, front/side extents, phase, side timers/attempt counters,
-   * capture state, progress, and the 1-Euro filters. A failed scan that
-   * only reset some of these (as the old finishScan failure branch did --
-   * it never cleared extents, filters, or side timers) let stale state from
-   * the failed attempt bleed into the next one.
+   * Single place that clears every piece of per-attempt state.
    */
   const resetScanSession = useCallback(() => {
     burstRef.current.reset();
@@ -157,36 +163,21 @@ export default function BodyScanScreen() {
     sideExtentsRef.current = [];
     sideAttemptCountRef.current = 0;
     sidePhaseStartRef.current = null;
+    sideOrientationConfirmedStartRef.current = null;
     nativeFilterRef.current?.reset();
     isCapturingRef.current = false;
     setIsCapturing(false);
     setProgress(0);
-    setPhaseBoth("front");
+    setPhaseBoth("front_positioning");
     lastSpokenRef.current = "";
   }, [setPhaseBoth]);
 
   useEffect(() => {
-    // Height calibrates every measurement and is mandatory. Weight is not
-    // consumed by the measurement math (see measurementCalculator.ts) --
-    // it stays part of the broader profile/scan-session record, but a scan
-    // must not block on it.
     if (!height) {
       showToast("Please enter your height first.", 'info');
       router.back();
     }
   }, [height, router, showToast]);
-
-  // Held until prep is finished, so the intro is not spoken over the wizard
-  // (and not spoken at all if the customer backs out during it).
-  useEffect(() => {
-    if (consentGranted && hasPermission && prepDone) {
-      Speech.speak("Please stand about 2 meters from your device, and make sure your whole body is visible.");
-      lastSpokenRef.current = "intro";
-    }
-    return () => {
-      Speech.stop();
-    };
-  }, [consentGranted, hasPermission, prepDone]);
 
   useEffect(() => {
     isTiltValidRef.current = isTiltValid;
@@ -219,14 +210,6 @@ export default function BodyScanScreen() {
       return;
     }
 
-    // Replace the anthropometric-fallback circumferences with dual-view
-    // measured ones, but ONLY when the side pass actually reached its
-    // target sample count -- a side phase that ended via timeout/attempt
-    // ceiling before reaching SIDE_TARGET_SAMPLES must resolve as
-    // single_view_fallback, per the frozen plan, not be quietly upgraded
-    // just because a few partial extents happened to be collected before
-    // it gave up. Linear measurements are untouched: depth does not affect
-    // them, and re-deriving would only discard the burst's outlier rejection.
     const reachedSideTarget = sideExtentsRef.current.length >= SIDE_TARGET_SAMPLES;
     const width = reachedSideTarget ? medianExtents(frontExtentsRef.current) : null;
     const depth = reachedSideTarget ? medianExtents(sideExtentsRef.current) : null;
@@ -262,16 +245,55 @@ export default function BodyScanScreen() {
     });
   }, [router, height, weight, gender, speakIfNew, resetScanSession]);
 
-  // Front burst is done: pause and ask for a quarter turn rather than jumping
-  // straight into capturing, because the pose is guaranteed invalid mid-turn.
   const beginTurn = useCallback(() => {
     isCapturingRef.current = false;
     setIsCapturing(false);
     setProgress(0);
-    setPhaseBoth("turn");
+    setPhaseBoth("turn_to_side");
+    sideOrientationConfirmedStartRef.current = null;
+    lastNudgeTimeRef.current = Date.now();
     lastSpokenRef.current = "";
-    speakIfNew("Now turn to your side, keeping your arms relaxed.");
+    speakIfNew("Great. Now turn sideways. Keep your feet in place and look straight ahead.");
   }, [setPhaseBoth, speakIfNew]);
+
+  const alignmentContext = useMemo(() => ({
+    isMirrored: device?.position === "front",
+    sensorRotation: 0 as const,
+  }), [device?.position]);
+
+  const requestedPose: RequestedPose =
+    phase === "side_positioning" || phase === "side_capturing" ? "side" : "front";
+
+  const { result: alignmentState, processFrame: processAlignmentFrame } = useBodyAlignment({
+    onCaptureReady: () => {
+      if (phaseRef.current === "front_positioning" && !isCapturingRef.current) {
+        setPhaseBoth("front_capturing");
+        isCapturingRef.current = true;
+        setIsCapturing(true);
+        speakIfNew("✓ Perfect — hold still");
+      } else if (phaseRef.current === "side_positioning" && !isCapturingRef.current) {
+        setPhaseBoth("side_capturing");
+        isCapturingRef.current = true;
+        setIsCapturing(true);
+        sideAttemptCountRef.current = 0;
+        sidePhaseStartRef.current = Date.now();
+        speakIfNew("✓ Perfect — hold still");
+      }
+    },
+    context: alignmentContext,
+    requestedPose
+  });
+
+  useEffect(() => {
+    if (
+      (phase === "front_positioning" || phase === "side_positioning") &&
+      !isCapturing &&
+      alignmentState.instruction &&
+      prepDone
+    ) {
+      speakIfNew(alignmentState.instruction);
+    }
+  }, [alignmentState.instruction, phase, isCapturing, prepDone, speakIfNew]);
 
   const lastOverlayUpdateRef = useRef(0);
 
@@ -286,16 +308,12 @@ export default function BodyScanScreen() {
         return;
       }
 
-      // Normalize the library's optional visibility/presence into our
-      // required-visibility Landmark shape; fall back to presence, then 0.
       const rawLandmarks: Landmark[] = pose.map((p) => ({
         x: p.x,
         y: p.y,
         z: p.z,
         visibility: p.visibility ?? p.presence ?? 0,
       }));
-
-      const landmarks = nativeFilterRef.current?.filterLandmarks(rawLandmarks) ?? rawLandmarks;
 
       const rawWorldLandmarks: WorldLandmark[] | undefined = worldPose?.map((p) => ({
         x: p.x,
@@ -304,11 +322,15 @@ export default function BodyScanScreen() {
         visibility: p.visibility ?? p.presence ?? 0,
       }));
 
-      const worldLandmarks = rawWorldLandmarks 
-        ? (nativeFilterRef.current?.filterWorldLandmarks(rawWorldLandmarks) ?? rawWorldLandmarks) 
+      const compat = applyNativePoseCompatibility(rawLandmarks, rawWorldLandmarks);
+      const compatLandmarks = (compat.normalizedLandmarks ?? rawLandmarks) as Landmark[];
+      const compatWorldLandmarks = (compat.worldLandmarks ?? rawWorldLandmarks) as WorldLandmark[] | undefined;
+
+      const landmarks = nativeFilterRef.current?.filterLandmarks(compatLandmarks) ?? compatLandmarks;
+      const worldLandmarks = compatWorldLandmarks 
+        ? (nativeFilterRef.current?.filterWorldLandmarks(compatWorldLandmarks) ?? compatWorldLandmarks) 
         : undefined;
 
-      // Throttle overlay state updates to ~12 FPS (~80ms) to prevent React JS thread lockup
       const now = Date.now();
       if (now - lastOverlayUpdateRef.current > 80) {
         lastOverlayUpdateRef.current = now;
@@ -316,102 +338,96 @@ export default function BodyScanScreen() {
       }
 
       if (!isTiltValidRef.current) {
-        // Keep the tilt guidance loop in charge until the phone is upright.
+        processAlignmentFrame(landmarks, false);
         return;
       }
 
       const mask = result.results[0]?.segmentationMasks?.[0] as MaskLike | undefined;
 
-      // --- Turn phase: wait for the quarter turn, capture nothing ---
-      if (phaseRef.current === "turn") {
-        if (getPoseOrientation(landmarks) === "side" && isSidePoseValid(landmarks)) {
-          setPhaseBoth("side");
-          isCapturingRef.current = true;
-          setIsCapturing(true);
-          sideAttemptCountRef.current = 0;
-          sidePhaseStartRef.current = Date.now();
-          speakIfNew("Hold still.");
+      // 1. Front Positioning
+      if (phaseRef.current === "front_positioning") {
+        processAlignmentFrame(landmarks, true);
+        return;
+      }
+
+      // 2. Front Capturing
+      if (phaseRef.current === "front_capturing") {
+        if (!height) return;
+        const bodyRatios = extractBodyRatios(landmarks);
+        burstRef.current.addSample({
+          bodyRatios,
+          worldLandmarks,
+          orientation: getPoseOrientation(landmarks),
+          poseConfidence: getPoseConfidence(landmarks),
+        });
+        if (mask) {
+          const extents = extractBodyExtents(landmarks, mask);
+          if (extents) frontExtentsRef.current.push(extents);
+        }
+        setProgress(burstRef.current.capturedCount / burstRef.current.targetCount);
+
+        if (burstRef.current.isComplete()) {
+          beginTurn();
         }
         return;
       }
 
-      // --- Side phase: only depth is wanted here ---
-      if (phaseRef.current === "side") {
-        if (!isSidePoseValid(landmarks)) {
-          if (!isCapturingRef.current) speakIfNew("Turn so your side faces the camera.");
-          return;
+      // 3. Turn to Side (Orientation Hysteresis)
+      if (phaseRef.current === "turn_to_side") {
+        const orientation = evaluatePoseOrientation(landmarks);
+        const now = Date.now();
+
+        // Voice reminder after 5s if user hasn't turned
+        if (now - lastNudgeTimeRef.current >= 5000 && orientation.label !== 'side') {
+          speakIfNew("Turn your body sideways.");
+          lastNudgeTimeRef.current = now;
         }
 
-        const extents = mask ? extractBodyExtents(landmarks, mask) : null;
-        if (extents) {
-          sideExtentsRef.current.push(extents);
+        // Must maintain verified side orientation (confidence >= threshold) continuously for sideOrientationDwellMs (400ms)
+        if (orientation.label === 'side' && orientation.confidence >= ALIGNMENT_CONFIG.sideOrientationThreshold) {
+          if (!sideOrientationConfirmedStartRef.current) {
+            sideOrientationConfirmedStartRef.current = now;
+          } else if (now - sideOrientationConfirmedStartRef.current >= ALIGNMENT_CONFIG.sideOrientationDwellMs) {
+            setPhaseBoth("side_positioning");
+            sideOrientationConfirmedStartRef.current = null;
+          }
         } else {
-          // Counts both "mask missing entirely" and "mask present but
-          // extractBodyExtents() returned null" -- either way it's an
-          // attempt that failed to produce a usable extent.
+          sideOrientationConfirmedStartRef.current = null;
+        }
+        return;
+      }
+
+      // 4. Side Positioning
+      if (phaseRef.current === "side_positioning") {
+        processAlignmentFrame(landmarks, true);
+        return;
+      }
+
+      // 5. Side Capturing
+      if (phaseRef.current === "side_capturing") {
+        if (mask) {
+          const extents = extractBodyExtents(landmarks, mask);
+          if (extents) sideExtentsRef.current.push(extents);
+        } else {
           sideAttemptCountRef.current += 1;
         }
-        setProgress(Math.min(1, sideExtentsRef.current.length / SIDE_TARGET_SAMPLES));
 
-        const reachedTarget = sideExtentsRef.current.length >= SIDE_TARGET_SAMPLES;
+        const currentCount = mask ? sideExtentsRef.current.length : sideAttemptCountRef.current;
+        setProgress(Math.min(1, currentCount / SIDE_TARGET_SAMPLES));
+
+        const reachedTarget = currentCount >= SIDE_TARGET_SAMPLES;
         const elapsedMs = sidePhaseStartRef.current ? Date.now() - sidePhaseStartRef.current : 0;
         const timedOut = elapsedMs >= SIDE_CAPTURE_TIMEOUT_MS;
         const ceilingHit = sideAttemptCountRef.current >= SIDE_MAX_ATTEMPTS;
 
-        // Reaching the target completes with dual_view_mask circumferences;
-        // timing out or hitting the attempt ceiling first deliberately
-        // completes on the front pass alone (single_view_fallback) rather
-        // than hanging the scan indefinitely -- finishScan() itself decides
-        // which, based on whether the target was actually reached.
         if (reachedTarget || timedOut || ceilingHit) {
+          setPhaseBoth("processing");
           finishScan();
         }
         return;
       }
-
-      // --- Front phase ---
-      const valid = isPoseValid(landmarks);
-      if (!valid) {
-        if (!isCapturingRef.current) speakIfNew("Make sure your whole body is in frame.");
-        return;
-      }
-
-      // Pose is valid: enter/continue the capture burst.
-      if (!isCapturingRef.current) {
-        isCapturingRef.current = true;
-        setIsCapturing(true);
-        speakIfNew("Hold still, scanning now.");
-      }
-
-      if (!height) return;
-      const bodyRatios = extractBodyRatios(landmarks);
-      // Offer raw evidence to the collector -- it decides acceptance
-      // (front orientation + pose confidence) and defers the measurement
-      // math to a single run over the aggregated, outlier-filtered burst
-      // in finishScan(), rather than recomputing it every frame.
-      burstRef.current.addSample({
-        bodyRatios,
-        worldLandmarks,
-        orientation: getPoseOrientation(landmarks),
-        poseConfidence: getPoseConfidence(landmarks),
-      });
-      if (mask) {
-        const extents = extractBodyExtents(landmarks, mask);
-        if (extents) frontExtentsRef.current.push(extents);
-      }
-      setProgress(burstRef.current.capturedCount / burstRef.current.targetCount);
-
-      if (burstRef.current.isComplete()) {
-        // A depth pass is only worth asking for if the front one produced a
-        // silhouette; with no mask the side view would measure nothing.
-        if (frontExtentsRef.current.length > 0) {
-          beginTurn();
-          return;
-        }
-        finishScan();
-      }
     },
-    [height, speakIfNew, finishScan, beginTurn, setPhaseBoth]
+    [height, speakIfNew, finishScan, beginTurn, setPhaseBoth, processAlignmentFrame]
   );
 
   const poseDetection = usePoseDetection(
@@ -434,9 +450,18 @@ export default function BodyScanScreen() {
       // thick a torso is -- which is why depth used to be inferred from BMI.
       // The mask is a per-pixel person map, so one row of it gives the real
       // horizontal extent: width from the front pass, depth from the side.
-      shouldOutputSegmentationMasks: true,
+      shouldOutputSegmentationMasks: false, // Disabled to eliminate HostFunction exception
     }
   );
+
+  const onOutputOrientationChanged = poseDetection.cameraOrientationChangedHandler;
+  const cameraDeviceChangeHandler = poseDetection.cameraDeviceChangeHandler;
+
+  useEffect(() => {
+    if (device && cameraDeviceChangeHandler) {
+      cameraDeviceChangeHandler(device);
+    }
+  }, [device, cameraDeviceChangeHandler]);
 
   const handleConsentAccept = async () => {
     setShowConsent(false);
@@ -451,11 +476,7 @@ export default function BodyScanScreen() {
     router.back();
   };
 
-  const handleTiltGuideState = useCallback((state: "tilt_down" | "tilt_up" | "hold_steady") => {
-    if (isCapturing) return;
-    if (state === "tilt_down") speakIfNew("Tilt phone down");
-    else if (state === "tilt_up") speakIfNew("Tilt phone up");
-  }, [isCapturing, speakIfNew]);
+  // Removed handleTiltGuideState as it is handled by unified alignment state machine
 
   if (!consentGranted) {
     return (
@@ -564,14 +585,22 @@ export default function BodyScanScreen() {
         style={StyleSheet.absoluteFill}
         device={device}
         isActive={!isProcessing}
-        // MediaPipe's PoseLandmarker rejects anything but RGBA_8888; VisionCamera
-        // defaults to yuv on Android, which crashed every frame on device.
         pixelFormat="rgb"
         frameProcessor={poseDetection.frameProcessor}
         onLayout={poseDetection.cameraViewLayoutChangeHandler}
+        onOutputOrientationChanged={onOutputOrientationChanged}
         onError={(e: any) => console.warn('Camera Error:', e)}
       />
       <PoseLandmarkOverlay landmarks={overlayLandmarks} />
+      
+      {phase !== "pre_scan_intro" && phase !== "processing" && (
+        <BodyAlignmentGuide
+          requestedPose={requestedPose}
+          state={alignmentState.state}
+          footStatus={alignmentState.footStatus}
+        />
+      )}
+      
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => { Speech.stop(); router.back(); }}>
@@ -580,7 +609,13 @@ export default function BodyScanScreen() {
             </BlurView>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {phase === "front" ? "Face the camera" : phase === "turn" ? "Turn to your side" : "Hold your side pose"}
+            {phase === "front_positioning" || phase === "front_capturing"
+              ? "Front View (1/2)"
+              : phase === "turn_to_side"
+              ? "Turn Sideways"
+              : phase === "side_positioning" || phase === "side_capturing"
+              ? "Side View (2/2)"
+              : "Body Scan"}
           </Text>
           <TouchableOpacity
             onPress={() => { Speech.stop(); router.replace({ pathname: "/profile/measurements", params: { height, weight, gender } }); }}
@@ -591,12 +626,9 @@ export default function BodyScanScreen() {
           </TouchableOpacity>
         </View>
 
-        {!isCapturing && <TiltGuide onTiltValid={setIsTiltValid} onGuideState={handleTiltGuideState} />}
+        {!isCapturing && phase !== "pre_scan_intro" && <TiltGuide onTiltValid={setIsTiltValid} renderBadge={false} />}
 
-        {/* Front-facing outline, so it is only a guide while facing forward --
-            leaving it up during the turn would be telling the customer to
-            stand in a shape the scan is no longer asking for. */}
-        {phase === "front" && <SilhouetteOverlay color={outlineColor} />}
+        {phase === "front_capturing" && isCapturing && <SilhouetteOverlay color={outlineColor} />}
 
         <View style={styles.controls}>
           {isProcessing ? (
@@ -607,24 +639,85 @@ export default function BodyScanScreen() {
           ) : isCapturing ? (
             <View style={styles.countdownBadge}>
               <Text style={styles.countdownText}>
-                {phase === "side" ? "Side scan" : "Front scan"} {Math.round(progress * 100)}%
+                {phase === "side_capturing" ? "Side View" : "Front View"} {Math.round(progress * 100)}%
               </Text>
             </View>
-          ) : phase === "turn" ? (
+          ) : phase === "turn_to_side" ? (
             <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
-              <Text style={styles.warningText}>Turn a quarter circle so your side faces the camera</Text>
+              <Text style={styles.warningText}>
+                ✓ Front view complete. Turn sideways
+              </Text>
             </BlurView>
-          ) : !isTiltValid ? (
+          ) : phase !== "pre_scan_intro" ? (
             <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
-              <Text style={styles.warningText}>Please follow voice instructions</Text>
+              <Text style={styles.warningText}>
+                {alignmentState.instruction || (requestedPose === "front" ? "Face the camera" : "Turn sideways")}
+              </Text>
             </BlurView>
-          ) : (
-            <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
-              <Text style={styles.warningText}>Stand back so your whole body is visible</Text>
-            </BlurView>
-          )}
+          ) : null}
         </View>
       </SafeAreaView>
+
+      {/* Pre-Scan Explainer Card (Communicating 2 Views Upfront) */}
+      {phase === "pre_scan_intro" && (
+        <View style={[StyleSheet.absoluteFill, styles.introBackdrop]}>
+          <SafeAreaView style={styles.introContainer} edges={["top", "bottom"]}>
+            <View style={styles.introHeader}>
+              <Text style={styles.introTitle}>Camera scan</Text>
+              <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.introCloseBtn}>
+                <IconSymbol name="xmark" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.introBody}>
+              <Text style={styles.introLead}>
+                We scan your body by taking one front and one side photo with your phone.
+              </Text>
+
+              <View style={styles.introCardsRow}>
+                <View style={styles.introPoseCard}>
+                  <View style={styles.introBrackets}>
+                    <IconSymbol name="figure.stand" size={48} color={colors.tint} />
+                  </View>
+                  <Text style={styles.introCardLabel}>FRONT</Text>
+                  <Text style={styles.introCardSub}>1. Face camera</Text>
+                </View>
+
+                <View style={styles.introPoseCard}>
+                  <View style={styles.introBrackets}>
+                    <IconSymbol name="figure.walk" size={48} color={colors.tint} />
+                  </View>
+                  <Text style={styles.introCardLabel}>SIDE</Text>
+                  <Text style={styles.introCardSub}>2. Turn sideways</Text>
+                </View>
+              </View>
+
+              <View style={styles.introBulletsBox}>
+                <Text style={styles.introBulletText}>• Stand about 2 meters from your phone</Text>
+                <Text style={styles.introBulletText}>• Keep your whole body visible on screen</Text>
+                <Text style={styles.introBulletText}>• Stand naturally and follow spoken prompts</Text>
+              </View>
+            </View>
+
+            <View style={styles.introFooter}>
+              <TouchableOpacity
+                style={[styles.startScanBtn, { backgroundColor: colors.tint }]}
+                onPress={() => {
+                  setPhaseBoth("front_positioning");
+                  Speech.speak("Please stand about 2 meters from your device, and make sure your whole body is visible.");
+                  lastSpokenRef.current = "intro";
+                }}
+              >
+                <Text style={styles.startScanText}>CONTINUE</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.cancelScanBtn} onPress={() => router.back()}>
+                <Text style={styles.cancelScanText}>CANCEL THE SCAN</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+      )}
       <FirstUseHintModal
         visible={showScanHint}
         icon="figure.stand"
@@ -711,4 +804,123 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl, gap: Spacing.md,
   },
   processingText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  introBackdrop: {
+    backgroundColor: "rgba(0,0,0,0.92)",
+    zIndex: 50,
+  },
+  introContainer: {
+    flex: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+  },
+  introHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: Spacing.md,
+  },
+  introTitle: {
+    ...Type.title,
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  introCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  introBody: {
+    flex: 1,
+    justifyContent: "center",
+    paddingVertical: Spacing.lg,
+  },
+  introLead: {
+    ...Type.body,
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    marginBottom: Spacing.xl,
+  },
+  introCardsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  introPoseCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: Radius.xl,
+    padding: Spacing.md,
+    alignItems: "center",
+  },
+  introBrackets: {
+    width: 72,
+    height: 72,
+    borderRadius: Radius.lg,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.sm,
+  },
+  introCardLabel: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  introCardSub: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  introBulletsBox: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: Spacing.sm,
+  },
+  introBulletText: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  introFooter: {
+    paddingBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  startScanBtn: {
+    height: 50,
+    borderRadius: Radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  startScanText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 1,
+  },
+  cancelScanBtn: {
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelScanText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
 });

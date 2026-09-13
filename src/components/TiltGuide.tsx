@@ -4,14 +4,15 @@ import { StyleSheet, View, Text } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
-interface Props {
+export interface TiltGuideProps {
   onTiltValid: (isValid: boolean) => void;
   onGuideState?: (state: 'tilt_down' | 'tilt_up' | 'hold_steady') => void;
+  renderBadge?: boolean;
 }
 
 type GuideState = 'tilt_down' | 'tilt_up' | 'hold_steady';
 
-export function TiltGuide({ onTiltValid, onGuideState }: Props) {
+export function TiltGuide({ onTiltValid, onGuideState, renderBadge = true }: TiltGuideProps) {
   const [guideState, setGuideState] = useState<GuideState>('hold_steady');
 
   const onTiltValidRef = React.useRef(onTiltValid);
@@ -73,6 +74,10 @@ export function TiltGuide({ onTiltValid, onGuideState }: Props) {
     message = 'Tilt phone up ↑';
     icon = 'arrow.up.circle.fill';
     color = '#FFCC00';
+  }
+
+  if (!renderBadge) {
+    return null;
   }
 
   return (

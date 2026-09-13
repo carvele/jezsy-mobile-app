@@ -134,6 +134,7 @@ const MAPPING = {
   'lightbulb': 'lightbulb',
   'speaker.wave.2.fill': 'volume-up',
   'figure.stand': 'accessibility-new',
+  'figure.walk': 'directions-walk',
 } as const satisfies IconMapping;
 
 type IconSymbolName = keyof typeof MAPPING;
