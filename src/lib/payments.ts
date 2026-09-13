@@ -89,3 +89,26 @@ export async function getPaymentStatus(paymentId: string): Promise<PaymentStatus
   if (error) throw new Error(error.message || 'Could not confirm the payment status.');
   return (data?.status as PaymentStatus) ?? null;
 }
+
+export async function submitReservationBalanceReceipt(params: {
+  reservationId: string;
+  receiptPath: string;
+  method: 'gcash' | 'bank_transfer';
+  amountClaimed: number;
+  referenceNumber: string;
+}): Promise<any> {
+  const { data, error } = await supabase.rpc('submit_reservation_balance_receipt' as any, {
+    _reservation_id: params.reservationId,
+    _receipt_path: params.receiptPath,
+    _method: params.method,
+    _amount_claimed: params.amountClaimed,
+    _reference_number: params.referenceNumber.trim(),
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Could not submit balance receipt.');
+  }
+
+  return data;
+}
+
