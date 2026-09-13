@@ -50,7 +50,9 @@ export function EditVariantModal({ visible, product, currentSize, currentColor, 
   }, [visible, product.id]);
 
   const sizes = product.sizes || [];
-  const colorOptions = product.color ? product.color.split(',').map(c => c.trim()) : [];
+  const colorOptions = product.color
+    ? [...new Set(product.color.split(',').map(c => c.trim()).filter(Boolean))]
+    : [];
 
   const getStock = (s?: string, c?: string) => {
     if (!s) return undefined;

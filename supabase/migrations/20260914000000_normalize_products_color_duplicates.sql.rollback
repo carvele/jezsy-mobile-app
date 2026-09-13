@@ -1,3 +1,4 @@
+-- Rollback: Restore previous products.color for Mini Skirt
 UPDATE public.products
 SET
   color = 'Black, Black, White, Sky Blue, Blue, Blue, Sky Blue, White',
