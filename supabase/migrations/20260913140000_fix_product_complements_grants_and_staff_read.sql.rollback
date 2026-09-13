@@ -1,0 +1,3 @@
+-- Rollback companion for 20260913140000_fix_product_complements_grants_and_staff_read.sql
+DROP POLICY IF EXISTS "Staff read all complements" ON public.product_complements;
+REVOKE SELECT (origin, is_active) ON public.product_complements FROM anon, authenticated;
