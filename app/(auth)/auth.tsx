@@ -10,7 +10,6 @@ import {
   Alert,
   LayoutAnimation,
   UIManager,
-  Dimensions,
   StatusBar,
   ScrollView,
 } from 'react-native';
@@ -30,9 +29,6 @@ import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/p
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-
-const { width } = Dimensions.get('window');
 
 // Curated editorial fashion image for the glassmorphism background
 const BG_IMAGE =
@@ -831,12 +827,16 @@ const styles = StyleSheet.create({
   // OTP Elements
   otpWrapper: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
     width: '100%',
     paddingVertical: 10,
+    gap: 8,
   },
   otpBox: {
-    width: (width - 48 - 48 - 40) / 6,
+    flex: 1,
+    maxWidth: 50,
+    minWidth: 0,
     height: 54,
     borderRadius: Radius.md,
     borderWidth: 1,
