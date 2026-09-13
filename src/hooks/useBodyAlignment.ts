@@ -7,6 +7,7 @@ export type AlignmentState = 'SEARCHING' | 'POSITIONING' | 'STABILIZING' | 'LOCK
 
 export interface UseBodyAlignmentOptions {
   onCaptureReady: () => void;
+  onLock?: () => void;
   context: AlignmentCoordinateContext;
   requestedPose?: RequestedPose;
 }
@@ -51,7 +52,7 @@ function computeRMSVelocity(history: Landmark[][]): number {
   return count > 0 ? Math.sqrt(sumSq / count) : 0;
 }
 
-export function useBodyAlignment({ onCaptureReady, context, requestedPose = 'front' }: UseBodyAlignmentOptions) {
+export function useBodyAlignment({ onCaptureReady, onLock, context, requestedPose = 'front' }: UseBodyAlignmentOptions) {
   const [result, setResult] = useState<BodyAlignmentResult>({
     state: 'SEARCHING',
     instruction: requestedPose === 'front' ? 'Face the camera' : 'Turn sideways',
@@ -167,8 +168,9 @@ export function useBodyAlignment({ onCaptureReady, context, requestedPose = 'fro
       violations: evaluation.violations,
     };
 
-    // If state newly reached LOCKED, schedule capture callback after confirmation window
+    // If state newly reached LOCKED, trigger onLock immediately and schedule capture after confirmation window
     if (nextState === 'LOCKED' && stateRef.current !== 'LOCKED') {
+      onLock?.();
       if (lockConfirmationTimerRef.current) clearTimeout(lockConfirmationTimerRef.current);
       lockConfirmationTimerRef.current = setTimeout(() => {
         if (stateRef.current === 'LOCKED') {
@@ -195,7 +197,7 @@ export function useBodyAlignment({ onCaptureReady, context, requestedPose = 'fro
         }, DEBOUNCE_MS);
       }
     }
-  }, [context, onCaptureReady, requestedPose]);
+  }, [context, onCaptureReady, onLock, requestedPose]);
 
   // Clean up
   useCallback(() => {

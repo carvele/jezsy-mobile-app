@@ -8,6 +8,7 @@ import * as ReactTestRenderer from 'react-test-renderer';
 
 interface TestWrapperProps {
   onCaptureReady: () => void;
+  onLock?: () => void;
   requestedPose?: 'front' | 'side';
   renderHook: (props: ReturnType<typeof useBodyAlignment>) => React.ReactNode;
 }
@@ -15,6 +16,7 @@ interface TestWrapperProps {
 function TestWrapper(props: TestWrapperProps) {
   const hookResult = useBodyAlignment({
     onCaptureReady: props.onCaptureReady,
+    onLock: props.onLock,
     context: { isMirrored: false, sensorRotation: 0 },
     requestedPose: props.requestedPose,
   });
@@ -68,12 +70,14 @@ describe('useBodyAlignment hook', () => {
 
   it('progresses from SEARCHING to POSITIONING to STABILIZING to LOCKED with 350ms confirmation', () => {
     const onCaptureReady = jest.fn();
+    const onLock = jest.fn();
     let hookResult: ReturnType<typeof useBodyAlignment> | null = null;
     
     ReactTestRenderer.act(() => {
       ReactTestRenderer.create(
         React.createElement(TestWrapper, {
           onCaptureReady,
+          onLock,
           renderHook: (res: ReturnType<typeof useBodyAlignment>) => {
             hookResult = res;
             return null;
@@ -116,6 +120,8 @@ describe('useBodyAlignment hook', () => {
     });
 
     expect(hookResult!.result.state).toBe('LOCKED');
+    // onLock triggers immediately when entering LOCKED
+    expect(onLock).toHaveBeenCalledTimes(1);
     // Important: capture callback should NOT be called immediately upon reaching LOCKED
     expect(onCaptureReady).not.toHaveBeenCalled();
 

@@ -147,7 +147,11 @@ export default function BodyScanScreen() {
   const sideAttemptCountRef = useRef(0);
   const sidePhaseStartRef = useRef<number | null>(null);
   const sideOrientationConfirmedStartRef = useRef<number | null>(null);
+  const ambiguousStartRef = useRef<number | null>(null);
   const lastNudgeTimeRef = useRef<number>(0);
+  const [turnOrientationLabel, setTurnOrientationLabel] = useState<string>("front");
+  const turnOrientationLabelRef = useRef<string>("front");
+  const instructionDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const setPhaseBoth = useCallback((next: BodyScanPhase) => {
     phaseRef.current = next;
@@ -164,6 +168,13 @@ export default function BodyScanScreen() {
     sideAttemptCountRef.current = 0;
     sidePhaseStartRef.current = null;
     sideOrientationConfirmedStartRef.current = null;
+    ambiguousStartRef.current = null;
+    turnOrientationLabelRef.current = "front";
+    setTurnOrientationLabel("front");
+    if (instructionDebounceTimerRef.current) {
+      clearTimeout(instructionDebounceTimerRef.current);
+      instructionDebounceTimerRef.current = null;
+    }
     nativeFilterRef.current?.reset();
     isCapturingRef.current = false;
     setIsCapturing(false);
@@ -183,10 +194,14 @@ export default function BodyScanScreen() {
     isTiltValidRef.current = isTiltValid;
   }, [isTiltValid]);
 
-  const speakIfNew = useCallback((text: string) => {
-    if (lastSpokenRef.current === text) return;
-    Speech.speak(text);
-    lastSpokenRef.current = text;
+  const speakIfNew = useCallback((text: string, forceImmediate = false) => {
+    // Strip UI adornments (checkmarks, dashes) so TTS receives natural imperative speech
+    const speechText = text.replace(/^[✓✔]\s*/, '').replace(/—/g, '. ').trim();
+    if (!speechText) return;
+    if (!forceImmediate && lastSpokenRef.current === speechText) return;
+    Speech.stop();
+    Speech.speak(speechText);
+    lastSpokenRef.current = speechText;
   }, []);
 
   const medianExtents = (samples: BodyExtents[]): BodyExtents | null => {
@@ -205,7 +220,7 @@ export default function BodyScanScreen() {
     if (!result) {
       // Not enough valid frames; reset everything and let the user retry.
       resetScanSession();
-      speakIfNew("Could not read your measurements clearly. Please reposition and try again.");
+      speakIfNew("Could not read your measurements clearly. Please reposition and try again.", true);
       lastSpokenRef.current = "";
       return;
     }
@@ -251,9 +266,12 @@ export default function BodyScanScreen() {
     setProgress(0);
     setPhaseBoth("turn_to_side");
     sideOrientationConfirmedStartRef.current = null;
+    ambiguousStartRef.current = null;
+    turnOrientationLabelRef.current = "front";
+    setTurnOrientationLabel("front");
     lastNudgeTimeRef.current = Date.now();
     lastSpokenRef.current = "";
-    speakIfNew("Great. Now turn sideways. Keep your feet in place and look straight ahead.");
+    speakIfNew("Great. Now turn sideways. Keep your feet in place and look straight ahead.", true);
   }, [setPhaseBoth, speakIfNew]);
 
   const alignmentContext = useMemo(() => ({
@@ -264,38 +282,73 @@ export default function BodyScanScreen() {
   const requestedPose: RequestedPose =
     phase === "side_positioning" || phase === "side_capturing" ? "side" : "front";
 
+  const handleLock = useCallback(() => {
+    notifySuccess();
+    speakIfNew("Perfect. Hold still.", true);
+  }, [speakIfNew]);
+
+  const handleCaptureReady = useCallback(() => {
+    if (phaseRef.current === "front_positioning" && !isCapturingRef.current) {
+      setPhaseBoth("front_capturing");
+      isCapturingRef.current = true;
+      setIsCapturing(true);
+    } else if (phaseRef.current === "side_positioning" && !isCapturingRef.current) {
+      setPhaseBoth("side_capturing");
+      isCapturingRef.current = true;
+      setIsCapturing(true);
+      sideAttemptCountRef.current = 0;
+      sidePhaseStartRef.current = Date.now();
+    }
+  }, [setPhaseBoth]);
+
   const { result: alignmentState, processFrame: processAlignmentFrame } = useBodyAlignment({
-    onCaptureReady: () => {
-      if (phaseRef.current === "front_positioning" && !isCapturingRef.current) {
-        setPhaseBoth("front_capturing");
-        isCapturingRef.current = true;
-        setIsCapturing(true);
-        notifySuccess();
-        speakIfNew("✓ Perfect — hold still");
-      } else if (phaseRef.current === "side_positioning" && !isCapturingRef.current) {
-        setPhaseBoth("side_capturing");
-        isCapturingRef.current = true;
-        setIsCapturing(true);
-        sideAttemptCountRef.current = 0;
-        sidePhaseStartRef.current = Date.now();
-        notifySuccess();
-        speakIfNew("✓ Perfect — hold still");
-      }
-    },
+    onLock: handleLock,
+    onCaptureReady: handleCaptureReady,
     context: alignmentContext,
     requestedPose
   });
 
   useEffect(() => {
     if (
-      (phase === "front_positioning" || phase === "side_positioning") &&
-      !isCapturing &&
-      alignmentState.instruction &&
-      prepDone
+      (phase !== "front_positioning" && phase !== "side_positioning") ||
+      isCapturing ||
+      !alignmentState.instruction ||
+      !prepDone
     ) {
-      speakIfNew(alignmentState.instruction);
+      if (instructionDebounceTimerRef.current) {
+        clearTimeout(instructionDebounceTimerRef.current);
+        instructionDebounceTimerRef.current = null;
+      }
+      return;
     }
-  }, [alignmentState.instruction, phase, isCapturing, prepDone, speakIfNew]);
+
+    // Suppress positioning speech during STABILIZING or LOCKED
+    // (STABILIZING is silent stillness; LOCKED speaks immediately via onLock)
+    if (alignmentState.state === "STABILIZING" || alignmentState.state === "LOCKED") {
+      if (instructionDebounceTimerRef.current) {
+        clearTimeout(instructionDebounceTimerRef.current);
+        instructionDebounceTimerRef.current = null;
+      }
+      return;
+    }
+
+    const targetInstruction = alignmentState.instruction;
+    if (instructionDebounceTimerRef.current) {
+      clearTimeout(instructionDebounceTimerRef.current);
+    }
+
+    instructionDebounceTimerRef.current = setTimeout(() => {
+      speakIfNew(targetInstruction);
+      instructionDebounceTimerRef.current = null;
+    }, ALIGNMENT_CONFIG.voiceInstructionPersistenceMs);
+
+    return () => {
+      if (instructionDebounceTimerRef.current) {
+        clearTimeout(instructionDebounceTimerRef.current);
+        instructionDebounceTimerRef.current = null;
+      }
+    };
+  }, [alignmentState.instruction, alignmentState.state, phase, isCapturing, prepDone, speakIfNew]);
 
   const lastOverlayUpdateRef = useRef(0);
 
@@ -379,10 +432,27 @@ export default function BodyScanScreen() {
         const orientation = evaluatePoseOrientation(landmarks);
         const now = Date.now();
 
+        // Update UI badge orientation state
+        if (turnOrientationLabelRef.current !== orientation.label) {
+          turnOrientationLabelRef.current = orientation.label;
+          setTurnOrientationLabel(orientation.label);
+        }
+
         // Voice reminder after 5s if user hasn't turned
         if (now - lastNudgeTimeRef.current >= 5000 && orientation.label !== 'side') {
-          speakIfNew("Turn your body sideways.");
+          speakIfNew("Turn your body sideways.", true);
           lastNudgeTimeRef.current = now;
+        }
+
+        // If user is partially turned (ambiguous), prompt "Keep turning sideways." after ambiguousTurnDwellMs (700ms)
+        if (orientation.label === 'ambiguous') {
+          if (!ambiguousStartRef.current) {
+            ambiguousStartRef.current = now;
+          } else if (now - ambiguousStartRef.current >= ALIGNMENT_CONFIG.ambiguousTurnDwellMs) {
+            speakIfNew("Keep turning sideways.");
+          }
+        } else {
+          ambiguousStartRef.current = null;
         }
 
         // Must maintain verified side orientation (confidence >= threshold) continuously for sideOrientationDwellMs (400ms)
@@ -424,7 +494,11 @@ export default function BodyScanScreen() {
 
         if (reachedTarget || timedOut || ceilingHit) {
           setPhaseBoth("processing");
-          finishScan();
+          setIsProcessing(true);
+          speakIfNew("Side view complete. Processing your measurements.", true);
+          setTimeout(() => {
+            finishScan();
+          }, 1500);
         }
         return;
       }
@@ -648,7 +722,9 @@ export default function BodyScanScreen() {
           ) : phase === "turn_to_side" ? (
             <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
               <Text style={styles.warningText}>
-                ✓ Front view complete. Turn sideways
+                {turnOrientationLabel === "ambiguous"
+                  ? "Keep turning sideways"
+                  : "✓ Front view complete. Turn sideways"}
               </Text>
             </BlurView>
           ) : (

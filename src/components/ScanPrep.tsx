@@ -7,6 +7,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LevelIndicator } from '@/src/components/LevelIndicator';
 import { ALIGNMENT_CONFIG } from '@/src/utils/bodyAlignmentEvaluator';
 import { notifySuccess } from '@/src/utils/haptics';
+import * as Speech from 'expo-speech';
 
 interface Props {
   onDone: () => void;
@@ -56,6 +57,7 @@ export function ScanPrep({ onDone, onCancel }: Props) {
         holdTimerRef.current = setTimeout(() => {
           setIsCalibrated(true);
           notifySuccess();
+          Speech.speak('Phone positioned correctly. Tap Start Scan.');
           holdTimerRef.current = null;
         }, ALIGNMENT_CONFIG.deviceCalibrationHoldMs);
       }
@@ -73,10 +75,12 @@ export function ScanPrep({ onDone, onCancel }: Props) {
       if (holdTimerRef.current) {
         clearTimeout(holdTimerRef.current);
       }
+      Speech.stop();
     };
   }, []);
 
   const next = () => {
+    Speech.stop();
     if (step === TOTAL - 1) {
       onDone();
     } else {
@@ -85,6 +89,7 @@ export function ScanPrep({ onDone, onCancel }: Props) {
   };
 
   const back = () => {
+    Speech.stop();
     if (step === 0) {
       onCancel();
     } else {

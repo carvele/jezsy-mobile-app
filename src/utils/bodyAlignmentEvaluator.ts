@@ -52,6 +52,8 @@ export const ALIGNMENT_CONFIG = {
   deviceCalibrationToleranceDeg: 8, // Tighter tolerance for initial setup
   liveTiltWarningToleranceDeg: 15, // Wider recovery tolerance during live scan before warning
   captureGuideFadeMs: 200,
+  voiceInstructionPersistenceMs: 600, // 500-800ms debounce before speaking positioning corrections
+  ambiguousTurnDwellMs: 700, // Dwell in ambiguous orientation before prompting "Keep turning sideways"
 };
 
 export const FOOT_TARGETS = {
