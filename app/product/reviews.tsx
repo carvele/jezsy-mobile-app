@@ -594,6 +594,58 @@ export default function ProductReviewsScreen() {
     return null;
   };
 
+  if (!productId) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={[styles.navHeader, { borderBottomColor: colors.border }]}>
+          <TouchableOpacity
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <IconSymbol name="chevron.left" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <View style={styles.titleWrap}>
+            <Text style={[styles.navTitle, { color: colors.text }]}>Reviews</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.center}>
+          <IconSymbol name="exclamationmark.triangle.fill" size={44} color={colors.secondaryText} />
+          <Text style={[styles.emptyTitle, { color: colors.text, marginTop: Spacing.md }]}>
+            Product Not Specified
+          </Text>
+          <Text
+            style={[
+              styles.emptySubtitle,
+              { color: colors.secondaryText, textAlign: 'center', marginTop: Spacing.xs, paddingHorizontal: Spacing.xl },
+            ]}
+          >
+            No product was specified. Please view reviews directly from an item in the catalog.
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.loadMoreBtn,
+              {
+                borderColor: colors.tint,
+                backgroundColor: colors.tint + '15',
+                marginTop: Spacing.lg,
+                paddingHorizontal: Spacing.xl,
+              },
+            ]}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+          >
+            <Text style={[styles.loadMoreText, { color: colors.tint, fontWeight: '600' }]}>
+              {router.canGoBack() ? 'Go Back' : 'Browse Catalog'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Navigation Header */}

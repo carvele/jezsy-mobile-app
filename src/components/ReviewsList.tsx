@@ -12,11 +12,12 @@ import { useToast } from '@/src/context/ToastContext';
 
 interface ReviewsListProps {
   productId: string;
+  productName?: string;
 }
 
 type VoteType = 'like' | 'dislike';
 
-export function ReviewsList({ productId }: ReviewsListProps) {
+export function ReviewsList({ productId, productName }: ReviewsListProps) {
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -63,6 +64,16 @@ export function ReviewsList({ productId }: ReviewsListProps) {
       setLoading(false);
     }
   }, [productId, fetchStats]);
+
+  const navigateToAllReviews = useCallback(() => {
+    router.push({
+      pathname: '/product/reviews',
+      params: {
+        productId,
+        ...(productName ? { name: productName } : {}),
+      },
+    } as any);
+  }, [router, productId, productName]);
 
   useEffect(() => {
     fetchPreviewReviews();
@@ -156,7 +167,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
         <Text style={[styles.title, { color: colors.text }]}>Reviews ({stats.count})</Text>
         {stats.count > 0 && (
           <TouchableOpacity
-            onPress={() => router.push(`/product/${productId}/reviews` as any)}
+            onPress={navigateToAllReviews}
             accessibilityRole="button"
             accessibilityLabel={`View all ${stats.count} reviews`}
           >
@@ -330,7 +341,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
           {stats.count > 3 && (
             <TouchableOpacity
               style={[styles.viewAllButton, { borderColor: colors.border, backgroundColor: colors.card }]}
-              onPress={() => router.push(`/product/${productId}/reviews` as any)}
+              onPress={navigateToAllReviews}
               accessibilityRole="button"
               accessibilityLabel={`View all ${stats.count} reviews for this product`}
             >
