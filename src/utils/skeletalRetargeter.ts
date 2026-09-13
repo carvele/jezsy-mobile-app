@@ -50,6 +50,36 @@ export function setFromUnitVectors(vFrom: Vec3, vTo: Vec3): Quaternion {
 }
 
 /**
+ * Caps a rotation delta's angle at maxAngleRad, preserving its axis. For the leg
+ * deltas below: hip/knee landmarks proved to be far noisier in practice than the
+ * shoulder/elbow pair this same math already handles well for arms -- confirmed
+ * live, a wearer standing still produced a computed LeftUpLeg delta of ~137deg
+ * (anatomically that's a deep crouch, not standing), visibly mangling the mesh
+ * into an unrecognizable twisted shape. Real hip/knee flexion during a normal
+ * standing/shifting try-on session doesn't approach that range, so a delta this
+ * large is far more likely sensor noise (baggy clothing, self-occlusion, camera
+ * distance) than a real pose. Clamping the MAGNITUDE rather than discarding the
+ * delta outright keeps the leg visibly responsive to real (smaller) movement
+ * instead of snapping between "full bend" and "no bend" as noise crosses a
+ * threshold.
+ */
+function clampQuatAngle(q: Quaternion, maxAngleRad: number): Quaternion {
+  const w = Math.min(1, Math.max(-1, Math.abs(q.w)));
+  const angle = 2 * Math.acos(w);
+  if (angle <= maxAngleRad) return q;
+  const sinHalf = Math.sqrt(Math.max(0, 1 - w * w));
+  if (sinHalf < 1e-9) return q; // angle ~0 or ~2*PI: no well-defined axis to preserve
+  const newHalf = maxAngleRad / 2;
+  const scale = Math.sin(newHalf) / sinHalf;
+  return {
+    x: q.x * scale,
+    y: q.y * scale,
+    z: q.z * scale,
+    w: Math.cos(newHalf) * (q.w < 0 ? -1 : 1),
+  };
+}
+
+/**
  * Calculates per-bone rotation DELTAS (relative to each bone rest/bind orientation)
  * from a CanonicalPose, for GarmentRenderer to apply to the garment skeleton.
  *
@@ -122,6 +152,17 @@ export function calculateBoneRotationsFromCanonical(
   const rE = j[LM.rightElbow];
   const rW = j[LM.rightWrist];
 
+  // Legs (pants/skirt garments only consume these -- see GarmentRenderer.tsx's
+  // registerCorrection list; a garment with no LeftUpLeg/RightUpLeg bones simply
+  // never reads these keys, so computing them unconditionally is harmless for
+  // every existing shoulder-anchored garment).
+  const lH = j[LM.leftHip];
+  const lK = j[LM.leftKnee];
+  const lA = j[LM.leftAnkle];
+  const rH = j[LM.rightHip];
+  const rK = j[LM.rightKnee];
+  const rA = j[LM.rightAnkle];
+
   // Rest directions, in torso-local space. T-pose arms lie along the shoulder line,
   // which IS the torso local X axis by construction (see poseNormalizer).
   let lArmRest: Vec3 = { x: 1, y: 0, z: 0 };
@@ -157,6 +198,30 @@ export function calculateBoneRotationsFromCanonical(
     : IDENTITY_QUAT;
   boneRotations['RightForeArm'] = rForeDir
     ? multiplyQuat(invertQuat(rArm), setFromUnitVectors(rArmRest, rForeDir))
+    : IDENTITY_QUAT;
+
+  // Upper legs: hip -> knee. Rest direction is straight down the torso-local
+  // -Y axis regardless of restPose -- unlike arms, T-pose and A-pose don't
+  // differ in leg stance, both are a neutral standing pose.
+  const legRest: Vec3 = { x: 0, y: -1, z: 0 };
+  // See clampQuatAngle's own comment: hip/knee landmark noise, not real
+  // anatomy, is what actually produces a delta anywhere near this bound.
+  const MAX_LEG_BEND_RAD = (100 * Math.PI) / 180;
+  const lLegDir = localDir(lH, lK);
+  const rLegDir = localDir(rH, rK);
+  const lUpLeg = lLegDir ? clampQuatAngle(setFromUnitVectors(legRest, lLegDir), MAX_LEG_BEND_RAD) : IDENTITY_QUAT;
+  const rUpLeg = rLegDir ? clampQuatAngle(setFromUnitVectors(legRest, rLegDir), MAX_LEG_BEND_RAD) : IDENTITY_QUAT;
+  boneRotations['LeftUpLeg'] = lUpLeg;
+  boneRotations['RightUpLeg'] = rUpLeg;
+
+  // Lower legs: knee -> ankle, expressed relative to the upper leg (the parent in the chain).
+  const lCalfDir = localDir(lK, lA);
+  const rCalfDir = localDir(rK, rA);
+  boneRotations['LeftLeg'] = lCalfDir
+    ? clampQuatAngle(multiplyQuat(invertQuat(lUpLeg), setFromUnitVectors(legRest, lCalfDir)), MAX_LEG_BEND_RAD)
+    : IDENTITY_QUAT;
+  boneRotations['RightLeg'] = rCalfDir
+    ? clampQuatAngle(multiplyQuat(invertQuat(rUpLeg), setFromUnitVectors(legRest, rCalfDir)), MAX_LEG_BEND_RAD)
     : IDENTITY_QUAT;
 
   return boneRotations;

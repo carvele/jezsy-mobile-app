@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
@@ -30,6 +30,14 @@ import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
 import type { PaymentPurpose } from '@/src/utils/reservationPayment';
 
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental &&
+  !(globalThis as Record<string, unknown>).nativeFabricUIManager
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 // Rounded up so a window of 59 minutes reads "1 hour left" rather than
 // "0 hours left".
 function formatRemaining(dueAt: string): string | null {
@@ -45,6 +53,21 @@ function formatRemaining(dueAt: string): string | null {
 
 type Reservation = Database['public']['Tables']['reservations']['Row'];
 type ReservationItem = Database['public']['Tables']['reservation_items']['Row'];
+
+type ManualMethod = 'gcash' | 'bank_transfer';
+
+type PaymentInstructions = {
+  manual_payment_enabled: boolean;
+  gcash_enabled: boolean;
+  gcash_account_name: string;
+  gcash_number: string;
+  bank_transfer_enabled: boolean;
+  bank_name: string;
+  bank_account_name: string;
+  bank_account_number: string;
+  manual_payment_instructions: string;
+  manual_payment_reference_instructions: string;
+};
 
 export default function ReservationDetailScreen() {
   const { showToast } = useToast();
@@ -68,6 +91,33 @@ export default function ReservationDetailScreen() {
   const payBusyRef = useRef(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
+  const [isPickupPassExpanded, setIsPickupPassExpanded] = useState(true);
+
+  const togglePickupPass = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsPickupPassExpanded((prev) => !prev);
+  }, []);
+
+  // Manual payment: the customer must see where to send money and give
+  // staff structured context (method/amount/reference) before a receipt
+  // image is judged in isolation. See src/services/... audit notes.
+  const [paymentInstructions, setPaymentInstructions] = useState<PaymentInstructions | null>(null);
+  const [showManualPayment, setShowManualPayment] = useState(false);
+  const [manualMethod, setManualMethod] = useState<ManualMethod | null>(null);
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualReference, setManualReference] = useState('');
+  const [confirmedSent, setConfirmedSent] = useState(false);
+  const [confirmedReceiptReady, setConfirmedReceiptReady] = useState(false);
+
+  const fetchPaymentInstructions = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'paymentInstructions')
+      .maybeSingle();
+    if (error || !data) return;
+    setPaymentInstructions(data.value as unknown as PaymentInstructions);
+  }, []);
 
   const fetchReservation = useCallback(async () => {
     if (!id) return;
@@ -127,6 +177,7 @@ export default function ReservationDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchReservation();
+      fetchPaymentInstructions();
       if (!id) return;
 
       const channel = supabase
@@ -141,7 +192,7 @@ export default function ReservationDetailScreen() {
       return () => {
         supabase.removeChannel(channel);
       };
-    }, [fetchReservation, id]),
+    }, [fetchReservation, fetchPaymentInstructions, id]),
   );
 
   const handleAskAboutReservation = async () => {
@@ -201,7 +252,11 @@ export default function ReservationDetailScreen() {
         params: { paymentId, url: checkoutUrl },
       } as any);
     } catch (err: any) {
+      console.warn('[handlePayNow] Payment start failed:', err?.message);
       showToast(err.message || 'Could not start the payment.', 'error');
+      // If payment failed (e.g. 409 conflict, cancelled, expired), refresh
+      // reservation state to reflect latest server status and disable stale actions.
+      await fetchReservation();
     } finally {
       payBusyRef.current = false;
       setPayBusy(false);
@@ -210,9 +265,40 @@ export default function ReservationDetailScreen() {
 
   // Manual transfer path. Uploading only records the claim -- staff still have
   // to verify it, which is what stops a junk image from holding the item.
+  //
+  // Opens the instructions/metadata form instead of the image picker directly
+  // -- a customer must be shown WHERE to send money and give staff structured
+  // context (method/amount/reference) before a bare receipt image is judged
+  // in isolation. Defaults the method to whichever single manual method is
+  // enabled; if both are enabled the customer picks.
+  const openManualPayment = () => {
+    if (!paymentInstructions?.manual_payment_enabled) return;
+    const onlyMethod: ManualMethod | null =
+      paymentInstructions.gcash_enabled && !paymentInstructions.bank_transfer_enabled
+        ? 'gcash'
+        : paymentInstructions.bank_transfer_enabled && !paymentInstructions.gcash_enabled
+          ? 'bank_transfer'
+          : null;
+    setManualMethod(onlyMethod);
+    setManualAmount(reservation ? String(reservation.deposit || '') : '');
+    setManualReference('');
+    setConfirmedSent(false);
+    setConfirmedReceiptReady(false);
+    setShowManualPayment(true);
+  };
+
+  const manualAmountValue = Number(manualAmount);
+  const canSubmitManualPayment =
+    !!manualMethod &&
+    Number.isFinite(manualAmountValue) &&
+    manualAmountValue > 0 &&
+    manualReference.trim().length > 0 &&
+    confirmedSent &&
+    confirmedReceiptReady;
+
   const handleUploadReceipt = async () => {
     const userId = session?.user?.id;
-    if (!id || !userId) return;
+    if (!id || !userId || !canSubmitManualPayment || !manualMethod) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -234,8 +320,12 @@ export default function ReservationDetailScreen() {
       const { error } = await supabase.rpc('submit_reservation_receipt' as any, {
         _reservation_id: id,
         _receipt_path: path,
+        _method: manualMethod,
+        _amount_claimed: manualAmountValue,
+        _reference_number: manualReference.trim(),
       });
       if (error) throw error;
+      setShowManualPayment(false);
       await fetchReservation();
       showToast('Receipt sent. We will confirm once it has been checked.', 'success');
     } catch (err: any) {
@@ -366,20 +456,43 @@ export default function ReservationDetailScreen() {
             and still unpaid, so this was showing a pickup pass to customers who
             owed money and hiding it from the ones who had paid. */}
         {reservationState === 'ready' && (
-          <View style={[styles.pickupCard, { backgroundColor: colors.tint }]}>
-            <View style={styles.pickupHeader}>
-              <IconSymbol name="checkmark.circle.fill" size={18} color={colors.onTint} />
-              <Text style={[styles.pickupTitle, { color: colors.onTint }]}>PICKUP PASS</Text>
-            </View>
-            {reservation.pickup_token && (
-              <View style={styles.pickupQrWrap}>
-                <QRCode value={`jezsy-pickup:${reservation.pickup_token}`} size={140} backgroundColor="#FFFFFF" color="#0D0D0D" />
+          <View style={[styles.pickupCard, { backgroundColor: colors.tint }, !isPickupPassExpanded && styles.pickupCardCollapsed]}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={togglePickupPass}
+              style={[styles.pickupHeader, !isPickupPassExpanded && styles.pickupHeaderCollapsed]}
+              accessibilityRole="button"
+              accessibilityLabel={isPickupPassExpanded ? 'Collapse pickup pass' : 'Expand pickup pass'}
+              accessibilityState={{ expanded: isPickupPassExpanded }}
+            >
+              <View style={styles.pickupHeaderLeft}>
+                <IconSymbol name="checkmark.circle.fill" size={18} color={colors.onTint} />
+                <Text style={[styles.pickupTitle, { color: colors.onTint }]}>PICKUP PASS</Text>
               </View>
+              <View style={styles.pickupHeaderRight}>
+                <Text style={[styles.pickupToggleText, { color: colors.onTint }]}>
+                  {isPickupPassExpanded ? 'Hide' : 'Show'}
+                </Text>
+                <IconSymbol
+                  name={isPickupPassExpanded ? 'chevron.up' : 'chevron.down'}
+                  size={16}
+                  color={colors.onTint}
+                />
+              </View>
+            </TouchableOpacity>
+            {isPickupPassExpanded && (
+              <>
+                {reservation.pickup_token && (
+                  <View style={styles.pickupQrWrap}>
+                    <QRCode value={`jezsy-pickup:${reservation.pickup_token}`} size={140} backgroundColor="#FFFFFF" color="#0D0D0D" />
+                  </View>
+                )}
+                <Text style={[styles.pickupRef, { color: colors.onTint }]}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
+                <Text style={[styles.pickupHint, { color: colors.onTint }]}>
+                  Show this code at the boutique to collect your item. Bring a valid ID and your remaining balance.
+                </Text>
+              </>
             )}
-            <Text style={[styles.pickupRef, { color: colors.onTint }]}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
-            <Text style={[styles.pickupHint, { color: colors.onTint }]}>
-              Show this code at the boutique to collect your item. Bring a valid ID and your remaining balance.
-            </Text>
           </View>
         )}
 
@@ -578,23 +691,161 @@ export default function ReservationDetailScreen() {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
-              onPress={handleUploadReceipt}
-              disabled={payBusy || uploadingReceipt}
-              accessibilityRole="button"
-              accessibilityLabel="Upload payment receipt"
-              accessibilityHint="Send proof of a manual transfer for staff to check"
-              accessibilityState={{ disabled: payBusy || uploadingReceipt }}
-            >
-              {uploadingReceipt ? (
-                <ActivityIndicator color={colors.text} />
-              ) : (
+            {paymentInstructions?.manual_payment_enabled && !showManualPayment && (
+              <TouchableOpacity
+                style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
+                onPress={openManualPayment}
+                disabled={payBusy || uploadingReceipt}
+                accessibilityRole="button"
+                accessibilityLabel="Pay by manual transfer"
+                accessibilityHint="Shows where to send payment, then lets you upload a receipt for staff to check"
+                accessibilityState={{ disabled: payBusy || uploadingReceipt }}
+              >
                 <Text style={[styles.paySecondaryText, { color: colors.text }]}>
-                  I paid by transfer - upload receipt
+                  I&apos;ll pay by transfer
                 </Text>
-              )}
-            </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+
+            {showManualPayment && (
+              <View style={styles.manualPaymentPanel}>
+                {paymentInstructions?.gcash_enabled && (
+                  <TouchableOpacity
+                    style={[
+                      styles.methodChip,
+                      { borderColor: manualMethod === 'gcash' ? colors.tint : colors.border },
+                      manualMethod === 'gcash' && { backgroundColor: colors.tint + '15' },
+                    ]}
+                    onPress={() => setManualMethod('gcash')}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: manualMethod === 'gcash' }}
+                    accessibilityLabel="Pay via GCash"
+                  >
+                    <Text style={[styles.methodChipLabel, { color: colors.text }]}>GCash</Text>
+                    <Text style={[styles.rowText, { color: colors.secondaryText }]} selectable>
+                      {paymentInstructions.gcash_account_name} · {paymentInstructions.gcash_number}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {paymentInstructions?.bank_transfer_enabled && (
+                  <TouchableOpacity
+                    style={[
+                      styles.methodChip,
+                      { borderColor: manualMethod === 'bank_transfer' ? colors.tint : colors.border },
+                      manualMethod === 'bank_transfer' && { backgroundColor: colors.tint + '15' },
+                    ]}
+                    onPress={() => setManualMethod('bank_transfer')}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: manualMethod === 'bank_transfer' }}
+                    accessibilityLabel="Pay via bank transfer"
+                  >
+                    <Text style={[styles.methodChipLabel, { color: colors.text }]}>Bank Transfer</Text>
+                    <Text style={[styles.rowText, { color: colors.secondaryText }]} selectable>
+                      {paymentInstructions.bank_name} · {paymentInstructions.bank_account_name} · {paymentInstructions.bank_account_number}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {!!paymentInstructions?.manual_payment_instructions && (
+                  <Text style={[styles.rowText, { color: colors.secondaryText, marginTop: Spacing.sm }]}>
+                    {paymentInstructions.manual_payment_instructions}
+                  </Text>
+                )}
+                {!!paymentInstructions?.manual_payment_reference_instructions && (
+                  <Text style={[styles.rowText, { color: colors.secondaryText, marginTop: Spacing.xs }]}>
+                    {paymentInstructions.manual_payment_reference_instructions}
+                  </Text>
+                )}
+
+                <Text style={[styles.rescheduleLabel, { color: colors.secondaryText, marginTop: Spacing.lg }]}>
+                  Amount sent
+                </Text>
+                <TextInput
+                  value={manualAmount}
+                  onChangeText={setManualAmount}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={colors.secondaryText}
+                  style={[styles.textInput, { borderColor: colors.border, color: colors.text }]}
+                  accessibilityLabel="Amount sent"
+                />
+
+                <Text style={[styles.rescheduleLabel, { color: colors.secondaryText, marginTop: Spacing.md }]}>
+                  Reference number
+                </Text>
+                <TextInput
+                  value={manualReference}
+                  onChangeText={setManualReference}
+                  placeholder="e.g. GCash reference or bank transaction ID"
+                  placeholderTextColor={colors.secondaryText}
+                  style={[styles.textInput, { borderColor: colors.border, color: colors.text }]}
+                  accessibilityLabel="Payment reference number"
+                />
+
+                <TouchableOpacity
+                  style={styles.checklistRow}
+                  onPress={() => setConfirmedSent((v) => !v)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: confirmedSent }}
+                  accessibilityLabel="I sent payment to the account shown above"
+                >
+                  <IconSymbol
+                    name={confirmedSent ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                    size={20}
+                    color={confirmedSent ? colors.tint : colors.secondaryText}
+                  />
+                  <Text style={[styles.rowText, { color: colors.text, flex: 1 }]}>
+                    I sent payment to the account shown above
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.checklistRow}
+                  onPress={() => setConfirmedReceiptReady((v) => !v)}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: confirmedReceiptReady }}
+                  accessibilityLabel="I have a receipt or screenshot ready"
+                >
+                  <IconSymbol
+                    name={confirmedReceiptReady ? 'checkmark.circle.fill' : 'checkmark.circle'}
+                    size={20}
+                    color={confirmedReceiptReady ? colors.tint : colors.secondaryText}
+                  />
+                  <Text style={[styles.rowText, { color: colors.text, flex: 1 }]}>
+                    I have a receipt or screenshot ready
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={styles.rescheduleActions}>
+                  <TouchableOpacity
+                    style={[styles.rescheduleCancel, { borderColor: colors.border }]}
+                    onPress={() => setShowManualPayment(false)}
+                    disabled={uploadingReceipt}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel manual payment"
+                  >
+                    <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.rescheduleConfirm,
+                      { backgroundColor: !canSubmitManualPayment || uploadingReceipt ? colors.border : colors.tint },
+                    ]}
+                    onPress={handleUploadReceipt}
+                    disabled={!canSubmitManualPayment || uploadingReceipt}
+                    accessibilityRole="button"
+                    accessibilityLabel="Upload receipt"
+                    accessibilityState={{ disabled: !canSubmitManualPayment || uploadingReceipt }}
+                  >
+                    {uploadingReceipt ? (
+                      <ActivityIndicator color={colors.background} />
+                    ) : (
+                      <Text style={{ fontWeight: '700' }}>Upload Receipt</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -747,8 +998,30 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
     marginBottom: Spacing.xl,
   },
-  pickupHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md },
+  pickupCardCollapsed: {
+    paddingVertical: Spacing.lg,
+  },
+  pickupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  pickupHeaderCollapsed: {
+    marginBottom: 0,
+  },
+  pickupHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  pickupHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
   pickupTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1 },
+  pickupToggleText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
   pickupQrWrap: { alignSelf: 'center', padding: Spacing.md, borderRadius: Radius.md, backgroundColor: '#FFFFFF', marginBottom: Spacing.lg },
   pickupRef: { fontSize: 28, fontWeight: '900', letterSpacing: 2, marginBottom: Spacing.sm, textAlign: 'center' },
   pickupHint: { fontSize: 12, lineHeight: 17 },
@@ -834,6 +1107,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: Spacing.md,
+  },
+  manualPaymentPanel: {
+    marginTop: Spacing.lg,
+    paddingTop: Spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  methodChip: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  methodChipLabel: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    fontSize: 15,
+    marginTop: Spacing.xs,
+  },
+  checklistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
   },
   // The price breakdown, left as literals for the same reason as reserve/[id]:
   // rowText is an exact Type.body match but rowValue is 14/600, which the scale

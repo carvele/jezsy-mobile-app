@@ -37,6 +37,10 @@ export const LM = {
   rightWrist: 16,
   leftHip: 23,
   rightHip: 24,
+  leftKnee: 25,
+  rightKnee: 26,
+  leftAnkle: 27,
+  rightAnkle: 28,
 } as const;
 
 /** Below this visibility a landmark is treated as absent rather than trusted. */

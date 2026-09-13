@@ -23,7 +23,7 @@ export default function ToRateScreen() {
 
   const [items, setItems] = useState<UnratedItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [reviewProductId, setReviewProductId] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<UnratedItem | null>(null);
 
   const fetchUnrated = useCallback(async () => {
     if (!session?.user) return;
@@ -75,7 +75,7 @@ export default function ToRateScreen() {
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.rateBtn, { borderColor: colors.tint }]}
-        onPress={() => setReviewProductId(item.productId)}
+        onPress={() => setSelectedItem(item)}
         accessibilityRole="button"
         accessibilityLabel={`Rate ${item.productName}`}
       >
@@ -122,11 +122,14 @@ export default function ToRateScreen() {
       )}
 
       <ReviewModal
-        visible={reviewProductId !== null}
-        productId={reviewProductId ?? ''}
-        onClose={() => setReviewProductId(null)}
+        visible={selectedItem !== null}
+        reservationItemId={selectedItem?.reservationItemId ?? ''}
+        productName={selectedItem?.productName}
+        orderSize={selectedItem?.size}
+        orderColor={selectedItem?.color}
+        onClose={() => setSelectedItem(null)}
         onSuccess={() => {
-          setReviewProductId(null);
+          setSelectedItem(null);
           fetchUnrated();
         }}
       />

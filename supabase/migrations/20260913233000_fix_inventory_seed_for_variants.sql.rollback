@@ -1,0 +1,65 @@
+-- Rollback for 20260913233000_fix_inventory_seed_for_variants.sql
+
+-- 1. Restore previous seed_inventory_for_new_product() definition from 20260908130000
+CREATE OR REPLACE FUNCTION public.seed_inventory_for_new_product()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  sz text;
+  prod_color text;
+  clean_code text;
+  clean_color text;
+  v_sku text;
+  effective_sizes text[];
+BEGIN
+  prod_color := COALESCE(NULLIF(TRIM(NEW.color), ''), NULLIF(TRIM(NEW.base_color), ''), '');
+
+  IF NEW.sizes IS NULL OR array_length(NEW.sizes, 1) IS NULL OR array_length(NEW.sizes, 1) = 0 THEN
+    effective_sizes := ARRAY['One Size']::text[];
+  ELSE
+    effective_sizes := NEW.sizes;
+  END IF;
+
+  FOREACH sz IN ARRAY effective_sizes LOOP
+    IF NEW.style_code IS NOT NULL AND TRIM(NEW.style_code) != '' THEN
+      clean_code := UPPER(TRIM(NEW.style_code));
+      IF prod_color != '' THEN
+        clean_color := UPPER(REGEXP_REPLACE(prod_color, '[^A-Za-z0-9]+', '', 'g'));
+        v_sku := clean_code || '-' || clean_color || '-' || UPPER(TRIM(sz));
+      ELSE
+        v_sku := clean_code || '-' || UPPER(TRIM(sz));
+      END IF;
+    ELSE
+      v_sku := NULL;
+    END IF;
+
+    INSERT INTO public.inventory (
+      product_doc_id, item, category, size, color, pattern,
+      sku, variant_sku,
+      total, reserved, available, deleted, created_at, updated_at
+    )
+    SELECT
+      NEW.id, NEW.name, NEW.category, sz, prod_color, '',
+      NEW.style_code, v_sku,
+      1, 0, 1, false, now(), now()
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.inventory i
+      WHERE i.product_doc_id = NEW.id AND (i.size IS NOT DISTINCT FROM sz OR (i.size IS NULL AND sz = 'One Size'))
+        AND (i.color IS NOT DISTINCT FROM prod_color OR (i.color IS NULL AND prod_color = ''))
+        AND (i.deleted IS NULL OR i.deleted = false)
+    );
+  END LOOP;
+
+  RETURN NEW;
+END;
+$$;
+
+-- 2. Restore the Mini Skirt phantom inventory row if it exists
+UPDATE public.inventory
+SET
+  deleted = false,
+  updated_at = now()
+WHERE id = 'dee0a998-8f81-4c9e-acc4-7d84be03e773'
+  AND product_doc_id = '4d5dacae-2ef0-4b82-a1d3-1d2b43530061'
+  AND color = 'Black, White, Sky Blue, Blue';

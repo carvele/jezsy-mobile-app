@@ -1607,6 +1607,12 @@ export type Database = {
           id: string
           idempotency_key: string | null
           image_url: string | null
+          last_receipt_rejected_at: string | null
+          last_receipt_rejection_reason: string | null
+          manual_amount_claimed: number | null
+          manual_payment_method: string | null
+          manual_receipt_attempt_count: number
+          manual_reference_number: string | null
           payment_due_at: string | null
           payment_method: string | null
           payment_reminder_sent_at: string | null
@@ -1655,6 +1661,12 @@ export type Database = {
           id?: string
           idempotency_key?: string | null
           image_url?: string | null
+          last_receipt_rejected_at?: string | null
+          last_receipt_rejection_reason?: string | null
+          manual_amount_claimed?: number | null
+          manual_payment_method?: string | null
+          manual_receipt_attempt_count?: number
+          manual_reference_number?: string | null
           payment_due_at?: string | null
           payment_method?: string | null
           payment_reminder_sent_at?: string | null
@@ -1703,6 +1715,12 @@ export type Database = {
           id?: string
           idempotency_key?: string | null
           image_url?: string | null
+          last_receipt_rejected_at?: string | null
+          last_receipt_rejection_reason?: string | null
+          manual_amount_claimed?: number | null
+          manual_payment_method?: string | null
+          manual_receipt_attempt_count?: number
+          manual_reference_number?: string | null
           payment_due_at?: string | null
           payment_method?: string | null
           payment_reminder_sent_at?: string | null
@@ -1808,6 +1826,7 @@ export type Database = {
       reviews: {
         Row: {
           admin_reply: string | null
+          color: string | null
           comment: string | null
           created_at: string
           dislikes: number | null
@@ -1817,13 +1836,16 @@ export type Database = {
           likes: number | null
           product_id: string
           rating: number
+          reservation_item_id: string | null
           reviewer_name: string | null
+          size: string | null
           updated_at: string | null
           user_id: string
           verified_purchase: boolean
         }
         Insert: {
           admin_reply?: string | null
+          color?: string | null
           comment?: string | null
           created_at?: string
           dislikes?: number | null
@@ -1833,13 +1855,16 @@ export type Database = {
           likes?: number | null
           product_id: string
           rating: number
+          reservation_item_id?: string | null
           reviewer_name?: string | null
+          size?: string | null
           updated_at?: string | null
           user_id: string
           verified_purchase?: boolean
         }
         Update: {
           admin_reply?: string | null
+          color?: string | null
           comment?: string | null
           created_at?: string
           dislikes?: number | null
@@ -1849,7 +1874,9 @@ export type Database = {
           likes?: number | null
           product_id?: string
           rating?: number
+          reservation_item_id?: string | null
           reviewer_name?: string | null
+          size?: string | null
           updated_at?: string | null
           user_id?: string
           verified_purchase?: boolean
@@ -1860,6 +1887,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_reservation_item_id_fkey"
+            columns: ["reservation_item_id"]
+            isOneToOne: false
+            referencedRelation: "reservation_items"
             referencedColumns: ["id"]
           },
           {
@@ -2395,11 +2429,21 @@ export type Database = {
       can_manage_inventory: { Args: never; Returns: boolean }
       can_manage_staff: { Args: never; Returns: boolean }
       can_operate_inventory: { Args: never; Returns: boolean }
+      can_operate_reservations: { Args: never; Returns: boolean }
       cancel_reservation_as_manager: {
         Args: {
           _expected_status: string
           _reason?: string
           _reservation_id: string
+        }
+        Returns: Json
+      }
+      cancel_reservation_for_fraud: {
+        Args: {
+          _expected_status: string
+          _reason_code: string
+          _reservation_id: string
+          _staff_note?: string
         }
         Returns: Json
       }
@@ -2452,8 +2496,27 @@ export type Database = {
         Returns: Json
       }
       dispatch_pending_push: { Args: never; Returns: number }
+      enqueue_customer_notification: {
+        Args: {
+          _body: string
+          _data?: Json
+          _is_read?: boolean
+          _title: string
+          _type: string
+          _user_id: string
+        }
+        Returns: string
+      }
       expire_all_stale_reservations: { Args: never; Returns: number }
       expire_stale_payments: { Args: never; Returns: number }
+      find_duplicate_payment_reference: {
+        Args: { _exclude_reservation_id?: string; _reference_number: string }
+        Returns: {
+          customer_name: string
+          display_id: string
+          reservation_id: string
+        }[]
+      }
       get_direct_chat_summaries: {
         Args: { p_limit?: number; p_offset?: number }
         Returns: {
@@ -2512,11 +2575,25 @@ export type Database = {
           wardrobe_privacy: string
         }[]
       }
+      get_review_filter_facets: {
+        Args: { p_product_id: string }
+        Returns: Json
+      }
       get_review_stats: { Args: { p_product_id: string }; Returns: Json }
       get_reviews_with_user_vote: {
-        Args: { p_limit?: number; p_offset?: number; p_product_id: string }
+        Args: {
+          p_color?: string
+          p_limit?: number
+          p_offset?: number
+          p_photos_only?: boolean
+          p_product_id: string
+          p_rating?: number
+          p_size?: string
+          p_sort?: string
+        }
         Returns: {
           review: Database["public"]["Tables"]["reviews"]["Row"]
+          total_filtered_count: number
           user_vote: string
         }[]
       }
@@ -2732,7 +2809,12 @@ export type Database = {
       }
       resolve_username: { Args: { p_username: string }; Returns: string }
       review_reservation_receipt: {
-        Args: { _approve: boolean; _reservation_id: string }
+        Args: {
+          _approve: boolean
+          _reason_code?: string
+          _reservation_id: string
+          _staff_note?: string
+        }
         Returns: Json
       }
       save_pose_guide: {
@@ -2880,8 +2962,47 @@ export type Database = {
         Returns: Json
       }
       submit_reservation_receipt: {
-        Args: { _receipt_path: string; _reservation_id: string }
+        Args: {
+          _amount_claimed: number
+          _method: string
+          _receipt_path: string
+          _reference_number: string
+          _reservation_id: string
+        }
         Returns: Json
+      }
+      submit_verified_review: {
+        Args: {
+          p_comment?: string
+          p_images?: string[]
+          p_rating: number
+          p_reservation_item_id: string
+        }
+        Returns: {
+          admin_reply: string | null
+          color: string | null
+          comment: string | null
+          created_at: string
+          dislikes: number | null
+          id: string
+          images: string[] | null
+          is_pinned: boolean | null
+          likes: number | null
+          product_id: string
+          rating: number
+          reservation_item_id: string | null
+          reviewer_name: string | null
+          size: string | null
+          updated_at: string | null
+          user_id: string
+          verified_purchase: boolean
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reviews"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
       transition_reservation_status: {

@@ -1,5 +1,4 @@
 import 'react-native-url-polyfill/auto';
-import * as SecureStore from 'expo-secure-store';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import { Database } from '@/src/types/database.types';
@@ -13,7 +12,7 @@ const ExpoSecureStoreAdapter = {
 
       // Only session values are split with a companion `_user` entry; other
       // keys (e.g. the PKCE code verifier) pass through unchanged.
-      const userStr = await SecureStore.getItemAsync(`${key}_user`);
+      const userStr = await getSecureValue(`${key}_user`);
       if (!userStr) return minimalSessionStr;
 
       const minimalSession = JSON.parse(minimalSessionStr);
@@ -32,7 +31,7 @@ const ExpoSecureStoreAdapter = {
         // session (id/email/user_metadata), not the full Supabase user object
         // -- phone, app_metadata, identities, etc are unused PII at rest.
         const { id, email, user_metadata } = session.user;
-        await SecureStore.setItemAsync(`${key}_user`, JSON.stringify({ id, email, user_metadata }));
+        await setSecureValue(`${key}_user`, JSON.stringify({ id, email, user_metadata }));
 
         const { user: _, ...minimalSession } = session;
         await setSecureValue(key, JSON.stringify(minimalSession));
@@ -48,7 +47,7 @@ const ExpoSecureStoreAdapter = {
     try {
       await Promise.all([
         deleteSecureValue(key),
-        SecureStore.deleteItemAsync(`${key}_user`),
+        deleteSecureValue(`${key}_user`),
       ]);
     } catch (e) {
       console.error('Error in ExpoSecureStoreAdapter.removeItem:', e);

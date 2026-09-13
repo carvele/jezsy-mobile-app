@@ -267,7 +267,9 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const colorsList = product.color ? product.color.split(",").map((c) => c.trim()) : [];
+  const colorsList = product.color
+    ? [...new Set(product.color.split(",").map((c) => c.trim()).filter(Boolean))]
+    : [];
   
   // Combine images array with primary image_url if not in array
   const imageGallery = product.images && product.images.length > 0 
@@ -708,7 +710,7 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
 
           {/* Customer Reviews & Ratings */}
-          <ReviewsList productId={product.id} />
+          <ReviewsList productId={product.id} productName={product.name} />
 
           {/* Styled Looks - real curated editorial content, ahead of the
               algorithmic Complete the Look suggestions below */}

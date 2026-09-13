@@ -1,0 +1,280 @@
+-- ============================================================================
+-- Rollback Migration: 20260914020000_notifications_security_and_events.sql.rollback
+-- ============================================================================
+
+-- 1. Restore notify_reservation_status_change
+CREATE OR REPLACE FUNCTION public.notify_reservation_status_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_title text; v_body text;
+  v_status text := lower(coalesce(NEW.status, ''));
+BEGIN
+  IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
+  IF NEW.customer_id IS NULL THEN RETURN NEW; END IF;
+
+  IF v_status IN ('confirmed', 'approved', 'to pay') THEN
+    IF lower(coalesce(NEW.payment_status, '')) = 'paid' THEN
+      v_title := 'Reservation Confirmed';
+      v_body := 'Your reservation for ' || coalesce(NEW.product_name, 'your item')
+                 || ' on ' || to_char(NEW.date, 'Mon DD, YYYY') || ' is confirmed.';
+    ELSE
+      v_title := 'Accepted - payment needed';
+      v_body := coalesce(NEW.product_name, 'Your item') || ' has been accepted. Pay by '
+                 || to_char(NEW.payment_due_at AT TIME ZONE 'Asia/Manila', 'Mon DD, HH12:MI AM')
+                 || ' to keep it.';
+    END IF;
+  ELSIF v_status IN ('to pickup', 'fitting') THEN
+    v_title := 'Ready for pickup';
+    v_body := coalesce(NEW.product_name, 'Your item') || ' is ready for pickup at your appointment.';
+  ELSIF v_status = 'active' THEN
+    v_title := 'Enjoy your rental';
+    v_body := coalesce(NEW.product_name, 'Your item') || ' has been checked out to you. Have a great time!';
+  ELSIF v_status = 'completed' THEN
+    v_title := 'Reservation Completed';
+    v_body := 'Your reservation for ' || coalesce(NEW.product_name, 'your item')
+               || ' is complete. We hope you loved it!';
+  ELSIF v_status = 'cancelled' THEN
+    IF lower(coalesce(NEW.payment_status, '')) NOT IN ('paid', 'submitted')
+       AND NEW.payment_due_at IS NOT NULL AND NEW.payment_due_at <= now() THEN
+      v_title := 'Reservation Expired';
+      v_body := 'Your reservation for ' || coalesce(NEW.product_name, 'your item')
+                 || ' was cancelled because payment was not received in time.';
+    ELSE
+      v_title := 'Reservation Cancelled';
+      v_body := 'Your reservation for ' || coalesce(NEW.product_name, 'your item')
+                 || ' has been cancelled.';
+    END IF;
+  ELSE
+    v_title := 'Reservation Updated';
+    v_body := 'Your reservation for ' || coalesce(NEW.product_name, 'your item')
+               || ' is now ' || NEW.status || '.';
+  END IF;
+
+  INSERT INTO public.notifications (user_id, type, title, body, data)
+  VALUES (NEW.customer_id, 'reservation', v_title, v_body,
+    jsonb_build_object('reservation_id', NEW.id, 'display_id', NEW.display_id, 'status', NEW.status));
+
+  RETURN NEW;
+END;
+$$;
+
+-- 2. Restore notify_stock_back_in_stock
+CREATE OR REPLACE FUNCTION public.notify_stock_back_in_stock()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_product_name text;
+BEGIN
+  IF NEW.deleted OR NEW.product_doc_id IS NULL OR NEW.size IS NULL THEN
+    RETURN NEW;
+  END IF;
+  IF NOT (coalesce(OLD.available, 0) <= 0 AND coalesce(NEW.available, 0) > 0) THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT name INTO v_product_name FROM public.products WHERE id = NEW.product_doc_id;
+
+  INSERT INTO public.notifications (user_id, type, title, body, data)
+  SELECT
+    r.user_id,
+    'system',
+    'Back in Stock',
+    coalesce(v_product_name, 'An item') || ' (size ' || NEW.size || ') is back in stock.',
+    jsonb_build_object('product_id', NEW.product_doc_id, 'size', NEW.size)
+  FROM public.stock_notify_requests r
+  WHERE r.product_id = NEW.product_doc_id AND r.size = NEW.size;
+
+  DELETE FROM public.stock_notify_requests
+  WHERE product_id = NEW.product_doc_id AND size = NEW.size;
+
+  RETURN NEW;
+END;
+$$;
+
+-- 3. Drop Review Admin Reply Trigger & Function
+DROP TRIGGER IF EXISTS trg_notify_customer_on_review_reply ON public.reviews;
+DROP FUNCTION IF EXISTS public.notify_customer_on_review_reply();
+
+-- 4. Drop Direct P2P Message Trigger & Function
+DROP TRIGGER IF EXISTS trg_notify_customer_on_direct_message ON public.direct_messages;
+DROP FUNCTION IF EXISTS public.notify_customer_on_direct_message();
+
+-- 5. Drop Support Message Trigger & Function
+DROP TRIGGER IF EXISTS trg_notify_customer_on_support_message ON public.messages;
+DROP FUNCTION IF EXISTS public.notify_customer_on_support_message();
+
+-- 6. Restore review_reservation_receipt
+CREATE OR REPLACE FUNCTION public.review_reservation_receipt(
+  _reservation_id uuid,
+  _approve boolean,
+  _reason_code text DEFAULT NULL,
+  _staff_note text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+  v_amount_centavos bigint;
+  v_purpose text;
+  v_retry_minutes integer;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT _approve AND _reason_code IS NULL THEN
+    RAISE EXCEPTION 'A reason is required to reject a receipt.';
+  END IF;
+  IF _reason_code IS NOT NULL AND _reason_code NOT IN (
+    'unreadable_receipt', 'wrong_amount', 'invalid_reference', 'wrong_account',
+    'duplicate_receipt', 'suspected_fraud', 'other'
+  ) THEN
+    RAISE EXCEPTION 'Unrecognized rejection reason.';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+  IF lower(coalesce(v_res.status, '')) NOT IN ('to pay', 'confirmed', 'approved') THEN
+    RAISE EXCEPTION 'Only a reservation awaiting payment can have its receipt reviewed.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF lower(coalesce(v_res.payment_status, '')) NOT IN ('submitted', 'processing') THEN
+    RAISE EXCEPTION 'This receipt is no longer awaiting review.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  IF _approve THEN
+    v_amount_centavos := round(coalesce(v_res.deposit, 0) * 100)::bigint;
+    v_purpose := CASE
+      WHEN lower(coalesce(v_res.payment_type, '')) = 'full' THEN 'full_payment'
+      ELSE 'initial_deposit'
+    END;
+    IF v_amount_centavos <= 0 THEN
+      RAISE EXCEPTION 'The reservation has no payable amount.' USING ERRCODE = 'check_violation';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.payments p
+      WHERE p.reservation_id = v_res.id
+        AND p.status = 'paid'
+        AND coalesce(p.requires_refund, false) = false
+        AND p.purpose IN ('initial_deposit', 'full_payment')
+    ) THEN
+      RAISE EXCEPTION 'The initial reservation payment is already recorded.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+
+    INSERT INTO public.payments (
+      user_id, reservation_id, provider, provider_ref, amount_centavos,
+      currency, status, method, purpose, attempt_started_at
+    ) VALUES (
+      v_res.customer_id, v_res.id, 'manual', 'receipt:' || v_res.id::text,
+      v_amount_centavos, 'PHP', 'paid', 'transfer', v_purpose, now()
+    );
+
+    UPDATE public.reservations
+    SET payment_status = 'Paid',
+        status = 'Preparing',
+        assigned_staff_id = v_actor,
+        countdown = false,
+        balance_settled_at = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint
+            THEN coalesce(balance_settled_at, now())
+          ELSE balance_settled_at
+        END,
+        balance_settled_by = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint THEN v_actor
+          ELSE balance_settled_by
+        END,
+        balance_settled_by_name = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint
+            THEN coalesce(v_actor_name, 'Owner')
+          ELSE balance_settled_by_name
+        END,
+        balance_settled_method = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint THEN 'transfer'
+          ELSE balance_settled_method
+        END,
+        updated_at = now()
+    WHERE id = _reservation_id
+    RETURNING * INTO v_res;
+  ELSE
+    v_retry_minutes := coalesce(
+      (SELECT (value->>'retry_minutes')::integer FROM public.settings WHERE key = 'reservationPaymentWindow'),
+      60
+    );
+
+    UPDATE public.reservations
+    SET payment_status = 'Pending',
+        receipt_url = NULL,
+        payment_due_at = now() + make_interval(mins => v_retry_minutes),
+        last_receipt_rejection_reason = _reason_code,
+        last_receipt_rejected_at = now(),
+        updated_at = now()
+    WHERE id = _reservation_id
+    RETURNING * INTO v_res;
+  END IF;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    CASE WHEN _approve THEN 'Approved reservation receipt' ELSE 'Rejected reservation receipt' END,
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'approved', _approve,
+      'status', v_res.status,
+      'payment_status', v_res.payment_status,
+      'payment_purpose', CASE WHEN _approve THEN v_purpose ELSE NULL END,
+      'reason_code', CASE WHEN _approve THEN NULL ELSE _reason_code END,
+      'staff_note', CASE WHEN _approve THEN NULL ELSE _staff_note END,
+      'payment_due_at', CASE WHEN _approve THEN NULL ELSE v_res.payment_due_at END
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'reservation_id', v_res.id,
+    'approved', _approve,
+    'status', v_res.status,
+    'payment_status', v_res.payment_status,
+    'payment_due_at', v_res.payment_due_at
+  );
+END;
+$function$;
+
+-- 7. Drop Immutability Trigger & Function on public.notifications
+DROP TRIGGER IF EXISTS trg_harden_notifications_update ON public.notifications;
+DROP FUNCTION IF EXISTS public.harden_notifications_update();
+
+-- 8. Restore Permissions and Policies on public.notifications
+DROP POLICY IF EXISTS "Users can update is_read on their own notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users can view their own notifications" ON public.notifications;
+
+CREATE POLICY "Users can manage their own notifications"
+ON public.notifications FOR ALL TO public
+USING (((SELECT auth.uid() AS uid) = user_id));
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.notifications TO anon, authenticated, public;
+
+-- 9. Drop Canonical Ingestion Helper
+DROP FUNCTION IF EXISTS public.enqueue_customer_notification(uuid, text, text, text, jsonb, boolean);

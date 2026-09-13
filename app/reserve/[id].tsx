@@ -370,10 +370,12 @@ export default function ReservationScreen() {
         }
       }
 
+      const reservationId = (data as any)?.id;
       await scheduleReservationReminder(
         displayId,
         reservationDate,
         appointmentTime,
+        reservationId,
       );
 
       showToast(

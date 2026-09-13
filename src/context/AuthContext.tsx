@@ -11,7 +11,6 @@ import React, {
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database.types";
 import { savePushTokenToProfile } from "../utils/pushNotifications";
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSecureValue, setSecureValue, deleteSecureValue } from '../utils/secureStorage';
 
@@ -51,7 +50,7 @@ const AuthContext = createContext<AuthContextType>({
   endPasswordRecovery: () => {},
 });
 
-const PROFILE_CACHE_PREFIX = 'jezsy_profile_cache:';
+const PROFILE_CACHE_PREFIX = 'jezsy_profile_cache_';
 const profileCacheKey = (userId: string) => `${PROFILE_CACHE_PREFIX}${userId}`;
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -70,7 +69,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const hydrateProfileFromCache = useCallback(async (userId: string) => {
     try {
-      const cached = await getSecureValue(profileCacheKey(userId));
+      const cached = await getSecureValue(profileCacheKey(userId)).catch(() => null);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed?.id === userId) {
@@ -90,7 +89,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
       if (error) {
         // Network/server error — fall back to cached profile
-        const cached = await getSecureValue(profileCacheKey(userId));
+        const cached = await getSecureValue(profileCacheKey(userId)).catch(() => null);
         const parsed = cached ? JSON.parse(cached) : null;
         const nextProfile = parsed?.id === userId ? parsed : null;
         setProfile((prev) => nextProfile ?? prev);
@@ -100,7 +99,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Cache successful fetches for offline resilience. SecureStore (not
       // AsyncStorage) because the profile carries email/name/measurements.
       if (nextProfile) {
-        await setSecureValue(profileCacheKey(userId), JSON.stringify(nextProfile));
+        await setSecureValue(profileCacheKey(userId), JSON.stringify(nextProfile)).catch(() => {});
       }
       setProfile((prev) => nextProfile ?? prev);
       return nextProfile;
@@ -108,7 +107,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error('AuthContext Profile Sync error:', err);
       // Total failure — try cache before giving up
       try {
-        const cached = await getSecureValue(profileCacheKey(userId));
+        const cached = await getSecureValue(profileCacheKey(userId)).catch(() => null);
         const parsed = cached ? JSON.parse(cached) : null;
         const nextProfile = parsed?.id === userId ? parsed : null;
         setProfile((prev) => nextProfile ?? prev);
@@ -280,8 +279,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // The local PIN feature was removed; drop the secrets it left behind on
     // devices that had already set one. Fire-and-forget: nothing gates on it.
-    void SecureStore.deleteItemAsync('jezsy_user_pin').catch(() => {});
-    void SecureStore.deleteItemAsync('jezsy_last_full_login').catch(() => {});
+    void deleteSecureValue('jezsy_user_pin');
+    void deleteSecureValue('jezsy_last_full_login');
 
     // Deliberately NOT also calling supabase.auth.getSession() here.
     // onAuthStateChange fires once immediately on subscribe with whatever

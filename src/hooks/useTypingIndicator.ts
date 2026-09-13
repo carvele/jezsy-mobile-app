@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { supabase } from '@/src/lib/supabase';
-import { errorReporting } from '@/src/services/observability';
 
 export interface UseTypingIndicatorOptions {
   conversationId?: string | null;
@@ -61,31 +60,30 @@ export function useTypingIndicator({
       return;
     }
 
+    let isCleanedUp = false;
+
     const channel = supabase.channel(`typing:${conversationId}`);
 
     channel
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        if (payload?.sender_id === userId) return;
+        if (isCleanedUp || payload?.sender_id === userId) return;
         setIsOtherTyping(true);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(() => {
-          setIsOtherTyping(false);
+          if (!isCleanedUp) setIsOtherTyping(false);
         }, timeoutMs);
       })
       .subscribe((status) => {
+        if (isCleanedUp) return;
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          errorReporting.capture(new Error(`Typing channel error: ${status}`), {
-            domain: 'chat',
-            operation: 'subscribeTyping',
-            conversationId,
-            status,
-          });
+          console.warn(`[useTypingIndicator] Channel status: ${status}`);
         }
       });
 
     channelRef.current = channel;
 
     return () => {
+      isCleanedUp = true;
       supabase.removeChannel(channel);
       channelRef.current = null;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);

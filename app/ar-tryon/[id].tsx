@@ -472,19 +472,27 @@ export default function ARTryOnScreen() {
 
   // Phase B2: real-measurement fit modifier for the AR overlay's scale (see
   // src/components/AR/GarmentRenderer.tsx). Ratio of the selected/recommended
-  // size's real chart width to the wearer's own saved shoulder width -- multiplies
+  // size's real chart width to the wearer's own saved measurement -- multiplies
   // the live silhouette-matched base scale so different sizes actually look
   // different on the same tracked body. Clamped to a modest range so missing or
   // noisy measurement data can't send the garment wildly off scale; defaults to 1
   // (today's silhouette-match-only behavior) whenever either side is unavailable.
+  //
+  // Pants/skirt compare hips, not shoulders -- a wearer's shoulder-to-hip ratio
+  // varies independently of their actual hip size, so the shoulder-based ratio
+  // used for every other category has no real relationship to how bottoms should
+  // scale. Matches the anchor this AR overlay already uses for bottoms (see
+  // garmentFitter.ts/GarmentRenderer.tsx's own category branch) and the "Hips:
+  // Roomy/Fitted" label already surfaced from the same measurement pair below.
+  const isBottomGarment = garmentMetadata?.category === 'pants' || garmentMetadata?.category === 'skirt';
   const fitModifier = useMemo(() => {
-    const wearerCm = sizingMeasurements?.shoulderWidth;
+    const wearerCm = isBottomGarment ? sizingMeasurements?.hips : sizingMeasurements?.shoulderWidth;
     const garmentCm = recommendedSize && product?.measurements
-      ? (product.measurements as any)[recommendedSize]?.shoulderWidth
+      ? (product.measurements as any)[recommendedSize]?.[isBottomGarment ? 'hips' : 'shoulderWidth']
       : null;
     if (!wearerCm || !garmentCm || wearerCm <= 0) return 1;
     return Math.min(1.4, Math.max(0.7, garmentCm / wearerCm));
-  }, [sizingMeasurements, recommendedSize, product?.measurements]);
+  }, [sizingMeasurements, recommendedSize, product?.measurements, isBottomGarment]);
 
   // Phase 3: real camera calibration (native only -- see GarmentRenderer.tsx and
   // the AR Implementation Plan). vision-camera's format.fieldOfView is the

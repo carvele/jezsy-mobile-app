@@ -1,9 +1,79 @@
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+
+function isWeb(): boolean {
+  return Platform.OS === 'web';
+}
+
+// In-memory fallback for web environments where window.localStorage is blocked
+// (e.g. browser tracking prevention, private browsing).
+const webMemoryStore = new Map<string, string>();
+
+function getWebItem(key: string): string | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const val = window.localStorage.getItem(key);
+      if (val != null) return val;
+      const countStr = window.localStorage.getItem(`${key}_chunks`);
+      if (countStr) {
+        const count = parseInt(countStr, 10);
+        if (!isNaN(count) && count > 0) {
+          const parts: string[] = [];
+          for (let i = 0; i < count; i++) {
+            const p = window.localStorage.getItem(`${key}_c${i}`);
+            if (p != null) parts.push(p);
+          }
+          if (parts.length === count) return parts.join('');
+        }
+      }
+      return null;
+    }
+  } catch {
+    // Tracking prevention or private mode blocked localStorage
+  }
+  return webMemoryStore.get(key) ?? null;
+}
+
+function setWebItem(key: string, value: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, value);
+      window.localStorage.removeItem(`${key}_chunks`);
+      return;
+    }
+  } catch {
+    // Tracking prevention blocked localStorage
+  }
+  webMemoryStore.set(key, value);
+}
+
+function deleteWebItem(key: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+      window.localStorage.removeItem(`${key}_chunks`);
+    }
+  } catch {
+    // Ignore
+  }
+  webMemoryStore.delete(key);
+  webMemoryStore.delete(`${key}_chunks`);
+}
 
 // Android's Keystore-backed SecureStore caps a single value at ~2048 bytes.
 // Chunk oversized values across multiple keys instead of falling back to
 // AsyncStorage, which is unencrypted.
 const SECURE_STORE_LIMIT = 2000;
+
+/**
+ * Ensures key satisfies SecureStore requirements:
+ * Only alphanumeric characters, '.', '-', and '_' are permitted.
+ * Any disallowed characters (such as colons) are replaced with '_'.
+ */
+export function sanitizeSecureKey(key: string): string {
+  if (!key) throw new Error('SecureStore key cannot be empty');
+  return key.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
 
 async function setChunked(key: string, value: string) {
   const count = Math.ceil(value.length / SECURE_STORE_LIMIT);
@@ -16,43 +86,80 @@ async function setChunked(key: string, value: string) {
 }
 
 async function getChunked(key: string): Promise<string | null> {
-  const countStr = await SecureStore.getItemAsync(`${key}_chunks`);
-  if (!countStr) return null;
-  const count = parseInt(countStr, 10);
-  const parts = await Promise.all(
-    Array.from({ length: count }, (_, i) => SecureStore.getItemAsync(`${key}_c${i}`)),
-  );
-  return parts.some((p) => p == null) ? null : parts.join('');
+  try {
+    const countStr = await SecureStore.getItemAsync(`${key}_chunks`);
+    if (!countStr) return null;
+    const count = parseInt(countStr, 10);
+    if (isNaN(count) || count <= 0) return null;
+    const parts = await Promise.all(
+      Array.from({ length: count }, (_, i) => SecureStore.getItemAsync(`${key}_c${i}`)),
+    );
+    return parts.some((p) => p == null) ? null : parts.join('');
+  } catch {
+    return null;
+  }
 }
 
 async function deleteChunked(key: string) {
-  const countStr = await SecureStore.getItemAsync(`${key}_chunks`);
-  if (!countStr) return;
-  const count = parseInt(countStr, 10);
-  await Promise.all([
-    SecureStore.deleteItemAsync(`${key}_chunks`),
-    ...Array.from({ length: count }, (_, i) => SecureStore.deleteItemAsync(`${key}_c${i}`)),
-  ]);
+  try {
+    const countStr = await SecureStore.getItemAsync(`${key}_chunks`);
+    if (!countStr) return;
+    const count = parseInt(countStr, 10);
+    if (isNaN(count) || count <= 0) return;
+    await Promise.all([
+      SecureStore.deleteItemAsync(`${key}_chunks`).catch(() => {}),
+      ...Array.from({ length: count }, (_, i) => SecureStore.deleteItemAsync(`${key}_c${i}`).catch(() => {})),
+    ]);
+  } catch {
+    // Silently ignore if chunks cannot be read or deleted
+  }
 }
 
-export async function setSecureValue(key: string, value: string) {
-  if (value.length > 2048) {
-    await SecureStore.deleteItemAsync(key);
-    await deleteChunked(key);
-    await setChunked(key, value);
-  } else {
-    await deleteChunked(key);
-    await SecureStore.setItemAsync(key, value);
+export async function setSecureValue(key: string, value: string): Promise<void> {
+  const safeKey = sanitizeSecureKey(key);
+  if (isWeb()) {
+    setWebItem(safeKey, value);
+    return;
+  }
+  try {
+    if (value.length > 2048) {
+      await SecureStore.deleteItemAsync(safeKey).catch(() => {});
+      await deleteChunked(safeKey);
+      await setChunked(safeKey, value);
+    } else {
+      await deleteChunked(safeKey);
+      await SecureStore.setItemAsync(safeKey, value);
+    }
+  } catch (err) {
+    console.warn(`[secureStorage] setSecureValue failed for key "${safeKey}":`, err);
   }
 }
 
 export async function getSecureValue(key: string): Promise<string | null> {
-  return (await SecureStore.getItemAsync(key)) ?? (await getChunked(key));
+  const safeKey = sanitizeSecureKey(key);
+  if (isWeb()) {
+    return getWebItem(safeKey);
+  }
+  try {
+    return (await SecureStore.getItemAsync(safeKey)) ?? (await getChunked(safeKey));
+  } catch (err) {
+    console.warn(`[secureStorage] getSecureValue failed for key "${safeKey}":`, err);
+    return null;
+  }
 }
 
-export async function deleteSecureValue(key: string) {
-  await Promise.all([
-    SecureStore.deleteItemAsync(key),
-    deleteChunked(key),
-  ]);
+export async function deleteSecureValue(key: string): Promise<void> {
+  const safeKey = sanitizeSecureKey(key);
+  if (isWeb()) {
+    deleteWebItem(safeKey);
+    return;
+  }
+  try {
+    await Promise.all([
+      SecureStore.deleteItemAsync(safeKey).catch(() => {}),
+      deleteChunked(safeKey),
+    ]);
+  } catch (err) {
+    console.warn(`[secureStorage] deleteSecureValue failed for key "${safeKey}":`, err);
+  }
 }

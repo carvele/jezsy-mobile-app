@@ -251,9 +251,10 @@ serve(async (req) => {
       }
       if (decision.kind === "amount_changed") {
         const expired = await expireCheckoutSession(attempt.provider_ref, basicAuth);
-        if (!expired) {
+        const hasPaidPayment = providerPayments.some((p: any) => p?.attributes?.status === "paid");
+        if (!expired && hasPaidPayment) {
           return json(req, {
-            error: "The previous payment is still active or processing. Please wait before changing the amount.",
+            error: "Your payment has already been received and is being processed.",
           }, 409);
         }
 
@@ -270,13 +271,11 @@ serve(async (req) => {
       }
       if (decision.kind === "reuse") {
         if (attempt.status === "failed") {
-          const expired = await expireCheckoutSession(attempt.provider_ref, basicAuth);
-          if (!expired) {
-            return json(req, {
-              error: "An earlier payment is still active or processing. Please wait before trying again.",
-            }, 409);
-          }
-          continue;
+          const { error: reviveError } = await admin
+            .from("payments")
+            .update({ status: "awaiting_payment", updated_at: new Date().toISOString() })
+            .eq("id", attempt.id);
+          if (reviveError) console.error("Could not reactivate payment attempt", reviveError);
         }
         return json(req, { payment_id: attempt.id, checkout_url: decision.checkoutUrl, reused: true });
       }

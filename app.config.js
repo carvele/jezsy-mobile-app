@@ -20,6 +20,9 @@ module.exports = {
     },
     updates: {
       url: "https://u.expo.dev/8c74360c-1d93-4a66-b20e-5507caad75b4",
+      requestHeaders: {
+        "expo-channel-name": "preview",
+      },
     },
     ios: {
       supportsTablet: true,

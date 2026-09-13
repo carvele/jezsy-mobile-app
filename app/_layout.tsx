@@ -17,6 +17,7 @@ import { AuthProvider, useAuth } from '@/src/context/AuthContext';
 import { WishlistProvider } from '@/src/context/WishlistContext';
 import { CartProvider } from '@/src/context/CartContext';
 import { MessagesProvider } from '@/src/context/MessagesContext';
+import { NotificationProvider } from '@/src/context/NotificationContext';
 import { ToastProvider } from '@/src/context/ToastContext';
 import { AppThemeProvider, useThemeContext } from '@/src/context/ThemeContext';
 import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
@@ -24,6 +25,7 @@ import { hasSeenOnboarding } from '@/src/utils/onboarding';
 import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
 import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoticeModal';
 import { initWebUpdateChecker } from '@/src/utils/webUpdateChecker';
+import { setupNotificationResponseHandler } from '@/src/utils/pushNotifications';
 import NetInfo from '@react-native-community/netinfo';
 
 LogBox.ignoreLogs([
@@ -223,6 +225,11 @@ function InitialLayout() {
 
     return () => subscription.remove();
   }, [router, beginPasswordRecovery]);
+
+  // Handle push notification responses (background taps and cold start launch)
+  useEffect(() => {
+    return setupNotificationResponseHandler(router);
+  }, [router]);
 
   useEffect(() => {
     hasSeenOnboarding().then(setOnboardingSeen);
@@ -433,7 +440,9 @@ function RootLayout() {
                 <WishlistProvider>
                   <CartProvider>
                     <MessagesProvider>
-                      <InitialLayout />
+                      <NotificationProvider>
+                        <InitialLayout />
+                      </NotificationProvider>
                     </MessagesProvider>
                   </CartProvider>
                 </WishlistProvider>
