@@ -51,7 +51,7 @@ const AuthContext = createContext<AuthContextType>({
   endPasswordRecovery: () => {},
 });
 
-const PROFILE_CACHE_PREFIX = 'jezsy_profile_cache:';
+const PROFILE_CACHE_PREFIX = 'jezsy_profile_cache_';
 const profileCacheKey = (userId: string) => `${PROFILE_CACHE_PREFIX}${userId}`;
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -70,7 +70,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const hydrateProfileFromCache = useCallback(async (userId: string) => {
     try {
-      const cached = await getSecureValue(profileCacheKey(userId));
+      const cached = await getSecureValue(profileCacheKey(userId)).catch(() => null);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed?.id === userId) {
@@ -90,7 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
       if (error) {
         // Network/server error — fall back to cached profile
-        const cached = await getSecureValue(profileCacheKey(userId));
+        const cached = await getSecureValue(profileCacheKey(userId)).catch(() => null);
         const parsed = cached ? JSON.parse(cached) : null;
         const nextProfile = parsed?.id === userId ? parsed : null;
         setProfile((prev) => nextProfile ?? prev);
@@ -100,7 +100,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Cache successful fetches for offline resilience. SecureStore (not
       // AsyncStorage) because the profile carries email/name/measurements.
       if (nextProfile) {
-        await setSecureValue(profileCacheKey(userId), JSON.stringify(nextProfile));
+        await setSecureValue(profileCacheKey(userId), JSON.stringify(nextProfile)).catch(() => {});
       }
       setProfile((prev) => nextProfile ?? prev);
       return nextProfile;
@@ -108,7 +108,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error('AuthContext Profile Sync error:', err);
       // Total failure — try cache before giving up
       try {
-        const cached = await getSecureValue(profileCacheKey(userId));
+        const cached = await getSecureValue(profileCacheKey(userId)).catch(() => null);
         const parsed = cached ? JSON.parse(cached) : null;
         const nextProfile = parsed?.id === userId ? parsed : null;
         setProfile((prev) => nextProfile ?? prev);
