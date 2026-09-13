@@ -251,9 +251,10 @@ serve(async (req) => {
       }
       if (decision.kind === "amount_changed") {
         const expired = await expireCheckoutSession(attempt.provider_ref, basicAuth);
-        if (!expired) {
+        const hasPaidPayment = providerPayments.some((p: any) => p?.attributes?.status === "paid");
+        if (!expired && hasPaidPayment) {
           return json(req, {
-            error: "The previous payment is still active or processing. Please wait before changing the amount.",
+            error: "Your payment has already been received and is being processed.",
           }, 409);
         }
 

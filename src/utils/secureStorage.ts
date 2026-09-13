@@ -1,4 +1,64 @@
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+
+function isWeb(): boolean {
+  return Platform.OS === 'web';
+}
+
+// In-memory fallback for web environments where window.localStorage is blocked
+// (e.g. browser tracking prevention, private browsing).
+const webMemoryStore = new Map<string, string>();
+
+function getWebItem(key: string): string | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const val = window.localStorage.getItem(key);
+      if (val != null) return val;
+      const countStr = window.localStorage.getItem(`${key}_chunks`);
+      if (countStr) {
+        const count = parseInt(countStr, 10);
+        if (!isNaN(count) && count > 0) {
+          const parts: string[] = [];
+          for (let i = 0; i < count; i++) {
+            const p = window.localStorage.getItem(`${key}_c${i}`);
+            if (p != null) parts.push(p);
+          }
+          if (parts.length === count) return parts.join('');
+        }
+      }
+      return null;
+    }
+  } catch {
+    // Tracking prevention or private mode blocked localStorage
+  }
+  return webMemoryStore.get(key) ?? null;
+}
+
+function setWebItem(key: string, value: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, value);
+      window.localStorage.removeItem(`${key}_chunks`);
+      return;
+    }
+  } catch {
+    // Tracking prevention blocked localStorage
+  }
+  webMemoryStore.set(key, value);
+}
+
+function deleteWebItem(key: string): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+      window.localStorage.removeItem(`${key}_chunks`);
+    }
+  } catch {
+    // Ignore
+  }
+  webMemoryStore.delete(key);
+  webMemoryStore.delete(`${key}_chunks`);
+}
 
 // Android's Keystore-backed SecureStore caps a single value at ~2048 bytes.
 // Chunk oversized values across multiple keys instead of falling back to
@@ -57,6 +117,10 @@ async function deleteChunked(key: string) {
 
 export async function setSecureValue(key: string, value: string): Promise<void> {
   const safeKey = sanitizeSecureKey(key);
+  if (isWeb()) {
+    setWebItem(safeKey, value);
+    return;
+  }
   try {
     if (value.length > 2048) {
       await SecureStore.deleteItemAsync(safeKey).catch(() => {});
@@ -73,6 +137,9 @@ export async function setSecureValue(key: string, value: string): Promise<void> 
 
 export async function getSecureValue(key: string): Promise<string | null> {
   const safeKey = sanitizeSecureKey(key);
+  if (isWeb()) {
+    return getWebItem(safeKey);
+  }
   try {
     return (await SecureStore.getItemAsync(safeKey)) ?? (await getChunked(safeKey));
   } catch (err) {
@@ -83,6 +150,10 @@ export async function getSecureValue(key: string): Promise<string | null> {
 
 export async function deleteSecureValue(key: string): Promise<void> {
   const safeKey = sanitizeSecureKey(key);
+  if (isWeb()) {
+    deleteWebItem(safeKey);
+    return;
+  }
   try {
     await Promise.all([
       SecureStore.deleteItemAsync(safeKey).catch(() => {}),

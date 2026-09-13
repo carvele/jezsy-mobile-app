@@ -11,7 +11,6 @@ import React, {
 import { supabase } from "../lib/supabase";
 import { Database } from "../types/database.types";
 import { savePushTokenToProfile } from "../utils/pushNotifications";
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSecureValue, setSecureValue, deleteSecureValue } from '../utils/secureStorage';
 
@@ -280,8 +279,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // The local PIN feature was removed; drop the secrets it left behind on
     // devices that had already set one. Fire-and-forget: nothing gates on it.
-    void SecureStore.deleteItemAsync('jezsy_user_pin').catch(() => {});
-    void SecureStore.deleteItemAsync('jezsy_last_full_login').catch(() => {});
+    void deleteSecureValue('jezsy_user_pin');
+    void deleteSecureValue('jezsy_last_full_login');
 
     // Deliberately NOT also calling supabase.auth.getSession() here.
     // onAuthStateChange fires once immediately on subscribe with whatever
