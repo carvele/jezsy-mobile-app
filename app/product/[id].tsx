@@ -160,9 +160,11 @@ export default function ProductDetailScreen() {
     emitTourEvent('product_detail');
   }, []);
 
+  const effectiveNotifySize = selectedSize || (product?.sizes && product.sizes.length === 1 ? product.sizes[0] : (product?.sizes && product.sizes.length > 0 ? null : 'OS'));
+
   useEffect(() => {
     const checkNotifyRequest = async () => {
-      if (!user?.id || !id || !selectedSize) {
+      if (!user?.id || !id || !effectiveNotifySize) {
         setNotifyRequested(false);
         return;
       }
@@ -171,16 +173,20 @@ export default function ProductDetailScreen() {
         .select("id")
         .eq("user_id", user.id)
         .eq("product_id", id)
-        .eq("size", selectedSize)
+        .eq("size", effectiveNotifySize)
         .maybeSingle();
       setNotifyRequested(!!data);
     };
     checkNotifyRequest();
-  }, [id, user?.id, selectedSize]);
+  }, [id, user?.id, effectiveNotifySize]);
 
   const handleToggleNotifyMe = async () => {
-    if (!user?.id || !id || !selectedSize) {
-      showToast("Log in to get notified when this size is back in stock.", 'info');
+    if (!user?.id) {
+      showToast("Log in to get notified when this is back in stock.", 'info');
+      return;
+    }
+    if (!effectiveNotifySize) {
+      showToast("Please choose a size to get notified.", 'info');
       return;
     }
     setNotifySubmitting(true);
@@ -192,7 +198,7 @@ export default function ProductDetailScreen() {
           .delete()
           .eq("user_id", user.id)
           .eq("product_id", id)
-          .eq("size", selectedSize);
+          .eq("size", effectiveNotifySize);
         if (error) throw error;
         setNotifyRequested(false);
         showToast("Stock notification cancelled.", 'info');
@@ -200,13 +206,14 @@ export default function ProductDetailScreen() {
         // Create notification request
         const { error } = await supabase
           .from("stock_notify_requests")
-          .insert({ user_id: user.id, product_id: id, size: selectedSize });
+          .insert({ user_id: user.id, product_id: id, size: effectiveNotifySize });
         if (error && error.code !== "23505") throw error; // 23505 = already requested
         setNotifyRequested(true);
-        showToast("We'll notify you when this size is back in stock!", 'success');
+        showToast("We'll notify you when this is back in stock!", 'success');
       }
     } catch (err) {
       console.error("Error toggling stock notification:", err);
+      showToast("Could not update notification request.", 'error');
     } finally {
       setNotifySubmitting(false);
     }
@@ -280,26 +287,43 @@ export default function ProductDetailScreen() {
     imageGallery.push(RNImage.resolveAssetSource(require("@/assets/images/partial-react-logo.png")).uri);
   }
 
-  const getStockInfo = (size: string, color?: string) => {
-    const inv = inventory.find((i: any) =>
-      i.size === size &&
-      (!color || !i.color || i.color === color)
-    );
-    if (!inv) return null; // Fallback to assumed available if no tracking
-    return inv.available || 0;
+  const getStockInfo = (size?: string | null, color?: string | null): number | null => {
+    if (inventory && inventory.length > 0) {
+      if (size) {
+        const inv = inventory.find((i: any) =>
+          i.size === size &&
+          (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
+        );
+        if (inv) return inv.available ?? 0;
+        // If variants are tracked for this product, an unlisted variant combination has 0 available
+        const hasSizeVariant = inventory.some((i: any) => i.size === size);
+        if (hasSizeVariant) return 0;
+      } else if (color) {
+        const matching = inventory.filter((i: any) => !i.color || i.color.toLowerCase() === color.toLowerCase());
+        if (matching.length > 0) {
+          return matching.reduce((sum: number, i: any) => sum + (i.available || 0), 0);
+        }
+      }
+    }
+    // Fallback to top-level product stock if variants are not tracked
+    if (product.stock !== null && product.stock !== undefined) {
+      return product.stock;
+    }
+    return null;
   };
 
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
-  // tracked and out of stock. The default-size logic can land on an
-  // out-of-stock size (it falls back to sizes[0] when none are available),
-  // so both actions must re-check stock rather than trust the selection.
+  // tracked and out of stock.
   const needsSize = !!(product.sizes && product.sizes.length > 0);
   const needsColor = !!product.color;
-  const selectedStock = selectedSize ? getStockInfo(selectedSize, selectedColor || undefined) : null;
-  const selectedSizeOutOfStock = selectedStock !== null && selectedStock <= 0;
+  const isProductOutOfStock = product.stock !== null && product.stock !== undefined && product.stock <= 0;
+  const selectedStock = selectedSize
+    ? getStockInfo(selectedSize, selectedColor || undefined)
+    : (needsSize ? null : getStockInfo(null, selectedColor || undefined));
+  const selectedSizeOutOfStock = (selectedStock !== null && selectedStock <= 0) || (isProductOutOfStock && (!needsSize || !!selectedSize));
   const hasRequiredSelection =
     (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor);
-  const canPurchase = hasRequiredSelection && !selectedSizeOutOfStock;
+  const canPurchase = hasRequiredSelection && !selectedSizeOutOfStock && !isProductOutOfStock;
   const sizeChart = (product.measurements as ProductMeasurements | null) || null;
   const hasSizeChart = !!sizeChart && (product.sizes || []).some(s => sizeChart[s]);
   const maxQuantity = selectedStock !== null ? selectedStock : 10;
@@ -574,16 +598,15 @@ export default function ProductDetailScreen() {
                           { borderColor: isSelected ? colors.tint : (isRecommended ? colors.tint + "80" : colors.border) },
                           isSelected && { backgroundColor: colors.card },
                           isRecommended && !isSelected && { backgroundColor: colors.tint + "10" },
-                          isOutOfStock && { opacity: 0.4 }
+                          isOutOfStock && { opacity: 0.65 }
                         ]}
-                        onPress={() => { if (!isOutOfStock) { tapLight(); setSelectedSize(s); } }}
-                        disabled={isOutOfStock}
+                        onPress={() => { tapLight(); setSelectedSize(s); }}
                         accessibilityRole="radio"
-                        accessibilityLabel={`Select size ${s}${isRecommended ? ' (Recommended)' : ''}`}
-                        accessibilityHint={isOutOfStock ? `Size ${s} is out of stock` : `Selects ${s} as the size option`}
-                        accessibilityState={{ selected: isSelected, disabled: isOutOfStock }}
+                        accessibilityLabel={`Select size ${s}${isRecommended ? ' (Recommended)' : ''}${isOutOfStock ? ' (Out of stock)' : ''}`}
+                        accessibilityHint={isOutOfStock ? `Size ${s} is out of stock. Select to get notified when available.` : `Selects ${s} as the size option`}
+                        accessibilityState={{ selected: isSelected }}
                       >
-                        <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{s}</Text>
+                        <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }, isOutOfStock && { textDecorationLine: 'line-through' }]}>{s}</Text>
                       </TouchableOpacity>
                       {isRecommended && !isOutOfStock && (
                         <Text style={[Type.caption, { color: colors.tint, marginTop: Spacing.xs, fontWeight: '700' }]}>Best fit ✨</Text>
@@ -791,39 +814,61 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
-          <TouchableOpacity
-            style={[styles.primaryAction, {
-              backgroundColor: canPurchase ? colors.tint : colors.border,
-              opacity: canPurchase ? 1 : 0.7,
-            }]}
-            onPress={() => {
-              if (product && canPurchase) {
-                router.push({
-                  pathname: "/reserve/[id]",
-                  params: { id: product.id, size: selectedSize || "", color: selectedColor || "" },
-                });
-              }
-            }}
-            disabled={!canPurchase}
-            accessibilityRole="button"
-            accessibilityLabel={selectedSizeOutOfStock ? "Out of Stock" : "Reserve Now"}
-            accessibilityHint={
-              selectedSizeOutOfStock
-                ? "The selected size is out of stock"
-                : canPurchase
+          {selectedSizeOutOfStock ? (
+            <TouchableOpacity
+              style={[styles.primaryAction, {
+                backgroundColor: notifyRequested ? colors.card : colors.tint,
+                borderColor: notifyRequested ? colors.secondaryText : colors.tint,
+                borderWidth: notifyRequested ? 1 : 0,
+                opacity: notifySubmitting ? 0.6 : 1,
+              }]}
+              onPress={handleToggleNotifyMe}
+              disabled={notifySubmitting}
+              accessibilityRole="button"
+              accessibilityLabel={notifyRequested ? "Cancel stock notification" : "Notify me when this size is back in stock"}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <IconSymbol
+                  name={notifyRequested ? "checkmark.circle.fill" : "bell.fill"}
+                  size={18}
+                  color={notifyRequested ? colors.secondaryText : colors.onTint}
+                />
+                <Text style={[styles.primaryActionText, { color: notifyRequested ? colors.secondaryText : colors.onTint }]}>
+                  {notifyRequested ? "Notification Set ✓" : "Notify Me When Available"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.primaryAction, {
+                backgroundColor: canPurchase ? colors.tint : colors.border,
+                opacity: canPurchase ? 1 : 0.7,
+              }]}
+              onPress={() => {
+                if (product && canPurchase) {
+                  router.push({
+                    pathname: "/reserve/[id]",
+                    params: { id: product.id, size: selectedSize || "", color: selectedColor || "" },
+                  });
+                }
+              }}
+              disabled={!canPurchase}
+              accessibilityRole="button"
+              accessibilityLabel={needsSize && !selectedSize ? "Choose a Size" : "Reserve Now"}
+              accessibilityHint={
+                canPurchase
                   ? "Starts the reservation process for this item"
                   : "Choose a size and color to enable reservation"
-            }
-            accessibilityState={{ disabled: !canPurchase }}
-          >
-            <Text style={styles.primaryActionText}>
-              {selectedSizeOutOfStock
-                ? "Out of Stock"
-                : needsSize && !selectedSize
+              }
+              accessibilityState={{ disabled: !canPurchase }}
+            >
+              <Text style={styles.primaryActionText}>
+                {needsSize && !selectedSize
                   ? "Choose a Size"
                   : "Reserve Now"}
-            </Text>
-          </TouchableOpacity>
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
