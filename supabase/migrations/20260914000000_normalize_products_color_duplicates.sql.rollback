@@ -1,0 +1,5 @@
+UPDATE public.products
+SET
+  color = 'Black, Black, White, Sky Blue, Blue, Blue, Sky Blue, White',
+  updated_at = now()
+WHERE id = '4d5dacae-2ef0-4b82-a1d3-1d2b43530061';
