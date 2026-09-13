@@ -1,0 +1,72 @@
+-- Rollback: fix_audit_actor_attribution
+-- Restores get_customer_measurements_for_staff to pre-fix state.
+-- NOTE: This does NOT restore old log records. Historical audit entries
+-- written with the corrected attribution remain as-is (append-only).
+-- Only future calls to this RPC will revert to the 'Staff' fallback.
+
+CREATE OR REPLACE FUNCTION public.get_customer_measurements_for_staff(_customer_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_actor_id   uuid := auth.uid();
+  v_actor_name text;
+  v_rec        record;
+BEGIN
+  IF v_actor_id IS NULL OR NOT public.can_view_customer_measurements() THEN
+    RAISE EXCEPTION 'Insufficient permissions to view customer measurements'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT full_name INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor_id;
+
+  SELECT
+    id, user_id, height, measurements, measurement_source,
+    scanned_at, created_at, scan_confidence, per_field_confidence,
+    quality_status, requires_review
+  INTO v_rec
+  FROM public.user_measurements
+  WHERE user_id = _customer_id;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  INSERT INTO public.logs (
+    target_type, target_id, action, user_id, user_name, details
+  ) VALUES (
+    'profile',
+    _customer_id,
+    'view_customer_measurements',
+    v_actor_id,
+    coalesce(v_actor_name, 'Staff'),
+    jsonb_build_object(
+      'action',          'view_customer_measurements',
+      'customer_id',     _customer_id,
+      'scanned_at',      v_rec.scanned_at,
+      'requires_review', v_rec.requires_review,
+      'timestamp',       now()
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'id',                   v_rec.id,
+    'user_id',              v_rec.user_id,
+    'height',               v_rec.height,
+    'measurements',         coalesce(v_rec.measurements, '{}'::jsonb),
+    'measurement_source',   v_rec.measurement_source,
+    'scanned_at',           v_rec.scanned_at,
+    'created_at',           v_rec.created_at,
+    'scan_confidence',      v_rec.scan_confidence,
+    'per_field_confidence',  v_rec.per_field_confidence,
+    'quality_status',       v_rec.quality_status,
+    'requires_review',      v_rec.requires_review
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_customer_measurements_for_staff(uuid) TO authenticated, service_role;

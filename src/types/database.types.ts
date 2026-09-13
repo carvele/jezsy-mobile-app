@@ -2757,6 +2757,12 @@ export type Database = {
         }
         Returns: Json
       }
+      canonicalize_product_sizes: {
+        Args: { raw_sizes: string[] }
+        Returns: string[]
+      }
+      canonicalize_size_rank: { Args: { val: string }; Returns: number }
+      canonicalize_size_token: { Args: { raw: string }; Returns: string }
       check_rate_limit: {
         Args: {
           p_key: string
