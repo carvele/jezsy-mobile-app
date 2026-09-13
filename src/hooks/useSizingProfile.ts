@@ -27,7 +27,7 @@ export function useSizingProfile() {
     }
     try {
       const [{ data: profile }, { data: metrics }] = await Promise.all([
-        supabase.from('profiles').select('fit_preference, gender').eq('id', user.id).single(),
+        supabase.from('profiles').select('fit_preference, gender').eq('id', user.id).maybeSingle(),
         supabase.from('user_measurements').select('measurements, height').eq('user_id', user.id).maybeSingle(),
       ]);
 

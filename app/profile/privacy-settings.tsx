@@ -32,7 +32,7 @@ export default function PrivacySettingsScreen() {
           .from('profiles')
           .select('is_wardrobe_shared, wardrobe_privacy, wishlist_privacy')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
         
         if (error) throw error;
         if (mounted && data) {
