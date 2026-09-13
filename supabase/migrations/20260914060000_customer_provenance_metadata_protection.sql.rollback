@@ -1,0 +1,43 @@
+-- Rollback: 20260914060000_customer_provenance_metadata_protection.sql.rollback
+
+CREATE OR REPLACE FUNCTION public.protect_measurement_system_metadata()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_is_staff boolean := public.can_view_customer_measurements();
+  v_bust numeric;
+  v_waist numeric;
+  v_inseam numeric;
+  v_height numeric;
+BEGIN
+  IF NOT v_is_staff THEN
+    IF NEW.quality_status IS DISTINCT FROM OLD.quality_status
+       OR NEW.requires_review IS DISTINCT FROM OLD.requires_review THEN
+      RAISE EXCEPTION 'Unauthorized: Customers cannot modify system-owned quality_status or requires_review'
+        USING ERRCODE = '42501';
+    END IF;
+
+    IF NEW.scan_confidence IS DISTINCT FROM OLD.scan_confidence
+       AND (NEW.scan_confidence > coalesce(OLD.scan_confidence, 0)) THEN
+      NEW.scan_confidence := OLD.scan_confidence;
+    END IF;
+  END IF;
+
+  IF NEW.measurements IS NOT NULL THEN
+    v_bust := (NEW.measurements->'bust'->>'valueCm')::numeric;
+    v_waist := (NEW.measurements->'waist'->>'valueCm')::numeric;
+    v_inseam := (NEW.measurements->'inseam'->>'valueCm')::numeric;
+    v_height := NEW.height;
+
+    IF v_bust >= 160 OR v_waist >= 140 OR (v_height > 0 AND v_waist >= v_height) OR (v_height > 0 AND v_inseam >= 0.7 * v_height) THEN
+      NEW.quality_status := 'needs_review';
+      NEW.requires_review := true;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
