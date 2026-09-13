@@ -198,12 +198,13 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     if (!session?.user.id) return null;
 
     try {
-      const { data: existing } = await supabase
+      const { data: existing, error: fetchError } = await supabase
         .from('conversations')
         .select('*')
         .eq('customer_id', session.user.id)
-        .single();
+        .maybeSingle();
 
+      if (fetchError) throw fetchError;
       if (existing) return existing;
 
       const { data: newConv, error: createError } = await supabase
@@ -216,38 +217,22 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
         .select()
         .single();
 
-      if (createError) throw createError;
+      if (createError) {
+        if (createError.code === '23505' && session?.user.id) {
+          const { data: raceConv } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('customer_id', session.user.id)
+            .maybeSingle();
+          if (raceConv) return raceConv;
+        }
+        throw createError;
+      }
       
       setConversations(prev => [newConv, ...prev]);
       return newConv;
-    } catch (error) {
-      if ((error as { code?: string } | null)?.code === 'PGRST116') {
-        const { data: newConv, error: createError } = await supabase
-          .from('conversations')
-          .insert({
-            customer_id: session?.user.id,
-            unread_customer: 0,
-            unread_staff: 0,
-          })
-          .select()
-          .single();
-
-        if (createError) {
-          if (createError.code === '23505' && session?.user.id) {
-            const { data: raceConv } = await supabase
-              .from('conversations')
-              .select('*')
-              .eq('customer_id', session.user.id)
-              .maybeSingle();
-            if (raceConv) return raceConv;
-          }
-          console.error('Error creating conversation:', createError);
-          return null;
-        }
-        setConversations(prev => [newConv, ...prev]);
-        return newConv;
-      }
-      if ((error as { code?: string } | null)?.code === '23505' && session?.user.id) {
+    } catch (error: any) {
+      if (error?.code === '23505' && session?.user.id) {
         const { data: raceConv } = await supabase
           .from('conversations')
           .select('*')
