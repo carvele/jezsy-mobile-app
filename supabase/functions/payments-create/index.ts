@@ -204,7 +204,20 @@ serve(async (req) => {
     for (const attempt of attempts) {
       if (!attempt.provider_ref) {
         if (attempt.status === "failed") continue;
-        return json(req, { error: "A payment session is already being prepared. Please try again." }, 409);
+        
+        const ageMs = Date.now() - new Date(attempt.created_at).getTime();
+        if (ageMs < 120_000) {
+          return json(req, { error: "A payment session is already being prepared. Please try again." }, 409);
+        }
+        
+        // If it's been more than 2 minutes without a provider_ref, the session
+        // creation crashed. Fail it so the user isn't permanently locked out.
+        const { error: closeError } = await admin
+          .from("payments")
+          .update({ status: "failed" })
+          .eq("id", attempt.id);
+        if (closeError) throw closeError;
+        continue;
       }
 
       const sessionResponse = await fetch(

@@ -92,6 +92,7 @@ export default function ReservationDetailScreen() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
   const [isPickupPassExpanded, setIsPickupPassExpanded] = useState(true);
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
 
   const togglePickupPass = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -253,7 +254,12 @@ export default function ReservationDetailScreen() {
       } as any);
     } catch (err: any) {
       console.warn('[handlePayNow] Payment start failed:', err?.message);
-      showToast(err.message || 'Could not start the payment.', 'error');
+      if (err?.message?.includes('payment has already been received')) {
+        setIsPaymentProcessing(true);
+        showToast('Your payment was received and is processing.', 'success');
+      } else {
+        showToast(err.message || 'Could not start the payment.', 'error');
+      }
       // If payment failed (e.g. 409 conflict, cancelled, expired), refresh
       // reservation state to reflect latest server status and disable stale actions.
       await fetchReservation();
@@ -659,33 +665,35 @@ export default function ReservationDetailScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
+              style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy || uploadingReceipt || isPaymentProcessing ? 0.6 : 1 }]}
               onPress={() => handlePayNow(initialPaymentPurpose)}
-              disabled={payBusy || uploadingReceipt}
+              disabled={payBusy || uploadingReceipt || isPaymentProcessing}
               accessibilityRole="button"
               accessibilityLabel={initialPaymentPurpose === 'full_payment' ? 'Pay in full with GCash' : 'Pay reservation fee with GCash'}
-              accessibilityState={{ disabled: payBusy || uploadingReceipt }}
+              accessibilityState={{ disabled: payBusy || uploadingReceipt || isPaymentProcessing }}
             >
               {payBusy ? (
                 <ActivityIndicator color={colors.onTint} />
               ) : (
                 <Text style={[styles.payPrimaryText, { color: colors.onTint }]}>
-                  {initialPaymentPurpose === 'full_payment'
-                    ? `Pay ₱${(reservation.rental_price || 0).toFixed(2)} in full with GCash`
-                    : `Pay ₱${(reservation.deposit || 0).toFixed(2)} with GCash`}
+                  {isPaymentProcessing
+                    ? 'Payment processing...'
+                    : initialPaymentPurpose === 'full_payment'
+                      ? `Pay ₱${(reservation.rental_price || 0).toFixed(2)} in full with GCash`
+                      : `Pay ₱${(reservation.deposit || 0).toFixed(2)} with GCash`}
                 </Text>
               )}
             </TouchableOpacity>
 
             {canUpgradeToFullPayment && (
               <TouchableOpacity
-                style={[styles.paySecondary, { borderColor: colors.tint, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
+                style={[styles.paySecondary, { borderColor: colors.tint, opacity: payBusy || uploadingReceipt || isPaymentProcessing ? 0.6 : 1 }]}
                 onPress={() => handlePayNow('full_payment')}
-                disabled={payBusy || uploadingReceipt}
+                disabled={payBusy || uploadingReceipt || isPaymentProcessing}
                 accessibilityRole="button"
                 accessibilityLabel="Switch to full payment with GCash"
                 accessibilityHint="Expires the previous unpaid checkout and opens a checkout for the full item price"
-                accessibilityState={{ disabled: payBusy || uploadingReceipt }}
+                accessibilityState={{ disabled: payBusy || uploadingReceipt || isPaymentProcessing }}
               >
                 <Text style={[styles.paySecondaryText, { color: colors.tint }]}>Pay in full instead</Text>
               </TouchableOpacity>
@@ -693,13 +701,13 @@ export default function ReservationDetailScreen() {
 
             {paymentInstructions?.manual_payment_enabled && !showManualPayment && (
               <TouchableOpacity
-                style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingReceipt ? 0.6 : 1 }]}
+                style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingReceipt || isPaymentProcessing ? 0.6 : 1 }]}
                 onPress={openManualPayment}
-                disabled={payBusy || uploadingReceipt}
+                disabled={payBusy || uploadingReceipt || isPaymentProcessing}
                 accessibilityRole="button"
                 accessibilityLabel="Pay by manual transfer"
                 accessibilityHint="Shows where to send payment, then lets you upload a receipt for staff to check"
-                accessibilityState={{ disabled: payBusy || uploadingReceipt }}
+                accessibilityState={{ disabled: payBusy || uploadingReceipt || isPaymentProcessing }}
               >
                 <Text style={[styles.paySecondaryText, { color: colors.text }]}>
                   I&apos;ll pay by transfer
