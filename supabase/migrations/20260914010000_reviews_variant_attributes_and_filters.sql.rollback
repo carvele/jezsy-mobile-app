@@ -1,0 +1,66 @@
+-- Rollback: 20260914010000_reviews_variant_attributes_and_filters.sql.rollback
+
+-- 1. Drop facets RPC
+DROP FUNCTION IF EXISTS public.get_review_filter_facets(uuid);
+
+-- 2. Drop review submission RPC
+DROP FUNCTION IF EXISTS public.submit_verified_review(uuid, int, text, text[]);
+
+-- 3. Restore previous get_reviews_with_user_vote signature
+DROP FUNCTION IF EXISTS public.get_reviews_with_user_vote(uuid, int, int, int, text, text, boolean, text);
+
+CREATE OR REPLACE FUNCTION public.get_reviews_with_user_vote(
+  p_product_id uuid,
+  p_limit int DEFAULT 20,
+  p_offset int DEFAULT 0
+)
+RETURNS TABLE (review public.reviews, user_vote text)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
+  SELECT r, rv.vote_type
+  FROM public.reviews r
+  LEFT JOIN public.review_votes rv ON rv.review_id = r.id AND rv.user_id = (select auth.uid())
+  WHERE r.product_id = p_product_id
+  ORDER BY r.is_pinned DESC NULLS LAST, r.created_at DESC
+  LIMIT p_limit OFFSET p_offset;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_reviews_with_user_vote(uuid, int, int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_reviews_with_user_vote(uuid, int, int) TO authenticated, anon;
+
+-- 4. Restore previous harden_reviews_update_trigger function
+CREATE OR REPLACE FUNCTION public.harden_reviews_update_trigger()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+BEGIN
+  IF public.is_staff_or_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  NEW.verified_purchase = OLD.verified_purchase;
+  NEW.admin_reply = OLD.admin_reply;
+  NEW.is_pinned = OLD.is_pinned;
+  NEW.likes = OLD.likes;
+  NEW.dislikes = OLD.dislikes;
+  NEW.product_id = OLD.product_id;
+  NEW.user_id = OLD.user_id;
+
+  RETURN NEW;
+END;
+$function$;
+
+-- 5. Drop added indexes and columns
+DROP INDEX IF EXISTS public.idx_reviews_color;
+DROP INDEX IF EXISTS public.idx_reviews_size;
+DROP INDEX IF EXISTS public.idx_reviews_reservation_item_id;
+
+ALTER TABLE public.reviews
+  DROP COLUMN IF EXISTS color,
+  DROP COLUMN IF EXISTS size,
+  DROP COLUMN IF EXISTS reservation_item_id;
