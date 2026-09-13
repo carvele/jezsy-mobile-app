@@ -7,26 +7,32 @@ import { useAuth } from '@/src/context/AuthContext';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { supabase } from '@/src/lib/supabase';
 import { announcementService } from '@/src/services';
 import { formatPHDate } from '@/src/utils/dateTime';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';
 import { getDirectChatsPage, DirectChatSummary } from '@/src/services/chatService';
 import { getNotificationsPage, NotificationItem } from '@/src/services/notificationService';
+import { useNotifications } from '@/src/context/NotificationContext';
+import { resolveNotificationRoute } from '@/src/utils/notificationRouting';
 
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 
 export default function InboxScreen() {
   const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline } = useMessages();
   const { user, profile } = useAuth();
+  const { unreadNonChatCount, markAsRead: markNotifReadInContext } = useNotifications();
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
   const tourCoachmark = useTourCoachmark('messages');
 
-
+  const isStaff = profile?.role === 'staff' || profile?.role === 'owner';
+  const shopUnreadCount = conversations.reduce(
+    (sum, c) => sum + (isStaff ? (c.unread_staff || 0) : (c.unread_customer || 0)),
+    0
+  );
 
   const [activeTab, setActiveTab] = useState<'shop' | 'friends' | 'notifications'>('shop');
   const [directChats, setDirectChats] = useState<DirectChatSummary[]>([]);
@@ -131,11 +137,7 @@ export default function InboxScreen() {
     if (!user) return;
     try {
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', id)
-        .eq('user_id', user.id);
+      await markNotifReadInContext(id);
     } catch (e) {
       console.error(e);
     }
@@ -154,11 +156,22 @@ export default function InboxScreen() {
 
   const getIconForType = (type: string) => {
     switch (type) {
-      case 'order': return 'bag.fill';
-      case 'reservation': return 'calendar';
-      case 'promo': return 'tag.fill';
-      case 'system': return 'info.circle.fill';
-      default: return 'bell.fill';
+      case 'reservation':
+      case 'order':
+        return 'calendar';
+      case 'product':
+      case 'promo':
+        return 'tag.fill';
+      case 'review':
+        return 'star.fill';
+      case 'conversation':
+      case 'direct_chat':
+        return 'bubble.left.and.bubble.right';
+      case 'system':
+      case 'announcement':
+        return 'info.circle.fill';
+      default:
+        return 'bell.fill';
     }
   };
 
@@ -264,13 +277,9 @@ export default function InboxScreen() {
         onPress={() => {
           if (!isAnnouncement) {
             markAsRead(item.id);
-            const payload = item.data as any;
-            if (payload?.reservation_id) {
-              router.push(`/reservations/${payload.reservation_id}`);
-            } else if (payload?.product_id) {
-              router.push(`/product/${payload.product_id}`);
-            } else if (payload?.conversation_id) {
-              router.push(`/messages/${payload.conversation_id}`);
+            const route = resolveNotificationRoute(item.data);
+            if (route) {
+              router.push(route as any);
             }
           }
         }}
@@ -318,25 +327,41 @@ export default function InboxScreen() {
           style={[styles.segment, activeTab === 'shop' && [styles.activeSegment, { backgroundColor: colors.card }]]}
           onPress={() => setActiveTab('shop')}
         >
-          <Text style={[styles.segmentText, { color: activeTab === 'shop' ? colors.text : colors.secondaryText }]}>
-            Shop
-          </Text>
+          <View style={styles.segmentContent}>
+            <Text style={[styles.segmentText, { color: activeTab === 'shop' ? colors.text : colors.secondaryText }]}>
+              Shop
+            </Text>
+            {shopUnreadCount > 0 && (
+              <View style={[styles.tabBadge, { backgroundColor: colors.notification }]}>
+                <Text style={styles.tabBadgeText}>{shopUnreadCount > 99 ? '99+' : shopUnreadCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.segment, activeTab === 'friends' && [styles.activeSegment, { backgroundColor: colors.card }]]}
           onPress={() => setActiveTab('friends')}
         >
-          <Text style={[styles.segmentText, { color: activeTab === 'friends' ? colors.text : colors.secondaryText }]}>
-            Friends
-          </Text>
+          <View style={styles.segmentContent}>
+            <Text style={[styles.segmentText, { color: activeTab === 'friends' ? colors.text : colors.secondaryText }]}>
+              Friends
+            </Text>
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.segment, activeTab === 'notifications' && [styles.activeSegment, { backgroundColor: colors.card }]]}
           onPress={() => setActiveTab('notifications')}
         >
-          <Text style={[styles.segmentText, { color: activeTab === 'notifications' ? colors.text : colors.secondaryText }]}>
-            Notifications
-          </Text>
+          <View style={styles.segmentContent}>
+            <Text style={[styles.segmentText, { color: activeTab === 'notifications' ? colors.text : colors.secondaryText }]}>
+              Notifications
+            </Text>
+            {unreadNonChatCount > 0 && (
+              <View style={[styles.tabBadge, { backgroundColor: colors.notification }]}>
+                <Text style={styles.tabBadgeText}>{unreadNonChatCount > 99 ? '99+' : unreadNonChatCount}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -490,6 +515,27 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  segmentContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadge: {
+    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 13,
   },
   list: {
     paddingHorizontal: Spacing.lg,
