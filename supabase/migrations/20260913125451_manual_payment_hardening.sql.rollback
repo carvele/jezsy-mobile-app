@@ -1,0 +1,304 @@
+-- Restores the pre-migration state: drops the new functions/columns/
+-- settings row, restores the two modified functions to their exact prior
+-- bodies, and restores the two overloaded RPCs to their original 2-arg
+-- signatures.
+DROP FUNCTION IF EXISTS public.find_duplicate_payment_reference(text, uuid);
+DROP FUNCTION IF EXISTS public.cancel_reservation_for_fraud(uuid, text, text, text);
+DROP FUNCTION IF EXISTS public.review_reservation_receipt(uuid, boolean, text, text);
+DROP FUNCTION IF EXISTS public.submit_reservation_receipt(uuid, text, text, numeric, text);
+
+CREATE OR REPLACE FUNCTION public.submit_reservation_receipt(_reservation_id uuid, _receipt_path text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE v_user_id uuid := auth.uid(); v_reservation public.reservations%rowtype;
+BEGIN
+  IF v_user_id IS NULL THEN RAISE EXCEPTION 'Authentication required.'; END IF;
+  IF _receipt_path IS NULL OR _receipt_path = '' THEN RAISE EXCEPTION 'A receipt is required.'; END IF;
+  IF (string_to_array(_receipt_path, '/'))[1] <> v_user_id::text THEN
+    RAISE EXCEPTION 'Receipt does not belong to the current user.';
+  END IF;
+
+  SELECT * INTO v_reservation FROM public.reservations
+  WHERE id = _reservation_id AND COALESCE(deleted, false) = false FOR UPDATE;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'Reservation not found.'; END IF;
+  IF v_reservation.customer_id <> v_user_id THEN RAISE EXCEPTION 'Not your reservation.'; END IF;
+  IF lower(COALESCE(v_reservation.payment_status, '')) = 'paid' THEN
+    RAISE EXCEPTION 'This reservation is already paid.';
+  END IF;
+  IF NOT public.is_awaiting_payment_status(v_reservation.status) THEN
+    RAISE EXCEPTION 'This reservation is not awaiting payment yet.';
+  END IF;
+
+  UPDATE public.reservations
+  SET receipt_url = _receipt_path, payment_status = 'Submitted'
+  WHERE id = _reservation_id RETURNING * INTO v_reservation;
+
+  RETURN to_jsonb(v_reservation);
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.submit_reservation_receipt(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.submit_reservation_receipt(uuid, text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.review_reservation_receipt(_reservation_id uuid, _approve boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+  v_amount_centavos bigint;
+  v_purpose text;
+BEGIN
+  IF v_actor IS NULL OR NOT public.is_admin_or_owner() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+  IF lower(coalesce(v_res.status, '')) NOT IN ('to pay', 'confirmed', 'approved') THEN
+    RAISE EXCEPTION 'Only a reservation awaiting payment can have its receipt reviewed.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF lower(coalesce(v_res.payment_status, '')) NOT IN ('submitted', 'processing') THEN
+    RAISE EXCEPTION 'This receipt is no longer awaiting review.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  IF _approve THEN
+    v_amount_centavos := round(coalesce(v_res.deposit, 0) * 100)::bigint;
+    v_purpose := CASE
+      WHEN lower(coalesce(v_res.payment_type, '')) = 'full' THEN 'full_payment'
+      ELSE 'initial_deposit'
+    END;
+    IF v_amount_centavos <= 0 THEN
+      RAISE EXCEPTION 'The reservation has no payable amount.' USING ERRCODE = 'check_violation';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.payments p
+      WHERE p.reservation_id = v_res.id
+        AND p.status = 'paid'
+        AND coalesce(p.requires_refund, false) = false
+        AND p.purpose IN ('initial_deposit', 'full_payment')
+    ) THEN
+      RAISE EXCEPTION 'The initial reservation payment is already recorded.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+
+    INSERT INTO public.payments (
+      user_id, reservation_id, provider, provider_ref, amount_centavos,
+      currency, status, method, purpose, attempt_started_at
+    ) VALUES (
+      v_res.customer_id, v_res.id, 'manual', 'receipt:' || v_res.id::text,
+      v_amount_centavos, 'PHP', 'paid', 'transfer', v_purpose, now()
+    );
+
+    UPDATE public.reservations
+    SET payment_status = 'Paid',
+        status = 'Preparing',
+        assigned_staff_id = v_actor,
+        countdown = false,
+        balance_settled_at = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint
+            THEN coalesce(balance_settled_at, now())
+          ELSE balance_settled_at
+        END,
+        balance_settled_by = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint THEN v_actor
+          ELSE balance_settled_by
+        END,
+        balance_settled_by_name = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint
+            THEN coalesce(v_actor_name, 'Owner')
+          ELSE balance_settled_by_name
+        END,
+        balance_settled_method = CASE
+          WHEN v_amount_centavos >= round(coalesce(v_res.rental_price, 0) * 100)::bigint THEN 'transfer'
+          ELSE balance_settled_method
+        END,
+        updated_at = now()
+    WHERE id = _reservation_id
+    RETURNING * INTO v_res;
+  ELSE
+    UPDATE public.reservations
+    SET payment_status = 'Pending', receipt_url = NULL, updated_at = now()
+    WHERE id = _reservation_id
+    RETURNING * INTO v_res;
+  END IF;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    CASE WHEN _approve THEN 'Approved reservation receipt' ELSE 'Rejected reservation receipt' END,
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'approved', _approve,
+      'status', v_res.status,
+      'payment_status', v_res.payment_status,
+      'payment_purpose', CASE WHEN _approve THEN v_purpose ELSE NULL END
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'reservation_id', v_res.id,
+    'approved', _approve,
+    'status', v_res.status,
+    'payment_status', v_res.payment_status
+  );
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.review_reservation_receipt(uuid, boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.review_reservation_receipt(uuid, boolean) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.cancel_reservation_as_manager(_reservation_id uuid, _expected_status text, _reason text DEFAULT 'Cancelled by owner'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+BEGIN
+  IF v_actor IS NULL OR NOT public.is_admin_or_owner() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+  IF lower(trim(coalesce(v_res.status, ''))) <> lower(trim(coalesce(_expected_status, ''))) THEN
+    RAISE EXCEPTION 'Reservation changed since it was loaded. Refresh and try again.'
+      USING ERRCODE = 'serialization_failure';
+  END IF;
+  IF lower(coalesce(v_res.status, '')) IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be cancelled.' USING ERRCODE = 'check_violation';
+  END IF;
+  IF lower(coalesce(v_res.payment_status, '')) IN ('paid', 'submitted', 'processing', 'refund required')
+     OR EXISTS (
+       SELECT 1 FROM public.payments p
+       WHERE p.reservation_id = _reservation_id
+         AND p.status IN ('awaiting_payment', 'processing', 'paid')
+     ) THEN
+    RAISE EXCEPTION 'Resolve or refund the payment before cancelling this reservation.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  UPDATE public.reservations
+  SET status = 'Cancelled',
+      countdown = false,
+      cancellation_reason = left(coalesce(nullif(trim(_reason), ''), 'Cancelled by owner'), 500),
+      updated_at = now()
+  WHERE id = _reservation_id
+  RETURNING * INTO v_res;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Cancelled reservation',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object('previous_status', _expected_status, 'reason', v_res.cancellation_reason)
+  );
+
+  RETURN jsonb_build_object('reservation_id', v_res.id, 'status', v_res.status);
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.guard_reservation_financial_state()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+BEGIN
+  IF current_user = 'authenticated'
+     AND (
+       NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.payment_status IS DISTINCT FROM OLD.payment_status
+     ) THEN
+    RAISE EXCEPTION 'Use an authorized reservation command to change lifecycle or payment state.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF lower(coalesce(OLD.payment_status, '')) = 'paid'
+     AND lower(coalesce(NEW.payment_status, '')) NOT IN ('paid', 'refund required', 'refunded') THEN
+    RAISE EXCEPTION 'A paid reservation cannot be marked unpaid.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND lower(coalesce(NEW.status, '')) = 'cancelled'
+     AND (
+       lower(coalesce(OLD.payment_status, '')) IN ('paid', 'submitted', 'processing', 'refund required')
+       OR lower(coalesce(NEW.payment_status, '')) IN ('paid', 'submitted', 'processing', 'refund required')
+     ) THEN
+    RAISE EXCEPTION 'Resolve or refund the payment before cancelling this reservation.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND lower(coalesce(OLD.status, '')) IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be reopened or changed.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND lower(coalesce(NEW.status, '')) IN ('preparing', 'ready', 'to pickup')
+     AND lower(coalesce(NEW.payment_status, '')) <> 'paid' THEN
+    RAISE EXCEPTION 'Payment must be confirmed before preparing this reservation.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_last_receipt_rejection_reason_check') THEN
+    ALTER TABLE public.reservations DROP CONSTRAINT reservations_last_receipt_rejection_reason_check;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_manual_amount_claimed_positive') THEN
+    ALTER TABLE public.reservations DROP CONSTRAINT reservations_manual_amount_claimed_positive;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_manual_payment_method_check') THEN
+    ALTER TABLE public.reservations DROP CONSTRAINT reservations_manual_payment_method_check;
+  END IF;
+END $$;
+
+ALTER TABLE public.reservations
+  DROP COLUMN IF EXISTS manual_payment_method,
+  DROP COLUMN IF EXISTS manual_amount_claimed,
+  DROP COLUMN IF EXISTS manual_reference_number,
+  DROP COLUMN IF EXISTS manual_receipt_attempt_count,
+  DROP COLUMN IF EXISTS last_receipt_rejection_reason,
+  DROP COLUMN IF EXISTS last_receipt_rejected_at;
+
+DELETE FROM public.settings WHERE key = 'paymentInstructions';
