@@ -48,6 +48,10 @@ export const ALIGNMENT_CONFIG = {
   sideOrientationDwellMs: 400,
   sideProfileMaxShoulderRatio: 0.30,
   sideProfileMaxHipRatio: 0.35,
+  deviceCalibrationHoldMs: 400,
+  deviceCalibrationToleranceDeg: 8, // Tighter tolerance for initial setup
+  liveTiltWarningToleranceDeg: 15, // Wider recovery tolerance during live scan before warning
+  captureGuideFadeMs: 200,
 };
 
 export const FOOT_TARGETS = {

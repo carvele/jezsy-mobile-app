@@ -47,6 +47,7 @@ import { applyNativePoseCompatibility } from "@/src/utils/nativePoseCompatibilit
 import { BurstCollector } from "@/src/utils/burstAverager";
 import { useToast } from '@/src/context/ToastContext';
 import { createScanSession } from '@/src/utils/scanSession';
+import { notifySuccess } from '@/src/utils/haptics';
 
 // CPU (default) delegate. GPU delegate is a device-tuning follow-up: an
 // unsupported delegate fails the whole model load, so correctness-first we
@@ -56,9 +57,8 @@ const POSE_DELEGATE = Delegate.CPU;
 const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
 
 // Multi-view scan flow phases:
-// pre_scan_intro -> front_positioning -> front_capturing -> turn_to_side -> side_positioning -> side_capturing -> processing -> complete
+// front_positioning -> front_capturing -> turn_to_side -> side_positioning -> side_capturing -> processing -> complete
 export type BodyScanPhase =
-  | "pre_scan_intro"
   | "front_positioning"
   | "front_capturing"
   | "turn_to_side"
@@ -135,8 +135,8 @@ export default function BodyScanScreen() {
   // Burst collector persists across frames.
   const burstRef = useRef(new BurstCollector());
 
-  const [phase, setPhase] = useState<BodyScanPhase>("pre_scan_intro");
-  const phaseRef = useRef<BodyScanPhase>("pre_scan_intro");
+  const [phase, setPhase] = useState<BodyScanPhase>("front_positioning");
+  const phaseRef = useRef<BodyScanPhase>("front_positioning");
   // Extents are collected per frame and reduced at the end, so one frame that
   // clipped a hand or a belt cannot skew the result.
   const frontExtentsRef = useRef<BodyExtents[]>([]);
@@ -270,6 +270,7 @@ export default function BodyScanScreen() {
         setPhaseBoth("front_capturing");
         isCapturingRef.current = true;
         setIsCapturing(true);
+        notifySuccess();
         speakIfNew("✓ Perfect — hold still");
       } else if (phaseRef.current === "side_positioning" && !isCapturingRef.current) {
         setPhaseBoth("side_capturing");
@@ -277,6 +278,7 @@ export default function BodyScanScreen() {
         setIsCapturing(true);
         sideAttemptCountRef.current = 0;
         sidePhaseStartRef.current = Date.now();
+        notifySuccess();
         speakIfNew("✓ Perfect — hold still");
       }
     },
@@ -593,11 +595,12 @@ export default function BodyScanScreen() {
       />
       <PoseLandmarkOverlay landmarks={overlayLandmarks} />
       
-      {phase !== "pre_scan_intro" && phase !== "processing" && (
+      {phase !== "processing" && (
         <BodyAlignmentGuide
           requestedPose={requestedPose}
           state={alignmentState.state}
           footStatus={alignmentState.footStatus}
+          isCapturing={isCapturing}
         />
       )}
       
@@ -626,7 +629,7 @@ export default function BodyScanScreen() {
           </TouchableOpacity>
         </View>
 
-        {!isCapturing && phase !== "pre_scan_intro" && <TiltGuide onTiltValid={setIsTiltValid} renderBadge={false} />}
+        {!isCapturing && <TiltGuide onTiltValid={setIsTiltValid} renderBadge={false} />}
 
         {phase === "front_capturing" && isCapturing && <SilhouetteOverlay color={outlineColor} />}
 
@@ -648,76 +651,15 @@ export default function BodyScanScreen() {
                 ✓ Front view complete. Turn sideways
               </Text>
             </BlurView>
-          ) : phase !== "pre_scan_intro" ? (
+          ) : (
             <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
               <Text style={styles.warningText}>
                 {alignmentState.instruction || (requestedPose === "front" ? "Face the camera" : "Turn sideways")}
               </Text>
             </BlurView>
-          ) : null}
+          )}
         </View>
       </SafeAreaView>
-
-      {/* Pre-Scan Explainer Card (Communicating 2 Views Upfront) */}
-      {phase === "pre_scan_intro" && (
-        <View style={[StyleSheet.absoluteFill, styles.introBackdrop]}>
-          <SafeAreaView style={styles.introContainer} edges={["top", "bottom"]}>
-            <View style={styles.introHeader}>
-              <Text style={styles.introTitle}>Camera scan</Text>
-              <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.introCloseBtn}>
-                <IconSymbol name="xmark" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.introBody}>
-              <Text style={styles.introLead}>
-                We scan your body by taking one front and one side photo with your phone.
-              </Text>
-
-              <View style={styles.introCardsRow}>
-                <View style={styles.introPoseCard}>
-                  <View style={styles.introBrackets}>
-                    <IconSymbol name="figure.stand" size={48} color={colors.tint} />
-                  </View>
-                  <Text style={styles.introCardLabel}>FRONT</Text>
-                  <Text style={styles.introCardSub}>1. Face camera</Text>
-                </View>
-
-                <View style={styles.introPoseCard}>
-                  <View style={styles.introBrackets}>
-                    <IconSymbol name="figure.walk" size={48} color={colors.tint} />
-                  </View>
-                  <Text style={styles.introCardLabel}>SIDE</Text>
-                  <Text style={styles.introCardSub}>2. Turn sideways</Text>
-                </View>
-              </View>
-
-              <View style={styles.introBulletsBox}>
-                <Text style={styles.introBulletText}>• Stand about 2 meters from your phone</Text>
-                <Text style={styles.introBulletText}>• Keep your whole body visible on screen</Text>
-                <Text style={styles.introBulletText}>• Stand naturally and follow spoken prompts</Text>
-              </View>
-            </View>
-
-            <View style={styles.introFooter}>
-              <TouchableOpacity
-                style={[styles.startScanBtn, { backgroundColor: colors.tint }]}
-                onPress={() => {
-                  setPhaseBoth("front_positioning");
-                  Speech.speak("Please stand about 2 meters from your device, and make sure your whole body is visible.");
-                  lastSpokenRef.current = "intro";
-                }}
-              >
-                <Text style={styles.startScanText}>CONTINUE</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.cancelScanBtn} onPress={() => router.back()}>
-                <Text style={styles.cancelScanText}>CANCEL THE SCAN</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
-      )}
       <FirstUseHintModal
         visible={showScanHint}
         icon="figure.stand"
@@ -804,123 +746,4 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl, gap: Spacing.md,
   },
   processingText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  introBackdrop: {
-    backgroundColor: "rgba(0,0,0,0.92)",
-    zIndex: 50,
-  },
-  introContainer: {
-    flex: 1,
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-  },
-  introHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: Spacing.md,
-  },
-  introTitle: {
-    ...Type.title,
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "700",
-  },
-  introCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  introBody: {
-    flex: 1,
-    justifyContent: "center",
-    paddingVertical: Spacing.lg,
-  },
-  introLead: {
-    ...Type.body,
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: "center",
-    marginBottom: Spacing.xl,
-  },
-  introCardsRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: Spacing.md,
-    marginBottom: Spacing.xl,
-  },
-  introPoseCard: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: Radius.xl,
-    padding: Spacing.md,
-    alignItems: "center",
-  },
-  introBrackets: {
-    width: 72,
-    height: 72,
-    borderRadius: Radius.lg,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.sm,
-  },
-  introCardLabel: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  introCardSub: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  introBulletsBox: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    gap: Spacing.sm,
-  },
-  introBulletText: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  introFooter: {
-    paddingBottom: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  startScanBtn: {
-    height: 50,
-    borderRadius: Radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  startScanText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-  cancelScanBtn: {
-    height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cancelScanText: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 13,
-    fontWeight: "600",
-    letterSpacing: 0.5,
-  },
 });

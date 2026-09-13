@@ -4,15 +4,13 @@ import { Accelerometer } from 'expo-sensors';
 
 const RING = 120;
 const DOT = 44;
-// Same tolerance TiltGuide enforces, so passing this step means the scan's own
-// tilt check will also pass rather than immediately complaining.
-const TOLERANCE_DEG = 15;
 // Travel of the dot at the tolerance edge, so "just outside the ring" reads as
 // "just outside tolerance".
 const TRAVEL = (RING - DOT) / 2;
 
 interface Props {
   onLevelChange?: (isLevel: boolean) => void;
+  toleranceDeg?: number;
 }
 
 // Visual bubble level for the preparation step. TiltGuide says "tilt phone
@@ -22,7 +20,7 @@ interface Props {
 // Sampled at 20Hz rather than the scan's 60Hz: this renders on a static screen
 // with no camera or pose model running, and a dot cannot usefully move faster
 // than the eye tracks it anyway.
-export function LevelIndicator({ onLevelChange }: Props) {
+export function LevelIndicator({ onLevelChange, toleranceDeg = 15 }: Props) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isLevel, setIsLevel] = useState(false);
   const prevLevelRef = useRef(false);
@@ -38,12 +36,12 @@ export function LevelIndicator({ onLevelChange }: Props) {
       const roll = Math.atan2(x, Math.sqrt(y * y + z * z)) * (180 / Math.PI);
 
       const clamp = (deg: number) =>
-        Math.max(-1, Math.min(1, deg / TOLERANCE_DEG)) * TRAVEL;
+        Math.max(-1, Math.min(1, deg / toleranceDeg)) * TRAVEL;
 
       setOffset({ x: clamp(roll), y: clamp(normalizedPitch) });
 
       const level =
-        Math.abs(normalizedPitch) <= TOLERANCE_DEG && Math.abs(roll) <= TOLERANCE_DEG;
+        Math.abs(normalizedPitch) <= toleranceDeg && Math.abs(roll) <= toleranceDeg;
       setIsLevel(level);
       if (prevLevelRef.current !== level) {
         prevLevelRef.current = level;
@@ -52,7 +50,7 @@ export function LevelIndicator({ onLevelChange }: Props) {
     });
 
     return () => subscription.remove();
-  }, [onLevelChange]);
+  }, [onLevelChange, toleranceDeg]);
 
   const color = isLevel ? '#22C55E' : '#9CA3AF';
 
