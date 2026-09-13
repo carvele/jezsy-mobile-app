@@ -22,6 +22,15 @@ export function usePresence(
   const [reconnectGen, setReconnectGen] = useState(0);
 
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  // Realtime tenants on a mostly-idle project (like this one outside active
+  // testing) cold-start their replication connection on the first subscribe
+  // after going idle -- confirmed live via Supabase's own realtime_logs
+  // ("Tenant ... is initializing", ~4s) racing this channel's subscribe and
+  // losing, producing a CHANNEL_ERROR that would otherwise just sit reported
+  // instead of self-healing once the tenant is warm.
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const MAX_PRESENCE_RETRIES = 3;
 
   // AppState listener to trigger complete channel recreation on resume
   useEffect(() => {
@@ -60,6 +69,7 @@ export function usePresence(
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+          retryCountRef.current = 0;
           try {
             await channel.track({
               user_id: userId,
@@ -78,10 +88,21 @@ export function usePresence(
             operation: 'subscribePresence',
             status,
           });
+          if (retryCountRef.current < MAX_PRESENCE_RETRIES) {
+            retryCountRef.current += 1;
+            const delayMs = 1500 * retryCountRef.current;
+            retryTimerRef.current = setTimeout(() => {
+              setReconnectGen((prev) => prev + 1);
+            }, delayMs);
+          }
         }
       });
 
     return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
   }, [userId, role, reconnectGen]);

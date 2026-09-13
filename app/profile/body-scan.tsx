@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -22,10 +22,10 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ConsentModal } from "@/src/components/ConsentModal";
 import { TiltGuide } from "@/src/components/TiltGuide";
 import { PoseLandmarkOverlay } from "@/src/components/PoseLandmarkOverlay";
-import { SilhouetteOverlay } from "@/src/components/SilhouetteOverlay";
 import { BodyAlignmentGuide } from "@/src/components/BodyAlignmentGuide";
+import { CaptureTransitionOverlay } from "@/src/components/CaptureTransitionOverlay";
 import { useBodyAlignment } from "@/src/hooks/useBodyAlignment";
-import { evaluatePoseOrientation, ALIGNMENT_CONFIG, type RequestedPose } from "@/src/utils/bodyAlignmentEvaluator";
+import { evaluatePoseOrientation, ALIGNMENT_CONFIG, type RequestedPose, type AlignmentViolation } from "@/src/utils/bodyAlignmentEvaluator";
 import { FirstUseHintModal } from "@/src/components/FirstUseHintModal";
 import { useAuth } from "@/src/context/AuthContext";
 import { hasSeenHint, markHintSeen } from "@/src/utils/firstUseHints";
@@ -55,6 +55,13 @@ import { notifySuccess } from '@/src/utils/haptics';
 // hardware (same rationale as the original tflite pipeline this replaced).
 const POSE_DELEGATE = Delegate.CPU;
 const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
+
+// TEMPORARY: side view disabled while the side-profile orientation/framing
+// checks are still being verified on-device. Skips turn_to_side/side_positioning/
+// side_capturing entirely and finishes on the front pass alone, reusing the
+// existing single_view_fallback path finishScan() already has for when side
+// capture doesn't complete. Flip back to true once side view is re-verified.
+const SIDE_VIEW_ENABLED = false;
 
 // Multi-view scan flow phases:
 // front_positioning -> front_capturing -> turn_to_side -> side_positioning -> side_capturing -> processing -> complete
@@ -148,8 +155,15 @@ export default function BodyScanScreen() {
   const sidePhaseStartRef = useRef<number | null>(null);
   const sideOrientationConfirmedStartRef = useRef<number | null>(null);
   const ambiguousStartRef = useRef<number | null>(null);
+  // Minimum time the big front/side-complete transition card stays up before a
+  // phase can advance, independent of how fast geometry/orientation resolves.
+  const turnPhaseStartRef = useRef<number | null>(null);
   const lastNudgeTimeRef = useRef<number>(0);
   const [turnOrientationLabel, setTurnOrientationLabel] = useState<string>("front");
+  // Shows the big "FRONT COMPLETE / TURN SIDEWAYS" card for the first
+  // completionTransitionMinMs of turn_to_side, then hands off to live "keep
+  // turning" guidance for however long the rest of the turn takes.
+  const [showFrontComplete, setShowFrontComplete] = useState(false);
   const turnOrientationLabelRef = useRef<string>("front");
   const instructionDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -265,6 +279,9 @@ export default function BodyScanScreen() {
     setIsCapturing(false);
     setProgress(0);
     setPhaseBoth("turn_to_side");
+    turnPhaseStartRef.current = Date.now();
+    setShowFrontComplete(true);
+    setTimeout(() => setShowFrontComplete(false), ALIGNMENT_CONFIG.completionTransitionMinMs);
     sideOrientationConfirmedStartRef.current = null;
     ambiguousStartRef.current = null;
     turnOrientationLabelRef.current = "front";
@@ -307,6 +324,53 @@ export default function BodyScanScreen() {
     context: alignmentContext,
     requestedPose
   });
+
+  // The silhouette is a brief positioning aid, not a permanent overlay: shown for
+  // guideInitialVisibleMs on entering a positioning phase, then faded -- reappearing
+  // only if the wearer becomes badly misaligned, per the reference flow.
+  const RESTORE_GUIDE_VIOLATIONS: AlignmentViolation[] = ['BODY_CLIPPED', 'OFF_CENTER_LEFT', 'OFF_CENTER_RIGHT', 'FEET_PLACEMENT'];
+  const [guideVisible, setGuideVisible] = useState(true);
+  const guideHideTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const guidePhaseRef = useRef<BodyScanPhase | null>(null);
+
+  const scheduleGuideHide = useCallback(() => {
+    if (guideHideTimerRef.current) clearTimeout(guideHideTimerRef.current);
+    guideHideTimerRef.current = setTimeout(() => {
+      setGuideVisible(false);
+      guideHideTimerRef.current = null;
+    }, ALIGNMENT_CONFIG.guideInitialVisibleMs);
+  }, []);
+
+  useEffect(() => {
+    if (phase === "front_positioning" || phase === "side_positioning") {
+      if (guidePhaseRef.current !== phase) {
+        guidePhaseRef.current = phase;
+        setGuideVisible(true);
+        scheduleGuideHide();
+      }
+    } else {
+      guidePhaseRef.current = null;
+      if (guideHideTimerRef.current) {
+        clearTimeout(guideHideTimerRef.current);
+        guideHideTimerRef.current = null;
+      }
+    }
+  }, [phase, scheduleGuideHide]);
+
+  const hasRestoreViolation = alignmentState.violations.some((v) => RESTORE_GUIDE_VIOLATIONS.includes(v));
+  useEffect(() => {
+    if (phase !== "front_positioning" && phase !== "side_positioning") return;
+    if (hasRestoreViolation) {
+      if (guideHideTimerRef.current) {
+        clearTimeout(guideHideTimerRef.current);
+        guideHideTimerRef.current = null;
+      }
+      setGuideVisible(true);
+    } else if (guideVisible && !guideHideTimerRef.current) {
+      // A restore violation just cleared while the guide is showing -- fade again.
+      scheduleGuideHide();
+    }
+  }, [hasRestoreViolation, phase, guideVisible, scheduleGuideHide]);
 
   useEffect(() => {
     if (
@@ -422,7 +486,16 @@ export default function BodyScanScreen() {
         setProgress(burstRef.current.capturedCount / burstRef.current.targetCount);
 
         if (burstRef.current.isComplete()) {
-          beginTurn();
+          if (SIDE_VIEW_ENABLED) {
+            beginTurn();
+          } else {
+            setPhaseBoth("processing");
+            setIsProcessing(true);
+            speakIfNew("Front view complete. Processing your measurements.", true);
+            setTimeout(() => {
+              finishScan();
+            }, 1500);
+          }
         }
         return;
       }
@@ -459,7 +532,10 @@ export default function BodyScanScreen() {
         if (orientation.label === 'side' && orientation.confidence >= ALIGNMENT_CONFIG.sideOrientationThreshold) {
           if (!sideOrientationConfirmedStartRef.current) {
             sideOrientationConfirmedStartRef.current = now;
-          } else if (now - sideOrientationConfirmedStartRef.current >= ALIGNMENT_CONFIG.sideOrientationDwellMs) {
+          } else if (
+            now - sideOrientationConfirmedStartRef.current >= ALIGNMENT_CONFIG.sideOrientationDwellMs &&
+            now - (turnPhaseStartRef.current ?? 0) >= ALIGNMENT_CONFIG.completionTransitionMinMs
+          ) {
             setPhaseBoth("side_positioning");
             sideOrientationConfirmedStartRef.current = null;
           }
@@ -533,11 +609,21 @@ export default function BodyScanScreen() {
   const onOutputOrientationChanged = poseDetection.cameraOrientationChangedHandler;
   const cameraDeviceChangeHandler = poseDetection.cameraDeviceChangeHandler;
 
+  // cameraDeviceChangeHandler is a fresh function reference from the native-vision
+  // hook on every render, so depending on it directly re-fires this effect every
+  // render; if the handler itself triggers any state update, that recreates the
+  // handler and loops forever ("Maximum update depth exceeded", confirmed live on
+  // device). A ref for the handler plus device?.id (a stable primitive) as the only
+  // dependency fires this only when the physical device actually changes.
+  const cameraDeviceChangeHandlerRef = useRef(cameraDeviceChangeHandler);
+  cameraDeviceChangeHandlerRef.current = cameraDeviceChangeHandler;
+
   useEffect(() => {
-    if (device && cameraDeviceChangeHandler) {
-      cameraDeviceChangeHandler(device);
+    if (device && cameraDeviceChangeHandlerRef.current) {
+      cameraDeviceChangeHandlerRef.current(device);
     }
-  }, [device, cameraDeviceChangeHandler]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [device?.id]);
 
   const handleConsentAccept = async () => {
     setShowConsent(false);
@@ -650,11 +736,6 @@ export default function BodyScanScreen() {
     );
   }
 
-  let outlineColor = "rgba(255,255,255,0.4)";
-  if (isProcessing || isCapturing) outlineColor = "#00FF00";
-  else if (!isTiltValid) outlineColor = "#FF3B30";
-  else outlineColor = "#FFCC00";
-
   return (
     <View style={styles.container}>
       <Camera
@@ -668,16 +749,26 @@ export default function BodyScanScreen() {
         onError={(e: any) => console.warn('Camera Error:', e)}
       />
       <PoseLandmarkOverlay landmarks={overlayLandmarks} />
-      
-      {phase !== "processing" && (
+
+      {(phase === "front_positioning" || phase === "side_positioning") && (
         <BodyAlignmentGuide
           requestedPose={requestedPose}
           state={alignmentState.state}
           footStatus={alignmentState.footStatus}
-          isCapturing={isCapturing}
+          visible={guideVisible}
         />
       )}
-      
+
+      {phase === "turn_to_side" && (
+        showFrontComplete
+          ? <CaptureTransitionOverlay mode="front_complete" />
+          : <CaptureTransitionOverlay mode="turning_side" keepTurning={turnOrientationLabel === "ambiguous"} />
+      )}
+
+      {phase === "processing" && (
+        <CaptureTransitionOverlay mode={SIDE_VIEW_ENABLED ? "side_complete" : "processing"} />
+      )}
+
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => { Speech.stop(); router.back(); }}>
@@ -687,7 +778,7 @@ export default function BodyScanScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
             {phase === "front_positioning" || phase === "front_capturing"
-              ? "Front View (1/2)"
+              ? (SIDE_VIEW_ENABLED ? "Front View (1/2)" : "Body Scan")
               : phase === "turn_to_side"
               ? "Turn Sideways"
               : phase === "side_positioning" || phase === "side_capturing"
@@ -705,36 +796,26 @@ export default function BodyScanScreen() {
 
         {!isCapturing && <TiltGuide onTiltValid={setIsTiltValid} renderBadge={false} />}
 
-        {phase === "front_capturing" && isCapturing && <SilhouetteOverlay color={outlineColor} />}
-
-        <View style={styles.controls}>
-          {isProcessing ? (
-            <View style={styles.processingBadge}>
-              <ActivityIndicator color="#fff" />
-              <Text style={styles.processingText}>Processing Scan...</Text>
-            </View>
-          ) : isCapturing ? (
-            <View style={styles.countdownBadge}>
-              <Text style={styles.countdownText}>
-                {phase === "side_capturing" ? "Side View" : "Front View"} {Math.round(progress * 100)}%
-              </Text>
-            </View>
-          ) : phase === "turn_to_side" ? (
-            <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
-              <Text style={styles.warningText}>
-                {turnOrientationLabel === "ambiguous"
-                  ? "Keep turning sideways"
-                  : "✓ Front view complete. Turn sideways"}
-              </Text>
-            </BlurView>
-          ) : (
-            <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
-              <Text style={styles.warningText}>
-                {alignmentState.instruction || (requestedPose === "front" ? "Face the camera" : "Turn sideways")}
-              </Text>
-            </BlurView>
-          )}
-        </View>
+        {/* turn_to_side and processing get the big CaptureTransitionOverlay instead --
+            a small bottom pill here would be redundant with (and easy to miss next to)
+            that center-screen checkpoint. */}
+        {phase !== "turn_to_side" && phase !== "processing" && (
+          <View style={styles.controls}>
+            {isCapturing ? (
+              <View style={styles.countdownBadge}>
+                <Text style={styles.countdownText}>
+                  {phase === "side_capturing" ? "Side View" : "Front View"} {Math.round(progress * 100)}%
+                </Text>
+              </View>
+            ) : (
+              <BlurView intensity={40} tint="dark" style={styles.warningWrap}>
+                <Text style={styles.warningText}>
+                  {alignmentState.instruction || (requestedPose === "front" ? "Face the camera" : "Turn sideways")}
+                </Text>
+              </BlurView>
+            )}
+          </View>
+        )}
       </SafeAreaView>
       <FirstUseHintModal
         visible={showScanHint}
@@ -762,10 +843,11 @@ const styles = StyleSheet.create({
   // fill: this is nav chrome floating over the live camera feed, the same
   // case as the AR Try-On overlay panels -- translucency over genuinely
   // varying content, not flat app chrome (Apple HIG Materials guidance).
-  // overflow hidden clips the blur to the rounded shape. countdownBadge/
-  // processingBadge below are left opaque on purpose -- those are semantic
-  // status signals during a timed pose-hold, where ambiguous legibility is
-  // a real usability risk, not just decoration.
+  // overflow hidden clips the blur to the rounded shape. countdownBadge below
+  // is left opaque on purpose -- it's a semantic status signal during a timed
+  // pose-hold, where ambiguous legibility is a real usability risk, not just
+  // decoration. Phase completion/processing states use CaptureTransitionOverlay's
+  // own opaque backdrop instead of a bottom pill.
   iconBtn: {
     width: 40, height: 40,
     alignItems: "center", justifyContent: "center",
@@ -815,11 +897,4 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
   },
   countdownText: { color: "#000", ...Type.title },
-  processingBadge: {
-    flexDirection: "row", alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.8)",
-    paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md,
-    borderRadius: Radius.xl, gap: Spacing.md,
-  },
-  processingText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 });

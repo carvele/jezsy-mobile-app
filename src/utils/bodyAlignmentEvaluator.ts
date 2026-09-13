@@ -51,9 +51,27 @@ export const ALIGNMENT_CONFIG = {
   deviceCalibrationHoldMs: 400,
   deviceCalibrationToleranceDeg: 8, // Tighter tolerance for initial setup
   liveTiltWarningToleranceDeg: 15, // Wider recovery tolerance during live scan before warning
-  captureGuideFadeMs: 200,
   voiceInstructionPersistenceMs: 600, // 500-800ms debounce before speaking positioning corrections
   ambiguousTurnDwellMs: 700, // Dwell in ambiguous orientation before prompting "Keep turning sideways"
+  // The silhouette is a brief positioning aid, not a permanent overlay: it shows
+  // for guideInitialVisibleMs then fades over guideFadeMs, reappearing only if
+  // the wearer becomes badly misaligned (see RESTORE_GUIDE_VIOLATIONS in body-scan.tsx).
+  guideInitialVisibleMs: 2500,
+  guideFadeMs: 350,
+  // The 0.35 presence bar on feetVis (below) only answers "is there probably a
+  // foot here at all" -- not reliable enough to trust the ankle's actual Y
+  // position for a height/distance measurement. A foot that's genuinely past
+  // the bottom of frame often still reports visibility in the 0.35-0.6 band
+  // with a Y estimate pulled short of the true edge, undercounting height and
+  // misreading as "too far" (telling the wearer to step closer -- which pushes
+  // their real feet further off-frame while the landmark barely moves, an
+  // unresolvable loop). Below this stricter bar, treat feet as unconfirmed
+  // (BODY_CLIPPED) rather than trusting bottomY for the height calculation.
+  minFootPositionConfidence: 0.6,
+  // Minimum time the big front/side-complete transition card stays on screen
+  // before a phase can advance, so it reads as a deliberate checkpoint rather
+  // than a flash -- independent of how quickly orientation/geometry resolves.
+  completionTransitionMinMs: 1200,
 };
 
 export const FOOT_TARGETS = {
@@ -93,7 +111,16 @@ export function evaluatePoseOrientation(landmarks: Landmark[]): PoseOrientationR
   const midHipY = (leftHip.y + rightHip.y) / 2;
   const torsoHeight = Math.abs(midHipY - midShoulderY);
 
-  if (torsoHeight < 0.05) {
+  // In true side profile the hip landmark is partially self-occluded, and
+  // pose_landmarker_lite's Y estimate for it can land nearly level with the
+  // shoulder Y even for an upright, correctly-turned wearer -- confirmed live
+  // on-device: valid side poses (shoulderRatio comfortably < 0.30 once
+  // computed) logged torsoHeight as low as ~0.017, well under the previous
+  // 0.05 guard, which misread every one of them as "ambiguous" and looped
+  // "Turn sideways" on a wearer who was already correctly turned. The guard
+  // still exists to keep the division below from blowing up on a genuinely
+  // collapsed/degenerate basis (landmarks coincident).
+  if (torsoHeight < 0.01) {
     return { label: 'ambiguous', confidence: 0 };
   }
 
@@ -199,6 +226,12 @@ export function evaluateBodyAlignment(
 
   // If upper body is detected but lower body is missing, user is too close / clipped
   if (!lowerBodyDetected) {
+    violations.push('BODY_CLIPPED');
+  } else if (feetVis < ALIGNMENT_CONFIG.minFootPositionConfidence) {
+    // Feet are "present" enough to pass the loose bar above, but not confident
+    // enough to trust their Y position for the height check below -- see
+    // minFootPositionConfidence's comment. Don't let a false TOO_FAR override
+    // this: the wearer needs "step back", not "step closer".
     violations.push('BODY_CLIPPED');
   }
 

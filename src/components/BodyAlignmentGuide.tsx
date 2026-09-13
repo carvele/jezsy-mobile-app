@@ -10,14 +10,16 @@ interface BodyAlignmentGuideProps {
   state: AlignmentState;
   footStatus: { left: boolean; right: boolean };
   requestedPose?: AlignmentGuidePose;
-  isCapturing?: boolean;
+  /** Visibility is scan-experience state (brief positioning aid, restored on bad
+   * misalignment), not geometry -- body-scan.tsx owns the timing, this just fades. */
+  visible: boolean;
 }
 
 export const BodyAlignmentGuide: React.FC<BodyAlignmentGuideProps> = ({
   state,
   footStatus,
   requestedPose = 'front',
-  isCapturing = false,
+  visible,
 }) => {
   let strokeColor = 'rgba(255, 255, 255, 0.35)'; // SEARCHING
   if (state === 'POSITIONING') {
@@ -26,16 +28,15 @@ export const BodyAlignmentGuide: React.FC<BodyAlignmentGuideProps> = ({
     strokeColor = '#34C759'; // Success green
   }
 
-  // Fade out entire guide during capture burst for clean capture moment
-  const captureOpacity = useRef(new Animated.Value(isCapturing ? 0 : 1)).current;
+  const visibilityOpacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
 
   useEffect(() => {
-    Animated.timing(captureOpacity, {
-      toValue: isCapturing ? 0 : 1,
-      duration: ALIGNMENT_CONFIG.captureGuideFadeMs,
+    Animated.timing(visibilityOpacity, {
+      toValue: visible ? 1 : 0,
+      duration: ALIGNMENT_CONFIG.guideFadeMs,
       useNativeDriver: true,
     }).start();
-  }, [isCapturing, captureOpacity]);
+  }, [visible, visibilityOpacity]);
 
   // Cross-fade animation between front (0) and side (1)
   const animValue = useRef(new Animated.Value(requestedPose === 'front' ? 0 : 1)).current;
@@ -109,7 +110,7 @@ export const BodyAlignmentGuide: React.FC<BodyAlignmentGuideProps> = ({
   const sideProfileFootprint = "M 47 89 C 45 89, 44 91, 45 93 C 46 94.5, 54 94.5, 56 93 C 57 91.5, 56 89, 54 89 C 52 89, 49 89, 47 89 Z";
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { opacity: captureOpacity }]} pointerEvents="none">
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity: visibilityOpacity }]} pointerEvents="none">
       {/* Front Silhouette Layer */}
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: frontOpacity }]}>
         <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
