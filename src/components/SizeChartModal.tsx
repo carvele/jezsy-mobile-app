@@ -4,6 +4,7 @@ import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ProductMeasurements } from '@/src/utils/sizeRecommender';
+import { normalizeSizes } from '@/src/utils/sizeOrder';
 
 const CM_TO_IN = 1 / 2.54;
 
@@ -28,8 +29,9 @@ export function SizeChartModal({ visible, measurements, sizes, recommendedSize, 
   const colors = Colors[theme];
   const [unit, setUnit] = useState<'cm' | 'in'>('cm');
 
-  // Only show sizes the product actually lists, and only columns with data.
-  const rows = sizes.filter(s => measurements[s]);
+  // Only show sizes the product actually lists, in canonical apparel order, and only columns with data.
+  const normalized = normalizeSizes(sizes);
+  const rows = normalized.filter(s => measurements[s]);
   const activeColumns = COLUMNS.filter(c => rows.some(s => measurements[s]?.[c.key] != null));
 
   // Source data is always centimetres; inches are display-only, rounded to

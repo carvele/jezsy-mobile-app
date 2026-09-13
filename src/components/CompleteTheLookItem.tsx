@@ -5,6 +5,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useCart } from '@/src/context/CartContext';
 import { tapLight, notifySuccess } from '@/src/utils/haptics';
 import { CompleteTheLookItem as CompleteTheLookItemType } from '@/src/services/completeTheLookService';
+import { normalizeSizes } from '@/src/utils/sizeOrder';
 
 interface Props {
   item: CompleteTheLookItemType;
@@ -17,6 +18,7 @@ interface Props {
  * never the full inventory list, matching product/[id].tsx's own
  * canPurchase gating so this can't offer a variant the server would reject.
  */
+
 export function CompleteTheLookItem({ item }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -27,7 +29,7 @@ export function CompleteTheLookItem({ item }: Props) {
   const [justAdded, setJustAdded] = useState(false);
 
   const sizes = useMemo(
-    () => [...new Set(item.sellableVariants.map((v) => v.size).filter((s): s is string => !!s))],
+    () => normalizeSizes(item.sellableVariants.map((v) => v.size)),
     [item.sellableVariants],
   );
 
