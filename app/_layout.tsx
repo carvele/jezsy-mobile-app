@@ -39,6 +39,10 @@ LogBox.ignoreLogs([
   'React does not recognize the `accessibilityElementsHidden` prop',
   'React does not recognize the `importantForAccessibility` prop',
   'Image: style.resizeMode is deprecated. Please use props.resizeMode.',
+  // Benign Expo Router timing quirk: the auth-redirect effect's router.replace()
+  // can fire on the first render tick, before ContextNavigator finishes mounting.
+  // Navigation still succeeds; this is framework-internal noise, not an app bug.
+  "Can't perform a React state update on a component that hasn't mounted yet.",
 ]);
 
 // react-native-web and React DOM emit known harmless dev notices on web that bypass LogBox.
