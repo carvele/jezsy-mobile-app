@@ -20,7 +20,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
