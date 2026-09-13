@@ -1,0 +1,7 @@
+-- Rollback: 20260914050000_customer_metadata_protection_and_hardened_fitting_rpcs.sql.rollback
+
+DROP TRIGGER IF EXISTS trg_protect_measurement_system_metadata ON public.user_measurements;
+DROP FUNCTION IF EXISTS public.protect_measurement_system_metadata();
+
+GRANT ALL ON public.reservation_fitting_records TO authenticated;
+GRANT ALL ON public.reservation_item_alterations TO authenticated;
