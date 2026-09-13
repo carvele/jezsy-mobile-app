@@ -710,7 +710,7 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
 
           {/* Customer Reviews & Ratings */}
-          <ReviewsList productId={product.id} />
+          <ReviewsList productId={product.id} productName={product.name} />
 
           {/* Styled Looks - real curated editorial content, ahead of the
               algorithmic Complete the Look suggestions below */}

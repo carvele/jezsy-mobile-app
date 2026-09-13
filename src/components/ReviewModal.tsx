@@ -16,12 +16,23 @@ const MAX_REVIEW_IMAGES = 4;
 
 interface ReviewModalProps {
   visible: boolean;
-  productId: string;
+  reservationItemId: string;
+  productName?: string | null;
+  orderSize?: string | null;
+  orderColor?: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewModalProps) {
+export function ReviewModal({
+  visible,
+  reservationItemId,
+  productName,
+  orderSize,
+  orderColor,
+  onClose,
+  onSuccess,
+}: ReviewModalProps) {
   const { showToast } = useToast();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -58,6 +69,10 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
       showToast('You must be logged in to review.', 'error');
       return;
     }
+    if (!reservationItemId) {
+      showToast('Missing verified reservation item.', 'error');
+      return;
+    }
     if (rating < 1 || rating > 5) return;
 
     isSubmittingRef.current = true;
@@ -75,8 +90,7 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
       const uploadedUrls = await Promise.all(uploadPromises);
 
       const result = await reviewService.submitReview({
-        productId,
-        userId: user.id,
+        reservationItemId,
         rating,
         comment: comment.trim() || null,
         images: uploadedUrls,
@@ -112,7 +126,23 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
             </TouchableOpacity>
           </View>
           
-          <View style={styles.body}>
+          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+            {productName && (
+              <Text style={[styles.productNameTitle, { color: colors.text }]} numberOfLines={1}>
+                {productName}
+              </Text>
+            )}
+            {(orderSize || orderColor) && (
+              <View style={[styles.variantBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <IconSymbol name="checkmark.circle.fill" size={13} color={colors.tint} />
+                <Text style={[styles.variantText, { color: colors.secondaryText }]}>
+                  Purchased: {orderSize ? `Size ${orderSize}` : ''}
+                  {orderSize && orderColor ? ' • ' : ''}
+                  {orderColor ? `Color ${orderColor}` : ''}
+                </Text>
+              </View>
+            )}
+
             <Text style={[styles.label, { color: colors.text }]}>Rate your item</Text>
             <View style={styles.starsRow}>
               {[1, 2, 3, 4, 5].map((star) => (
@@ -134,9 +164,10 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
             </Text>
 
             <Text style={[styles.label, { color: colors.text }]}>Tell us more</Text>
-            <TextInput keyboardAppearance={theme}
+            <TextInput
+              keyboardAppearance={theme}
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="What did you like or dislike?"
+              placeholder="What did you like or dislike about the fit and fabric?"
               placeholderTextColor={colors.secondaryText}
               multiline
               textAlignVertical="top"
@@ -179,10 +210,10 @@ export function ReviewModal({ visible, productId, onClose, onSuccess }: ReviewMo
               {submitting ? (
                 <ActivityIndicator color={colors.onTint} />
               ) : (
-                <Text style={[styles.submitBtnText, { color: colors.onTint }]}>Submit Review</Text>
+                <Text style={[styles.submitBtnText, { color: colors.onTint }]}>Submit Verified Review</Text>
               )}
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -201,7 +232,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderLeftWidth: 1,
     borderRightWidth: 1,
-    minHeight: Dimensions.get('window').height * 0.6,
+    maxHeight: Dimensions.get('window').height * 0.85,
   },
   header: {
     flexDirection: 'row',
@@ -221,6 +252,27 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: Spacing.xxl,
+  },
+  productNameTitle: {
+    ...Type.bodyLargeStrong,
+    textAlign: 'center',
+    marginBottom: Spacing.xs,
+  },
+  variantBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+    alignSelf: 'center',
+    marginBottom: Spacing.xl,
+  },
+  variantText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   label: {
     fontSize: 16,
@@ -255,9 +307,9 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: Spacing.sm,
   },
   submitBtnText: {
-    
     ...Type.bodyLargeStrong,
   },
   photoRow: {
