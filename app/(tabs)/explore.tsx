@@ -722,7 +722,18 @@ export default function ExploreScreen() {
       }
     }
 
-    if (!selectedMySizeOnly) return source;
+    if (!selectedMySizeOnly) {
+      // Availability is the primary ranking gate: sold-out items always sort
+      // last so in-stock products dominate browsable inventory. The secondary
+      // order (server-assigned score, newest, price etc.) is preserved within
+      // each availability group via a stable sort.
+      return [...source].sort((a, b) => {
+        const aOut = typeof a.stock === 'number' && a.stock <= 0;
+        const bOut = typeof b.stock === 'number' && b.stock <= 0;
+        if (aOut === bOut) return 0;
+        return aOut ? 1 : -1;
+      });
+    }
 
     return source.filter((product) => {
       const rec = recommendedSizes.get(product.id);
