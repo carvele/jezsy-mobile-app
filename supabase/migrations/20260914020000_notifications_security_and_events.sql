@@ -38,8 +38,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.enqueue_customer_notification FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.enqueue_customer_notification TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.enqueue_customer_notification FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.enqueue_customer_notification TO service_role;
 
 -- 2. Table-level Mutation Hardening
 DROP POLICY IF EXISTS "Users can manage their own notifications" ON public.notifications;
