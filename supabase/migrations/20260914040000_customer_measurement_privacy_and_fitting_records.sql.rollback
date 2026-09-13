@@ -1,0 +1,33 @@
+-- Rollback: 20260914040000_customer_measurement_privacy_and_fitting_records.sql.rollback
+-- Purpose: Revert customer measurement privacy boundaries, capabilities, and fitting records.
+
+-- 1. Drop RPCs
+DROP FUNCTION IF EXISTS public.get_customer_reservation_fitting(uuid);
+DROP FUNCTION IF EXISTS public.save_reservation_item_alteration(uuid, uuid, uuid, numeric, numeric, numeric, numeric, jsonb, text, text, text);
+DROP FUNCTION IF EXISTS public.save_reservation_fitting_record(uuid, jsonb, text, text, text);
+DROP FUNCTION IF EXISTS public.get_customer_measurements_for_staff(uuid);
+DROP FUNCTION IF EXISTS public.can_manage_fitting_records();
+DROP FUNCTION IF EXISTS public.can_view_customer_measurements();
+
+-- 2. Drop Tables
+DROP TABLE IF EXISTS public.reservation_item_alterations CASCADE;
+DROP TABLE IF EXISTS public.reservation_fitting_records CASCADE;
+
+-- 3. Restore Policies on public.user_measurements
+DROP POLICY IF EXISTS "customer_select_own_measurements" ON public.user_measurements;
+DROP POLICY IF EXISTS "customer_insert_own_measurements" ON public.user_measurements;
+DROP POLICY IF EXISTS "customer_update_own_measurements" ON public.user_measurements;
+DROP POLICY IF EXISTS "customer_delete_own_measurements" ON public.user_measurements;
+
+CREATE POLICY "Enable all access for own measurements or admin"
+  ON public.user_measurements
+  FOR ALL
+  TO authenticated
+  USING ((user_id = (SELECT auth.uid())) OR (SELECT public.is_staff_or_admin()))
+  WITH CHECK ((user_id = (SELECT auth.uid())) OR (SELECT public.is_staff_or_admin()));
+
+-- 4. Revert columns on public.user_measurements
+ALTER TABLE public.user_measurements
+  DROP CONSTRAINT IF EXISTS user_measurements_quality_status_check,
+  DROP COLUMN IF EXISTS quality_status,
+  DROP COLUMN IF EXISTS requires_review;
