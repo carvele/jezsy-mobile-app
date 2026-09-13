@@ -92,7 +92,7 @@ serve(async (req) => {
       }
       if (session?.data?.attributes?.status !== "active") {
         await admin.from("payments").update({ status: "cancelled" }).eq("id", attempt.id)
-          .in("status", ["awaiting_payment", "processing"]);
+          .in("status", ["awaiting_payment", "processing", "failed"]);
         continue;
       }
 
@@ -102,18 +102,23 @@ serve(async (req) => {
       ).catch(() => null);
       if (!expireResponse) return json(req, { error: "Could not close the active payment." }, 502);
       if (!expireResponse.ok) {
-        return json(req, {
-          error: expireResponse.status === 400
-            ? "A payment is currently processing. Wait for it to finish before recording another payment."
-            : "Could not close the active payment.",
-        }, expireResponse.status === 400 ? 409 : 502);
+        if (expireResponse.status !== 400) {
+          return json(req, { error: "Could not close the active payment." }, 502);
+        }
+        // PayMongo returns 400 when an attempt is attached to the session and cannot be expired via API.
+        // If a payment was actually paid, it was already handled above (status === "paid" returns 409).
+        // For uncompleted/failed attempts, proceed with local cancellation so staff operations
+        // (cash balance recording, handover, cancellation) are not permanently blocked.
+        console.warn(
+          `[payments-expire] PayMongo refused to expire session ${attempt.provider_ref} (status 400). Proceeding with local cancellation.`,
+        );
       }
 
       const { error: closeError } = await admin
         .from("payments")
         .update({ status: "cancelled" })
         .eq("id", attempt.id)
-        .in("status", ["awaiting_payment", "processing"]);
+        .in("status", ["awaiting_payment", "processing", "failed"]);
       if (closeError) throw closeError;
       expired += 1;
     }
