@@ -190,7 +190,6 @@ export default function ReservationDetailScreen() {
     useCallback(() => {
       if (!balanceReceiptPath) {
         setBalanceReceiptUri(null);
-        setBalanceReceiptLoadFailed(false);
         return;
       }
 
