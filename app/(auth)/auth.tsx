@@ -418,12 +418,13 @@ export default function AuthScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
+      {Platform.OS === 'web' && React.createElement('style', null, `input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active { -webkit-box-shadow: 0 0 0 30px #1a1a1a inset !important; -webkit-text-fill-color: white !important; transition: background-color 5000s ease-in-out 0s; }`)}
 
       {/* Background */}
       <Image source={BG_IMAGE} style={StyleSheet.absoluteFill} contentFit="cover" />
       <LinearGradient
-        colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.75)', 'rgba(10,10,10,0.98)']}
-        locations={[0, 0.45, 1]}
+        colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.92)', 'rgba(10,10,10,1)']}
+        locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFill}
       />
 
@@ -444,7 +445,7 @@ export default function AuthScreen() {
         </TouchableOpacity>
 
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 64 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 24, paddingBottom: Math.max(insets.bottom + 40, 60) }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -462,7 +463,7 @@ export default function AuthScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Email</Text>
                 <View style={styles.inputRow}>
-                  <Mail size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                  <Mail size={22} color="rgba(255,255,255,0.7)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.input}
                     placeholder={mode === 'forgot' ? 'Enter your registered email' : 'Enter your email'}
@@ -484,7 +485,7 @@ export default function AuthScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Password</Text>
                 <View style={styles.inputRow}>
-                  <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                  <Lock size={22} color="rgba(255,255,255,0.7)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.inputWithAction}
                     placeholder={mode === 'signup' ? 'Create password (min. 8 chars)' : 'Enter your password'}
@@ -506,9 +507,9 @@ export default function AuthScreen() {
                     accessibilityState={{ expanded: showPassword }}
                   >
                     {showPassword ? (
-                      <EyeOff size={20} color="rgba(255,255,255,0.6)" />
+                      <EyeOff size={22} color="rgba(255,255,255,0.7)" />
                     ) : (
-                      <Eye size={20} color="rgba(255,255,255,0.6)" />
+                      <Eye size={22} color="rgba(255,255,255,0.7)" />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -520,7 +521,7 @@ export default function AuthScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Confirm password</Text>
                 <View style={styles.inputRow}>
-                  <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                  <Lock size={22} color="rgba(255,255,255,0.7)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.inputWithAction}
                     placeholder="Confirm your password"
@@ -542,9 +543,9 @@ export default function AuthScreen() {
                     accessibilityState={{ expanded: showConfirmPassword }}
                   >
                     {showConfirmPassword ? (
-                      <EyeOff size={20} color="rgba(255,255,255,0.6)" />
+                      <EyeOff size={22} color="rgba(255,255,255,0.7)" />
                     ) : (
-                      <Eye size={20} color="rgba(255,255,255,0.6)" />
+                      <Eye size={22} color="rgba(255,255,255,0.7)" />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -608,7 +609,7 @@ export default function AuthScreen() {
                     <TouchableOpacity
                       onPress={handleResendCode}
                       disabled={loading}
-                      hitSlop={10}
+                      hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                       accessibilityRole="button"
                       accessibilityLabel="Resend verification code"
                       accessibilityState={{ disabled: loading, busy: loading }}
@@ -625,7 +626,7 @@ export default function AuthScreen() {
               <View style={styles.linksRow}>
                   <TouchableOpacity
                     onPress={() => transitionMode('otp_request')}
-                    hitSlop={10}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                     accessibilityRole="button"
                     accessibilityLabel="Log in with a verification code instead"
                   >
@@ -633,7 +634,7 @@ export default function AuthScreen() {
                 </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => transitionMode('forgot')}
-                    hitSlop={10}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                     accessibilityRole="button"
                     accessibilityLabel="Forgot password"
                   >
@@ -659,7 +660,7 @@ export default function AuthScreen() {
                 </Text>
                 <TouchableOpacity
                   onPress={() => transitionMode(mode === 'login' ? 'signup' : 'login')}
-                  hitSlop={10}
+                  hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                   accessibilityRole="button"
                   accessibilityLabel={mode === 'login' ? 'Create an account' : 'Log in'}
                 >
@@ -689,8 +690,8 @@ export default function AuthScreen() {
   );
 }
 
-const GLASS_BG = 'rgba(255,255,255,0.07)';
-const GLASS_BORDER = 'rgba(255,255,255,0.13)';
+const GLASS_BG = 'rgba(18,18,18,0.88)';
+const GLASS_BORDER = 'rgba(255,255,255,0.08)';
 
 // Deliberately not theme-aware. The background is a full-bleed photograph under a dark gradient scrim,
 // so white text on it is correct whatever the system theme is -- lightening
@@ -708,18 +709,18 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     width: '100%',
-    maxWidth: 440,
+    maxWidth: 400,
     alignSelf: 'center',
-    paddingHorizontal: Spacing.xxl,
-    paddingBottom: 40,
+    paddingHorizontal: 24,
+    paddingBottom: 60,
   },
   headingWrapper: {
-    marginBottom: 28,
+    marginBottom: 36,
   },
   title: {
-    fontSize: 40,
+    fontSize: 36,
     fontWeight: '800',
     color: 'white',
     lineHeight: 46,
@@ -734,11 +735,11 @@ const styles = StyleSheet.create({
   },
   glassCard: {
     backgroundColor: GLASS_BG,
-    borderRadius: Radius.xl,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: GLASS_BORDER,
-    padding: Spacing.xxl,
-    gap: 18,
+    padding: 24,
+    gap: 20,
     elevation: 10,
     ...Platform.select({
       ios: {
@@ -756,7 +757,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(255,255,255,0.65)',
     letterSpacing: 1.5,
     // Caps live here, not in the string: a screen reader spells out literal
     // all-caps text letter by letter.
@@ -793,7 +794,7 @@ const styles = StyleSheet.create({
   },
   linkText: {
     color: c.tint,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
   },
   // Geometry, colour and the disabled state now live in PrimaryButton; what
@@ -820,12 +821,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   toggleLabel: {
-    color: 'rgba(255,255,255,0.45)',
-    ...Type.body,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 15,
   },
   toggleLink: {
     color: c.tint,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
   },
   // OTP Elements
@@ -870,8 +871,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   timerText: {
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(255,255,255,0.65)',
     fontSize: 14,
     fontWeight: '500',
   },
 });
+
+
+
