@@ -1,32 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
-import { Colors, Type, Spacing } from '@/constants/theme';
+import { useRouter } from 'expo-router';
+import { Colors, Type, Spacing, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
-import { reviewService } from '@/src/services';
+import { reviewService, ReviewWithVote } from '@/src/services/reviewService';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
-import { Database } from '@/src/types/database.types';
 
 interface ReviewsListProps {
   productId: string;
+  productName?: string;
 }
 
-type ReviewRow = Database['public']['Tables']['reviews']['Row'];
 type VoteType = 'like' | 'dislike';
-type ReviewWithVote = ReviewRow & { user_vote: VoteType | null };
 
-type SortKey = 'recent' | 'highest' | 'lowest';
-
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'recent', label: 'Recent' },
-  { key: 'highest', label: 'Highest' },
-  { key: 'lowest', label: 'Lowest' },
-];
-
-export function ReviewsList({ productId }: ReviewsListProps) {
+export function ReviewsList({ productId, productName }: ReviewsListProps) {
+  const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { user } = useAuth();
@@ -35,14 +27,7 @@ export function ReviewsList({ productId }: ReviewsListProps) {
   const [reviews, setReviews] = useState<ReviewWithVote[]>([]);
   const [votingIds, setVotingIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ average: 0, count: 0, breakdown: [0,0,0,0,0] });
-  const [sortBy, setSortBy] = useState<SortKey>('recent');
-  const [photosOnly, setPhotosOnly] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  const LIMIT = 20;
+  const [stats, setStats] = useState({ average: 0, count: 0, breakdown: [0, 0, 0, 0, 0] });
 
   const fetchStats = useCallback(async () => {
     try {
@@ -50,142 +35,126 @@ export function ReviewsList({ productId }: ReviewsListProps) {
       if (!error && data) {
         const statsData = data as any;
         setStats({
-          count: statsData.count,
-          average: statsData.average,
-          breakdown: statsData.breakdown
+          count: Number(statsData.count || 0),
+          average: Number(statsData.average || 0),
+          breakdown: Array.isArray(statsData.breakdown) ? statsData.breakdown : [0, 0, 0, 0, 0],
         });
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error fetching review stats:', e);
     }
   }, [productId]);
 
-  const fetchReviews = useCallback(async () => {
+  const fetchPreviewReviews = useCallback(async () => {
     setLoading(true);
     fetchStats();
     try {
-      const { data, error } = await supabase
-        .rpc('get_reviews_with_user_vote', { p_product_id: productId, p_limit: LIMIT, p_offset: 0 });
+      const result = await reviewService.fetchReviews({
+        productId,
+        limit: 3,
+        offset: 0,
+        sort: 'recent',
+      });
 
-      if (error) throw error;
-
-      const items: ReviewWithVote[] = (data || []).map((row: any) => ({
-        ...row.review,
-        user_vote: (row.user_vote as VoteType | null) ?? null,
-      }));
-      setReviews(items);
-      setOffset(LIMIT);
-      setHasMore(items.length === LIMIT);
+      if (!result.ok) throw result.error;
+      setReviews(result.data.reviews);
     } catch (err) {
-      console.error('Error fetching reviews:', err);
+      console.error('Error fetching review preview:', err);
     } finally {
       setLoading(false);
     }
   }, [productId, fetchStats]);
 
-  const loadMoreReviews = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const { data, error } = await supabase
-        .rpc('get_reviews_with_user_vote', { p_product_id: productId, p_limit: LIMIT, p_offset: offset });
-
-      if (error) throw error;
-
-      const items: ReviewWithVote[] = (data || []).map((row: any) => ({
-        ...row.review,
-        user_vote: (row.user_vote as VoteType | null) ?? null,
-      }));
-      setReviews(prev => {
-        const existingIds = new Set(prev.map(r => r.id));
-        const newItems = items.filter(i => !existingIds.has(i.id));
-        return [...prev, ...newItems];
-      });
-      setOffset(prev => prev + LIMIT);
-      setHasMore(items.length === LIMIT);
-    } catch (err) {
-      console.error('Error loading more reviews:', err);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [productId, offset, hasMore, loadingMore]);
+  const navigateToAllReviews = useCallback(() => {
+    router.push({
+      pathname: '/product/reviews',
+      params: {
+        productId,
+        ...(productName ? { name: productName } : {}),
+      },
+    } as any);
+  }, [router, productId, productName]);
 
   useEffect(() => {
-    fetchReviews();
-  }, [fetchReviews]);
+    fetchPreviewReviews();
+  }, [fetchPreviewReviews]);
 
-  const visibleReviews = useMemo(() => {
-    const filtered = photosOnly
-      ? reviews.filter(r => r.images && r.images.length > 0)
-      : reviews;
-    const sorted = [...filtered];
-    sorted.sort((a, b) => {
-      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
-      if (sortBy === 'highest') return b.rating - a.rating;
-      if (sortBy === 'lowest') return a.rating - b.rating;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
-    return sorted;
-  }, [reviews, sortBy, photosOnly]);
-
-  const photoReviewCount = useMemo(
-    () => reviews.filter(r => r.images && r.images.length > 0).length,
-    [reviews]
-  );
-
-  const handleVote = useCallback(async (review: ReviewWithVote, voteType: VoteType) => {
-    if (!user) {
-      showToast('Log in to vote on reviews', 'info');
-      return;
-    }
-    if (votingIds.has(review.id)) return;
-
-    const nextVote: VoteType | null = review.user_vote === voteType ? null : voteType;
-    const previous = { likes: review.likes, dislikes: review.dislikes, user_vote: review.user_vote };
-
-    setVotingIds(prev => new Set(prev).add(review.id));
-    setReviews(prev => prev.map(r => {
-      if (r.id !== review.id) return r;
-      let likes = r.likes ?? 0;
-      let dislikes = r.dislikes ?? 0;
-      if (previous.user_vote === 'like') likes -= 1;
-      if (previous.user_vote === 'dislike') dislikes -= 1;
-      if (nextVote === 'like') likes += 1;
-      if (nextVote === 'dislike') dislikes += 1;
-      return { ...r, likes: Math.max(0, likes), dislikes: Math.max(0, dislikes), user_vote: nextVote };
-    }));
-
-    try {
-      const result = await reviewService.voteReview(review.id, nextVote);
-      if (!result.ok) throw result.error;
-      const resData = result.data;
-      if (resData) {
-        setReviews(prev => prev.map(r => r.id === review.id
-          ? { ...r, likes: resData.likes, dislikes: resData.dislikes, user_vote: resData.user_vote as VoteType | null }
-          : r));
+  const handleVote = useCallback(
+    async (review: ReviewWithVote, voteType: VoteType) => {
+      if (!user) {
+        showToast('Log in to vote on reviews', 'info');
+        return;
       }
-    } catch (err) {
-      console.error('Error voting on review:', err);
-      setReviews(prev => prev.map(r => r.id === review.id ? { ...r, ...previous } : r));
-      showToast('Could not record your vote. Please try again.', 'error');
-    } finally {
-      setVotingIds(prev => {
-        const next = new Set(prev);
-        next.delete(review.id);
-        return next;
-      });
-    }
-  }, [user, votingIds, showToast]);
+      if (review.user_id === user.id) {
+        showToast('You cannot vote on your own review', 'info');
+        return;
+      }
+      if (votingIds.has(review.id)) return;
+
+      const nextVote: VoteType | null = review.user_vote === voteType ? null : voteType;
+      const previous = { likes: review.likes, dislikes: review.dislikes, user_vote: review.user_vote };
+
+      setVotingIds((prev) => new Set(prev).add(review.id));
+      setReviews((prev) =>
+        prev.map((r) => {
+          if (r.id !== review.id) return r;
+          let likes = r.likes ?? 0;
+          let dislikes = r.dislikes ?? 0;
+          if (previous.user_vote === 'like') likes -= 1;
+          if (previous.user_vote === 'dislike') dislikes -= 1;
+          if (nextVote === 'like') likes += 1;
+          if (nextVote === 'dislike') dislikes += 1;
+          return {
+            ...r,
+            likes: Math.max(0, likes),
+            dislikes: Math.max(0, dislikes),
+            user_vote: nextVote,
+          };
+        }),
+      );
+
+      try {
+        const result = await reviewService.voteReview(review.id, nextVote);
+        if (!result.ok) throw result.error;
+        const resData = result.data;
+        if (resData) {
+          setReviews((prev) =>
+            prev.map((r) =>
+              r.id === review.id
+                ? {
+                    ...r,
+                    likes: resData.likes,
+                    dislikes: resData.dislikes,
+                    user_vote: resData.user_vote as VoteType | null,
+                  }
+                : r,
+            ),
+          );
+        }
+      } catch (err) {
+        console.error('Error voting on review:', err);
+        setReviews((prev) => prev.map((r) => (r.id === review.id ? { ...r, ...previous } : r)));
+        showToast('Could not record your vote. Please try again.', 'error');
+      } finally {
+        setVotingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(review.id);
+          return next;
+        });
+      }
+    },
+    [user, votingIds, showToast],
+  );
 
   const renderStars = (rating: number) => {
     return (
-      <View style={{ flexDirection: 'row' }}>
-        {[1, 2, 3, 4, 5].map(star => (
-          <IconSymbol 
-            key={star} 
-            name={star <= rating ? 'star.fill' : 'star'} 
-            size={12} 
-            color={star <= rating ? colors.warning : colors.border} 
+      <View style={{ flexDirection: 'row', gap: 2 }}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <IconSymbol
+            key={star}
+            name={star <= rating ? 'star.fill' : 'star'}
+            size={13}
+            color={star <= rating ? colors.warning : colors.border}
           />
         ))}
       </View>
@@ -196,6 +165,15 @@ export function ReviewsList({ productId }: ReviewsListProps) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>Reviews ({stats.count})</Text>
+        {stats.count > 0 && (
+          <TouchableOpacity
+            onPress={navigateToAllReviews}
+            accessibilityRole="button"
+            accessibilityLabel={`View all ${stats.count} reviews`}
+          >
+            <Text style={[styles.viewAllText, { color: colors.tint }]}>View All ({stats.count})</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {stats.count > 0 && (
@@ -203,10 +181,13 @@ export function ReviewsList({ productId }: ReviewsListProps) {
           <View style={styles.scoreCol}>
             <Text style={[styles.avgScore, { color: colors.text }]}>{stats.average.toFixed(1)}</Text>
             {renderStars(Math.round(stats.average))}
+            <Text style={[styles.totalReviewsLabel, { color: colors.secondaryText }]}>
+              {stats.count} verified {stats.count === 1 ? 'rating' : 'ratings'}
+            </Text>
           </View>
           <View style={styles.barsCol}>
-            {[5, 4, 3, 2, 1].map((star, idx) => {
-              const count = stats.breakdown[star - 1];
+            {[5, 4, 3, 2, 1].map((star) => {
+              const count = stats.breakdown[star - 1] || 0;
               const pct = stats.count > 0 ? (count / stats.count) * 100 : 0;
               return (
                 <View key={star} style={styles.barRow}>
@@ -221,129 +202,157 @@ export function ReviewsList({ productId }: ReviewsListProps) {
         </View>
       )}
 
-      {reviews.length > 1 && (
-        <View style={styles.controlsRow}>
-          {SORT_OPTIONS.map(opt => {
-            const active = sortBy === opt.key;
-            return (
-              <TouchableOpacity
-                key={opt.key}
-                style={[styles.chip, { borderColor: active ? colors.tint : colors.border }, active && { backgroundColor: colors.tint + '20' }]}
-                onPress={() => setSortBy(opt.key)}
-                accessibilityRole="button"
-                accessibilityLabel={`Sort reviews by ${opt.label}`}
-                accessibilityState={{ selected: active }}
-              >
-                <Text style={[styles.chipText, { color: active ? colors.tint : colors.secondaryText }]}>{opt.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-          {photoReviewCount > 0 && (
-            <TouchableOpacity
-              style={[styles.chip, { borderColor: photosOnly ? colors.tint : colors.border }, photosOnly && { backgroundColor: colors.tint + '20' }]}
-              onPress={() => setPhotosOnly(v => !v)}
-              accessibilityRole="button"
-              accessibilityLabel="Show only reviews with photos"
-              accessibilityState={{ selected: photosOnly }}
-            >
-              <Text style={[styles.chipText, { color: photosOnly ? colors.tint : colors.secondaryText }]}>
-                With photos ({photoReviewCount})
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
       {loading ? (
-        <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.xxxl }} />
+        <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.xxl }} />
       ) : reviews.length === 0 ? (
-        <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No reviews yet. Write the first review.</Text>
-      ) : visibleReviews.length === 0 ? (
-        <Text style={[styles.emptyText, { color: colors.secondaryText }]}>No reviews match this filter.</Text>
+        <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+          No reviews yet. Be the first to review this piece after your reservation!
+        </Text>
       ) : (
         <View style={styles.list}>
-          {visibleReviews.map(review => (
-            <View key={review.id} style={[styles.reviewCard, { borderBottomColor: colors.border }, review.is_pinned && { backgroundColor: colors.tint + '10', borderColor: colors.tint, borderWidth: 1, padding: Spacing.md, borderRadius: 8 }]}>
-              <View style={styles.reviewHeader}>
-                <View style={styles.reviewerInfo}>
-                  {review.is_pinned && <IconSymbol name="pin.fill" size={14} color={colors.tint} style={{ marginRight: 4 }} />}
-                  <Text style={[styles.reviewerName, { color: colors.text }]}>
-                    {review.reviewer_name || 'Anonymous'}
+          {reviews.map((review) => {
+            const isOwnReview = user?.id === review.user_id;
+
+            return (
+              <View
+                key={review.id}
+                style={[
+                  styles.reviewCard,
+                  { borderBottomColor: colors.border },
+                  review.is_pinned && {
+                    backgroundColor: colors.tint + '10',
+                    borderColor: colors.tint,
+                    borderWidth: 1,
+                    padding: Spacing.md,
+                    borderRadius: Radius.md,
+                  },
+                ]}
+              >
+                <View style={styles.reviewHeader}>
+                  <View style={styles.reviewerInfo}>
+                    {review.is_pinned && (
+                      <IconSymbol name="pin.fill" size={14} color={colors.tint} style={{ marginRight: 4 }} />
+                    )}
+                    <Text style={[styles.reviewerName, { color: colors.text }]}>
+                      {review.reviewer_name || 'Anonymous'}
+                    </Text>
+                    {review.verified_purchase && (
+                      <View style={styles.verifiedBadge}>
+                        <IconSymbol name="checkmark.circle.fill" size={10} color="#34C759" />
+                        <Text style={styles.verifiedText}>Verified</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.date, { color: colors.secondaryText }]}>
+                    {new Date(review.created_at).toLocaleDateString()}
                   </Text>
-                  {review.verified_purchase && (
-                    <View style={styles.verifiedBadge}>
-                      <IconSymbol name="checkmark.circle.fill" size={10} color="#34C759" />
-                      <Text style={styles.verifiedText}>Verified</Text>
+                </View>
+
+                {/* Rating and Purchased Variant */}
+                <View style={styles.ratingAndVariantRow}>
+                  {renderStars(review.rating)}
+                  {(review.size || review.color) && (
+                    <View style={[styles.variantPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <Text style={[styles.variantPillText, { color: colors.secondaryText }]}>
+                        {review.size ? `Size: ${review.size}` : ''}
+                        {review.size && review.color ? ' • ' : ''}
+                        {review.color ? `Color: ${review.color}` : ''}
+                      </Text>
                     </View>
                   )}
                 </View>
-                <Text style={[styles.date, { color: colors.secondaryText }]}>
-                  {new Date(review.created_at).toLocaleDateString()}
-                </Text>
-              </View>
-              {renderStars(review.rating)}
-              {review.comment && <Text style={[styles.comment, { color: colors.text }]}>{review.comment}</Text>}
-              {review.images && review.images.length > 0 && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.reviewPhotoRow} contentContainerStyle={{ gap: Spacing.sm }}>
-                  {review.images.map((url: string, idx: number) => (
-                    <Image key={idx} source={{ uri: url }} style={styles.reviewPhoto} contentFit="cover" />
-                  ))}
-                </ScrollView>
-              )}
-              {review.admin_reply && (
-                <View style={{ marginTop: Spacing.md, padding: Spacing.md, backgroundColor: colors.card, borderRadius: 8 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 4 }}>Response from JezSy Couture</Text>
-                  <Text style={{ fontSize: 13, color: colors.secondaryText, lineHeight: 18 }}>{review.admin_reply}</Text>
-                </View>
-              )}
-              {review.user_id !== user?.id && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md, gap: Spacing.lg }}>
+
+                {review.comment && <Text style={[styles.comment, { color: colors.text }]}>{review.comment}</Text>}
+
+                {review.images && review.images.length > 0 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.reviewPhotoRow}
+                    contentContainerStyle={{ gap: Spacing.sm }}
+                  >
+                    {review.images.map((url: string, idx: number) => (
+                      <Image key={idx} source={{ uri: url }} style={styles.reviewPhoto} contentFit="cover" />
+                    ))}
+                  </ScrollView>
+                )}
+
+                {review.admin_reply && (
+                  <View style={{ marginTop: Spacing.md, padding: Spacing.md, backgroundColor: colors.card, borderRadius: Radius.sm }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 4 }}>
+                      Response from JezSy Collection
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.secondaryText, lineHeight: 18 }}>{review.admin_reply}</Text>
+                  </View>
+                )}
+
+                {/* Always-visible voting actions */}
+                <View style={styles.actionsRow}>
                   <TouchableOpacity
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    style={[styles.voteButton, isOwnReview && styles.voteButtonDisabled]}
                     onPress={() => handleVote(review, 'like')}
                     disabled={votingIds.has(review.id)}
                     accessibilityRole="button"
-                    accessibilityLabel="Helpful"
+                    accessibilityLabel={`Helpful, ${review.likes ?? 0} likes`}
                     accessibilityState={{ selected: review.user_vote === 'like' }}
                   >
-                    <IconSymbol name="hand.thumbsup.fill" size={12} color={review.user_vote === 'like' ? colors.tint : colors.secondaryText} />
-                    <Text style={{ fontSize: 12, color: review.user_vote === 'like' ? colors.tint : colors.secondaryText }}>
+                    <IconSymbol
+                      name="hand.thumbsup.fill"
+                      size={13}
+                      color={review.user_vote === 'like' ? colors.tint : colors.secondaryText}
+                    />
+                    <Text
+                      style={[
+                        styles.voteButtonText,
+                        { color: review.user_vote === 'like' ? colors.tint : colors.secondaryText },
+                      ]}
+                    >
                       Helpful{(review.likes ?? 0) > 0 ? ` (${review.likes})` : ''}
                     </Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    style={[styles.voteButton, isOwnReview && styles.voteButtonDisabled]}
                     onPress={() => handleVote(review, 'dislike')}
                     disabled={votingIds.has(review.id)}
                     accessibilityRole="button"
-                    accessibilityLabel="Not helpful"
+                    accessibilityLabel={`Not helpful, ${review.dislikes ?? 0} dislikes`}
                     accessibilityState={{ selected: review.user_vote === 'dislike' }}
                   >
-                    <IconSymbol name="hand.thumbsdown.fill" size={12} color={review.user_vote === 'dislike' ? colors.tint : colors.secondaryText} />
-                    <Text style={{ fontSize: 12, color: review.user_vote === 'dislike' ? colors.tint : colors.secondaryText }}>
+                    <IconSymbol
+                      name="hand.thumbsdown.fill"
+                      size={13}
+                      color={review.user_vote === 'dislike' ? colors.tint : colors.secondaryText}
+                    />
+                    <Text
+                      style={[
+                        styles.voteButtonText,
+                        { color: review.user_vote === 'dislike' ? colors.tint : colors.secondaryText },
+                      ]}
+                    >
                       Not helpful{(review.dislikes ?? 0) > 0 ? ` (${review.dislikes})` : ''}
                     </Text>
                   </TouchableOpacity>
                 </View>
-              )}
-            </View>
-          ))}
-          </View>
-        )}
+              </View>
+            );
+          })}
 
-        {hasMore && reviews.length > 0 && (
-          <TouchableOpacity 
-            style={[styles.writeBtn, { borderColor: colors.border, marginTop: Spacing.md, alignSelf: 'center' }]} 
-            onPress={loadMoreReviews}
-            disabled={loadingMore}
-          >
-            {loadingMore ? (
-              <ActivityIndicator size="small" color={colors.text} />
-            ) : (
-              <Text style={[styles.writeBtnText, { color: colors.text }]}>Load More Reviews</Text>
-            )}
-          </TouchableOpacity>
-        )}
+          {stats.count > 3 && (
+            <TouchableOpacity
+              style={[styles.viewAllButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+              onPress={navigateToAllReviews}
+              accessibilityRole="button"
+              accessibilityLabel={`View all ${stats.count} reviews for this product`}
+            >
+              <Text style={[styles.viewAllButtonText, { color: colors.text }]}>
+                View All {stats.count} Reviews
+              </Text>
+              <IconSymbol name="chevron.right" size={14} color={colors.secondaryText} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -361,20 +370,14 @@ const styles = StyleSheet.create({
   title: {
     ...Type.subtitle,
   },
-  writeBtn: {
-    borderWidth: 1,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  writeBtnText: {
-    fontSize: 13,
+  viewAllText: {
+    fontSize: 14,
     fontWeight: '600',
   },
   summary: {
     flexDirection: 'row',
     padding: Spacing.lg,
-    borderRadius: 12,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     marginBottom: Spacing.xxl,
     gap: Spacing.lg,
@@ -384,12 +387,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingRight: Spacing.lg,
     borderRightWidth: 1,
-    borderRightColor: 'rgba(150,150,150,0.2)'
+    borderRightColor: 'rgba(150,150,150,0.2)',
   },
   avgScore: {
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '800',
     marginBottom: Spacing.xs,
+  },
+  totalReviewsLabel: {
+    fontSize: 11,
+    marginTop: 4,
   },
   barsCol: {
     flex: 1,
@@ -402,8 +409,8 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   starLabel: {
-    fontSize: 12,
-    width: 12,
+    fontSize: 11,
+    width: 10,
   },
   barBg: {
     flex: 1,
@@ -417,24 +424,9 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-    fontSize: 15,
+    fontSize: 14,
+    lineHeight: 20,
     marginVertical: Spacing.xxl,
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  chip: {
-    borderWidth: 1,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '600',
   },
   list: {
     gap: Spacing.lg,
@@ -464,29 +456,76 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(52, 199, 89, 0.1)',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   verifiedText: {
-    fontSize: 12,
-    color: Colors.light.success,
+    fontSize: 11,
+    color: '#34C759',
     fontWeight: '600',
   },
   date: {
     fontSize: 12,
   },
+  ratingAndVariantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  variantPill: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  variantPillText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
   comment: {
     fontSize: 14,
-    marginTop: Spacing.sm,
+    marginTop: 4,
     lineHeight: 20,
   },
   reviewPhotoRow: {
     marginTop: 10,
   },
   reviewPhoto: {
-    width: 72,
-    height: 72,
-    borderRadius: 10,
+    width: 68,
+    height: 68,
+    borderRadius: 8,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.md,
+    gap: Spacing.xl,
+  },
+  voteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+  },
+  voteButtonDisabled: {
+    opacity: 0.65,
+  },
+  voteButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  viewAllButtonText: {
+    ...Type.bodyStrong,
   },
 });
-
-
