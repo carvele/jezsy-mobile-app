@@ -2429,6 +2429,7 @@ export type Database = {
       can_manage_inventory: { Args: never; Returns: boolean }
       can_manage_staff: { Args: never; Returns: boolean }
       can_operate_inventory: { Args: never; Returns: boolean }
+      can_operate_reservations: { Args: never; Returns: boolean }
       cancel_reservation_as_manager: {
         Args: {
           _expected_status: string
@@ -2495,6 +2496,17 @@ export type Database = {
         Returns: Json
       }
       dispatch_pending_push: { Args: never; Returns: number }
+      enqueue_customer_notification: {
+        Args: {
+          _body: string
+          _data?: Json
+          _is_read?: boolean
+          _title: string
+          _type: string
+          _user_id: string
+        }
+        Returns: string
+      }
       expire_all_stale_reservations: { Args: never; Returns: number }
       expire_stale_payments: { Args: never; Returns: number }
       find_duplicate_payment_reference: {
@@ -2563,7 +2575,10 @@ export type Database = {
           wardrobe_privacy: string
         }[]
       }
-      get_review_filter_facets: { Args: { p_product_id: string }; Returns: Json }
+      get_review_filter_facets: {
+        Args: { p_product_id: string }
+        Returns: Json
+      }
       get_review_stats: { Args: { p_product_id: string }; Returns: Json }
       get_reviews_with_user_vote: {
         Args: {
@@ -2956,6 +2971,39 @@ export type Database = {
         }
         Returns: Json
       }
+      submit_verified_review: {
+        Args: {
+          p_comment?: string
+          p_images?: string[]
+          p_rating: number
+          p_reservation_item_id: string
+        }
+        Returns: {
+          admin_reply: string | null
+          color: string | null
+          comment: string | null
+          created_at: string
+          dislikes: number | null
+          id: string
+          images: string[] | null
+          is_pinned: boolean | null
+          likes: number | null
+          product_id: string
+          rating: number
+          reservation_item_id: string | null
+          reviewer_name: string | null
+          size: string | null
+          updated_at: string | null
+          user_id: string
+          verified_purchase: boolean
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reviews"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
       transition_reservation_status: {
         Args: {
@@ -3000,15 +3048,6 @@ export type Database = {
         Returns: Json
       }
       update_user_streak: { Args: never; Returns: undefined }
-      submit_verified_review: {
-        Args: {
-          p_comment?: string
-          p_images?: string[]
-          p_rating: number
-          p_reservation_item_id: string
-        }
-        Returns: Database["public"]["Tables"]["reviews"]["Row"]
-      }
       vote_on_review: {
         Args: { p_review_id: string; p_vote_type?: string }
         Returns: Json

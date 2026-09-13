@@ -1,5 +1,7 @@
 import { supabase } from "@/src/lib/supabase";
 import { formatTimeLabel } from "@/src/utils/dateTime";
+import { resolveNotificationRoute } from "@/src/utils/notificationRouting";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 
 import { Platform } from "react-native";
@@ -143,10 +145,97 @@ export async function savePushTokenToProfile(userId: string): Promise<PushRegist
   }
 }
 
+const LAST_HANDLED_NOTIFICATION_KEY = "@last_handled_notification_id";
+const handledNotificationIds = new Set<string>();
+
+export async function handleNotificationResponse(
+  response: any,
+  router: { push: (route: any) => void; replace?: (route: any) => void },
+): Promise<boolean> {
+  if (!response) return false;
+
+  const rawData = response.notification?.request?.content?.data;
+  const identifier: string | undefined =
+    response.notification?.request?.identifier ||
+    rawData?.notification_id ||
+    rawData?.id;
+
+  if (identifier) {
+    if (handledNotificationIds.has(identifier)) {
+      return false;
+    }
+    try {
+      const lastStored = await AsyncStorage.getItem(LAST_HANDLED_NOTIFICATION_KEY);
+      if (lastStored === identifier) {
+        handledNotificationIds.add(identifier);
+        return false;
+      }
+      handledNotificationIds.add(identifier);
+      await AsyncStorage.setItem(LAST_HANDLED_NOTIFICATION_KEY, identifier);
+    } catch (err) {
+      console.warn("[pushNotifications] Failed to access AsyncStorage for notification deduping", err);
+      handledNotificationIds.add(identifier);
+    }
+  }
+
+  const targetRoute = resolveNotificationRoute(rawData);
+  if (targetRoute) {
+    router.push(targetRoute as any);
+    return true;
+  }
+  return false;
+}
+
+export async function handleInitialNotificationResponse(
+  router: { push: (route: any) => void; replace?: (route: any) => void },
+): Promise<boolean> {
+  if (Platform.OS === "web" || IS_EXPO_GO) return false;
+  try {
+    const Notifications = await import("expo-notifications");
+    const response = await Notifications.getLastNotificationResponseAsync();
+    if (response) {
+      return await handleNotificationResponse(response, router);
+    }
+  } catch (err) {
+    console.warn("[pushNotifications] Error handling initial notification response:", err);
+  }
+  return false;
+}
+
+export function setupNotificationResponseHandler(
+  router: { push: (route: any) => void; replace?: (route: any) => void },
+): () => void {
+  if (Platform.OS === "web" || IS_EXPO_GO) return () => {};
+
+  let subscription: any = null;
+  let isCleanedUp = false;
+
+  (async () => {
+    try {
+      const Notifications = await import("expo-notifications");
+      if (isCleanedUp) return;
+
+      subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
+        handleNotificationResponse(response, router);
+      });
+
+      await handleInitialNotificationResponse(router);
+    } catch (err) {
+      console.warn("[pushNotifications] Error setting up notification response listener:", err);
+    }
+  })();
+
+  return () => {
+    isCleanedUp = true;
+    subscription?.remove?.();
+  };
+}
+
 export async function scheduleReservationReminder(
   displayId: string,
   appointmentDate: string,
   timeStr: string,
+  reservationId?: string,
 ): Promise<void> {
   if (Platform.OS === "web" || IS_EXPO_GO) {
     if (IS_EXPO_GO) console.log("Skipping push notification scheduling in Expo Go.");
@@ -182,7 +271,16 @@ export async function scheduleReservationReminder(
         title: "Upcoming Reservation Reminder",
         body: `Your reservation #${displayId} is in 1 hour at ${formatTimeLabel(timeStr)}.`,
         sound: true,
-        data: { displayId, appointmentDate, timeStr },
+        data: {
+          entity_type: "reservation",
+          entity_id: reservationId,
+          reservation_id: reservationId,
+          display_id: displayId,
+          displayId,
+          appointmentDate,
+          timeStr,
+          deep_link: reservationId ? `/reservations/${reservationId}` : undefined,
+        },
       },
       trigger: { type: "date", date: reminderTime } as any,
     });
@@ -191,30 +289,42 @@ export async function scheduleReservationReminder(
   }
 }
 
-export async function scheduleReturnReminder(
+export async function schedulePickupReminder(
   displayId: string,
-  returnDateStr: string,
+  pickupDateStr: string,
+  reservationId?: string,
 ): Promise<void> {
   if (Platform.OS === "web" || IS_EXPO_GO) return;
 
   try {
     const Notifications = await import("expo-notifications");
 
-    const returnDate = new Date(returnDateStr);
-    // 24 hours before return due date
-    const reminderTime = new Date(returnDate.getTime() - 24 * 60 * 60 * 1000);
+    const pickupDate = new Date(pickupDateStr);
+    // 24 hours before pickup appointment
+    const reminderTime = new Date(pickupDate.getTime() - 24 * 60 * 60 * 1000);
     if (reminderTime <= new Date()) return;
 
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: "Rental Return Reminder 📦",
-        body: `Your rental #${displayId} is due for return tomorrow. Please make sure to return it on time!`,
+        title: "Boutique Pickup Reminder",
+        body: `Your reservation #${displayId} is scheduled for pickup tomorrow.`,
         sound: true,
-        data: { displayId, returnDateStr, type: "return_reminder" },
+        data: {
+          entity_type: "reservation",
+          entity_id: reservationId,
+          reservation_id: reservationId,
+          display_id: displayId,
+          displayId,
+          pickupDateStr,
+          type: "pickup_reminder",
+          deep_link: reservationId ? `/reservations/${reservationId}` : undefined,
+        },
       },
       trigger: { type: "date", date: reminderTime } as any,
     });
   } catch (e) {
-    console.error("Error scheduling return reminder:", e);
+    console.error("Error scheduling pickup reminder:", e);
   }
 }
+
+export const scheduleReturnReminder = schedulePickupReminder;

@@ -7,6 +7,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useMessages } from '@/src/context/MessagesContext';
+import { useNotifications } from '@/src/context/NotificationContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { useFloatingTabBarMetrics } from '@/src/hooks/useFloatingTabBarMetrics';
 
@@ -14,7 +15,9 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
-  const { unreadCount } = useMessages();
+  const { unreadCount: unreadMessagesCount } = useMessages();
+  const { unreadNonChatCount } = useNotifications();
+  const totalInboxBadge = (unreadMessagesCount || 0) + (unreadNonChatCount || 0);
   const { isLoading } = useAuth();
 
   const { width: windowWidth } = useWindowDimensions();
@@ -135,7 +138,7 @@ export default function TabLayout() {
         options={{
           title: 'Inbox',
           tabBarIcon: ({ color }) => <IconSymbol size={iconSize} name="envelope.fill" color={color} />,
-          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadge: totalInboxBadge > 0 ? totalInboxBadge : undefined,
         }}
       />
       <Tabs.Screen
