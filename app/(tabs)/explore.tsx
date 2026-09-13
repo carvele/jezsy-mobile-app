@@ -159,6 +159,21 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     fetchCategories();
+
+    const channel = supabase
+      .channel('categories_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'categories' },
+        () => {
+          fetchCategories();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchCategories]);
 
   useEffect(() => {
@@ -1241,7 +1256,16 @@ export default function ExploreScreen() {
 
           {/* Level 0: Categories Grid */}
           {!selectedCategory && !showAllProducts && (
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={categoriesLoading}
+                  onRefresh={fetchCategories}
+                  tintColor={colors.tint}
+                />
+              }
+            >
               <TouchableOpacity
                 style={[styles.shopAllButton, { backgroundColor: colors.tint }]}
                 onPress={() => setShowAllProducts(true)}
@@ -1319,7 +1343,16 @@ export default function ExploreScreen() {
 
           {/* Level 1: Sub-Categories View in a 2-Column Grid Layout */}
           {selectedCategory && !selectedSubCategory && (
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={categoriesLoading}
+                  onRefresh={fetchCategories}
+                  tintColor={colors.tint}
+                />
+              }
+            >
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Shop {selectedCategory}</Text>
               <View style={styles.categoriesGrid}>
                 {/* View All is a synthetic category: it borrows the parent's
