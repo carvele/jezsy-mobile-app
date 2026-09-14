@@ -1,10 +1,10 @@
 import { isAllowedCheckoutUrl, isPaymentReturnUrl } from '@/src/lib/payments';
 
 describe('payment URL validation', () => {
-  it('accepts https urls for checkout and 3ds', () => {
+  it('accepts only the PayMongo hosted checkout origin', () => {
     expect(isAllowedCheckoutUrl('https://checkout.paymongo.com/cs_test#fragment')).toBe(true);
-    expect(isAllowedCheckoutUrl('http://checkout.paymongo.com/cs_test')).toBe(true);
-    expect(isAllowedCheckoutUrl('https://checkout.paymongo.com.evil.example/cs_test')).toBe(true);
+    expect(isAllowedCheckoutUrl('http://checkout.paymongo.com/cs_test')).toBe(false);
+    expect(isAllowedCheckoutUrl('https://checkout.paymongo.com.evil.example/cs_test')).toBe(false);
     expect(isAllowedCheckoutUrl('https://evil.example/payment')).toBe(false);
   });
 

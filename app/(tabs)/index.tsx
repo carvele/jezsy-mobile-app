@@ -29,7 +29,7 @@ import { useToast } from '@/src/context/ToastContext';
 import { cacheProductCatalog, getCachedCatalog, OfflineProduct } from '@/src/services/offlineSync';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
-import { GRID_GUTTER } from '@/src/utils/layout';
+import { GRID_GUTTER, GRID_COLUMN_GAP } from '@/src/utils/layout';
 import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
@@ -742,6 +742,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     // Feeds gridCardWidth via GRID_GUTTER, same as Explore's grid.
     paddingHorizontal: GRID_GUTTER,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: GRID_COLUMN_GAP,
   },
 });
