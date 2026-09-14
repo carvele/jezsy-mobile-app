@@ -67,7 +67,8 @@ const sampleSubCategories = {
 
 function matchCategoryNavigation(searchQuery) {
   const raw = searchQuery.trim().toLowerCase().replace(/\s+/g, ' ');
-  if (!raw) return [];
+  if (!raw || raw.length < 2) return [];
+  const isShort = raw.length === 2;
 
   const rawSingular = raw.endsWith('s') && raw.length > 3 ? raw.slice(0, -1) : raw;
   const rawPlural = raw.endsWith('s') ? raw : `${raw}s`;
@@ -75,14 +76,16 @@ function matchCategoryNavigation(searchQuery) {
   const matches = [];
   const seen = new Set();
 
+  const checkMatch = (name) => {
+    const n = name.toLowerCase();
+    if (isShort) {
+      return n.startsWith(raw) || n.split(/\s+/).some((w) => w.startsWith(raw));
+    }
+    return n === raw || n === rawSingular || n === rawPlural || n.includes(raw);
+  };
+
   sampleTopCategories.forEach((cat) => {
-    const catLower = cat.name.toLowerCase();
-    if (
-      catLower === raw ||
-      catLower === rawSingular ||
-      catLower === rawPlural ||
-      catLower.includes(raw)
-    ) {
+    if (checkMatch(cat.name)) {
       const key = `cat-${cat.id}`;
       if (!seen.has(key)) {
         seen.add(key);
@@ -93,13 +96,7 @@ function matchCategoryNavigation(searchQuery) {
 
   Object.entries(sampleSubCategories).forEach(([parentName, subs]) => {
     subs.forEach((sub) => {
-      const subLower = sub.name.toLowerCase();
-      if (
-        subLower === raw ||
-        subLower === rawSingular ||
-        subLower === rawPlural ||
-        subLower.includes(raw)
-      ) {
+      if (checkMatch(sub.name)) {
         const key = `sub-${sub.id}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -113,6 +110,18 @@ function matchCategoryNavigation(searchQuery) {
 }
 
 // Assertions
+// Test short query precision: "ac" matches Accessories and Activewear, but NOT Jackets
+const acMatches = matchCategoryNavigation('ac').map((m) => m.label);
+assert(acMatches.includes('Accessories'), '"ac" must match Accessories');
+assert(acMatches.includes('Activewear'), '"ac" must match Activewear');
+assert(!acMatches.some((l) => l.toLowerCase().includes('jacket')), '"ac" must NOT match Jackets');
+console.log('  ✓ Short query "ac" surfaces only prefix matches:', acMatches);
+
+// Test 1-character query suppression
+const singleCharMatches = matchCategoryNavigation('a');
+assert.equal(singleCharMatches.length, 0, 'Single-character query "a" must be suppressed');
+console.log('  ✓ Single character query "a" is suppressed (0 matches)');
+
 const shirtMatches = matchCategoryNavigation('shirt').map((m) => m.label);
 assert(shirtMatches.includes('Tops > Shirts (button-down)'), '"shirt" must match Shirts (button-down)');
 assert(shirtMatches.includes('Tops > T-Shirts'), '"shirt" must match T-Shirts');

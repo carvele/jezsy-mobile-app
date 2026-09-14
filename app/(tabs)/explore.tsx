@@ -211,14 +211,25 @@ export default function ExploreScreen() {
   }, [subCategoriesByParent]);
 
   const subCategoryIdsMatching = useCallback((text: string) => {
-    const lower = text.toLowerCase();
+    const lower = text.toLowerCase().trim();
+    if (lower.length < 2) return [];
+    const isShort = lower.length === 2;
     const ids = new Set<string>();
+
+    const matches = (name: string) => {
+      const n = name.toLowerCase();
+      if (isShort) {
+        return n.startsWith(lower) || n.split(/\s+/).some((w) => w.startsWith(lower));
+      }
+      return n.includes(lower);
+    };
+
     topCategories
-      .filter((c) => c.name.toLowerCase().includes(lower))
+      .filter((c) => matches(c.name))
       .forEach((top) => (subCategoriesByParent[top.name] || []).forEach((s) => ids.add(s.id)));
     Object.values(subCategoriesByParent)
       .flat()
-      .filter((s) => s.name.toLowerCase().includes(lower))
+      .filter((s) => matches(s.name))
       .forEach((s) => ids.add(s.id));
     return Array.from(ids);
   }, [topCategories, subCategoriesByParent]);
@@ -226,27 +237,35 @@ export default function ExploreScreen() {
   // Quick category navigation suggestions for the active search query
   const matchingNavOptions = useMemo(() => {
     const raw = searchQuery.trim().toLowerCase().replace(/\s+/g, ' ');
-    if (!raw) return [];
+    if (!raw || raw.length < 2) return [];
+    const isShort = raw.length === 2;
 
     const rawSingular = raw.endsWith('s') && raw.length > 3 ? raw.slice(0, -1) : raw;
     const rawPlural = raw.endsWith('s') ? raw : `${raw}s`;
 
-    const matches: { id: string; category: string; subCategory?: string; label: string }[] = [];
+    const matches = (name: string) => {
+      const n = name.toLowerCase();
+      if (isShort) {
+        return n.startsWith(raw) || n.split(/\s+/).some((w) => w.startsWith(raw));
+      }
+      return (
+        n === raw ||
+        n === rawSingular ||
+        n === rawPlural ||
+        n.includes(raw)
+      );
+    };
+
+    const matchesList: { id: string; category: string; subCategory?: string; label: string }[] = [];
     const seen = new Set<string>();
 
     // Check parent categories
     topCategories.forEach((cat) => {
-      const catLower = cat.name.toLowerCase();
-      if (
-        catLower === raw ||
-        catLower === rawSingular ||
-        catLower === rawPlural ||
-        catLower.includes(raw)
-      ) {
+      if (matches(cat.name)) {
         const key = `cat-${cat.id}`;
         if (!seen.has(key)) {
           seen.add(key);
-          matches.push({
+          matchesList.push({
             id: key,
             category: cat.name,
             label: cat.name,
@@ -258,17 +277,11 @@ export default function ExploreScreen() {
     // Check subcategories
     Object.entries(subCategoriesByParent).forEach(([parentName, subs]) => {
       subs.forEach((sub) => {
-        const subLower = sub.name.toLowerCase();
-        if (
-          subLower === raw ||
-          subLower === rawSingular ||
-          subLower === rawPlural ||
-          subLower.includes(raw)
-        ) {
+        if (matches(sub.name)) {
           const key = `sub-${sub.id}`;
           if (!seen.has(key)) {
             seen.add(key);
-            matches.push({
+            matchesList.push({
               id: key,
               category: parentName,
               subCategory: sub.name,
@@ -279,7 +292,7 @@ export default function ExploreScreen() {
       });
     });
 
-    return matches;
+    return matchesList;
   }, [searchQuery, topCategories, subCategoriesByParent]);
 
   // Filter States (Applied)
@@ -351,7 +364,9 @@ export default function ExploreScreen() {
   // are pushed server-side. Only the fit-aware My Size filter remains client-side.
   const fetchSearchResults = useCallback(async (text: string) => {
     const currentReqId = ++searchReqId.current;
-    if (!text.trim()) {
+    const safeText = text.replace(/[,()\"]/g, ' ').trim();
+    // Suppress product results for 0 or 1 character queries
+    if (!safeText || safeText.length < 2) {
       setSearchResults([]);
       setSearchError(null);
       setIsSearching(false);
@@ -360,11 +375,6 @@ export default function ExploreScreen() {
     setIsSearching(true);
     setSearchError(null);
     try {
-      const safeText = text.replace(/[,()\"]/g, ' ').trim();
-      if (!safeText) {
-        setSearchResults([]);
-        return;
-      }
       // Expand category-name matches to their subcategory IDs server-side.
       const matchingCategoryIds = subCategoryIdsMatching(safeText);
       const categoryIds = matchingCategoryIds.length > 0 ? matchingCategoryIds : null;
