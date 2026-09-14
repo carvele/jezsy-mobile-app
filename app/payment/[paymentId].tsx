@@ -133,7 +133,16 @@ export default function PaymentScreen() {
       setSettling(true);
       return false;
     }
-    return isAllowedCheckoutUrl(navState.url);
+    if (isAllowedCheckoutUrl(navState.url)) {
+      return true;
+    }
+    // Allow downstream 3D Secure / bank authentication pages securely over HTTPS
+    try {
+      const parsed = new URL(navState.url);
+      return parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
   };
 
   // Web can't embed PayMongo Checkout in an iframe -- their own CSP
