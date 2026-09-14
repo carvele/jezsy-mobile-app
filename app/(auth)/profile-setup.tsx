@@ -21,6 +21,7 @@ import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { useToast } from '@/src/context/ToastContext';
+import { consumeAuthReturnTarget, consumePendingEntryTarget } from '@/src/utils/authReturnTarget';
 import { CountryPickerModal } from '@/src/components/CountryPickerModal';
 import { DobPickerModal } from '@/src/components/DobPickerModal';
 import {
@@ -280,8 +281,27 @@ export default function ProfileSetupScreen() {
         }
       }
 
-      // Refresh profile in context so root layout re-routes to (tabs)
+      // Refresh profile in context so root layout knows profile is complete
       await refreshProfile();
+
+      const returnTarget = await consumeAuthReturnTarget();
+      if (returnTarget) {
+        router.replace({
+          pathname: returnTarget.pathname,
+          params: returnTarget.params,
+        } as any);
+        return;
+      }
+
+      const pendingEntry = await consumePendingEntryTarget();
+      if (pendingEntry) {
+        router.replace({
+          pathname: pendingEntry.pathname,
+          params: pendingEntry.params,
+        } as any);
+        return;
+      }
+
       router.replace('/(tabs)');
     } catch (err: any) {
       showToast(err.message ?? 'Could not save profile. Please try again.', 'error');

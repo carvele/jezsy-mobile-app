@@ -8,6 +8,7 @@ import { Database } from '@/src/types/database.types';
 import { normalizeSizes } from '@/src/utils/sizeOrder';
 
 type Product = Database['public']['Tables']['products']['Row'];
+type ProductVariant = Database['public']['Views']['product_variants']['Row'];
 
 interface EditVariantModalProps {
   visible: boolean;
@@ -15,8 +16,7 @@ interface EditVariantModalProps {
   currentSize?: string;
   currentColor?: string;
   onClose: () => void;
-  /** maxQuantity is inventory.available for the size being switched to. */
-  onSave: (size?: string, color?: string, maxQuantity?: number) => void;
+  onSave: (variantId: string, size?: string, color?: string, maxQuantity?: number) => void;
 }
 
 export function EditVariantModal({ visible, product, currentSize, currentColor, onClose, onSave }: EditVariantModalProps) {
@@ -24,28 +24,18 @@ export function EditVariantModal({ visible, product, currentSize, currentColor, 
   const colors = Colors[theme];
   const [size, setSize] = useState(currentSize);
   const [color, setColor] = useState(currentColor);
-  // Composite variant availability (key: "size|color" or fallback "size")
-  const [stockByVariant, setStockByVariant] = useState<Record<string, number>>({});
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
 
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     supabase
-      .from('inventory')
-      .select('size, color, available')
+      .from('product_variants')
+      .select('*')
       .eq('product_doc_id', product.id)
-      .eq('deleted', false)
       .then(({ data }) => {
         if (cancelled || !data) return;
-        const map: Record<string, number> = {};
-        data.forEach((row: any) => {
-          const key = `${row.size ?? ''}|${row.color ?? ''}`;
-          map[key] = row.available ?? 0;
-          if (row.size && !(row.size in map)) {
-            map[row.size] = row.available ?? 0;
-          }
-        });
-        setStockByVariant(map);
+        setVariants(data);
       });
     return () => { cancelled = true; };
   }, [visible, product.id]);
@@ -55,19 +45,18 @@ export function EditVariantModal({ visible, product, currentSize, currentColor, 
     ? [...new Set(product.color.split(',').map(c => c.trim()).filter(Boolean))]
     : [];
 
-  const getStock = (s?: string, c?: string) => {
+  const getVariant = (s?: string, c?: string): ProductVariant | undefined => {
     if (!s) return undefined;
-    const key = `${s}|${c ?? ''}`;
-    if (key in stockByVariant) return stockByVariant[key];
-    if (s in stockByVariant) return stockByVariant[s];
-    return undefined;
+    return variants.find((v) =>
+      v.size === s &&
+      (!c || !v.color || v.color.toLowerCase() === c.toLowerCase())
+    );
   };
 
   const handleSave = () => {
-    // Undefined when the variant has no inventory row -- untracked, so
-    // uncapped, matching the server-side hold trigger's own fallback.
-    const stock = getStock(size, color);
-    onSave(size, color, stock);
+    const v = getVariant(size, color);
+    const variantId = v?.id || `${product.id}:${size ?? ''}:${color ?? ''}`;
+    onSave(variantId, size, color);
     onClose();
   };
 
@@ -118,10 +107,8 @@ export function EditVariantModal({ visible, product, currentSize, currentColor, 
                 <View style={styles.optionsList}>
                   {sizes.map((s) => {
                     const isSelected = size === s;
-                    // Only treat as sold out when we positively know it is --
-                    // an absent row means untracked, not unavailable.
-                    const available = getStock(s, color);
-                    const isSoldOut = available !== undefined && available <= 0;
+                    const matchingVariant = getVariant(s, color);
+                    const isSoldOut = matchingVariant !== undefined && !matchingVariant.is_available;
                     return (
                       <TouchableOpacity
                         key={s}

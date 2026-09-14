@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -45,9 +46,11 @@ import { ImageViewerModal } from "@/src/components/ImageViewerModal";
 import { useToast } from '@/src/context/ToastContext';
 import { normalizeSizes } from "@/src/utils/sizeOrder";
 import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
+import { SoftAuthModal } from '@/src/components/SoftAuthModal';
+import { AuthAction } from '@/src/utils/authReturnTarget';
 
 type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
-type Inventory = Database["public"]["Tables"]["inventory"]["Row"];
+type ProductVariant = Database["public"]["Views"]["product_variants"]["Row"];
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
 // Same reasoning as the home hero carousel: the dominant region (the image
@@ -64,11 +67,15 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<Product | null>(null);
   const [lovedByCount, setLovedByCount] = useState(0);
   const [lovedByUsers, setLovedByUsers] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<Inventory[]>([]);
+  const [inventory, setInventory] = useState<ProductVariant[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const [softAuthVisible, setSoftAuthVisible] = useState(false);
+  const [softAuthAction, setSoftAuthAction] = useState<AuthAction>('generic');
+  const [softAuthPathname, setSoftAuthPathname] = useState('/product/[id]');
+  const [softAuthParams, setSoftAuthParams] = useState<Record<string, string>>({});
   const [recommendedSize, setRecommendedSize] = useState<string | null>(null);
   const [stylistRecommendation, setStylistRecommendation] = useState<StylistRecommendation | null>(null);
   const [addedToBag, setAddedToBag] = useState(false);
@@ -98,7 +105,7 @@ export default function ProductDetailScreen() {
         try {
           const [productRes, invRes] = await Promise.all([
             supabase.from("products").select(`*, ${CATEGORY_SELECT}`).eq("id", id).single(),
-            supabase.from("inventory").select("*").eq("product_doc_id", id)
+            supabase.from("product_variants").select("*").eq("product_doc_id", id)
           ]);
 
           if (productRes.error) {
@@ -116,10 +123,9 @@ export default function ProductDetailScreen() {
             
             if (invRes.data) {
               setInventory(invRes.data);
-              const activeInv = invRes.data.filter((i: any) => !i.deleted);
-              if (activeInv.length === 1) {
-                if (activeInv[0].size) setSelectedSize((prev) => prev || activeInv[0].size);
-                if (activeInv[0].color) setSelectedColor((prev) => prev || activeInv[0].color);
+              if (invRes.data.length === 1) {
+                if (invRes.data[0].size) setSelectedSize((prev) => prev || invRes.data[0].size);
+                if (invRes.data[0].color) setSelectedColor((prev) => prev || invRes.data[0].color);
               }
             }
 
@@ -238,6 +244,28 @@ export default function ProductDetailScreen() {
   };
 
   const handleMessageSeller = async () => {
+    if (!user) {
+      setSoftAuthAction('message');
+      setSoftAuthPathname('/messages');
+      setSoftAuthParams({
+        ctxType: 'product',
+        ctxRef: product?.id ?? '',
+        ctxLabel: product ? `${product.name}${selectedSize ? ` (Size ${selectedSize})` : ''}` : 'a product',
+      });
+      setSoftAuthVisible(true);
+      return;
+    }
+
+    const isStaff = profile?.role === 'staff' || profile?.role === 'owner' || profile?.role === 'admin';
+    if (isStaff) {
+      Alert.alert(
+        'Staff Account Restriction',
+        'Staff and boutique accounts cannot open customer support inquiries. Please use a personal customer account.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     const conv = await getOrCreateConversation();
     if (!conv) return;
     router.push({
@@ -295,14 +323,14 @@ export default function ProductDetailScreen() {
           i.size === size &&
           (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
         );
-        if (inv) return inv.available ?? 0;
+        if (inv) return inv.is_available ? 1 : 0;
         // If variants are tracked for this product, an unlisted variant combination has 0 available
         const hasSizeVariant = inventory.some((i: any) => i.size === size);
         if (hasSizeVariant) return 0;
       } else if (color) {
         const matching = inventory.filter((i: any) => !i.color || i.color.toLowerCase() === color.toLowerCase());
         if (matching.length > 0) {
-          return matching.reduce((sum: number, i: any) => sum + (i.available || 0), 0);
+          return matching.some((i: any) => i.is_available) ? 1 : 0;
         }
       }
     }
@@ -327,7 +355,7 @@ export default function ProductDetailScreen() {
   const canPurchase = hasRequiredSelection && !selectedSizeOutOfStock && !isProductOutOfStock;
   const sizeChart = (product.measurements as ProductMeasurements | null) || null;
   const hasSizeChart = !!sizeChart && (product.sizes || []).some(s => sizeChart[s]);
-  const maxQuantity = selectedStock !== null ? selectedStock : 10;
+  const maxQuantity = 10;
   const effectiveQuantity = Math.min(Math.max(quantity, 1), Math.max(maxQuantity, 1));
 
   return (
@@ -381,7 +409,17 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.favoriteButton, { top: insets.top + 12 }]}
-            onPress={() => { tapLight(); toggleWishlist(product.id); }}
+            onPress={() => {
+              if (!user) {
+                setSoftAuthAction('wishlist');
+                setSoftAuthPathname('/product/[id]');
+                setSoftAuthParams({ id: product.id });
+                setSoftAuthVisible(true);
+                return;
+              }
+              tapLight();
+              toggleWishlist(product.id);
+            }}
             accessibilityRole="button"
             accessibilityLabel={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
             accessibilityHint={isInWishlist(product.id) ? "Removes this item from your favorites list" : "Saves this item to your favorites list"}
@@ -782,14 +820,17 @@ export default function ProductDetailScreen() {
             style={[styles.iconAction, { borderColor: colors.border, opacity: canPurchase ? 1 : 0.4 }]}
             onPress={() => {
               if (product && canPurchase) {
-                // selectedStock is inventory.available for this exact size --
-                // the figure the server-side hold trigger enforces against.
+                const matchingVariant = inventory.find((i) =>
+                  (!selectedSize || i.size === selectedSize) &&
+                  (!selectedColor || !i.color || i.color.toLowerCase() === selectedColor.toLowerCase())
+                );
+                const variantId = matchingVariant?.id || `${product.id}:${selectedSize ?? ''}:${selectedColor ?? ''}`;
                 addToCart(
                   product,
+                  variantId,
                   effectiveQuantity,
                   selectedSize || undefined,
                   selectedColor || undefined,
-                  selectedStock ?? undefined,
                 );
                 notifySuccess();
                 announceAddedToBag();
@@ -846,12 +887,31 @@ export default function ProductDetailScreen() {
                 opacity: canPurchase ? 1 : 0.7,
               }]}
               onPress={() => {
-                if (product && canPurchase) {
-                  router.push({
-                    pathname: "/reserve/[id]",
-                    params: { id: product.id, size: selectedSize || "", color: selectedColor || "" },
+                if (!product || !canPurchase) return;
+                if (!user) {
+                  setSoftAuthAction('reserve');
+                  setSoftAuthPathname('/reserve/[id]');
+                  setSoftAuthParams({
+                    id: product.id,
+                    size: selectedSize || '',
+                    color: selectedColor || '',
                   });
+                  setSoftAuthVisible(true);
+                  return;
                 }
+                const isStaff = profile?.role === 'staff' || profile?.role === 'owner' || profile?.role === 'admin';
+                if (isStaff) {
+                  Alert.alert(
+                    'Staff Account Restriction',
+                    'Staff accounts cannot create customer reservations. Please use a personal customer account.',
+                    [{ text: 'OK' }]
+                  );
+                  return;
+                }
+                router.push({
+                  pathname: "/reserve/[id]",
+                  params: { id: product.id, size: selectedSize || "", color: selectedColor || "" },
+                });
               }}
               disabled={!canPurchase}
               accessibilityRole="button"
@@ -872,6 +932,13 @@ export default function ProductDetailScreen() {
           )}
         </View>
       </View>
+      <SoftAuthModal
+        visible={softAuthVisible}
+        action={softAuthAction}
+        targetPathname={softAuthPathname}
+        targetParams={softAuthParams}
+        onClose={() => setSoftAuthVisible(false)}
+      />
     </View>
   );
 }

@@ -17,7 +17,7 @@ import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { WebView } from 'react-native-webview';
-import { Colors, Spacing, Type } from '@/constants/theme';
+import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
@@ -203,6 +203,16 @@ export default function WelcomeScreen() {
           onPress={() => router.push('/(auth)/auth')}
           dark
         />
+
+        {/* Continue Browsing (Storefront First) */}
+        <TouchableOpacity
+          style={styles.guestButton}
+          onPress={() => router.replace('/(tabs)')}
+          accessibilityRole="button"
+          accessibilityLabel="Continue browsing without signing in"
+        >
+          <Text style={styles.guestButtonText}>Continue Browsing</Text>
+        </TouchableOpacity>
 
         <View style={styles.termsRow}>
           <Text style={styles.termsText}>By continuing, you agree to our </Text>
@@ -398,6 +408,21 @@ const styles = StyleSheet.create({
   },
   closeBtnText: {
     color: c.tint,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  guestButton: {
+    height: 52,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    marginTop: Spacing.sm,
+  },
+  guestButtonText: {
+    ...Type.label,
+    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
   },

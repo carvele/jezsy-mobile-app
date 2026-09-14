@@ -1809,6 +1809,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "reservation_items_inventory_id_fkey"
+            columns: ["inventory_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "reservation_items_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
@@ -2343,6 +2350,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "stock_movements_inventory_id_fkey"
+            columns: ["inventory_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "stock_movements_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
@@ -2693,7 +2707,29 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      product_variants: {
+        Row: {
+          color: string | null
+          hex_color: string | null
+          id: string | null
+          is_available: boolean | null
+          is_low_stock: boolean | null
+          pattern: string | null
+          product_doc_id: string | null
+          size: string | null
+          sku: string | null
+          stock_status: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_product_doc_id_fkey"
+            columns: ["product_doc_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       _settle_reservation_balance_internal: {
@@ -2903,6 +2939,7 @@ export type Database = {
           wardrobe_privacy: string
         }[]
       }
+      get_public_store_setting: { Args: { setting_key: string }; Returns: Json }
       get_review_filter_facets: {
         Args: { p_product_id: string }
         Returns: Json

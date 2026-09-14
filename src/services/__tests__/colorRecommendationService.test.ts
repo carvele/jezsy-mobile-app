@@ -22,12 +22,11 @@ function mockTables(tables: Record<string, any>) {
   });
 }
 
-const inventoryRow = (color: string, size = 'M', available = 5) => ({
+const variantRow = (color: string, size = 'M', is_available = true) => ({
   id: `${color}-${size}`,
   color,
   size,
-  available,
-  deleted: false,
+  is_available,
   hex_color: null,
 });
 
@@ -36,7 +35,7 @@ describe('colorRecommendationService.getRecommendedColors', () => {
 
   it('renormalizes weights over active signals -- a preference-only user is not diluted by inactive signals', async () => {
     mockTables({
-      inventory: { data: [inventoryRow('Navy'), inventoryRow('Red')] },
+      product_variants: { data: [variantRow('Navy'), variantRow('Red')] },
       user_color_profiles: {
         data: { undertone: 'unknown', preferred_colors: ['navy'], avoided_colors: [] },
       },
@@ -60,8 +59,8 @@ describe('colorRecommendationService.getRecommendedColors', () => {
 
   it('is deterministic in generic mode: zero signals ties every color at baseline, breaking ties alphabetically', async () => {
     mockTables({
-      inventory: {
-        data: [inventoryRow('Red'), inventoryRow('Blue'), inventoryRow('Amber')],
+      product_variants: {
+        data: [variantRow('Red'), variantRow('Blue'), variantRow('Amber')],
       },
       user_color_profiles: { data: null },
       wardrobe_items: { data: [] },
@@ -76,7 +75,7 @@ describe('colorRecommendationService.getRecommendedColors', () => {
 
   it('applies the avoided-color penalty unconditionally, not diluted by renormalization', async () => {
     mockTables({
-      inventory: { data: [inventoryRow('Neon Pink'), inventoryRow('Navy')] },
+      product_variants: { data: [variantRow('Neon Pink'), variantRow('Navy')] },
       user_color_profiles: {
         data: { undertone: 'unknown', preferred_colors: [], avoided_colors: ['neon pink'] },
       },
@@ -92,7 +91,7 @@ describe('colorRecommendationService.getRecommendedColors', () => {
   });
 
   it('works for an anonymous/unauthenticated viewer (no userId) -- falls back to generic mode', async () => {
-    mockTables({ inventory: { data: [inventoryRow('Navy')] } });
+    mockTables({ product_variants: { data: [variantRow('Navy')] } });
 
     const { recommendations, personalizationMode } = await getRecommendedColors(null, 'product-1');
     expect(personalizationMode).toBe('generic');

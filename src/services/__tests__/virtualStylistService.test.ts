@@ -31,12 +31,11 @@ function mockTables(tables: Record<string, any>) {
   });
 }
 
-const inventoryRow = (color: string, size: string, available: number) => ({
+const variantRow = (color: string, size: string, is_available: boolean) => ({
   id: `${color}-${size}`,
   color,
   size,
-  available,
-  deleted: false,
+  is_available,
   hex_color: null,
 });
 
@@ -80,11 +79,11 @@ describe('virtualStylistService', () => {
         profiles: { data: { fit_preference: 'regular' } },
         user_measurements: { data: { measurements: { bust: 90 } } },
         products: { data: { measurements: { M: { bust: 90 } }, category: 'Tops', category_id: null, name: 'Tee' } },
-        inventory: {
+        product_variants: {
           data: [
-            inventoryRow('Navy', 'M', 0), // out of stock in the recommended size
-            inventoryRow('Navy', 'L', 4), // in stock, but not the recommended size
-            inventoryRow('Burgundy', 'M', 3), // in stock in the recommended size
+            variantRow('Navy', 'M', false), // out of stock in the recommended size
+            variantRow('Navy', 'L', true), // in stock, but not the recommended size
+            variantRow('Burgundy', 'M', true), // in stock in the recommended size
           ],
         },
         user_color_profiles: {
@@ -106,7 +105,7 @@ describe('virtualStylistService', () => {
         profiles: { data: { fit_preference: 'regular' } },
         user_measurements: { data: null },
         products: { data: { measurements: { M: { bust: 90 } }, category: 'Tops', category_id: null, name: 'Tee' } },
-        inventory: { data: [inventoryRow('Navy', 'M', 5)] },
+        product_variants: { data: [variantRow('Navy', 'M', true)] },
         user_color_profiles: { data: null },
         wardrobe_items: { data: [] },
       });

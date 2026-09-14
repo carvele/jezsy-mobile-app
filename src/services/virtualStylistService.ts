@@ -3,7 +3,7 @@ import { recommendSize, UserMeasurements } from '@/src/utils/sizeRecommender';
 import { colorRecommendationService, ColorRecommendation, PersonalizationMode } from './colorRecommendationService';
 import { Database } from '@/src/types/database.types';
 
-export type InventoryVariant = Database['public']['Tables']['inventory']['Row'];
+export type InventoryVariant = Database['public']['Views']['product_variants']['Row'];
 
 export type SizeRecommendation = {
   size: string;

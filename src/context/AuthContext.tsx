@@ -12,7 +12,12 @@ import { supabase } from "../lib/supabase";
 import { Database } from "../types/database.types";
 import { savePushTokenToProfile } from "../utils/pushNotifications";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getSecureValue, setSecureValue, deleteSecureValue } from '../utils/secureStorage';
+import {
+  getSecureValue,
+  setSecureValue,
+  deleteSecureValue,
+} from '@/src/utils/secureStorage';
+import { clearAuthReturnTarget } from '@/src/utils/authReturnTarget';
 
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
@@ -266,14 +271,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = useCallback(async () => {
     try {
       syncedUsersRef.current.clear();
-      setIsProfileInitialized(false);
       setProfile(null);
-      // Remove the legacy shared AsyncStorage key (pre-SecureStore migration)
-      // so it can never be used by an older build after logout.
-      await AsyncStorage.multiRemove(['@jezsy_cart', 'jezsy_cart', 'jezsy_profile_cache']);
-      if (user?.id) await deleteSecureValue(profileCacheKey(user.id));
-    } catch {}
-    await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+      setIsProfileInitialized(true);
+
+      // Actively terminate all realtime channels to prevent background data delivery
+      await supabase.removeAllChannels().catch(() => {});
+
+      // Clear return targets and private storage caches
+      await clearAuthReturnTarget().catch(() => {});
+      await AsyncStorage.multiRemove(['@jezsy_cart', 'jezsy_cart', 'jezsy_profile_cache']).catch(() => {});
+      if (user?.id) await deleteSecureValue(profileCacheKey(user.id)).catch(() => {});
+    } catch (e) {
+      console.error('Error during signOut private state purge:', e);
+    } finally {
+      await supabase.auth.signOut().catch(() => {});
+    }
   }, [user]);
 
   useEffect(() => {
