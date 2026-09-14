@@ -1,0 +1,10 @@
+-- Rollback: fix_blouses_category
+-- Reverts product b0000003-0000-4000-8000-000000000002 ('Blouses') to T-Shirts subcategory.
+
+UPDATE public.products
+SET
+  sub_category = 'T-Shirts',
+  category_id = 'a9999999-0000-0000-0000-000000000001'
+WHERE id = 'b0000003-0000-4000-8000-000000000002'
+  AND category = 'Tops'
+  AND sub_category = 'Blouses';

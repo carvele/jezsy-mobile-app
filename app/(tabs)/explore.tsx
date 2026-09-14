@@ -41,6 +41,8 @@ const PAGE_SIZE = 20;
 // The product grid splits its page inset between the list and the row; the two
 // must still add up to GRID_GUTTER.
 const PRODUCT_ROW_INSET = 4;
+// Semantic sentinel for all-subcategory browsing decoupled from display copy.
+export const ALL_SUBCATEGORY = '__all__';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -220,6 +222,65 @@ export default function ExploreScreen() {
       .forEach((s) => ids.add(s.id));
     return Array.from(ids);
   }, [topCategories, subCategoriesByParent]);
+
+  // Quick category navigation suggestions for the active search query
+  const matchingNavOptions = useMemo(() => {
+    const raw = searchQuery.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!raw) return [];
+
+    const rawSingular = raw.endsWith('s') && raw.length > 3 ? raw.slice(0, -1) : raw;
+    const rawPlural = raw.endsWith('s') ? raw : `${raw}s`;
+
+    const matches: { id: string; category: string; subCategory?: string; label: string }[] = [];
+    const seen = new Set<string>();
+
+    // Check parent categories
+    topCategories.forEach((cat) => {
+      const catLower = cat.name.toLowerCase();
+      if (
+        catLower === raw ||
+        catLower === rawSingular ||
+        catLower === rawPlural ||
+        catLower.includes(raw)
+      ) {
+        const key = `cat-${cat.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          matches.push({
+            id: key,
+            category: cat.name,
+            label: cat.name,
+          });
+        }
+      }
+    });
+
+    // Check subcategories
+    Object.entries(subCategoriesByParent).forEach(([parentName, subs]) => {
+      subs.forEach((sub) => {
+        const subLower = sub.name.toLowerCase();
+        if (
+          subLower === raw ||
+          subLower === rawSingular ||
+          subLower === rawPlural ||
+          subLower.includes(raw)
+        ) {
+          const key = `sub-${sub.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            matches.push({
+              id: key,
+              category: parentName,
+              subCategory: sub.name,
+              label: `${parentName} > ${sub.name}`,
+            });
+          }
+        }
+      });
+    });
+
+    return matches;
+  }, [searchQuery, topCategories, subCategoriesByParent]);
 
   // Filter States (Applied)
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
@@ -401,7 +462,7 @@ export default function ExploreScreen() {
     if (showAllProducts) {
       // null = all products
     } else if (selectedCategory && selectedSubCategory) {
-      if (selectedSubCategory === 'View All') {
+      if (selectedSubCategory === ALL_SUBCATEGORY || selectedSubCategory === 'View All') {
         const subIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
         if (subIds.length > 0) {
           query = query.or(`category_id.in.(${subIds.join(',')}),and(category_id.is.null,category.eq.${selectedCategory})`);
@@ -453,7 +514,7 @@ export default function ExploreScreen() {
       // null = no category constraint; RPC returns all public products.
       categoryIds = null;
     } else if (selectedCategory && selectedSubCategory) {
-      if (selectedSubCategory === 'View All') {
+      if (selectedSubCategory === ALL_SUBCATEGORY || selectedSubCategory === 'View All') {
         categoryIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
       } else {
         const subId = subCategoryIdByName[selectedSubCategory];
@@ -882,9 +943,11 @@ export default function ExploreScreen() {
     }
 
     if (selectedSubCategory) {
+      const isAllSub = selectedSubCategory === ALL_SUBCATEGORY || selectedSubCategory === 'View All';
+      const subcatLabel = isAllSub ? `All ${selectedCategory}` : selectedSubCategory;
       breadcrumbItems.push(
         <Text key="sep2" style={[styles.breadcrumbSeparator, { color: colors.secondaryText }]}> &gt; </Text>,
-        <Text key="subcat" style={[styles.breadcrumbText, { color: colors.tint, fontWeight: '700' }]}>{selectedSubCategory}</Text>
+        <Text key="subcat" style={[styles.breadcrumbText, { color: colors.tint, fontWeight: '700' }]}>{subcatLabel}</Text>
       );
     }
 
@@ -938,6 +1001,37 @@ export default function ExploreScreen() {
   ]);
 
   const activeFiltersCount = activeFilterChips.length;
+
+  const renderCategoryNavPills = () => {
+    if (matchingNavOptions.length === 0) return null;
+    return (
+      <View style={[styles.relatedCategoriesWrapper, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.relatedCategoriesHeading, { color: colors.secondaryText }]}>
+          Related Categories
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.relatedCategoriesScroll}>
+          {matchingNavOptions.map((opt) => (
+            <TouchableOpacity
+              key={opt.id}
+              style={[styles.relatedCategoryPill, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => {
+                setIsSearchActive(false);
+                setSearchQuery('');
+                setSelectedCategory(opt.category);
+                setSelectedSubCategory(opt.subCategory ?? ALL_SUBCATEGORY);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Navigate to ${opt.label}`}
+            >
+              <IconSymbol name="folder" size={13} color={colors.tint} />
+              <Text style={[styles.relatedCategoryPillText, { color: colors.text }]}>{opt.label}</Text>
+              <IconSymbol name="chevron.right" size={11} color={colors.secondaryText} />
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
 
   const renderQuickFilterPills = () => {
     const isAllActive = !selectedNewArrivalsOnly && !selectedSaleOnly && !selectedArOnly && !selectedMySizeOnly;
@@ -1226,6 +1320,7 @@ export default function ExploreScreen() {
                         'Sort',
                         'Open sort options',
                       )}
+                      {renderCategoryNavPills()}
                       {renderQuickFilterPills()}
                     </View>
                   }
@@ -1366,16 +1461,16 @@ export default function ExploreScreen() {
             >
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Shop {selectedCategory}</Text>
               <View style={styles.categoriesGrid}>
-                {/* View All is a synthetic category: it borrows the parent's
+                {/* All items category tile: borrows the parent's
                     image so the row does not start with a blank tile. */}
                 <CategoryCard
                   category={{
-                    id: 'view-all',
-                    name: 'View All',
+                    id: ALL_SUBCATEGORY,
+                    name: `All ${selectedCategory}`,
                     image_url: topCategories.find((c) => c.name === selectedCategory)?.image_url ?? null,
                   }}
                   variant="grid"
-                  onPress={() => setSelectedSubCategory('View All')}
+                  onPress={() => setSelectedSubCategory(ALL_SUBCATEGORY)}
                 />
 
                 {(subCategoriesByParent[selectedCategory] || []).map((subcat) => (
@@ -1503,32 +1598,33 @@ export default function ExploreScreen() {
         keyboardBehavior="extend"
         enableDynamicSizing={false}
       >
-        {/* Modal Header */}
-        <BottomSheetView style={styles.modalHeader}>
-          <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
-            <TouchableOpacity
-              onPress={clearAllFilters}
-              accessibilityRole="button"
-              accessibilityLabel="Clear all filters"
-            >
-              <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={applyFilters}
-              accessibilityRole="button"
-              accessibilityLabel="Apply filters"
-              style={[styles.headerApplyButton, { backgroundColor: colors.tint }]}
-            >
-              <Text style={[styles.headerApplyButtonText, { color: colors.onTint }]}>Apply</Text>
-            </TouchableOpacity>
+        <BottomSheetView style={styles.sheetContent}>
+          {/* Modal Header */}
+          <View style={styles.modalHeader}>
+            <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+              <TouchableOpacity
+                onPress={clearAllFilters}
+                accessibilityRole="button"
+                accessibilityLabel="Clear all filters"
+              >
+                <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={applyFilters}
+                accessibilityRole="button"
+                accessibilityLabel="Apply filters"
+                style={[styles.headerApplyButton, { backgroundColor: colors.tint }]}
+              >
+                <Text style={[styles.headerApplyButtonText, { color: colors.onTint }]}>Apply</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </BottomSheetView>
 
-        <BottomSheetScrollView
-          style={styles.modalScroll}
-          contentContainerStyle={styles.modalScrollContent}
-        >
+          <BottomSheetScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalScrollContent}
+          >
             {/* Special Offers Section */}
             <View style={styles.filterSection}>
               <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Collections & Offers</Text>
@@ -1806,7 +1902,8 @@ export default function ExploreScreen() {
               </TouchableOpacity>
             </View>
           </BottomSheetScrollView>
-        </BottomSheetModal>
+        </BottomSheetView>
+      </BottomSheetModal>
 
         {/* SORT OPTIONS BOTTOM SHEET MODAL */}
         <BottomSheetModal
@@ -1997,11 +2094,8 @@ const styles = StyleSheet.create({
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    // rowGap only. A horizontal `gap` is added on top of the two 48% cards, so
-    // 96% + 12px overflowed the row on narrower phones and every card wrapped
-    // onto its own line -- the two-column grid silently became one column.
-    rowGap: GRID_COLUMN_GAP,
+    justifyContent: 'flex-start',
+    gap: GRID_COLUMN_GAP,
   },
   suggestionsContainer: {
     paddingHorizontal: Spacing.lg,
@@ -2111,7 +2205,8 @@ const styles = StyleSheet.create({
   },
   productRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: GRID_COLUMN_GAP,
     paddingHorizontal: PRODUCT_ROW_INSET,
   },
   sizingNudge: {
@@ -2174,12 +2269,45 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginVertical: Spacing.md,
   },
+  sheetContent: {
+    flex: 1,
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.lg,
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.md,
+  },
+  relatedCategoriesWrapper: {
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  relatedCategoriesHeading: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: 6,
+  },
+  relatedCategoriesScroll: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  relatedCategoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  relatedCategoryPillText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   modalTitle: {
     fontSize: 20,
