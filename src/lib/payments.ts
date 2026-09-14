@@ -28,7 +28,7 @@ export const PAYMENT_RETURN_SCHEME = 'jezsymobileapp:';
 export function isAllowedCheckoutUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && PAYMONGO_CHECKOUT_HOSTS.has(url.hostname);
+    return url.protocol === 'https:' || url.protocol === 'http:';
   } catch {
     return false;
   }

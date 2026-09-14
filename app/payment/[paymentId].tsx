@@ -208,7 +208,7 @@ export default function PaymentScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <WebView
+        <WebView originWhitelist={['*']}
           source={{ uri: checkoutUrl }}
           onShouldStartLoadWithRequest={handleNavigation}
           startInLoadingState
