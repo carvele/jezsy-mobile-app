@@ -2,7 +2,7 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { evaluateColors, undertoneAffinity, Undertone } from '@/src/utils/colorMatcher';
 
-export type InventoryVariant = Database['public']['Tables']['inventory']['Row'];
+export type InventoryVariant = Database['public']['Views']['product_variants']['Row'];
 
 export type ColorRecommendation = {
   colorKey: string; // canonical group key: color.trim().toLowerCase(), '' for a colorless product
@@ -124,13 +124,13 @@ export async function getRecommendedColors(
   productId: string,
   context?: { occasion?: string }
 ): Promise<ColorRecommendationResult> {
-  const [{ data: inventory }, profile, wardrobeColorTags] = await Promise.all([
-    supabase.from('inventory').select('*').eq('product_doc_id', productId).eq('deleted', false),
+  const [{ data: variants }, profile, wardrobeColorTags] = await Promise.all([
+    supabase.from('product_variants').select('*').eq('product_doc_id', productId),
     userId ? fetchColorProfile(userId) : Promise.resolve(DEFAULT_PROFILE),
     userId ? fetchWardrobeColorTags(userId) : Promise.resolve<string[]>([]),
   ]);
 
-  const grouped = groupByColor(inventory ?? []);
+  const grouped = groupByColor(variants ?? []);
 
   const hasVisual = profile.undertone !== 'unknown';
   const hasPref = profile.preferredColors.length > 0;
@@ -170,7 +170,7 @@ export async function getRecommendedColors(
     const avoidedPenalty = profile.avoidedColors.includes(group.colorKey) ? AVOIDED_PENALTY : 0;
 
     const score = Math.max(0, Math.min(100, Math.round(50 + weightedDelta - avoidedPenalty)));
-    const sellableVariants = group.variants.filter((v) => (v.available ?? 0) > 0 && !v.deleted);
+    const sellableVariants = group.variants.filter((v) => !!v.is_available);
 
     return {
       colorKey: group.colorKey,

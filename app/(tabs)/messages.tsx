@@ -340,6 +340,54 @@ export default function InboxScreen() {
     );
   };
 
+  if (!user) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={styles.headerRow}>
+          <Text style={[styles.title, { color: colors.text }]}>Inbox</Text>
+        </View>
+        <View style={{ flex: 1, padding: Spacing.xl, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: colors.tint + '15',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: Spacing.xl,
+          }}>
+            <IconSymbol name="bubble.left.and.bubble.right" size={38} color={colors.tint} />
+          </View>
+          <Text style={[Type.title, { color: colors.text, textAlign: 'center', marginBottom: Spacing.sm }]}>
+            Boutique & Stylist Messages
+          </Text>
+          <Text style={[Type.body, { color: colors.secondaryText, textAlign: 'center', marginBottom: Spacing.xxl, lineHeight: 22, maxWidth: 320 }]}>
+            Sign in to chat directly with boutique staff about sizing, reservations, custom alterations, and outfit inquiries.
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: colors.tint,
+              paddingVertical: 14,
+              paddingHorizontal: Spacing.xxl,
+              borderRadius: Radius.pill,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              maxWidth: 280,
+            }}
+            onPress={() => router.push('/(auth)/welcome')}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in or register to view inbox"
+          >
+            <Text style={{ color: colors.onTint, fontWeight: '600', fontSize: 16 }}>
+              Sign In / Register
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.headerRow}>

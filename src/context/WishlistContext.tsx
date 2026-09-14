@@ -7,6 +7,7 @@ type WishlistContextType = {
   wishlistIds: Set<string>;
   isInWishlist: (productId: string) => boolean;
   toggleWishlist: (productId: string) => Promise<void>;
+  ensureWishlisted: (productId: string) => Promise<void>;
   isLoading: boolean;
 };
 
@@ -14,6 +15,7 @@ const WishlistContext = createContext<WishlistContextType>({
   wishlistIds: new Set(),
   isInWishlist: () => false,
   toggleWishlist: async () => {},
+  ensureWishlisted: async () => {},
   isLoading: false,
 });
 
@@ -24,7 +26,10 @@ export const WishlistProvider = ({ children }: { children: React.ReactNode }) =>
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchWishlist = useCallback(async () => {
-    if (!user?.id) { setWishlistIds(new Set()); return; }
+    if (!user?.id) {
+      setWishlistIds(new Set());
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('wishlists')
@@ -47,54 +52,105 @@ export const WishlistProvider = ({ children }: { children: React.ReactNode }) =>
     [wishlistIds],
   );
 
-  const toggleWishlist = useCallback(async (productId: string) => {
-    if (!user?.id) {
-      showToast('Please sign in to save items to your wishlist.', 'info');
-      return;
-    }
+  const toggleWishlist = useCallback(
+    async (productId: string) => {
+      if (!user?.id) {
+        showToast('Please sign in to save items to your wishlist.', 'info');
+        return;
+      }
 
-    const alreadySaved = wishlistIds.has(productId);
+      const alreadySaved = wishlistIds.has(productId);
 
-    // Optimistic update
-    setWishlistIds((prev) => {
-      const next = new Set(prev);
-      if (alreadySaved) { next.delete(productId); } else { next.add(productId); }
-      return next;
-    });
+      // Optimistic update
+      setWishlistIds((prev) => {
+        const next = new Set(prev);
+        if (alreadySaved) {
+          next.delete(productId);
+        } else {
+          next.add(productId);
+        }
+        return next;
+      });
 
-    setIsLoading(true);
-    try {
-      if (alreadySaved) {
-        const { error } = await supabase
-          .from('wishlists')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('product_id', productId);
-        if (error) throw error;
-      } else {
+      setIsLoading(true);
+      try {
+        if (alreadySaved) {
+          const { error } = await supabase
+            .from('wishlists')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('product_id', productId);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('wishlists')
+            .upsert(
+              { user_id: user.id, product_id: productId },
+              { onConflict: 'user_id,product_id' },
+            );
+          if (error) throw error;
+        }
+      } catch (err) {
+        // Revert optimistic update on failure
+        setWishlistIds((prev) => {
+          const next = new Set(prev);
+          if (alreadySaved) {
+            next.add(productId);
+          } else {
+            next.delete(productId);
+          }
+          return next;
+        });
+        console.error('Error toggling wishlist:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [user?.id, wishlistIds, showToast],
+  );
+
+  /**
+   * Idempotent wishlist addition used when resuming intent post-auth.
+   * If already wishlisted, does nothing (never toggles off).
+   */
+  const ensureWishlisted = useCallback(
+    async (productId: string) => {
+      if (!user?.id) return;
+      if (wishlistIds.has(productId)) return; // Already wishlisted; no-op
+
+      // Optimistic update
+      setWishlistIds((prev) => new Set(prev).add(productId));
+
+      try {
         const { error } = await supabase
           .from('wishlists')
           .upsert(
             { user_id: user.id, product_id: productId },
-            { onConflict: 'user_id,product_id' }
+            { onConflict: 'user_id,product_id' },
           );
         if (error) throw error;
+      } catch (err) {
+        setWishlistIds((prev) => {
+          const next = new Set(prev);
+          next.delete(productId);
+          return next;
+        });
+        console.error('Error ensuring wishlisted:', err);
       }
-    } catch (err) {
-      // Revert optimistic update on failure
-      setWishlistIds((prev) => {
-        const next = new Set(prev);
-        if (alreadySaved) { next.add(productId); } else { next.delete(productId); }
-        return next;
-      });
-      console.error('Error toggling wishlist:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id, wishlistIds, showToast]);
+    },
+    [user?.id, wishlistIds],
+  );
 
   return (
-    <WishlistContext.Provider value={{ wishlistIds, isInWishlist, toggleWishlist, isLoading }}>
+    <WishlistContext.Provider
+      value={{
+        wishlistIds,
+        isInWishlist,
+        toggleWishlist,
+        ensureWishlisted,
+        isLoading,
+      }}
+    >
       {children}
     </WishlistContext.Provider>
   );

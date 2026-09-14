@@ -60,7 +60,8 @@ export function CompleteTheLookItem({ item }: Props) {
     if (!canAdd || !matchingVariant) return;
     // Stock is re-validated atomically by the cart/checkout flow on submit;
     // this is a UI-level gate, not the trust boundary.
-    addToCart(item.product, 1, selectedSize || undefined, selectedColor || undefined, matchingVariant.available ?? undefined);
+    const variantId = matchingVariant.id || `${item.product.id}:${selectedSize ?? ''}:${selectedColor ?? ''}`;
+    addToCart(item.product, variantId, 1, selectedSize || undefined, selectedColor || undefined);
     notifySuccess();
     setJustAdded(true);
     AccessibilityInfo.announceForAccessibility(`${item.product.name} added to bag`);

@@ -521,6 +521,54 @@ export default function WardrobeScreen() {
     </View>
   ) : null;
 
+  if (!session?.user?.id) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.tint }]}>Digital Wardrobe</Text>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: Spacing.xl, alignItems: 'center', justifyContent: 'center', flexGrow: 1 }}>
+          <View style={{
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: colors.tint + '15',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: Spacing.xl,
+          }}>
+            <IconSymbol name="hanger" size={40} color={colors.tint} />
+          </View>
+          <Text style={[Type.title, { color: colors.text, textAlign: 'center', marginBottom: Spacing.sm }]}>
+            Build Your Digital Wardrobe
+          </Text>
+          <Text style={[Type.body, { color: colors.secondaryText, textAlign: 'center', marginBottom: Spacing.xxl, lineHeight: 22, maxWidth: 320 }]}>
+            Digitize your personal clothing, create outfit combinations on a 3D mannequin, and receive AI-curated pairings with boutique pieces.
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: colors.tint,
+              paddingVertical: 14,
+              paddingHorizontal: Spacing.xxl,
+              borderRadius: Radius.pill,
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              maxWidth: 280,
+            }}
+            onPress={() => router.push('/(auth)/welcome')}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in or register to use wardrobe"
+          >
+            <Text style={{ color: colors.onTint, fontWeight: '600', fontSize: 16 }}>
+              Sign In / Register
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>

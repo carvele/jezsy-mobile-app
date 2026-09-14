@@ -42,8 +42,8 @@ function product(overrides: Partial<Record<string, any>> = {}) {
   };
 }
 
-function inventoryRow(productId: string, available = 5) {
-  return { id: `inv-${productId}`, product_doc_id: productId, deleted: false, available };
+function variantRow(productId: string, is_available = true) {
+  return { id: `inv-${productId}`, product_doc_id: productId, is_available };
 }
 
 /** Queues one mock result per table per call, in call order, so a table
@@ -79,8 +79,8 @@ describe('completeTheLookService', () => {
       products: [
         { data: [product({ id: 'p1' }), product({ id: 'p2' })], error: null },
       ],
-      inventory: [
-        { data: [inventoryRow('p1'), inventoryRow('p2')], error: null },
+      product_variants: [
+        { data: [variantRow('p1'), variantRow('p2')], error: null },
       ],
     });
 
@@ -98,7 +98,7 @@ describe('completeTheLookService', () => {
       products: [
         { data: [product({ id: 'p1' })], error: null },
       ],
-      inventory: [
+      product_variants: [
         { data: [], error: null }, // no sellable variants for p1
       ],
       pose_guide_products: [
@@ -120,9 +120,9 @@ describe('completeTheLookService', () => {
         { data: [product({ id: 'p1' })], error: null }, // Tier 1 lookup
         { data: [product({ id: 'p1' }), product({ id: 'p3' })], error: null }, // Tier 2 sibling lookup
       ],
-      inventory: [
-        { data: [inventoryRow('p1')], error: null }, // Tier 1 sellability
-        { data: [inventoryRow('p1'), inventoryRow('p3')], error: null }, // Tier 2 sellability
+      product_variants: [
+        { data: [variantRow('p1')], error: null }, // Tier 1 sellability
+        { data: [variantRow('p1'), variantRow('p3')], error: null }, // Tier 2 sellability
       ],
       pose_guide_products: [
         { data: [{ pose_guide_id: 'look-1' }], error: null }, // anchor's own looks
@@ -154,8 +154,8 @@ describe('completeTheLookService', () => {
       products: [
         { data: [product({ id: 'p_once' }), product({ id: 'p_twice' })], error: null },
       ],
-      inventory: [
-        { data: [inventoryRow('p_once'), inventoryRow('p_twice')], error: null },
+      product_variants: [
+        { data: [variantRow('p_once'), variantRow('p_twice')], error: null },
       ],
     });
 
@@ -175,8 +175,8 @@ describe('completeTheLookService', () => {
       products: [
         { data: [product({ id: 'p1' }), product({ id: 'p2' })], error: null },
       ],
-      inventory: [
-        { data: [inventoryRow('p1'), inventoryRow('p2')], error: null },
+      product_variants: [
+        { data: [variantRow('p1'), variantRow('p2')], error: null },
       ],
     });
 
@@ -195,11 +195,11 @@ describe('completeTheLookService', () => {
       products: [
         { data: [product({ id: 'p1' })], error: null },
       ],
-      inventory: [
+      product_variants: [
         { data: [
-          { id: 'inv-out', product_doc_id: 'p1', deleted: false, available: 0 },
-          { id: 'inv-in', product_doc_id: 'p1', deleted: false, available: 3 },
-        ].filter((r) => r.available > 0), error: null }, // .gt('available', 0) applied server-side
+          { id: 'inv-out', product_doc_id: 'p1', is_available: false },
+          { id: 'inv-in', product_doc_id: 'p1', is_available: true },
+        ].filter((r) => r.is_available), error: null }, // .eq('is_available', true) applied server-side
       ],
     });
 

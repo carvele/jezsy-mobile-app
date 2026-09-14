@@ -400,7 +400,7 @@ export default function CartScreen() {
           currentSize={editingItem.selectedSize}
           currentColor={editingItem.selectedColor}
           onClose={() => setEditingItem(null)}
-          onSave={(size, color, maxQuantity) => updateVariant(editingItem.id, size, color, maxQuantity)}
+          onSave={(newVariantId, size, color, maxQuantity) => updateVariant(editingItem.id, newVariantId, size, color, maxQuantity)}
         />
       )}
     </SafeAreaView>

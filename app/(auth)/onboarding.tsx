@@ -6,23 +6,25 @@ import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { ArrowRight } from 'lucide-react-native';
 import { markOnboardingSeen } from '@/src/utils/onboarding';
 
+import { consumePendingEntryTarget } from '@/src/utils/authReturnTarget';
+
 const SLIDES = [
   {
     id: '1',
-    title: 'Immersive\nFashion',
-    description: 'Discover the latest trends with our curated collections.',
+    title: 'Curated For\nYour Style',
+    description: 'Discover luxury and contemporary collections tailored to you.',
     image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=1000&auto=format&fit=crop',
   },
   {
     id: '2',
-    title: 'Digital\nWardrobe',
-    description: 'Save your favorite outfits and mix and match virtually.',
+    title: 'Build Your\nDigital Wardrobe',
+    description: 'Plan outfits, save favorites, and elevate your everyday look.',
     image: 'https://images.unsplash.com/photo-1532453288672-3a27e9be9efd?q=80&w=1000&auto=format&fit=crop',
   },
   {
     id: '3',
-    title: 'AR\nTry-On',
-    description: 'Experience clothes in augmented reality before you reserve.',
+    title: 'Try Looks in\nAugmented Reality',
+    description: 'Experience clothes virtually before booking a boutique fitting.',
     image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1000&auto=format&fit=crop',
   },
 ];
@@ -41,6 +43,19 @@ export default function Onboarding() {
     }
   }, [width]);
 
+  const completeOnboarding = async () => {
+    await markOnboardingSeen();
+    const entryTarget = await consumePendingEntryTarget();
+    if (entryTarget) {
+      router.replace({
+        pathname: entryTarget.pathname,
+        params: entryTarget.params,
+      } as any);
+      return;
+    }
+    router.replace('/(tabs)');
+  };
+
   const nextSlide = () => {
     if (currentIndex < SLIDES.length - 1) {
       const targetIndex = currentIndex + 1;
@@ -50,14 +65,12 @@ export default function Onboarding() {
         animated: true,
       });
     } else {
-      markOnboardingSeen();
-      router.push('/(auth)/welcome');
+      void completeOnboarding();
     }
   };
 
   const skip = () => {
-    markOnboardingSeen();
-    router.push('/(auth)/welcome');
+    void completeOnboarding();
   };
 
   const getItemLayout = useCallback((_: any, index: number) => ({
@@ -120,9 +133,9 @@ export default function Onboarding() {
             onPress={nextSlide}
             style={styles.nextButton}
             accessibilityRole="button"
-            accessibilityLabel={currentIndex === SLIDES.length - 1 ? 'Get started' : 'Next onboarding slide'}
+            accessibilityLabel={currentIndex === SLIDES.length - 1 ? 'Start exploring' : 'Next onboarding slide'}
           >
-            <Text style={styles.nextText}>{currentIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}</Text>
+            <Text style={styles.nextText}>{currentIndex === SLIDES.length - 1 ? 'Start Exploring' : 'Next'}</Text>
             <ArrowRight size={20} color={c.onTint} />
           </TouchableOpacity>
         </View>

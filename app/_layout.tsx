@@ -27,6 +27,11 @@ import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoti
 import { initWebUpdateChecker } from '@/src/utils/webUpdateChecker';
 import { setupNotificationResponseHandler } from '@/src/utils/pushNotifications';
 import NetInfo from '@react-native-community/netinfo';
+import {
+  savePendingEntryTarget,
+  consumePendingEntryTarget,
+  consumeAuthReturnTarget,
+} from '@/src/utils/authReturnTarget';
 
 LogBox.ignoreLogs([
   'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
@@ -206,21 +211,41 @@ function InitialLayout() {
     return () => { cancelled = true; };
   }, [session?.user?.id]);
 
-  // Handle password-recovery deep links (both a cold start from the link and
-  // the app already running in the background when it's tapped).
+  // Handle password-recovery and external public deep links (cold start and background taps)
   useEffect(() => {
-    Linking.getInitialURL().then(async (url) => {
+    const handleUrl = async (url: string | null) => {
+      if (!url) return;
       if (await handleRecoveryUrl(url)) {
         beginPasswordRecovery();
         router.replace('/(auth)/reset-password' as any);
+        return;
       }
-    });
+      try {
+        const parsed = Linking.parse(url);
+        if (parsed.path) {
+          const saved = await savePendingEntryTarget(parsed.path, parsed.queryParams ?? undefined);
+          if (saved) {
+            const seen = await hasSeenOnboarding();
+            if (seen) {
+              const target = await consumePendingEntryTarget();
+              if (target) {
+                router.push({
+                  pathname: target.pathname,
+                  params: target.params,
+                } as any);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[RootLayout] Error processing deep link:', err);
+      }
+    };
 
-    const subscription = Linking.addEventListener('url', async ({ url }) => {
-      if (await handleRecoveryUrl(url)) {
-        beginPasswordRecovery();
-        router.replace('/(auth)/reset-password' as any);
-      }
+    Linking.getInitialURL().then(handleUrl);
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleUrl(url);
     });
 
     return () => subscription.remove();
@@ -333,13 +358,25 @@ function InitialLayout() {
     // 3. For the initial bootstrap, wait until all async flags are resolved
     if (!flagsReady) return;
 
-    // 4. Unauthenticated (Guests)
+    // 4. Unauthenticated (Storefront-First Guest Browsing)
     if (!session) {
-      if (!inAuthGroup) {
-        const dest = onboardingSeen ? '/(auth)/welcome' : '/(auth)/onboarding';
-        safeRedirect(dest);
+      if (!onboardingSeen) {
+        if (!pathSegments.includes('onboarding')) {
+          safeRedirect('/(auth)/onboarding');
+        } else {
+          lastRedirectTargetRef.current = null;
+          setRouteSettled(true);
+        }
+        return;
+      }
+
+      // Guest has seen onboarding: allowed to browse storefront tabs or public screens
+      if (inAuthGroup) {
+        // User intentionally navigated into an auth screen (e.g. Welcome, Auth, Reset Password)
+        lastRedirectTargetRef.current = null;
+        setRouteSettled(true);
       } else {
-        // Destination observed: user is inside auth group
+        // User is browsing tabs or public screens
         lastRedirectTargetRef.current = null;
         setRouteSettled(true);
       }
@@ -363,7 +400,27 @@ function InitialLayout() {
 
     // 5b. Complete Profile: User must be in tabs navigator (outside auth)
     if (inAuthGroup) {
-      safeRedirect('/(tabs)');
+      (async () => {
+        const returnTarget = await consumeAuthReturnTarget();
+        if (returnTarget) {
+          lastRedirectTargetRef.current = null;
+          router.replace({
+            pathname: returnTarget.pathname,
+            params: returnTarget.params,
+          } as any);
+          return;
+        }
+        const pendingEntry = await consumePendingEntryTarget();
+        if (pendingEntry) {
+          lastRedirectTargetRef.current = null;
+          router.replace({
+            pathname: pendingEntry.pathname,
+            params: pendingEntry.params,
+          } as any);
+          return;
+        }
+        safeRedirect('/(tabs)');
+      })();
       return;
     }
 

@@ -3,7 +3,7 @@ import { Database } from '@/src/types/database.types';
 import { recommendCompleteTheLook, CatalogItem } from '@/src/utils/completeTheLook';
 
 type Product = Database['public']['Tables']['products']['Row'];
-type Inventory = Database['public']['Tables']['inventory']['Row'];
+type ProductVariant = Database['public']['Views']['product_variants']['Row'];
 
 export type CompleteTheLookOrigin = 'manual' | 'styled_look_suggestion' | 'algorithmic_suggestion';
 
@@ -11,7 +11,7 @@ export interface CompleteTheLookItem {
   product: Product;
   /** Only the variants that actually pass the sellability predicate below --
    * the UI must never offer a size/color that isn't really purchasable. */
-  sellableVariants: Inventory[];
+  sellableVariants: ProductVariant[];
   tier: CompleteTheLookOrigin;
 }
 
@@ -32,16 +32,15 @@ const toCatalogItem = (product: Product): CatalogItem => ({
   image_url: product.image_url ?? '',
 });
 
-async function fetchSellableVariantsByProduct(productIds: string[]): Promise<Map<string, Inventory[]>> {
-  const map = new Map<string, Inventory[]>();
+async function fetchSellableVariantsByProduct(productIds: string[]): Promise<Map<string, ProductVariant[]>> {
+  const map = new Map<string, ProductVariant[]>();
   if (productIds.length === 0) return map;
 
   const { data, error } = await supabase
-    .from('inventory')
+    .from('product_variants')
     .select('*')
     .in('product_doc_id', productIds)
-    .eq('deleted', false)
-    .gt('available', 0);
+    .eq('is_available', true);
   if (error) throw error;
 
   for (const row of data || []) {
