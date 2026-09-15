@@ -1,0 +1,18 @@
+-- Rollback: Canonical Analytics Aggregation RPCs & Schema Additions
+-- Rollback Migration: 20260915150000_analytics_canonical_aggregation_rpcs.sql.rollback
+
+DROP FUNCTION IF EXISTS public.get_customer_cohort_analytics(date, date, text);
+DROP FUNCTION IF EXISTS public.get_product_performance_analytics(date, date, text);
+DROP FUNCTION IF EXISTS public.get_inventory_health_analytics();
+DROP FUNCTION IF EXISTS public.get_cashflow_analytics(date, date, text);
+DROP FUNCTION IF EXISTS public.get_reservation_analytics(date, date, text);
+DROP FUNCTION IF EXISTS public.get_analytics_overview(date, date, text);
+DROP FUNCTION IF EXISTS public.assert_analytics_access(uuid);
+DROP FUNCTION IF EXISTS public.low_stock_threshold();
+
+DROP TRIGGER IF EXISTS trg_reservation_set_completed_at ON public.reservations;
+DROP FUNCTION IF EXISTS public.trg_set_reservation_completed_at();
+DROP INDEX IF EXISTS public.idx_reservations_completed_at;
+
+ALTER TABLE public.reservations
+DROP COLUMN IF EXISTS completed_at;
