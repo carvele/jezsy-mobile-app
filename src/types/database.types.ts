@@ -962,6 +962,38 @@ export type Database = {
           },
         ]
       }
+      mfa_reset_reservations: {
+        Row: {
+          expires_at: string
+          operation_id: string
+          reserved_at: string
+          status: Database["public"]["Enums"]["mfa_reset_reservation_status"]
+          target_id: string
+        }
+        Insert: {
+          expires_at?: string
+          operation_id: string
+          reserved_at?: string
+          status?: Database["public"]["Enums"]["mfa_reset_reservation_status"]
+          target_id: string
+        }
+        Update: {
+          expires_at?: string
+          operation_id?: string
+          reserved_at?: string
+          status?: Database["public"]["Enums"]["mfa_reset_reservation_status"]
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mfa_reset_reservations_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string
@@ -2313,6 +2345,39 @@ export type Database = {
           },
         ]
       }
+      step_up_receipts: {
+        Row: {
+          action_class: string
+          actor_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          session_id: string
+          target_id: string | null
+          verified_at: string
+        }
+        Insert: {
+          action_class: string
+          actor_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          session_id: string
+          target_id?: string | null
+          verified_at: string
+        }
+        Update: {
+          action_class?: string
+          actor_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          session_id?: string
+          target_id?: string | null
+          verified_at?: string
+        }
+        Relationships: []
+      }
       stock_movements: {
         Row: {
           change_type: string
@@ -2770,6 +2835,15 @@ export type Database = {
         Returns: undefined
       }
       admin_prune_devices: { Args: { _cutoff: string }; Returns: number }
+      archive_owner: {
+        Args: {
+          p_actor_id: string
+          p_session_id: string
+          p_step_up_verified_at: string
+          p_target_id: string
+        }
+        Returns: Json
+      }
       assert_bookable_slot: {
         Args: {
           _appointment: string
@@ -2779,9 +2853,33 @@ export type Database = {
         }
         Returns: undefined
       }
+      assert_owner_removal_quorum: {
+        Args: { p_target_id: string }
+        Returns: undefined
+      }
       assert_privileged_account_quorum: {
         Args: { target_user_id: string }
         Returns: undefined
+      }
+      begin_workforce_mfa_reset: {
+        Args: {
+          p_actor_id: string
+          p_operation_id: string
+          p_reason: string
+          p_session_id: string
+          p_step_up_verified_at: string
+          p_target_id: string
+        }
+        Returns: Json
+      }
+      block_owner: {
+        Args: {
+          p_actor_id: string
+          p_session_id: string
+          p_step_up_verified_at: string
+          p_target_id: string
+        }
+        Returns: Json
       }
       can_manage_customers: { Args: never; Returns: boolean }
       can_manage_fitting_records: { Args: never; Returns: boolean }
@@ -2821,6 +2919,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      clear_mfa_reset_reservation: {
+        Args: {
+          p_action: string
+          p_error?: string
+          p_operation_id: string
+          p_target_id: string
+        }
+        Returns: undefined
+      }
+      complete_mfa_reset: {
+        Args: { p_operation_id: string; p_target_id: string }
+        Returns: undefined
+      }
       complete_reservation_handover: {
         Args: { _method?: string; _reservation_id: string }
         Returns: Json
@@ -2858,6 +2969,25 @@ export type Database = {
           _items: Json
           _payment_option?: string
           _receipt_path?: string
+        }
+        Returns: Json
+      }
+      create_step_up_receipt: {
+        Args: {
+          p_action_class: string
+          p_actor_id: string
+          p_session_id: string
+          p_target_id: string
+          p_verified_at: string
+        }
+        Returns: string
+      }
+      demote_owner: {
+        Args: {
+          p_actor_id: string
+          p_session_id: string
+          p_step_up_verified_at: string
+          p_target_id: string
         }
         Returns: Json
       }
@@ -3120,6 +3250,15 @@ export type Database = {
           out_sort_order: number
         }[]
       }
+      promote_workforce_to_owner: {
+        Args: {
+          p_actor_id: string
+          p_session_id: string
+          p_step_up_verified_at: string
+          p_target_id: string
+        }
+        Returns: Json
+      }
       recalculate_inventory_stock: { Args: never; Returns: Json }
       record_boutique_sale: {
         Args: {
@@ -3174,6 +3313,8 @@ export type Database = {
         }
         Returns: Json
       }
+      require_aal2: { Args: never; Returns: undefined }
+      require_recent_mfa: { Args: never; Returns: undefined }
       reservation_holds_stock: {
         Args: { _deleted: boolean; _status: string }
         Returns: boolean
@@ -3429,6 +3570,19 @@ export type Database = {
         }
       }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
+      terminate_owner: {
+        Args: {
+          p_actor_id: string
+          p_session_id: string
+          p_step_up_verified_at: string
+          p_target_id: string
+        }
+        Returns: Json
+      }
+      transition_mfa_reset_to_awaiting: {
+        Args: { p_operation_id: string; p_target_id: string }
+        Returns: undefined
+      }
       transition_reservation_status: {
         Args: {
           _expected_status: string
@@ -3478,7 +3632,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      mfa_reset_reservation_status: "pending_delete" | "awaiting_reenrollment"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3605,6 +3759,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      mfa_reset_reservation_status: ["pending_delete", "awaiting_reenrollment"],
+    },
   },
 } as const
