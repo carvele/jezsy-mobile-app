@@ -161,10 +161,10 @@ BEGIN
 END;
 $function$;
 
+REVOKE ALL ON FUNCTION public.mark_reservation_refund_disbursed(uuid, text, text, text)
+  FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.mark_reservation_refund_disbursed(uuid, text, text, text)
   TO authenticated;
-REVOKE EXECUTE ON FUNCTION public.mark_reservation_refund_disbursed(uuid, text, text, text)
-  FROM anon;
 
 -- ── A-3. reschedule_reservation_as_manager ────────────────────────────────────
 --
@@ -315,10 +315,10 @@ BEGIN
 END;
 $function$;
 
+REVOKE ALL ON FUNCTION public.reschedule_reservation_as_manager(uuid, text, date, time, text)
+  FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.reschedule_reservation_as_manager(uuid, text, date, time, text)
   TO authenticated;
-REVOKE EXECUTE ON FUNCTION public.reschedule_reservation_as_manager(uuid, text, date, time, text)
-  FROM anon;
 
 -- ── A-4. Harden guard_reservation_financial_state ────────────────────────────
 --
