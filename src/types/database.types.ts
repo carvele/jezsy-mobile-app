@@ -1515,8 +1515,11 @@ export type Database = {
           full_name: string | null
           gender: string | null
           id: string
+          invite_delivery_status: string | null
+          invited_at: string | null
           is_blocked: boolean | null
           is_wardrobe_shared: boolean | null
+          last_invited_at: string | null
           last_name: string | null
           outfit_privacy: string
           phone: string | null
@@ -1544,8 +1547,11 @@ export type Database = {
           full_name?: string | null
           gender?: string | null
           id: string
+          invite_delivery_status?: string | null
+          invited_at?: string | null
           is_blocked?: boolean | null
           is_wardrobe_shared?: boolean | null
+          last_invited_at?: string | null
           last_name?: string | null
           outfit_privacy?: string
           phone?: string | null
@@ -1573,8 +1579,11 @@ export type Database = {
           full_name?: string | null
           gender?: string | null
           id?: string
+          invite_delivery_status?: string | null
+          invited_at?: string | null
           is_blocked?: boolean | null
           is_wardrobe_shared?: boolean | null
+          last_invited_at?: string | null
           last_name?: string | null
           outfit_privacy?: string
           phone?: string | null
@@ -2746,6 +2755,7 @@ export type Database = {
         }
         Returns: Json
       }
+      activate_staff_account: { Args: never; Returns: Json }
       adjust_inventory_on_hand: {
         Args: { p_delta: number; p_inventory_id: string; p_reason: string }
         Returns: Json
@@ -2767,6 +2777,10 @@ export type Database = {
           _date: string
           _exclude_reservation?: string
         }
+        Returns: undefined
+      }
+      assert_privileged_account_quorum: {
+        Args: { target_user_id: string }
         Returns: undefined
       }
       can_manage_customers: { Args: never; Returns: boolean }
