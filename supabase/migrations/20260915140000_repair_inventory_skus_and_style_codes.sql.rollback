@@ -1,0 +1,39 @@
+-- ============================================================================
+-- Rollback: 20260915140000_repair_inventory_skus_and_style_codes.sql.rollback
+-- Description: Reverts product style codes and inventory variant SKUs to their
+--              pre-remediation state recorded in the backup tables.
+-- Author: Platform Team
+-- Date: 2026-09-15
+-- ============================================================================
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '_backup_sku_remediation_20260915') THEN
+        -- Restore original inventory SKUs
+        UPDATE inventory i
+        SET sku = b.old_sku,
+            variant_sku = b.old_variant_sku,
+            updated_at = NOW()
+        FROM _backup_sku_remediation_20260915 b
+        WHERE i.id = b.inventory_id;
+        
+        RAISE NOTICE 'Restored original inventory SKUs from _backup_sku_remediation_20260915.';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '_backup_product_style_codes_20260915') THEN
+        -- Restore original product style codes
+        UPDATE products p
+        SET style_code = b.old_style_code,
+            updated_at = NOW()
+        FROM _backup_product_style_codes_20260915 b
+        WHERE p.id = b.product_id;
+        
+        RAISE NOTICE 'Restored original product style codes from _backup_product_style_codes_20260915.';
+    END IF;
+
+    -- Drop backup tables after restoration
+    DROP TABLE IF EXISTS _backup_sku_remediation_20260915;
+    DROP TABLE IF EXISTS _backup_product_style_codes_20260915;
+
+    RAISE NOTICE 'Rollback completed and backup tables cleaned up.';
+END $$;
