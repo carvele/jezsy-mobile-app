@@ -1,0 +1,421 @@
+-- Rollback: 20260915120000_harden_workforce_iam_invariants.sql.rollback
+
+-- 1. Drop index and tracking columns
+DROP INDEX IF EXISTS public.idx_profiles_staff_work_email_unique;
+
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS last_invited_at;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS invited_at;
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS invite_delivery_status;
+
+-- 2. Revert employment status check constraint
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_employment_status_check;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_employment_status_check
+  CHECK (employment_status IN ('active', 'on_leave', 'resigned', 'terminated'));
+
+-- 3. Drop insert defaults trigger and function
+DROP TRIGGER IF EXISTS trg_enforce_profile_insert_defaults ON public.profiles;
+DROP FUNCTION IF EXISTS public.enforce_profile_insert_defaults();
+
+-- 4. Drop activation RPC and quorum helper
+DROP FUNCTION IF EXISTS public.activate_staff_account();
+DROP FUNCTION IF EXISTS public.assert_privileged_account_quorum(uuid);
+
+-- 4b. Restore legacy check_profile_updates trigger function
+CREATE OR REPLACE FUNCTION public.check_profile_updates()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  performer_role text;
+BEGIN
+  IF (
+    NEW.role IS DISTINCT FROM OLD.role OR
+    NEW.employment_status IS DISTINCT FROM OLD.employment_status OR
+    NEW.is_blocked IS DISTINCT FROM OLD.is_blocked OR
+    NEW.deleted IS DISTINCT FROM OLD.deleted
+  ) THEN
+    IF auth.uid() IS NOT NULL THEN
+      IF auth.uid() = OLD.id THEN
+        RAISE EXCEPTION 'You cannot modify your own role, employment status, block status, or deletion status.';
+      END IF;
+
+      SELECT role INTO performer_role
+      FROM public.profiles
+      WHERE id = auth.uid() AND deleted = false;
+
+      IF performer_role IS NULL OR performer_role NOT IN ('admin', 'owner') THEN
+        RAISE EXCEPTION 'Only administrators or owners can modify role, employment status, block status, or deletion status.';
+      END IF;
+
+      IF NEW.role = 'owner' AND OLD.role IS DISTINCT FROM 'owner' THEN
+        RAISE EXCEPTION 'The Owner role cannot be assigned through the application.';
+      END IF;
+
+      IF OLD.role = 'owner' THEN
+        RAISE EXCEPTION 'The Owner account cannot be modified.';
+      END IF;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+-- 5. Restore original update_staff_status_v2
+CREATE OR REPLACE FUNCTION public.update_staff_status_v2(
+  target_user_id uuid,
+  employment_status text,
+  is_blocked boolean,
+  change_note text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_new_employment_status text := employment_status;
+  v_new_is_blocked boolean := is_blocked;
+  v_target record;
+  v_active_count integer;
+BEGIN
+  IF NOT public.can_manage_staff() THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  IF target_user_id IS NULL THEN
+    RAISE EXCEPTION 'target_user_id cannot be null';
+  END IF;
+
+  IF v_new_employment_status IS NULL OR v_new_employment_status NOT IN ('active', 'on_leave', 'resigned', 'terminated') THEN
+    RAISE EXCEPTION 'Invalid employment_status value';
+  END IF;
+
+  IF v_new_is_blocked IS NULL THEN
+    RAISE EXCEPTION 'is_blocked cannot be null';
+  END IF;
+
+  IF change_note IS NULL OR trim(change_note) = '' OR length(trim(change_note)) > 500 THEN
+    RAISE EXCEPTION 'change_note must be between 1 and 500 characters';
+  END IF;
+
+  SELECT * INTO v_target
+  FROM public.profiles
+  WHERE id = target_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not found';
+  END IF;
+
+  IF v_target.role NOT IN ('staff', 'admin') THEN
+    RAISE EXCEPTION 'Target user is not a staff member or administrator';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot modify your own status';
+  END IF;
+
+  IF v_target.role = 'owner' THEN
+    RAISE EXCEPTION 'Cannot modify owner account status';
+  END IF;
+
+  IF v_target.deleted IS NOT FALSE THEN
+    RAISE EXCEPTION 'Cannot update status of an archived staff member';
+  END IF;
+
+  IF v_target.employment_status = 'resigned' AND v_new_employment_status <> 'resigned' THEN
+    RAISE EXCEPTION 'Cannot change employment status of a resigned staff member';
+  END IF;
+
+  IF v_target.employment_status = 'terminated' AND v_new_employment_status <> 'terminated' THEN
+    RAISE EXCEPTION 'Cannot change employment status of a terminated staff member';
+  END IF;
+
+  IF v_target.employment_status = v_new_employment_status AND v_target.is_blocked = v_new_is_blocked THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'status', 'no_change',
+      'target_user_id', target_user_id,
+      'employment_status', v_new_employment_status,
+      'is_blocked', v_new_is_blocked
+    );
+  END IF;
+
+  IF (v_target.role IN ('admin', 'owner') AND v_target.deleted = false AND v_target.is_blocked = false AND v_target.employment_status = 'active')
+     AND (v_new_employment_status <> 'active' OR v_new_is_blocked = true) THEN
+    PERFORM pg_advisory_xact_lock(7421, 1);
+    SELECT count(*) INTO v_active_count
+    FROM public.profiles AS p
+    WHERE p.role IN ('admin', 'owner')
+      AND p.deleted = false
+      AND p.is_blocked = false
+      AND p.employment_status = 'active'
+      AND p.id <> target_user_id;
+
+    IF v_active_count < 1 THEN
+      RAISE EXCEPTION 'Cannot deactivate or block the last active privileged account';
+    END IF;
+  END IF;
+
+  PERFORM set_config('app.current_change_note', trim(change_note), true);
+
+  UPDATE public.profiles AS p
+  SET employment_status = v_new_employment_status,
+      is_blocked = v_new_is_blocked,
+      updated_at = now()
+  WHERE p.id = target_user_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', 'updated',
+    'target_user_id', target_user_id,
+    'previous_status', v_target.employment_status,
+    'new_status', v_new_employment_status,
+    'previous_blocked', v_target.is_blocked,
+    'new_blocked', v_new_is_blocked
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.update_staff_status_v2(uuid, text, boolean, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.update_staff_status_v2(uuid, text, boolean, text) TO authenticated;
+
+-- 6. Restore original update_staff_role_v2
+CREATE OR REPLACE FUNCTION public.update_staff_role_v2(
+  target_user_id uuid,
+  new_role text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_target record;
+  v_active_count integer;
+  v_actor_name text;
+BEGIN
+  IF NOT public.can_manage_staff() THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  IF target_user_id IS NULL THEN
+    RAISE EXCEPTION 'target_user_id cannot be null';
+  END IF;
+
+  IF new_role IS NULL OR new_role NOT IN ('staff', 'admin') THEN
+    RAISE EXCEPTION 'Invalid role specified';
+  END IF;
+
+  SELECT * INTO v_target
+  FROM public.profiles
+  WHERE id = target_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not found';
+  END IF;
+
+  IF v_target.role NOT IN ('staff', 'admin') THEN
+    RAISE EXCEPTION 'Target user is not a staff member or administrator';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot modify your own role';
+  END IF;
+
+  IF v_target.role = 'owner' THEN
+    RAISE EXCEPTION 'Cannot modify owner account status';
+  END IF;
+
+  IF v_target.deleted IS NOT FALSE THEN
+    RAISE EXCEPTION 'Cannot update role of an archived staff member';
+  END IF;
+
+  IF v_target.role = new_role THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'status', 'no_change',
+      'target_user_id', target_user_id,
+      'role', new_role
+    );
+  END IF;
+
+  IF (v_target.role = 'admin' AND v_target.deleted = false AND v_target.is_blocked = false AND v_target.employment_status = 'active')
+     AND new_role = 'staff' THEN
+    PERFORM pg_advisory_xact_lock(7421, 1);
+    SELECT count(*) INTO v_active_count
+    FROM public.profiles AS p
+    WHERE p.role IN ('admin', 'owner')
+      AND p.deleted = false
+      AND p.is_blocked = false
+      AND p.employment_status = 'active'
+      AND p.id <> target_user_id;
+
+    IF v_active_count < 1 THEN
+      RAISE EXCEPTION 'Cannot demote the last active privileged account';
+    END IF;
+  END IF;
+
+  UPDATE public.profiles AS p
+  SET role = new_role,
+      updated_at = now()
+  WHERE p.id = target_user_id;
+
+  SELECT COALESCE( NULLIF(trim(concat_ws(' ', first_name, last_name)), ''), 'Staff' )
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = auth.uid();
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    auth.uid(),
+    v_actor_name,
+    'staff_role_updated',
+    'staff',
+    target_user_id::text,
+    jsonb_build_object('previous_role', v_target.role, 'new_role', new_role)
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', 'updated',
+    'target_user_id', target_user_id,
+    'previous_role', v_target.role,
+    'new_role', new_role
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.update_staff_role_v2(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.update_staff_role_v2(uuid, text) TO authenticated;
+
+-- 7. Restore original set_staff_archive_state
+CREATE OR REPLACE FUNCTION public.set_staff_archive_state(
+  target_user_id uuid,
+  archived boolean,
+  change_note text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_target record;
+  v_active_count integer;
+  v_actor_name text;
+BEGIN
+  IF NOT public.can_manage_staff() THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  IF target_user_id IS NULL THEN
+    RAISE EXCEPTION 'target_user_id cannot be null';
+  END IF;
+
+  IF archived IS NULL THEN
+    RAISE EXCEPTION 'archived cannot be null';
+  END IF;
+
+  IF change_note IS NULL OR trim(change_note) = '' OR length(trim(change_note)) > 500 THEN
+    RAISE EXCEPTION 'change_note must be between 1 and 500 characters';
+  END IF;
+
+  SELECT * INTO v_target
+  FROM public.profiles
+  WHERE id = target_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not found';
+  END IF;
+
+  IF v_target.role NOT IN ('staff', 'admin') THEN
+    RAISE EXCEPTION 'Target user is not a staff member or administrator';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot archive your own account';
+  END IF;
+
+  IF v_target.role = 'owner' THEN
+    RAISE EXCEPTION 'Cannot archive owner account';
+  END IF;
+
+  IF (v_target.deleted IS TRUE AND archived IS TRUE) OR (v_target.deleted IS FALSE AND archived IS FALSE) THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'status', 'no_change',
+      'state', CASE WHEN archived THEN 'archived' ELSE 'restored' END,
+      'target_user_id', target_user_id
+    );
+  END IF;
+
+  IF (v_target.role IN ('admin', 'owner') AND v_target.deleted = false AND v_target.is_blocked = false AND v_target.employment_status = 'active')
+     AND archived IS TRUE THEN
+    PERFORM pg_advisory_xact_lock(7421, 1);
+    SELECT count(*) INTO v_active_count
+    FROM public.profiles AS p
+    WHERE p.role IN ('admin', 'owner')
+      AND p.deleted = false
+      AND p.is_blocked = false
+      AND p.employment_status = 'active'
+      AND p.id <> target_user_id;
+
+    IF v_active_count < 1 THEN
+      RAISE EXCEPTION 'Cannot archive the last active privileged account';
+    END IF;
+  END IF;
+
+  UPDATE public.profiles AS p
+  SET deleted = archived,
+      updated_at = now()
+  WHERE p.id = target_user_id;
+
+  SELECT COALESCE( NULLIF(trim(concat_ws(' ', first_name, last_name)), ''), 'Staff' )
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = auth.uid();
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    auth.uid(),
+    v_actor_name,
+    CASE WHEN archived THEN 'staff_archived' ELSE 'staff_restored' END,
+    'staff',
+    target_user_id::text,
+    jsonb_build_object(
+      'archived', archived,
+      'previous_deleted', v_target.deleted,
+      'new_deleted', archived,
+      'note', trim(change_note)
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', CASE WHEN archived THEN 'archived' ELSE 'restored' END,
+    'state', CASE WHEN archived THEN 'archived' ELSE 'restored' END,
+    'target_user_id', target_user_id,
+    'previous_deleted', v_target.deleted,
+    'new_deleted', archived
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.set_staff_archive_state(uuid, boolean, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.set_staff_archive_state(uuid, boolean, text) TO authenticated;
+
+-- 8. Re-grant original column list including is_blocked, deleted
+GRANT UPDATE (
+  first_name, last_name, username, phone, gender, date_of_birth,
+  address_line, barangay, city, province, zip_code,
+  fit_preference, is_wardrobe_shared, wardrobe_privacy,
+  wishlist_privacy, outfit_privacy, profile_visibility,
+  expo_push_token, updated_at,
+  is_blocked, deleted
+) ON TABLE public.profiles TO authenticated;
