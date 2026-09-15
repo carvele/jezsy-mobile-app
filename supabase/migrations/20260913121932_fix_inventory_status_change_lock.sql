@@ -1,0 +1,150 @@
+-- Reservation Lifecycle Audit: existing architecture retained (see PR body).
+-- Fixes one confirmed concurrency gap: hold_inventory_for_reservation_item()
+-- (fires on reservation_items INSERT) already does SELECT ... FOR UPDATE
+-- before checking availability. apply_inventory_on_reservation_status_change()
+-- (fires on reservations.status UPDATE) performed the equivalent availability
+-- check with a plain, unlocked SELECT before mutating -- a classic
+-- check-then-act race: two concurrent status transitions into (or out of) a
+-- stock-holding state for the SAME inventory variant could both read a stale
+-- available/reserved/total count, both pass their check, and both proceed,
+-- oversubscribing that variant.
+--
+-- Fix: lock every inventory row this reservation's items reference, in
+-- deterministic id order, before either the sanity check or the mutation in
+-- ANY branch. Everything else -- source/target status rules,
+-- reservation_holds_stock() semantics, quantity arithmetic, exception
+-- messages, SECURITY DEFINER, search_path -- is restated verbatim.
+CREATE OR REPLACE FUNCTION public.apply_inventory_on_reservation_status_change()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_was boolean;
+  v_now boolean;
+  v_short record;
+BEGIN
+  v_was := public.reservation_holds_stock(OLD.status, OLD.deleted);
+  v_now := public.reservation_holds_stock(NEW.status, NEW.deleted);
+
+  IF lower(coalesce(OLD.status, '')) = 'completed'
+     AND NEW.status IS DISTINCT FROM OLD.status THEN
+    RAISE EXCEPTION 'A completed purchase cannot be reopened; adjust inventory through a stock command.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_was = v_now THEN
+    RETURN NEW;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.reservation_items ri
+    WHERE ri.reservation_id = NEW.id AND ri.inventory_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Reservation contains an unresolved inventory variant.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Lock every inventory row this reservation's items reference, in
+  -- deterministic id order, BEFORE any check or mutation below -- this is
+  -- the fix. A plain SELECT here (as before) lets two concurrent status
+  -- transitions on different reservations both read the same stale
+  -- available/reserved/total snapshot for a shared variant and both pass.
+  -- FOR UPDATE forces the second transaction to wait for the first to
+  -- commit, so its subsequent (unlocked, unchanged) checks below now read
+  -- genuinely current values. ORDER BY id keeps lock acquisition order
+  -- consistent across any two overlapping reservations, reducing deadlock
+  -- risk when a status change touches more than one variant.
+  PERFORM 1
+  FROM public.inventory i
+  WHERE i.id IN (
+    SELECT DISTINCT ri.inventory_id
+    FROM public.reservation_items ri
+    WHERE ri.reservation_id = NEW.id
+  )
+  ORDER BY i.id
+  FOR UPDATE;
+
+  IF v_was AND NOT v_now THEN
+    WITH quantities AS (
+      SELECT inventory_id, sum(quantity)::integer AS quantity
+      FROM public.reservation_items
+      WHERE reservation_id = NEW.id
+      GROUP BY inventory_id
+    )
+    SELECT q.inventory_id, q.quantity, i.reserved, i.total
+    INTO v_short
+    FROM quantities q
+    LEFT JOIN public.inventory i ON i.id = q.inventory_id
+    WHERE i.id IS NULL OR i.reserved < q.quantity OR i.total < q.quantity
+    LIMIT 1;
+    IF FOUND THEN
+      RAISE EXCEPTION 'Inventory hold is inconsistent for variant %.', v_short.inventory_id
+        USING ERRCODE = 'check_violation';
+    END IF;
+
+    IF lower(coalesce(NEW.status, '')) = 'completed' AND NOT coalesce(NEW.deleted, false) THEN
+      WITH quantities AS (
+        SELECT inventory_id, sum(quantity)::integer AS quantity
+        FROM public.reservation_items
+        WHERE reservation_id = NEW.id
+        GROUP BY inventory_id
+      )
+      UPDATE public.inventory i
+      SET reserved = i.reserved - q.quantity,
+          total = i.total - q.quantity,
+          updated_at = now()
+      FROM quantities q
+      WHERE i.id = q.inventory_id;
+    ELSE
+      WITH quantities AS (
+        SELECT inventory_id, sum(quantity)::integer AS quantity
+        FROM public.reservation_items
+        WHERE reservation_id = NEW.id
+        GROUP BY inventory_id
+      )
+      UPDATE public.inventory i
+      SET reserved = i.reserved - q.quantity,
+          available = i.available + q.quantity,
+          updated_at = now()
+      FROM quantities q
+      WHERE i.id = q.inventory_id;
+    END IF;
+  ELSE
+    WITH quantities AS (
+      SELECT inventory_id, sum(quantity)::integer AS quantity
+      FROM public.reservation_items
+      WHERE reservation_id = NEW.id
+      GROUP BY inventory_id
+    )
+    SELECT q.inventory_id, i.available, q.quantity
+    INTO v_short
+    FROM quantities q
+    LEFT JOIN public.inventory i ON i.id = q.inventory_id AND coalesce(i.deleted, false) = false
+    WHERE i.id IS NULL OR i.available < q.quantity
+    LIMIT 1;
+
+    IF FOUND THEN
+      RAISE EXCEPTION 'Cannot activate this reservation: only % unit(s) remain for one selected variant.',
+        v_short.available USING ERRCODE = 'check_violation';
+    END IF;
+
+    WITH quantities AS (
+      SELECT inventory_id, sum(quantity)::integer AS quantity
+      FROM public.reservation_items
+      WHERE reservation_id = NEW.id
+      GROUP BY inventory_id
+    )
+    UPDATE public.inventory i
+    SET available = i.available - q.quantity,
+        reserved = i.reserved + q.quantity,
+        updated_at = now()
+    FROM quantities q
+    WHERE i.id = q.inventory_id
+      AND coalesce(i.deleted, false) = false;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
