@@ -10,7 +10,7 @@
 BEGIN;
 
 RAISE NOTICE '=== TEST 1: Verifying Initial Migration 2A Hard Assertions ===';
--- The hard assertions embedded in 20260915160000 will raise exception on any drift:
+-- The hard assertions embedded in 20260915161500 will raise exception on any drift:
 -- 1. Legacy workforce profiles missing membership = 0
 -- 2. Every workforce profile without membership = 0
 -- 3. Membership rows without workforce account_kind = 0
