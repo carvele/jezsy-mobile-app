@@ -125,13 +125,16 @@ export default function ReservationsScreen() {
     const deadline = statusBucket(item.status) === 'toPay'
       ? formatPaymentDeadline(item.payment_due_at)
       : null;
+    const hasRefundPending =
+      statusBucket(item.status) === 'cancelled' &&
+      item.payment_status?.toLowerCase() === 'refund required';
 
     return (
       <TouchableOpacity
         style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         accessible={true}
         accessibilityRole="button"
-        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${statusLabel(item.status)}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
+        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${statusLabel(item.status)}${hasRefundPending ? ', refund in progress' : ''}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
         accessibilityHint="View reservation details"
         onPress={() => router.push(`/reservations/${item.id}` as any)}
       >
@@ -143,6 +146,11 @@ export default function ReservationsScreen() {
                 <Text style={[styles.deadlineText, { color: deadline.urgent ? colors.error : colors.warning }]}>
                   {deadline.label}
                 </Text>
+              </View>
+            )}
+            {hasRefundPending && (
+              <View style={[styles.deadlineBadge, { borderColor: colors.error }]}>
+                <Text style={[styles.deadlineText, { color: colors.error }]}>REFUND IN PROGRESS</Text>
               </View>
             )}
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20', borderColor: getStatusColor(item.status) }]}>

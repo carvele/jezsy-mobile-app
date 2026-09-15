@@ -1,0 +1,64 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 20260915161200_reservations_stage3_rpcs.sql.rollback
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Drop new RPCs.
+DROP FUNCTION IF EXISTS public.mark_reservation_refund_disbursed(uuid, text, text, text);
+DROP FUNCTION IF EXISTS public.reschedule_reservation_as_manager(uuid, text, date, time, text);
+
+-- Remove refund disbursement columns from payments.
+ALTER TABLE public.payments
+  DROP COLUMN IF EXISTS refund_disbursed_at,
+  DROP COLUMN IF EXISTS refund_disbursement_method,
+  DROP COLUMN IF EXISTS refund_reference_number,
+  DROP COLUMN IF EXISTS refund_disbursed_by;
+
+-- Restore guard function to its previous version (20260913125451 body).
+-- The trigger remains attached; only the function body reverts.
+CREATE OR REPLACE FUNCTION public.guard_reservation_financial_state()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path TO ''
+AS $function$
+BEGIN
+  IF current_user = 'authenticated'
+     AND (
+       NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.payment_status IS DISTINCT FROM OLD.payment_status
+     ) THEN
+    RAISE EXCEPTION 'Use an authorized reservation command to change lifecycle or payment state.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF lower(coalesce(OLD.payment_status, '')) = 'paid'
+     AND lower(coalesce(NEW.payment_status, '')) NOT IN ('paid', 'refund required', 'refunded') THEN
+    RAISE EXCEPTION 'A paid reservation cannot be marked unpaid.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND lower(coalesce(NEW.status, '')) = 'cancelled'
+     AND (
+       lower(coalesce(OLD.payment_status, '')) IN ('paid', 'submitted', 'processing', 'refund required')
+       OR lower(coalesce(NEW.payment_status, '')) IN ('paid', 'submitted', 'processing', 'refund required')
+     ) THEN
+    RAISE EXCEPTION 'Resolve or refund the payment before cancelling this reservation.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND lower(coalesce(OLD.status, '')) IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be reopened or changed.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND lower(coalesce(NEW.status, '')) IN ('preparing', 'ready', 'to pickup')
+     AND lower(coalesce(NEW.payment_status, '')) <> 'paid' THEN
+    RAISE EXCEPTION 'Payment must be confirmed before preparing this reservation.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;

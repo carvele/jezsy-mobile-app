@@ -1,0 +1,858 @@
+-- RBAC-2B: Workforce Writer Authority Cutover to staff_memberships
+-- Migration: 20260915162000_update_workforce_writers_to_membership.sql
+
+BEGIN;
+
+-- 1. update_staff_status_v2: re-point employment_status authority to staff_memberships
+CREATE OR REPLACE FUNCTION public.update_staff_status_v2(
+  target_user_id uuid,
+  employment_status text,
+  is_blocked boolean,
+  change_note text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  v_new_employment_status text := employment_status;
+  v_new_is_blocked boolean := is_blocked;
+  v_target_profile record;
+  v_target_membership record;
+BEGIN
+  -- Direct baseline AAL2 enforcement
+  PERFORM public.require_aal2();
+
+  IF NOT public.can_manage_staff() THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  IF target_user_id IS NULL THEN
+    RAISE EXCEPTION 'target_user_id cannot be null';
+  END IF;
+
+  IF v_new_employment_status IS NULL OR v_new_employment_status NOT IN ('active', 'on_leave', 'resigned', 'terminated') THEN
+    RAISE EXCEPTION 'Invalid employment_status value';
+  END IF;
+
+  IF v_new_is_blocked IS NULL THEN
+    RAISE EXCEPTION 'is_blocked cannot be null';
+  END IF;
+
+  IF change_note IS NULL OR trim(change_note) = '' OR length(trim(change_note)) > 500 THEN
+    RAISE EXCEPTION 'change_note must be between 1 and 500 characters';
+  END IF;
+
+  -- Lock target profile and membership
+  SELECT * INTO v_target_profile
+  FROM public.profiles
+  WHERE id = target_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not found';
+  END IF;
+
+  SELECT * INTO v_target_membership
+  FROM public.staff_memberships
+  WHERE user_id = target_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user has no staff membership record';
+  END IF;
+
+  IF v_target_membership.role NOT IN ('staff', 'admin') THEN
+    RAISE EXCEPTION 'Target user is not a staff member or administrator';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot modify your own status';
+  END IF;
+
+  IF v_target_membership.role = 'owner' THEN
+    RAISE EXCEPTION 'Cannot modify owner account status';
+  END IF;
+
+  IF v_target_profile.deleted IS NOT FALSE THEN
+    RAISE EXCEPTION 'Cannot update status of an archived staff member';
+  END IF;
+
+  IF v_target_membership.employment_status = 'resigned' AND v_new_employment_status <> 'resigned' THEN
+    RAISE EXCEPTION 'Cannot change employment status of a resigned staff member';
+  END IF;
+
+  IF v_target_membership.employment_status = 'terminated' AND v_new_employment_status <> 'terminated' THEN
+    RAISE EXCEPTION 'Cannot change employment status of a terminated staff member';
+  END IF;
+
+  IF v_target_membership.employment_status = v_new_employment_status AND v_target_profile.is_blocked = v_new_is_blocked THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'status', 'no_change',
+      'target_user_id', target_user_id,
+      'employment_status', v_new_employment_status,
+      'is_blocked', v_new_is_blocked
+    );
+  END IF;
+
+  IF (v_target_membership.role IN ('admin', 'owner') AND v_target_profile.deleted = false AND v_target_profile.is_blocked = false AND v_target_membership.employment_status = 'active')
+     AND (v_new_employment_status <> 'active' OR v_new_is_blocked = true) THEN
+    PERFORM public.assert_privileged_account_quorum(target_user_id);
+  END IF;
+
+  PERFORM set_config('app.current_change_note', trim(change_note), true);
+
+  -- 1a. Canonical workforce authority write: staff_memberships
+  -- (trg_sync_membership_to_profile updates profiles.employment_status automatically)
+  UPDATE public.staff_memberships
+  SET employment_status = v_new_employment_status,
+      updated_at = now()
+  WHERE user_id = target_user_id;
+
+  -- 1b. Account-level identity attribute write: profiles.is_blocked
+  UPDATE public.profiles AS p
+  SET is_blocked = v_new_is_blocked,
+      updated_at = now()
+  WHERE p.id = target_user_id;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', 'updated',
+    'target_user_id', target_user_id,
+    'previous_status', v_target_membership.employment_status,
+    'new_status', v_new_employment_status,
+    'previous_blocked', v_target_profile.is_blocked,
+    'new_blocked', v_new_is_blocked
+  );
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.update_staff_status_v2(uuid, text, boolean, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.update_staff_status_v2(uuid, text, boolean, text) TO authenticated;
+
+-- 2. update_staff_role_v2: re-point role authority to staff_memberships, preserving Owner boundary
+CREATE OR REPLACE FUNCTION public.update_staff_role_v2(
+  target_user_id uuid,
+  new_role text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  v_target_profile record;
+  v_target_membership record;
+  v_actor_name text;
+BEGIN
+  -- Direct baseline AAL2 enforcement
+  PERFORM public.require_aal2();
+
+  IF NOT public.can_manage_staff() THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  IF target_user_id IS NULL THEN
+    RAISE EXCEPTION 'target_user_id cannot be null';
+  END IF;
+
+  -- Explicit Owner boundary invariant
+  IF new_role = 'owner' THEN
+    RAISE EXCEPTION 'Action rejected: Owner role promotion is restricted to dedicated Owner promotion procedure.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF new_role IS NULL OR new_role NOT IN ('staff', 'admin') THEN
+    RAISE EXCEPTION 'Invalid role specified';
+  END IF;
+
+  SELECT * INTO v_target_profile
+  FROM public.profiles
+  WHERE id = target_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not found';
+  END IF;
+
+  SELECT * INTO v_target_membership
+  FROM public.staff_memberships
+  WHERE user_id = target_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user has no staff membership record';
+  END IF;
+
+  IF v_target_membership.role NOT IN ('staff', 'admin') THEN
+    RAISE EXCEPTION 'Target user is not a staff member or administrator';
+  END IF;
+
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot modify your own role';
+  END IF;
+
+  IF v_target_membership.role = 'owner' THEN
+    RAISE EXCEPTION 'Cannot modify owner account status';
+  END IF;
+
+  IF v_target_profile.deleted IS NOT FALSE THEN
+    RAISE EXCEPTION 'Cannot update role of an archived staff member';
+  END IF;
+
+  IF v_target_membership.role = new_role THEN
+    RETURN jsonb_build_object(
+      'ok', true,
+      'status', 'no_change',
+      'target_user_id', target_user_id,
+      'role', new_role
+    );
+  END IF;
+
+  IF (v_target_membership.role = 'admin' AND v_target_profile.deleted = false AND v_target_profile.is_blocked = false AND v_target_membership.employment_status = 'active')
+     AND new_role = 'staff' THEN
+    PERFORM public.assert_privileged_account_quorum(target_user_id);
+  END IF;
+
+  -- Canonical workforce authority write: staff_memberships
+  -- (trg_sync_membership_to_profile updates profiles.role automatically)
+  UPDATE public.staff_memberships
+  SET role = new_role,
+      updated_at = now()
+  WHERE user_id = target_user_id;
+
+  SELECT COALESCE( NULLIF(trim(concat_ws(' ', first_name, last_name)), ''), 'Staff' )
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = auth.uid();
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    auth.uid(),
+    v_actor_name,
+    'staff_role_updated',
+    'staff',
+    target_user_id::text,
+    jsonb_build_object(
+      'previous_role', v_target_membership.role,
+      'new_role', new_role,
+      'claim_sync_status', 'pending'
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', 'updated',
+    'target_user_id', target_user_id,
+    'previous_role', v_target_membership.role,
+    'new_role', new_role
+  );
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.update_staff_role_v2(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.update_staff_role_v2(uuid, text) TO authenticated;
+
+-- 3. activate_staff_account: re-point activation authority to staff_memberships
+CREATE OR REPLACE FUNCTION public.activate_staff_account()
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_profile record;
+  v_membership record;
+  v_user_email text;
+  v_actor_name text;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized: No authenticated session' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_profile
+  FROM public.profiles
+  WHERE id = v_uid
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Profile not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  SELECT * INTO v_membership
+  FROM public.staff_memberships
+  WHERE user_id = v_uid
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Staff membership not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF v_profile.deleted IS TRUE OR v_profile.is_blocked IS TRUE THEN
+    RAISE EXCEPTION 'Account is blocked or archived' USING ERRCODE = '42501';
+  END IF;
+
+  IF v_membership.role <> 'staff' THEN
+    RAISE EXCEPTION 'Account role cannot be activated through Phase 1 staff onboarding'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF v_membership.employment_status = 'active' THEN
+    RETURN jsonb_build_object('ok', true, 'status', 'already_active', 'role', v_membership.role);
+  END IF;
+
+  IF v_membership.employment_status <> 'invited' THEN
+    RAISE EXCEPTION 'Account cannot be activated from status %', v_membership.employment_status
+      USING ERRCODE = '22023';
+  END IF;
+
+  -- Canonical workforce authority write: staff_memberships
+  -- (trg_sync_membership_to_profile updates profiles.employment_status automatically)
+  UPDATE public.staff_memberships
+  SET employment_status = 'active',
+      updated_at = now()
+  WHERE user_id = v_uid;
+
+  INSERT INTO public.staff_status_history (
+    staff_id, change_type, previous_value, new_value,
+    note, effective_date, changed_by
+  ) VALUES (
+    v_uid, 'employment_status', 'invited', 'active',
+    'Staff account activated via password setup',
+    CURRENT_DATE, v_uid
+  );
+
+  v_user_email := COALESCE(v_profile.email, 'unknown');
+  v_actor_name := COALESCE(NULLIF(trim(concat_ws(' ', v_profile.first_name, v_profile.last_name)), ''), v_user_email);
+
+  INSERT INTO public.logs (
+    user_id, user_name, action, target_type, target_id, details
+  ) VALUES (
+    v_uid,
+    v_actor_name,
+    'staff_account_activated',
+    'staff',
+    v_uid::text,
+    jsonb_build_object('role', v_membership.role, 'email', v_user_email)
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', 'activated',
+    'role', v_membership.role
+  );
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.activate_staff_account() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.activate_staff_account() TO authenticated;
+
+-- 4. assert_owner_removal_quorum: re-point owner authority to staff_memberships preserving all Phase 2 predicates
+CREATE OR REPLACE FUNCTION public.assert_owner_removal_quorum(p_target_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  v_owner_cnt integer;
+BEGIN
+  SELECT count(*) INTO v_owner_cnt
+  FROM public.staff_memberships sm
+  JOIN public.profiles p ON p.id = sm.user_id
+  WHERE sm.employment_status = 'active'
+    AND p.is_blocked = false
+    AND p.deleted = false
+    AND sm.role = 'owner'
+    AND sm.user_id <> p_target_id
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.mfa_reset_reservations r
+      WHERE r.target_id = sm.user_id
+        AND (
+          r.status = 'awaiting_reenrollment'
+          OR (
+            r.status = 'pending_delete'
+            AND r.expires_at > now()
+          )
+        )
+    );
+
+  IF v_owner_cnt < 1 THEN
+    RAISE EXCEPTION 'Action rejected: Organization must retain at least one active, unblocked Owner with verified MFA.'
+      USING ERRCODE = '42501';
+  END IF;
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.assert_owner_removal_quorum(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.assert_owner_removal_quorum(uuid) TO service_role;
+
+-- 5. Phase 2 Owner RPC 1: promote_to_owner authority write to staff_memberships
+CREATE OR REPLACE FUNCTION public.promote_to_owner(
+  p_actor_id uuid,
+  p_target_id uuid,
+  p_session_id uuid,
+  p_step_up_verified_at timestamptz
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  actor_rec record;
+  target_profile record;
+  target_membership record;
+  v_receipt_verified_at timestamptz;
+BEGIN
+  PERFORM pg_advisory_xact_lock(7421, 1);
+
+  -- Caller check from staff_memberships
+  SELECT sm.*, p.first_name, p.last_name, p.email, p.deleted, p.is_blocked
+  INTO actor_rec
+  FROM public.staff_memberships sm
+  JOIN public.profiles p ON p.id = sm.user_id
+  WHERE sm.user_id = p_actor_id
+    AND sm.employment_status = 'active'
+    AND p.is_blocked = false
+    AND p.deleted = false;
+
+  IF NOT FOUND OR actor_rec.role <> 'owner' THEN
+    RAISE EXCEPTION 'Action rejected: Caller must be an active, unblocked Owner' USING ERRCODE = '42501';
+  END IF;
+
+  -- Step-up validation
+  SELECT verified_at INTO v_receipt_verified_at
+  FROM public.step_up_receipts
+  WHERE actor_id = p_actor_id
+    AND session_id = p_session_id
+    AND action_class = 'owner_promotion'
+    AND (target_id IS NULL OR target_id = p_target_id)
+    AND now() < expires_at;
+
+  IF FOUND THEN
+    p_step_up_verified_at := v_receipt_verified_at;
+  ELSE
+    IF p_step_up_verified_at IS NULL THEN
+      RAISE EXCEPTION 'Valid step-up verification required' USING ERRCODE = '42501';
+    END IF;
+    IF (now() - p_step_up_verified_at) > interval '5 minutes' OR p_step_up_verified_at > now() + interval '10 seconds' THEN
+      RAISE EXCEPTION 'Step-up verification expired or invalid' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  -- Target lock and check
+  SELECT * INTO target_profile FROM public.profiles
+  WHERE id = p_target_id
+    AND is_blocked = false
+    AND deleted = false
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not eligible for promotion' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO target_membership FROM public.staff_memberships
+  WHERE user_id = p_target_id
+    AND employment_status = 'active'
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not eligible for promotion' USING ERRCODE = '42501';
+  END IF;
+
+  IF target_membership.role NOT IN ('staff', 'admin') THEN
+    RAISE EXCEPTION 'Target user must be an active staff or admin' USING ERRCODE = '42501';
+  END IF;
+
+  -- Canonical authority write
+  UPDATE public.staff_memberships
+  SET role = 'owner', updated_at = now()
+  WHERE user_id = p_target_id;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    p_actor_id,
+    COALESCE(NULLIF(trim(concat_ws(' ', actor_rec.first_name, actor_rec.last_name)), ''), actor_rec.email),
+    'owner_promotion',
+    'staff',
+    p_target_id::text,
+    jsonb_build_object(
+      'actor_id', p_actor_id,
+      'target_id', p_target_id,
+      'previous_role', target_membership.role,
+      'new_role', 'owner',
+      'step_up_verified_at', p_step_up_verified_at,
+      'mutation_at', now(),
+      'session_id', p_session_id
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', 'promoted',
+    'target_user_id', p_target_id,
+    'previous_role', target_membership.role,
+    'new_role', 'owner'
+  );
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.promote_to_owner(uuid, uuid, uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.promote_to_owner(uuid, uuid, uuid, timestamptz) TO service_role;
+
+-- 6. Phase 2 Owner RPC 2: demote_owner authority write to staff_memberships
+CREATE OR REPLACE FUNCTION public.demote_owner(
+  p_actor_id uuid,
+  p_target_id uuid,
+  p_session_id uuid,
+  p_step_up_verified_at timestamptz
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  actor_rec record;
+  target_profile record;
+  target_membership record;
+  v_receipt_verified_at timestamptz;
+BEGIN
+  PERFORM pg_advisory_xact_lock(7421, 1);
+
+  SELECT sm.*, p.first_name, p.last_name, p.email, p.deleted, p.is_blocked
+  INTO actor_rec
+  FROM public.staff_memberships sm
+  JOIN public.profiles p ON p.id = sm.user_id
+  WHERE sm.user_id = p_actor_id
+    AND sm.employment_status = 'active'
+    AND p.is_blocked = false
+    AND p.deleted = false;
+
+  IF NOT FOUND OR actor_rec.role <> 'owner' THEN
+    RAISE EXCEPTION 'Action rejected: Caller must be an active, unblocked Owner' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT verified_at INTO v_receipt_verified_at
+  FROM public.step_up_receipts
+  WHERE actor_id = p_actor_id
+    AND session_id = p_session_id
+    AND action_class = 'owner_demotion'
+    AND (target_id IS NULL OR target_id = p_target_id)
+    AND now() < expires_at;
+
+  IF FOUND THEN
+    p_step_up_verified_at := v_receipt_verified_at;
+  ELSE
+    IF p_step_up_verified_at IS NULL THEN
+      RAISE EXCEPTION 'Valid step-up verification required' USING ERRCODE = '42501';
+    END IF;
+    IF (now() - p_step_up_verified_at) > interval '5 minutes' OR p_step_up_verified_at > now() + interval '10 seconds' THEN
+      RAISE EXCEPTION 'Step-up verification expired or invalid' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  SELECT * INTO target_profile FROM public.profiles
+  WHERE id = p_target_id
+    AND is_blocked = false
+    AND deleted = false
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not found or inactive' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO target_membership FROM public.staff_memberships
+  WHERE user_id = p_target_id
+    AND employment_status = 'active'
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target user not found or inactive' USING ERRCODE = '42501';
+  END IF;
+
+  IF target_membership.role <> 'owner' THEN
+    RAISE EXCEPTION 'Target user is not an Owner' USING ERRCODE = '42501';
+  END IF;
+
+  PERFORM public.assert_owner_removal_quorum(p_target_id);
+
+  -- Canonical authority write
+  UPDATE public.staff_memberships
+  SET role = 'admin', updated_at = now()
+  WHERE user_id = p_target_id;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    p_actor_id,
+    COALESCE(NULLIF(trim(concat_ws(' ', actor_rec.first_name, actor_rec.last_name)), ''), actor_rec.email),
+    'owner_demotion',
+    'staff',
+    p_target_id::text,
+    jsonb_build_object(
+      'actor_id', p_actor_id,
+      'target_id', p_target_id,
+      'previous_role', 'owner',
+      'new_role', 'admin',
+      'step_up_verified_at', p_step_up_verified_at,
+      'mutation_at', now(),
+      'session_id', p_session_id
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'status', 'demoted',
+    'target_user_id', p_target_id,
+    'previous_role', 'owner',
+    'new_role', 'admin'
+  );
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.demote_owner(uuid, uuid, uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.demote_owner(uuid, uuid, uuid, timestamptz) TO service_role;
+
+-- 7. Phase 2 Owner RPC 3: terminate_owner authority write to staff_memberships
+CREATE OR REPLACE FUNCTION public.terminate_owner(
+  p_actor_id uuid,
+  p_target_id uuid,
+  p_session_id uuid,
+  p_step_up_verified_at timestamptz
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  actor_rec record;
+  target_profile record;
+  target_membership record;
+  v_receipt_verified_at timestamptz;
+BEGIN
+  PERFORM pg_advisory_xact_lock(7421, 1);
+
+  SELECT sm.*, p.first_name, p.last_name, p.email, p.deleted, p.is_blocked
+  INTO actor_rec
+  FROM public.staff_memberships sm
+  JOIN public.profiles p ON p.id = sm.user_id
+  WHERE sm.user_id = p_actor_id
+    AND sm.employment_status = 'active'
+    AND p.is_blocked = false
+    AND p.deleted = false;
+
+  IF NOT FOUND OR actor_rec.role <> 'owner' THEN
+    RAISE EXCEPTION 'Action rejected: Caller must be an active, unblocked Owner' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT verified_at INTO v_receipt_verified_at
+  FROM public.step_up_receipts
+  WHERE actor_id = p_actor_id
+    AND session_id = p_session_id
+    AND action_class = 'owner_terminate'
+    AND (target_id IS NULL OR target_id = p_target_id)
+    AND now() < expires_at;
+
+  IF FOUND THEN
+    p_step_up_verified_at := v_receipt_verified_at;
+  ELSE
+    IF p_step_up_verified_at IS NULL OR (now() - p_step_up_verified_at) > interval '5 minutes' OR p_step_up_verified_at > now() + interval '10 seconds' THEN
+      RAISE EXCEPTION 'Valid step-up verification required' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  SELECT * INTO target_profile FROM public.profiles WHERE id = p_target_id AND deleted = false FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Target user not found' USING ERRCODE = '42501'; END IF;
+
+  SELECT * INTO target_membership FROM public.staff_memberships WHERE user_id = p_target_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Target user not found' USING ERRCODE = '42501'; END IF;
+
+  IF target_membership.role <> 'owner' THEN RAISE EXCEPTION 'Target is not an Owner' USING ERRCODE = '42501'; END IF;
+  IF target_membership.employment_status = 'terminated' THEN
+    RETURN jsonb_build_object('ok', true, 'status', 'no_change', 'target_user_id', p_target_id);
+  END IF;
+
+  PERFORM public.assert_owner_removal_quorum(p_target_id);
+
+  -- Canonical authority write
+  UPDATE public.staff_memberships
+  SET employment_status = 'terminated', updated_at = now()
+  WHERE user_id = p_target_id;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    p_actor_id,
+    COALESCE(NULLIF(trim(concat_ws(' ', actor_rec.first_name, actor_rec.last_name)), ''), actor_rec.email),
+    'owner_terminated', 'staff', p_target_id::text,
+    jsonb_build_object(
+      'actor_id', p_actor_id,
+      'target_id', p_target_id,
+      'step_up_verified_at', p_step_up_verified_at,
+      'mutation_at', now(),
+      'session_id', p_session_id
+    )
+  );
+
+  RETURN jsonb_build_object('ok', true, 'status', 'terminated', 'target_user_id', p_target_id);
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.terminate_owner(uuid, uuid, uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.terminate_owner(uuid, uuid, uuid, timestamptz) TO service_role;
+
+-- 8. Phase 2 Owner RPC 4 & 5 (block_owner, archive_owner): maintain actor check from staff_memberships
+CREATE OR REPLACE FUNCTION public.block_owner(
+  p_actor_id uuid,
+  p_target_id uuid,
+  p_session_id uuid,
+  p_step_up_verified_at timestamptz
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  actor_rec record;
+  target_profile record;
+  target_membership record;
+  v_receipt_verified_at timestamptz;
+BEGIN
+  PERFORM pg_advisory_xact_lock(7421, 1);
+
+  SELECT sm.*, p.first_name, p.last_name, p.email, p.deleted, p.is_blocked
+  INTO actor_rec
+  FROM public.staff_memberships sm
+  JOIN public.profiles p ON p.id = sm.user_id
+  WHERE sm.user_id = p_actor_id
+    AND sm.employment_status = 'active'
+    AND p.is_blocked = false
+    AND p.deleted = false;
+
+  IF NOT FOUND OR actor_rec.role <> 'owner' THEN
+    RAISE EXCEPTION 'Action rejected: Caller must be an active, unblocked Owner' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT verified_at INTO v_receipt_verified_at
+  FROM public.step_up_receipts
+  WHERE actor_id = p_actor_id AND session_id = p_session_id AND action_class = 'owner_block'
+    AND (target_id IS NULL OR target_id = p_target_id) AND now() < expires_at;
+
+  IF FOUND THEN
+    p_step_up_verified_at := v_receipt_verified_at;
+  ELSE
+    IF p_step_up_verified_at IS NULL OR (now() - p_step_up_verified_at) > interval '5 minutes' OR p_step_up_verified_at > now() + interval '10 seconds' THEN
+      RAISE EXCEPTION 'Valid step-up verification required' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  SELECT * INTO target_profile FROM public.profiles
+  WHERE id = p_target_id AND deleted = false
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Target user not found' USING ERRCODE = '42501'; END IF;
+
+  SELECT * INTO target_membership FROM public.staff_memberships
+  WHERE user_id = p_target_id
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Target user not found' USING ERRCODE = '42501'; END IF;
+
+  IF target_membership.role <> 'owner' THEN RAISE EXCEPTION 'Target is not an Owner' USING ERRCODE = '42501'; END IF;
+  IF target_profile.is_blocked IS TRUE THEN
+    RETURN jsonb_build_object('ok', true, 'status', 'no_change', 'target_user_id', p_target_id);
+  END IF;
+
+  PERFORM public.assert_owner_removal_quorum(p_target_id);
+
+  UPDATE public.profiles SET is_blocked = true, updated_at = now() WHERE id = p_target_id;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    p_actor_id,
+    COALESCE(NULLIF(trim(concat_ws(' ', actor_rec.first_name, actor_rec.last_name)), ''), actor_rec.email),
+    'owner_blocked', 'staff', p_target_id::text,
+    jsonb_build_object(
+      'actor_id', p_actor_id, 'target_id', p_target_id,
+      'step_up_verified_at', p_step_up_verified_at, 'mutation_at', now(), 'session_id', p_session_id
+    )
+  );
+
+  RETURN jsonb_build_object('ok', true, 'status', 'blocked', 'target_user_id', p_target_id);
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.block_owner(uuid, uuid, uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.block_owner(uuid, uuid, uuid, timestamptz) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.archive_owner(
+  p_actor_id uuid,
+  p_target_id uuid,
+  p_session_id uuid,
+  p_step_up_verified_at timestamptz
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$$
+DECLARE
+  actor_rec record;
+  target_profile record;
+  target_membership record;
+  v_receipt_verified_at timestamptz;
+BEGIN
+  PERFORM pg_advisory_xact_lock(7421, 1);
+
+  SELECT sm.*, p.first_name, p.last_name, p.email, p.deleted, p.is_blocked
+  INTO actor_rec
+  FROM public.staff_memberships sm
+  JOIN public.profiles p ON p.id = sm.user_id
+  WHERE sm.user_id = p_actor_id AND sm.employment_status = 'active' AND p.is_blocked = false AND p.deleted = false;
+
+  IF NOT FOUND OR actor_rec.role <> 'owner' THEN
+    RAISE EXCEPTION 'Action rejected: Caller must be an active, unblocked Owner' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT verified_at INTO v_receipt_verified_at
+  FROM public.step_up_receipts
+  WHERE actor_id = p_actor_id AND session_id = p_session_id AND action_class = 'owner_archive'
+    AND (target_id IS NULL OR target_id = p_target_id) AND now() < expires_at;
+
+  IF FOUND THEN
+    p_step_up_verified_at := v_receipt_verified_at;
+  ELSE
+    IF p_step_up_verified_at IS NULL OR (now() - p_step_up_verified_at) > interval '5 minutes' OR p_step_up_verified_at > now() + interval '10 seconds' THEN
+      RAISE EXCEPTION 'Valid step-up verification required' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  SELECT * INTO target_profile FROM public.profiles WHERE id = p_target_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Target user not found' USING ERRCODE = '42501'; END IF;
+
+  SELECT * INTO target_membership FROM public.staff_memberships WHERE user_id = p_target_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Target user not found' USING ERRCODE = '42501'; END IF;
+
+  IF target_membership.role <> 'owner' THEN RAISE EXCEPTION 'Target is not an Owner' USING ERRCODE = '42501'; END IF;
+  IF target_profile.deleted IS TRUE THEN
+    RETURN jsonb_build_object('ok', true, 'status', 'no_change', 'target_user_id', p_target_id);
+  END IF;
+
+  PERFORM public.assert_owner_removal_quorum(p_target_id);
+
+  UPDATE public.profiles SET deleted = true, updated_at = now() WHERE id = p_target_id;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    p_actor_id,
+    COALESCE(NULLIF(trim(concat_ws(' ', actor_rec.first_name, actor_rec.last_name)), ''), actor_rec.email),
+    'owner_archived', 'staff', p_target_id::text,
+    jsonb_build_object(
+      'actor_id', p_actor_id, 'target_id', p_target_id,
+      'step_up_verified_at', p_step_up_verified_at, 'mutation_at', now(), 'session_id', p_session_id
+    )
+  );
+
+  RETURN jsonb_build_object('ok', true, 'status', 'archived', 'target_user_id', p_target_id);
+END;
+$$$;
+REVOKE ALL ON FUNCTION public.archive_owner(uuid, uuid, uuid, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.archive_owner(uuid, uuid, uuid, timestamptz) TO service_role;
+
+COMMIT;

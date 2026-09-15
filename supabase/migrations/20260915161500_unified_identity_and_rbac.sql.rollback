@@ -1,0 +1,33 @@
+-- RBAC-2A: Rollback 
+-- (Only safe before workforce write authority cuts over to membership tables)
+
+BEGIN;
+
+-- Drop triggers and functions
+DROP TRIGGER IF EXISTS trg_sync_membership_to_profile ON public.staff_memberships;
+DROP FUNCTION IF EXISTS public.sync_membership_to_profile();
+
+DROP TRIGGER IF EXISTS trg_staff_memberships_updated_at ON public.staff_memberships;
+DROP FUNCTION IF EXISTS public.set_staff_memberships_updated_at();
+
+-- Drop RPC Helpers
+DROP FUNCTION IF EXISTS public.get_my_staff_context();
+DROP FUNCTION IF EXISTS public.assert_capability(text);
+DROP FUNCTION IF EXISTS public.assert_actor_capability(uuid, text);
+DROP FUNCTION IF EXISTS public.has_capability(text);
+DROP FUNCTION IF EXISTS public.has_capability(uuid, text);
+DROP FUNCTION IF EXISTS public.is_admin_or_owner();
+DROP FUNCTION IF EXISTS public.is_staff();
+DROP FUNCTION IF EXISTS public.is_customer_account();
+
+-- Drop Tables (in reverse dependency order)
+DROP TABLE IF EXISTS public.staff_capability_overrides CASCADE;
+DROP TABLE IF EXISTS public.staff_memberships CASCADE;
+DROP TABLE IF EXISTS public.role_capabilities CASCADE;
+DROP TABLE IF EXISTS public.capabilities CASCADE;
+
+-- Remove account_kind from profiles
+ALTER TABLE public.profiles
+DROP COLUMN IF EXISTS account_kind;
+
+COMMIT;
