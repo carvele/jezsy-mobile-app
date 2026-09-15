@@ -55,7 +55,7 @@ const BUCKET: Record<string, Exclude<StatusFilter, 'all'>> = {
   preparing: 'preparing',
   'to pickup': 'ready',
   fitting: 'ready',
-  active: 'ready',
+  active: 'completed',
   ready: 'ready',
   completed: 'completed',
   cancelled: 'cancelled',
