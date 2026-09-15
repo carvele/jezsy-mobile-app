@@ -1,0 +1,5 @@
+-- Rollback for 20260915161000_dashboard_canonical_operations_rpc.sql
+
+DROP FUNCTION IF EXISTS public.get_recent_dashboard_activity(integer);
+DROP FUNCTION IF EXISTS public.get_top_inventory_alerts(integer);
+DROP FUNCTION IF EXISTS public.get_dashboard_operations(date, text);
