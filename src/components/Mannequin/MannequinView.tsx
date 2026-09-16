@@ -43,9 +43,24 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CANVAS_WIDTH = SCREEN_WIDTH - 32;
 const CANVAS_HEIGHT = 450;
+// When the drawer is collapsed, the screen (wrapped in a flex:1 View by the
+// parent tab so it survives tab switches -- see app/(tabs)/wardrobe.tsx)
+// still claims the full tab height, but there's nothing left to fill it:
+// the canvas stayed a fixed 450 regardless, leaving a large empty gap
+// between the drawer toggle and the bottom tab bar. Growing the canvas to
+// use that reclaimed space instead means collapsing the drawer makes the
+// mannequin bigger, not just leaves a void. Item positions are stored as
+// fractions of canvas width/height (see MannequinCanvasItem), so this is
+// safe to change at render time.
+// Kept close to CANVAS_HEIGHT's own aspect ratio rather than maximizing
+// height: MannequinSilhouette's SVG (fixed 300x480 viewBox, "xMidYMid meet")
+// scales oddly elongated at much taller aspect ratios on web, so this is a
+// deliberately modest bump -- enough to absorb the dead space, not a
+// full-screen fill.
+const CANVAS_HEIGHT_EXPANDED = Math.min(CANVAS_HEIGHT + 150, Math.round(SCREEN_HEIGHT * 0.5));
 
 // The floating tab bar is ~68px + bottom inset (~10-20px) + 8px offset.
 // We need enough bottom padding so nothing hides behind it.
@@ -104,6 +119,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isDrawerMinimized, setIsDrawerMinimized] = useState<boolean>(false);
   const [canvasBgColor, setCanvasBgColor] = useState<string>(isDark ? '#1A1A1C' : '#FFFFFF');
+  const canvasHeight = isDrawerMinimized ? CANVAS_HEIGHT_EXPANDED : CANVAS_HEIGHT;
 
   // Filter State
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
@@ -709,7 +725,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       >
         <View
           ref={canvasRef}
-          style={[styles.canvasStage, { width: CANVAS_WIDTH, height: CANVAS_HEIGHT }]}
+          style={[styles.canvasStage, { width: CANVAS_WIDTH, height: canvasHeight }]}
         >
           {/* Dress-form silhouette (Classic or Custom Proportioned) */}
           <MannequinSilhouette
@@ -725,7 +741,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               key={item.id}
               item={item}
               canvasWidth={CANVAS_WIDTH}
-              canvasHeight={CANVAS_HEIGHT}
+              canvasHeight={canvasHeight}
               isSelected={selectedItemId === item.id}
               onSelect={setSelectedItemId}
               onUpdateTransform={handleUpdateTransform}
