@@ -2,14 +2,14 @@
  * Builds outfit suggestions from the user's own wardrobe.
  *
  * Deterministic and local: it enumerates valid garment combinations, scores
- * each on colour harmony plus how neglected its pieces are, and explains the
- * result. Nothing is sent anywhere. The neglect weighting is the point -- a
- * suggestion engine that keeps proposing the same three favourite items is
- * not worth opening, so pieces the user has not reached for score higher.
+ * each on colour harmony, personal preference affinity, occasion fit, and neglect bonus.
  */
 
 import { Database } from '@/src/types/database.types';
 import { evaluateColors, ColorMatchResult } from './colorMatcher';
+import { UserStyleProfileDto } from '../types/dto/styleProfile';
+import { computePersonalAffinity } from './personalStyleEngine';
+import { explainOutfit, OutfitExplanation } from './outfitExplainer';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
@@ -19,12 +19,19 @@ export interface GeneratedOutfit {
   score: number;
   label: ColorMatchResult['label'];
   reason: string;
+  explanation?: OutfitExplanation;
+  personalScore?: number;
+  occasion?: string | null;
 }
 
-// Per-slot candidate cap. Enumerating every combination is factorial; a
-// wardrobe of 60 tops and 60 bottoms is 3600 pairs before shoes. Taking the
-// most-neglected few per slot keeps this linear enough to run on render.
-const PER_SLOT = 6;
+export interface GenerateOutfitsOptions {
+  limit?: number;
+  occasion?: string | null;
+  profile?: UserStyleProfileDto | null;
+  requiredItemId?: string | null; // When styling a specific item
+}
+
+const PER_SLOT = 8;
 const NEGLECT_DAYS = 60;
 
 function bySlot(items: WardrobeItem[], type: string): WardrobeItem[] {
@@ -46,16 +53,74 @@ function colorsOf(items: WardrobeItem[]): string[] {
   return items.flatMap((i) => i.color_tags || []);
 }
 
-function build(items: WardrobeItem[]): GeneratedOutfit {
+function build(
+  items: WardrobeItem[],
+  options?: GenerateOutfitsOptions
+): GeneratedOutfit {
   const match = evaluateColors(colorsOf(items));
   const avgNeglect = items.reduce((sum, i) => sum + neglect(i), 0) / items.length;
   const neverWorn = items.filter((i) => !i.wear_count);
 
-  // Harmony leads; neglect nudges. A great-looking outfit of favourites still
-  // outranks a mediocre one of forgotten pieces.
-  const score = Math.round(match.score * 0.8 + avgNeglect * 100 * 0.2);
+  const personal = computePersonalAffinity(items, options?.profile, options?.occasion);
 
-  let reason = match.feedback;
+  // 1. Composition Score
+  let compScore = 85;
+  const types = items.map((i) => i.garment_type);
+  const hasDress = types.includes('Dress');
+  const hasShoes = types.includes('Shoes');
+  const hasOuter = types.includes('Outerwear');
+
+  if (hasDress || (types.includes('Top') && types.includes('Bottom'))) {
+    compScore += 5;
+  }
+  if (hasShoes) compScore += 5;
+  if (hasOuter) compScore += 5;
+
+  // 2. Pattern Clash Guard
+  let patternedCount = 0;
+  for (const item of items) {
+    const pattern = (item as any).pattern;
+    if (pattern && pattern !== 'Solid' && pattern !== 'Plain') {
+      patternedCount++;
+    }
+  }
+  if (patternedCount > 1) {
+    compScore -= 15; // penalize clashing loud patterns
+  }
+
+  // 3. Occasion Suitability
+  let occasionBonus = 0;
+  if (options?.occasion) {
+    const target = options.occasion.toLowerCase();
+    for (const item of items) {
+      const occs: string[] = (item as any).occasions || [];
+      if (occs.some((o) => o.toLowerCase().includes(target) || target.includes(o.toLowerCase()))) {
+        occasionBonus += 6;
+      }
+    }
+    occasionBonus = Math.min(15, occasionBonus);
+  }
+
+  // 4. Weight Calculation
+  const w = options?.profile?.preferenceWeights || {
+    colorHarmony: 0.40,
+    composition: 0.35,
+    personalStyle: 0.25,
+  };
+
+  const rawScore =
+    match.score * w.colorHarmony +
+    compScore * w.composition +
+    personal.score * w.personalStyle +
+    occasionBonus +
+    avgNeglect * 10;
+
+  const finalScore = Math.max(10, Math.min(100, Math.round(rawScore)));
+
+  // 5. Stylist Explanation
+  const explanation = explainOutfit(items, match, personal, options?.occasion);
+
+  let reason = explanation.summary;
   if (neverWorn.length === 1) {
     reason += ` Includes a piece you have never worn.`;
   } else if (neverWorn.length > 1) {
@@ -65,23 +130,47 @@ function build(items: WardrobeItem[]): GeneratedOutfit {
   return {
     key: items.map((i) => i.id).sort().join('|'),
     items,
-    score: Math.max(0, Math.min(100, score)),
+    score: finalScore,
     label: match.label,
     reason,
+    explanation,
+    personalScore: personal.score,
+    occasion: options?.occasion,
   };
 }
 
 /**
- * Returns ranked outfit suggestions, best first. An outfit is a dress or a
- * top-and-bottom, always with shoes when the user owns any, optionally layered
- * with outerwear.
+ * Returns ranked outfit suggestions, best first.
+ * Supports backward-compatible call: generateOutfits(items, 6)
+ * As well as options object: generateOutfits(items, { limit: 6, occasion: 'Work', profile })
  */
-export function generateOutfits(items: WardrobeItem[], limit = 6): GeneratedOutfit[] {
-  const tops = bySlot(items, 'Top');
-  const bottoms = bySlot(items, 'Bottom');
-  const dresses = bySlot(items, 'Dress');
-  const shoes = bySlot(items, 'Shoes');
-  const outerwear = bySlot(items, 'Outerwear');
+export function generateOutfits(
+  items: WardrobeItem[],
+  optionsOrLimit: number | GenerateOutfitsOptions = 6
+): GeneratedOutfit[] {
+  const options: GenerateOutfitsOptions =
+    typeof optionsOrLimit === 'number'
+      ? { limit: optionsOrLimit }
+      : optionsOrLimit;
+
+  const limit = options.limit || 6;
+
+  // If a specific required item was requested (e.g. "Style this item"), filter pools
+  let eligibleItems = items;
+  if (options.requiredItemId) {
+    const targetItem = items.find((i) => i.id === options.requiredItemId);
+    if (targetItem) {
+      eligibleItems = items.filter(
+        (i) => i.id === options.requiredItemId || i.garment_type !== targetItem.garment_type
+      );
+    }
+  }
+
+  const tops = bySlot(eligibleItems, 'Top');
+  const bottoms = bySlot(eligibleItems, 'Bottom');
+  const dresses = bySlot(eligibleItems, 'Dress');
+  const shoes = bySlot(eligibleItems, 'Shoes');
+  const outerwear = bySlot(eligibleItems, 'Outerwear');
 
   const bases: WardrobeItem[][] = [];
   for (const d of dresses) bases.push([d]);
@@ -91,14 +180,18 @@ export function generateOutfits(items: WardrobeItem[], limit = 6): GeneratedOutf
 
   const candidates: GeneratedOutfit[] = [];
   for (const base of bases) {
-    // Shoes complete an outfit, but a wardrobe without any should still get
-    // suggestions rather than an empty screen.
+    // If requiredItemId specified, verify it's in this base or layer
     const withShoes = shoes.length ? shoes.map((s) => [...base, s]) : [base];
     for (const combo of withShoes) {
-      candidates.push(build(combo));
-      // Layering is offered as a separate suggestion rather than always-on, so
-      // the user sees both the plain and the layered version of a good base.
-      for (const o of outerwear.slice(0, 2)) candidates.push(build([...combo, o]));
+      if (!options.requiredItemId || combo.some((i) => i.id === options.requiredItemId)) {
+        candidates.push(build(combo, options));
+      }
+      for (const o of outerwear.slice(0, 2)) {
+        const layered = [...combo, o];
+        if (!options.requiredItemId || layered.some((i) => i.id === options.requiredItemId)) {
+          candidates.push(build(layered, options));
+        }
+      }
     }
   }
 
@@ -121,20 +214,21 @@ export interface WardrobeStats {
   totalWears: number;
 }
 
-/** Aggregates the wear data the app already records but never surfaced. */
+/** Aggregates the wear data the app already records. */
 export function computeStats(items: WardrobeItem[]): WardrobeStats {
   const neverWorn = items.filter((i) => !i.wear_count).length;
   const neglected = items.filter((i) => i.wear_count > 0 && neglect(i) >= 1).length;
   const mostWorn = items.reduce<WardrobeItem | null>(
     (best, i) => (!best || i.wear_count > best.wear_count ? i : best),
-    null,
+    null
   );
+  const totalWears = items.reduce((sum, i) => sum + (i.wear_count || 0), 0);
 
   return {
     total: items.length,
     neverWorn,
     neglected,
-    mostWorn: mostWorn && mostWorn.wear_count > 0 ? mostWorn : null,
-    totalWears: items.reduce((sum, i) => sum + (i.wear_count || 0), 0),
+    mostWorn,
+    totalWears,
   };
 }

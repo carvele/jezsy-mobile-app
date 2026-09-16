@@ -1,0 +1,28 @@
+-- Rollback: 20260916010000_wardrobe_ai_stylist_upgrade.sql.rollback
+
+DROP INDEX IF EXISTS idx_outfit_items_wardrobe_item_id;
+DROP INDEX IF EXISTS idx_outfit_feedback_created_at;
+DROP INDEX IF EXISTS idx_outfit_feedback_user_id;
+DROP INDEX IF EXISTS idx_wardrobe_items_user_occasions;
+
+DROP TABLE IF EXISTS public.outfit_feedback CASCADE;
+DROP TABLE IF EXISTS public.user_style_profiles CASCADE;
+
+ALTER TABLE public.outfit_items DROP COLUMN IF EXISTS wardrobe_item_id;
+
+ALTER TABLE public.wardrobe_items
+  DROP COLUMN IF EXISTS embedding,
+  DROP COLUMN IF EXISTS user_corrections,
+  DROP COLUMN IF EXISTS ai_confidence,
+  DROP COLUMN IF EXISTS ai_attributes,
+  DROP COLUMN IF EXISTS is_custom_category,
+  DROP COLUMN IF EXISTS color_details,
+  DROP COLUMN IF EXISTS seasons,
+  DROP COLUMN IF EXISTS occasions,
+  DROP COLUMN IF EXISTS silhouette,
+  DROP COLUMN IF EXISTS neckline,
+  DROP COLUMN IF EXISTS sleeve_type,
+  DROP COLUMN IF EXISTS length_type,
+  DROP COLUMN IF EXISTS fit,
+  DROP COLUMN IF EXISTS material,
+  DROP COLUMN IF EXISTS pattern;

@@ -187,12 +187,65 @@ export default function WardrobeItemDetailScreen() {
           </View>
         )}
 
+        {/* AI & Style Attributes Section */}
+        {((item as any).pattern || (item as any).material || (item as any).fit || ((item as any).occasions && (item as any).occasions.length > 0)) && (
+          <View style={[styles.attributesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.attributesHeader}>
+              <IconSymbol name="sparkles" size={14} color={colors.tint} />
+              <Text style={[styles.attributesTitle, { color: colors.tint }]}>Style Profile</Text>
+            </View>
+            <View style={styles.attrGrid}>
+              {(item as any).pattern && (
+                <View style={styles.attrItem}>
+                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Pattern</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{(item as any).pattern}</Text>
+                </View>
+              )}
+              {(item as any).material && (
+                <View style={styles.attrItem}>
+                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Material</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{(item as any).material}</Text>
+                </View>
+              )}
+              {(item as any).fit && (
+                <View style={styles.attrItem}>
+                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Fit</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{(item as any).fit}</Text>
+                </View>
+              )}
+            </View>
+            {(item as any).occasions && (item as any).occasions.length > 0 && (
+              <View style={styles.occasionsContainer}>
+                <Text style={[styles.attrLabel, { color: colors.secondaryText, marginBottom: 4 }]}>Occasions</Text>
+                <View style={styles.occasionsRow}>
+                  {((item as any).occasions as string[]).map((occ: string) => (
+                    <View key={occ} style={[styles.occasionChip, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                      <Text style={[styles.occasionChipText, { color: colors.text }]}>{occ}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={styles.wearRow}>
           <View style={[styles.wearCard, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
             <IconSymbol name="chart.bar.fill" size={20} color={colors.tint} />
             <Text style={[styles.wearLabel, { color: colors.text }]}>{wearLabel}</Text>
           </View>
         </View>
+
+        {/* Style with AI Button */}
+        <TouchableOpacity
+          style={[styles.styleBtn, { borderColor: colors.tint }]}
+          onPress={() => router.push('/style-advisor' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Style this piece with AI"
+        >
+          <IconSymbol name="sparkles" size={16} color={colors.tint} />
+          <Text style={[styles.styleBtnText, { color: colors.tint }]}>Style This Piece with AI</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.logButton, { backgroundColor: colors.tint, opacity: logging ? 0.6 : 1 }]}
@@ -297,6 +350,71 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   logButtonText: {
+    ...Type.bodyStrong,
+    fontWeight: '700',
+  },
+  attributesCard: {
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.xl,
+  },
+  attributesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: Spacing.md,
+  },
+  attributesTitle: {
+    ...Type.bodyStrong,
+    fontWeight: '700',
+  },
+  attrGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  attrItem: {
+    minWidth: '28%',
+  },
+  attrLabel: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  attrValue: {
+    ...Type.body,
+    fontWeight: '600',
+  },
+  occasionsContainer: {
+    marginTop: Spacing.sm,
+  },
+  occasionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  occasionChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  occasionChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  styleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    height: 48,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  styleBtnText: {
     ...Type.bodyStrong,
     fontWeight: '700',
   },

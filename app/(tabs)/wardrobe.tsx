@@ -7,6 +7,7 @@ import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { outfitService } from '@/src/services';
+import { outfitFeedbackService } from '@/src/services/outfitFeedbackService';
 import { useAuth } from '@/src/context/AuthContext';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -304,6 +305,13 @@ export default function WardrobeScreen() {
       const userId = session?.user?.id;
       if (userId) {
         AsyncStorage.setItem(`${PASSED_SUGGESTIONS_KEY_PREFIX}${userId}`, JSON.stringify([...next])).catch(() => {});
+        outfitFeedbackService.logFeedback(
+          {
+            userId,
+            feedbackType: 'rejected',
+          },
+          outfit.items as any
+        ).catch(() => {});
       }
       return next;
     });
@@ -339,6 +347,15 @@ export default function WardrobeScreen() {
         items: payload,
       });
       if (!result.ok) throw result.error;
+
+      // Log feedback event
+      outfitFeedbackService.logFeedback(
+        {
+          userId: session.user.id,
+          feedbackType: 'saved',
+        },
+        outfit.items as any
+      ).catch(() => {});
 
       showToast('Outfit saved to your wardrobe.', 'success');
       fetchWardrobeData();
