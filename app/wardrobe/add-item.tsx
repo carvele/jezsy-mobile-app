@@ -229,16 +229,10 @@ export default function AddWardrobeItemScreen() {
     setRawPickedSize(null);
   };
 
-  const handleCropConfirm = async (croppedUri: string) => {
-    setImageUri(croppedUri);
-    setCropModalVisible(false);
-    setRawPickedUri(null);
-    setRawPickedSize(null);
-
-    // Trigger AI clothing analysis
+  const runAiAnalysis = async (targetUri: string) => {
     setIsAnalyzingAi(true);
     try {
-      const analysis = await fashionVisionEngine.analyzeGarment(croppedUri, {
+      const analysis = await fashionVisionEngine.analyzeGarment(targetUri, {
         width: rawPickedSize?.width,
         height: rawPickedSize?.height,
       });
@@ -246,9 +240,18 @@ export default function AddWardrobeItemScreen() {
       setAiModalVisible(true);
     } catch (e) {
       console.warn('AI analysis error, proceeding with manual entry:', e);
+      showToast('AI analysis could not complete. You can enter details manually.', 'info');
     } finally {
       setIsAnalyzingAi(false);
     }
+  };
+
+  const handleCropConfirm = async (croppedUri: string) => {
+    setImageUri(croppedUri);
+    setCropModalVisible(false);
+    setRawPickedUri(null);
+    setRawPickedSize(null);
+    runAiAnalysis(croppedUri);
   };
 
   const handleAiConfirm = (confirmed: GarmentAnalysisResult, corrections: UserCorrections | null) => {
@@ -565,6 +568,41 @@ export default function AddWardrobeItemScreen() {
             </View>
           )}
         </View>
+
+        {/* Explicit AI Trigger & Status */}
+        {imageUri && (
+          <View style={styles.aiActionCard}>
+            <TouchableOpacity
+              style={[
+                styles.aiAnalyzeBtn,
+                { backgroundColor: isAnalyzingAi ? '#374151' : colors.tint },
+              ]}
+              onPress={() => {
+                const target = (removeBg && processedImageUri) ? processedImageUri : imageUri;
+                runAiAnalysis(target);
+              }}
+              disabled={isAnalyzingAi}
+            >
+              {isAnalyzingAi ? (
+                <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 8 }} />
+              ) : (
+                <IconSymbol name="sparkles" size={18} color="#FFF" style={{ marginRight: 8 }} />
+              )}
+              <Text style={styles.aiAnalyzeBtnText}>
+                {isAnalyzingAi
+                  ? 'Analyzing Clothing with AI...'
+                  : aiAnalysis
+                  ? '✨ Review / Re-Analyze with AI'
+                  : '✨ Analyze Clothing with AI'}
+              </Text>
+            </TouchableOpacity>
+            {aiAnalysis && (
+              <Text style={[styles.aiStatusText, { color: colors.secondaryText }]}>
+                Detected: {aiAnalysis.garmentType} • {aiAnalysis.subcategory || aiAnalysis.category} • {aiAnalysis.pattern} ({Math.round(aiAnalysis.confidence * 100)}% Match)
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Form Controls */}
         <View style={styles.form}>
@@ -1061,5 +1099,31 @@ const styles = StyleSheet.create({
   customColorBtnText: {
     ...Type.caption,
     fontWeight: '700',
+  },
+  aiActionCard: {
+    marginHorizontal: Spacing.xl,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+    alignItems: 'center',
+  },
+  aiAnalyzeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: Radius.pill,
+    width: '100%',
+    elevation: 3,
+  },
+  aiAnalyzeBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  aiStatusText: {
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: 'center',
   },
 });
