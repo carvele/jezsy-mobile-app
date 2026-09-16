@@ -17,8 +17,7 @@ export default function PrivacySettingsScreen() {
   const router = useRouter();
 
   const [isShared, setIsShared] = useState(false);
-  const [wardrobePrivacy, setWardrobePrivacy] = useState<'private' | 'connections'>('private');
-  const [wishlistPrivacy, setWishlistPrivacy] = useState<'private' | 'connections' | 'public'>('private');
+  const [wishlistPrivacy, setWishlistPrivacy] = useState<'private' | 'public'>('private');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
@@ -37,8 +36,8 @@ export default function PrivacySettingsScreen() {
         if (error) throw error;
         if (mounted && data) {
           setIsShared(!!data.is_wardrobe_shared);
-          setWardrobePrivacy((data.wardrobe_privacy as any) || 'private');
-          setWishlistPrivacy((data.wishlist_privacy as any) || 'private');
+          const wishPriv = data.wishlist_privacy === 'public' ? 'public' : 'private';
+          setWishlistPrivacy(wishPriv);
         }
       } catch (err: any) {
         console.log('Error loading privacy settings:', err.message);
@@ -72,54 +71,43 @@ export default function PrivacySettingsScreen() {
     }
   };
 
-  const handlePrivacyChange = async (type: 'wardrobe' | 'wishlist', value: 'private' | 'connections' | 'public') => {
+  const handleWishlistPrivacyChange = async (value: 'private' | 'public') => {
     if (!user) return;
-    
-    if (type === 'wardrobe' && wardrobePrivacy === value) return;
-    if (type === 'wishlist' && wishlistPrivacy === value) return;
+    if (wishlistPrivacy === value) return;
 
     setUpdating(true);
-    const prevWardrobe = wardrobePrivacy;
     const prevWishlist = wishlistPrivacy;
-
-    if (type === 'wardrobe') setWardrobePrivacy(value as 'private' | 'connections');
-    if (type === 'wishlist') setWishlistPrivacy(value);
+    setWishlistPrivacy(value);
 
     try {
-      const updatePayload = type === 'wardrobe' 
-        ? { wardrobe_privacy: value }
-        : { wishlist_privacy: value };
-
       const { error } = await supabase
         .from('profiles')
-        .update(updatePayload)
+        .update({ wishlist_privacy: value })
         .eq('id', user.id);
 
       if (error) throw error;
       showToast('Privacy updated', 'success');
     } catch {
-      if (type === 'wardrobe') setWardrobePrivacy(prevWardrobe);
-      if (type === 'wishlist') setWishlistPrivacy(prevWishlist);
+      setWishlistPrivacy(prevWishlist);
       showToast('Failed to update privacy settings', 'error');
     } finally {
       setUpdating(false);
     }
   };
 
-  const renderRadioOption = (
-    type: 'wardrobe' | 'wishlist',
-    value: 'private' | 'connections' | 'public',
+  const renderWishlistRadioOption = (
+    value: 'private' | 'public',
     title: string,
     description: string
   ) => {
-    const isSelected = type === 'wardrobe' ? wardrobePrivacy === value : wishlistPrivacy === value;
+    const isSelected = wishlistPrivacy === value;
     return (
       <TouchableOpacity 
         style={[
           styles.radioOption, 
           { borderColor: isSelected ? colors.tint : colors.border }
         ]}
-        onPress={() => handlePrivacyChange(type, value)}
+        onPress={() => handleWishlistPrivacyChange(value)}
         disabled={updating}
       >
         <View style={styles.radioHeader}>
@@ -173,9 +161,8 @@ export default function PrivacySettingsScreen() {
                 <ActivityIndicator color={colors.tint} />
               ) : (
                 <View style={styles.optionsContainer}>
-                  {renderRadioOption('wishlist', 'private', 'Private', 'Only you can see your saved items.')}
-                  {renderRadioOption('wishlist', 'connections', 'My Network', 'Your accepted connections can see your saved items.')}
-                  {renderRadioOption('wishlist', 'public', 'Public', 'Anyone can view your wishlist, and you may appear as someone who saved an item on public product pages.')}
+                  {renderWishlistRadioOption('private', 'Private', 'Only you can see your saved items.')}
+                  {renderWishlistRadioOption('public', 'Public', 'Anyone can view your wishlist, and you may appear as someone who saved an item on public product pages.')}
                 </View>
               )}
             </View>
@@ -188,13 +175,13 @@ export default function PrivacySettingsScreen() {
             <Text style={[styles.cardTitle, { color: colors.text }]}>Digital Wardrobe Access</Text>
           </View>
 
-          <View style={[styles.settingRow, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+          <View style={styles.settingRow}>
             <View style={styles.settingTextContainer}>
               <Text style={[styles.settingTitle, { color: colors.text }]}>
                 Share with Stylists
               </Text>
               <Text style={[styles.settingDesc, { color: colors.secondaryText }]}>
-                Allow JezSy Couture stylists to view your digital wardrobe to recommend outfits.
+                Allow JezSy Couture stylists to view your digital wardrobe to recommend outfits. Your wardrobe remains private to all other users.
               </Text>
             </View>
             
@@ -209,26 +196,6 @@ export default function PrivacySettingsScreen() {
                 accessibilityRole="switch"
               />
             )}
-          </View>
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingTextContainer}>
-              <Text style={[styles.settingTitle, { color: colors.text }]}>
-                Who can see your wardrobe?
-              </Text>
-              <Text style={[styles.settingDesc, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
-                Control which other users can view your digital closet items.
-              </Text>
-              
-              {loading ? (
-                <ActivityIndicator color={colors.tint} />
-              ) : (
-                <View style={styles.optionsContainer}>
-                  {renderRadioOption('wardrobe', 'private', 'Private', 'Only you (and stylists if enabled) can see your wardrobe.')}
-                  {renderRadioOption('wardrobe', 'connections', 'My Network', 'Your accepted connections can browse your wardrobe.')}
-                </View>
-              )}
-            </View>
           </View>
         </View>
 

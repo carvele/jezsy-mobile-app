@@ -15,7 +15,7 @@ export type CustomerReservation = Database['public']['Tables']['reservations']['
   reservation_items?: { count: number }[] | null;
 };
 
-const STATUS_BUCKET_MAP: Record<Exclude<StatusFilter, 'all'>, string[]> = {
+const STATUS_BUCKET_MAP: Record<Exclude<StatusFilter, 'all' | 'returnRefund'>, string[]> = {
   toPay: ['confirmed', 'approved', 'to pay', 'Confirmed', 'Approved', 'To Pay'],
   preparing: ['preparing', 'Preparing'],
   ready: ['to pickup', 'fitting', 'active', 'ready', 'To Pickup', 'Fitting', 'Active', 'Ready'],
@@ -35,7 +35,9 @@ export async function getMyReservationsPage(
     .eq('customer_id', userId)
     .eq('deleted', false);
 
-  if (filter !== 'all') {
+  if (filter === 'returnRefund') {
+    query = query.in('payment_status', ['Refund Required', 'Refunded', 'refund required', 'refunded']);
+  } else if (filter !== 'all') {
     const rawStatuses = STATUS_BUCKET_MAP[filter];
     if (rawStatuses && rawStatuses.length > 0) {
       query = query.in('status', rawStatuses);
@@ -66,7 +68,7 @@ export async function getMyReservationStatusCounts(
 ): Promise<Record<string, number>> {
   const { data, error } = await supabase
     .from('reservations')
-    .select('status')
+    .select('status, payment_status')
     .eq('customer_id', userId)
     .eq('deleted', false);
 
@@ -78,10 +80,15 @@ export async function getMyReservationStatusCounts(
     preparing: 0,
     ready: 0,
     completed: 0,
+    returnRefund: 0,
     cancelled: 0,
   };
 
   (data || []).forEach((r) => {
+    const pStatus = (r.payment_status || '').toLowerCase().trim();
+    if (pStatus === 'refund required' || pStatus === 'refunded') {
+      counts.returnRefund += 1;
+    }
     const bucket = statusBucket(r.status);
     if (counts[bucket] !== undefined) {
       counts[bucket] += 1;

@@ -40,7 +40,15 @@ export const RESERVATION_STATUSES = [
 ] as const;
 
 /** Filter buckets, in the order they appear in the tab row. */
-export const STATUS_FILTERS = ['all', 'toPay', 'preparing', 'ready', 'completed', 'cancelled'] as const;
+export const STATUS_FILTERS = [
+  'all',
+  'toPay',
+  'preparing',
+  'ready',
+  'completed',
+  'returnRefund',
+  'cancelled',
+] as const;
 export type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 /**
@@ -48,7 +56,7 @@ export type StatusFilter = (typeof STATUS_FILTERS)[number];
  * pre-rename values the dashboard still reconciles, so they are mapped to
  * 'ready' rather than dropped.
  */
-const BUCKET: Record<string, Exclude<StatusFilter, 'all'>> = {
+const BUCKET: Record<string, Exclude<StatusFilter, 'all' | 'returnRefund'>> = {
   confirmed: 'toPay',
   approved: 'toPay',
   'to pay': 'toPay',
@@ -66,7 +74,7 @@ const BUCKET: Record<string, Exclude<StatusFilter, 'all'>> = {
  * own null-status fallback -- so a malformed row is never unreachable
  * instead of crashing the screen.
  */
-export function statusBucket(status: string | null): Exclude<StatusFilter, 'all'> {
+export function statusBucket(status: string | null): Exclude<StatusFilter, 'all' | 'returnRefund'> {
   return BUCKET[(status || '').trim().toLowerCase()] ?? 'toPay';
 }
 
@@ -76,12 +84,13 @@ const FILTER_LABEL: Record<StatusFilter, string> = {
   preparing: 'Preparing',
   ready: 'Ready',
   completed: 'Completed',
+  returnRefund: 'Return / Refund',
   cancelled: 'Cancelled',
 };
 
 export const filterLabel = (filter: StatusFilter): string => FILTER_LABEL[filter];
 
-const BADGE_LABEL: Record<Exclude<StatusFilter, 'all'>, string> = {
+const BADGE_LABEL: Record<Exclude<StatusFilter, 'all' | 'returnRefund'>, string> = {
   toPay: 'To pay',
   preparing: 'Preparing your item',
   ready: 'Ready to collect',
@@ -133,3 +142,94 @@ export const formatPaymentDeadline = (
   const hours = Math.ceil(remaining / HOUR_MS);
   return { label: `${hours}h left`, urgent: remaining < HOUR_MS };
 };
+
+export type ReservationCardAction = 'toPay' | 'returnRefund' | 'rate' | 'buyAgain' | 'viewRefund';
+
+export interface ReservationActionInput {
+  status: string | null;
+  payment_status?: string | null;
+  completed_at?: string | null;
+  date?: string | null;
+  reviewed?: boolean;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Checks whether a completed reservation is within the standard return request window.
+ * Authoritative anchor is `completed_at`, with fallback to reservation `date` for legacy rows.
+ */
+export function isReturnEligible(
+  reservation: { completed_at?: string | null; date?: string | null },
+  windowDays = 7,
+  referenceTime = Date.now()
+): boolean {
+  const anchorStr = reservation.completed_at || reservation.date;
+  if (!anchorStr) return false;
+  const anchorDate = new Date(anchorStr);
+  if (Number.isNaN(anchorDate.getTime())) return false;
+
+  const elapsedMs = referenceTime - anchorDate.getTime();
+  if (elapsedMs < 0) return true; // Clock drift or future completion
+  return elapsedMs <= windowDays * DAY_MS;
+}
+
+/**
+ * Resolves customer-facing action buttons for a reservation card.
+ *
+ * Rules:
+ * - Active awaiting payment -> ['toPay']
+ * - Active (preparing/ready) -> []
+ * - Completed + within return window + not rated -> ['returnRefund', 'rate']
+ * - Completed + within return window + already rated -> ['returnRefund']
+ * - Completed + return window expired + not rated -> ['buyAgain', 'rate']
+ * - Completed + return window expired + rated -> ['buyAgain']
+ * - Return/refund request pending -> ['viewRefund']
+ * - Refunded / return completed -> ['buyAgain']
+ * - Cancelled -> []
+ */
+export function getReservationCardActions(
+  reservation: ReservationActionInput,
+  options: { windowDays?: number; referenceTime?: number } = {}
+): ReservationCardAction[] {
+  const bucket = statusBucket(reservation.status);
+  const paymentStatus = (reservation.payment_status || '').toLowerCase().trim();
+
+  // Return/refund request pending review
+  if (paymentStatus === 'refund required') {
+    return ['viewRefund'];
+  }
+
+  // Refund already completed
+  if (paymentStatus === 'refunded') {
+    return ['buyAgain'];
+  }
+
+  // Active holds
+  if (bucket === 'toPay') {
+    return ['toPay'];
+  }
+  if (bucket === 'preparing' || bucket === 'ready') {
+    return [];
+  }
+
+  // Completed reservation
+  if (bucket === 'completed') {
+    const eligible = isReturnEligible(
+      { completed_at: reservation.completed_at, date: reservation.date },
+      options.windowDays ?? 7,
+      options.referenceTime ?? Date.now()
+    );
+
+    const isRated = Boolean(reservation.reviewed);
+
+    if (eligible) {
+      return isRated ? ['returnRefund'] : ['returnRefund', 'rate'];
+    } else {
+      return isRated ? ['buyAgain'] : ['buyAgain', 'rate'];
+    }
+  }
+
+  // Cancelled or unknown
+  return [];
+}

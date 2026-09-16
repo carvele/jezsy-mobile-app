@@ -62,11 +62,12 @@ function TypingDot({ delay, color }: { delay: number; color: string }) {
 
 export default function ChatScreen() {
   const { showToast } = useToast();
-  const { conversationId, ctxType, ctxRef, ctxLabel } = useLocalSearchParams<{
+  const { conversationId, ctxType, ctxRef, ctxLabel, prefill } = useLocalSearchParams<{
     conversationId: string;
     ctxType?: string;
     ctxRef?: string;
     ctxLabel?: string;
+    prefill?: string;
   }>();
   const { session } = useAuth();
   const { sendMessage, editMessage, toggleReaction, markAsRead, markDelivered, isStaffOnline } = useMessages();
@@ -80,7 +81,7 @@ export default function ChatScreen() {
   const isInitialLoadRef = useRef(true);
   const isLoadingOlderRef = useRef(false);
   const lastMessageIdRef = useRef<string | null>(null);
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState(prefill ? String(prefill) : '');
   // Non-null while editing: the composer becomes an edit box for that message.
   const [editingId, setEditingId] = useState<string | null>(null);
   // The long-press target. Reactions apply to anyone's message; Edit only shows

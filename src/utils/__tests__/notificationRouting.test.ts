@@ -81,21 +81,21 @@ describe('resolveNotificationRoute', () => {
   });
 
   describe('Direct Chat routing', () => {
-    it('routes using actor_id as the other user UUID', () => {
+    it('routes direct_chat to /messages inbox as P2P chat is retired', () => {
       const data: NotificationData = {
         entity_type: 'direct_chat',
         entity_id: 'chat-uuid',
         actor_id: 'user-other-uuid',
       };
-      expect(resolveNotificationRoute(data)).toBe('/chat/user-other-uuid');
+      expect(resolveNotificationRoute(data)).toBe('/messages');
     });
 
-    it('refuses to substitute direct_chat_id for user UUID and returns null', () => {
+    it('routes direct_chat_id to /messages inbox', () => {
       const data: NotificationData = {
         entity_type: 'direct_chat',
         direct_chat_id: 'chat-uuid',
       };
-      expect(resolveNotificationRoute(data)).toBeNull();
+      expect(resolveNotificationRoute(data)).toBe('/messages');
     });
   });
 

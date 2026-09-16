@@ -1,0 +1,175 @@
+-- Rollback Migration: 20260917000000_remove_connections_and_decouple_privacy.sql.rollback
+-- Description: Re-creates connections table, triggers, helper functions, and privacy checks.
+
+-- 1. Re-create connections table
+CREATE TABLE IF NOT EXISTS public.connections (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    user_id_1 uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    user_id_2 uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    status text NOT NULL CHECK (status = ANY (ARRAY['pending'::text, 'accepted'::text, 'blocked'::text])),
+    action_user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT connections_user_order CHECK ((user_id_1 < user_id_2)),
+    CONSTRAINT connections_unique_pair UNIQUE (user_id_1, user_id_2)
+);
+
+ALTER TABLE public.connections ENABLE ROW LEVEL SECURITY;
+
+-- 2. Restore policies on connections
+CREATE POLICY "Connections read" ON public.connections
+FOR SELECT TO authenticated
+USING (
+  public.is_staff_or_admin()
+  OR (((user_id_1 = (SELECT auth.uid() AS uid)) OR (user_id_2 = (SELECT auth.uid() AS uid)))
+      AND (NOT ((status = 'blocked'::text) AND (action_user_id <> (SELECT auth.uid() AS uid)))))
+);
+
+CREATE POLICY "Users can insert pending connections" ON public.connections
+FOR INSERT TO authenticated
+WITH CHECK (
+  (((SELECT auth.uid() AS uid) = user_id_1) OR ((SELECT auth.uid() AS uid) = user_id_2))
+  AND ((SELECT auth.uid() AS uid) = action_user_id)
+  AND (status = ANY (ARRAY['pending'::text, 'blocked'::text]))
+);
+
+CREATE POLICY "Users can update their connections" ON public.connections
+FOR UPDATE TO authenticated
+USING (
+  (((SELECT auth.uid() AS uid) = user_id_1) OR ((SELECT auth.uid() AS uid) = user_id_2))
+  AND (NOT ((status = 'blocked'::text) AND (action_user_id <> (SELECT auth.uid() AS uid))))
+)
+WITH CHECK (
+  (((SELECT auth.uid() AS uid) = user_id_1) OR ((SELECT auth.uid() AS uid) = user_id_2))
+  AND (action_user_id = (SELECT auth.uid() AS uid))
+);
+
+-- 3. Restore triggers
+CREATE OR REPLACE FUNCTION public.set_connections_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER connections_updated_at
+BEFORE UPDATE ON public.connections
+FOR EACH ROW EXECUTE FUNCTION public.set_connections_updated_at();
+
+CREATE OR REPLACE FUNCTION public.prevent_self_accept()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $$
+BEGIN
+  IF NEW.status = 'accepted' AND OLD.status = 'pending' AND OLD.action_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'Cannot accept your own connection request';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER connections_prevent_self_accept
+BEFORE UPDATE ON public.connections
+FOR EACH ROW EXECUTE FUNCTION public.prevent_self_accept();
+
+-- 4. Restore check constraints on profiles to allow 'connections'
+ALTER TABLE public.profiles
+  DROP CONSTRAINT IF EXISTS profiles_wardrobe_privacy_check;
+ALTER TABLE public.profiles
+  ADD CONSTRAINT profiles_wardrobe_privacy_check
+  CHECK (wardrobe_privacy = ANY (ARRAY['private'::text, 'connections'::text]));
+
+ALTER TABLE public.profiles
+  DROP CONSTRAINT IF EXISTS profiles_wishlist_privacy_check;
+ALTER TABLE public.profiles
+  ADD CONSTRAINT profiles_wishlist_privacy_check
+  CHECK (wishlist_privacy = ANY (ARRAY['public'::text, 'connections'::text, 'private'::text]));
+
+ALTER TABLE public.profiles
+  DROP CONSTRAINT IF EXISTS profiles_outfit_privacy_check;
+ALTER TABLE public.profiles
+  ADD CONSTRAINT profiles_outfit_privacy_check
+  CHECK (outfit_privacy = ANY (ARRAY['public'::text, 'connections'::text, 'private'::text]));
+
+-- 5. Restore original is_blocked_between
+CREATE OR REPLACE FUNCTION public.is_blocked_between(p_user_a uuid, p_user_b uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $$
+BEGIN
+  IF p_user_a IS NULL OR p_user_b IS NULL THEN
+    RETURN false;
+  END IF;
+
+  IF auth.uid() IS NULL OR (auth.uid() <> p_user_a AND auth.uid() <> p_user_b) THEN
+    IF NOT public.is_staff_or_admin() THEN
+      RAISE EXCEPTION 'Not authorized to query relationship status between third parties'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1 FROM public.connections c
+    WHERE c.status = 'blocked'
+      AND (
+        (c.user_id_1 = p_user_a AND c.user_id_2 = p_user_b)
+        OR
+        (c.user_id_1 = p_user_b AND c.user_id_2 = p_user_a)
+      )
+  );
+END;
+$$;
+
+-- 6. Restore original policies on wishlists, saved_outfits, wardrobe_items
+DROP POLICY IF EXISTS "Wishlists read policy" ON public.wishlists;
+CREATE POLICY "Wishlists read policy"
+ON public.wishlists
+FOR SELECT
+TO authenticated
+USING (
+  ((SELECT auth.uid() AS uid) = user_id)
+  OR ((get_wishlist_privacy(user_id) = 'public'::text) AND (NOT is_blocked_between((SELECT auth.uid() AS uid), user_id)))
+  OR ((get_wishlist_privacy(user_id) = 'connections'::text) AND (EXISTS (
+    SELECT 1 FROM public.connections c
+    WHERE ((c.status = 'accepted'::text) AND (((c.user_id_1 = (SELECT auth.uid() AS uid)) AND (c.user_id_2 = wishlists.user_id)) OR ((c.user_id_2 = (SELECT auth.uid() AS uid)) AND (c.user_id_1 = wishlists.user_id))))
+  )))
+  OR is_staff_or_admin()
+);
+
+DROP POLICY IF EXISTS "Saved outfits read" ON public.saved_outfits;
+CREATE POLICY "Saved outfits read"
+ON public.saved_outfits
+FOR SELECT
+TO authenticated
+USING (
+  ((COALESCE(deleted, false) = false) AND (
+    (user_id = (SELECT auth.uid() AS uid))
+    OR is_staff_or_admin()
+    OR ((get_outfit_privacy(user_id) = 'public'::text) AND (NOT is_blocked_between((SELECT auth.uid() AS uid), user_id)))
+    OR ((get_outfit_privacy(user_id) = 'connections'::text) AND (EXISTS (
+      SELECT 1 FROM public.connections c
+      WHERE ((((c.user_id_1 = (SELECT auth.uid() AS uid)) AND (c.user_id_2 = saved_outfits.user_id)) OR ((c.user_id_2 = (SELECT auth.uid() AS uid)) AND (c.user_id_1 = saved_outfits.user_id))) AND (c.status = 'accepted'::text))
+    )))
+  ))
+);
+
+DROP POLICY IF EXISTS "Wardrobe items read" ON public.wardrobe_items;
+CREATE POLICY "Wardrobe items read"
+ON public.wardrobe_items
+FOR SELECT
+TO authenticated
+USING (
+  (user_id = (SELECT auth.uid() AS uid))
+  OR is_staff_or_admin()
+  OR ((get_wardrobe_privacy(user_id) = 'connections'::text) AND (EXISTS (
+    SELECT 1 FROM public.connections c
+    WHERE ((((c.user_id_1 = (SELECT auth.uid() AS uid)) AND (c.user_id_2 = wardrobe_items.user_id)) OR ((c.user_id_2 = (SELECT auth.uid() AS uid)) AND (c.user_id_1 = wardrobe_items.user_id))) AND (c.status = 'accepted'::text))
+  )))
+);
