@@ -32,7 +32,6 @@ export const RESERVATION_STATUSES = [
   'To Pay',
   'Preparing',
   'To Pickup',
-  'Fitting',
   'Active',
   'Ready',
   'Completed',
@@ -52,9 +51,9 @@ export const STATUS_FILTERS = [
 export type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 /**
- * Stored status to bucket. 'To Pickup', 'Fitting' and 'Active' are legacy
+ * Stored status to bucket. 'To Pickup' and 'Active' are legacy
  * pre-rename values the dashboard still reconciles, so they are mapped to
- * 'ready' rather than dropped.
+ * 'ready' / 'completed' rather than dropped.
  */
 const BUCKET: Record<string, Exclude<StatusFilter, 'all' | 'returnRefund'>> = {
   confirmed: 'toPay',
@@ -62,7 +61,6 @@ const BUCKET: Record<string, Exclude<StatusFilter, 'all' | 'returnRefund'>> = {
   'to pay': 'toPay',
   preparing: 'preparing',
   'to pickup': 'ready',
-  fitting: 'ready',
   active: 'completed',
   ready: 'ready',
   completed: 'completed',

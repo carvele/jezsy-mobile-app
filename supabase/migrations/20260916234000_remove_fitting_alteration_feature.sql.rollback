@@ -1,0 +1,55 @@
+-- Rollback: 20260916234000_remove_fitting_alteration_feature.sql.rollback
+-- Restores 'Fitting' status and creates table shells and stubs if ever rolled back.
+
+ALTER TABLE public.reservations DROP CONSTRAINT IF EXISTS reservations_status_check;
+ALTER TABLE public.reservations ADD CONSTRAINT reservations_status_check
+  CHECK (status IN (
+    'Pending', 'Request Approval', 'Confirmed', 'Approved', 'To Pay',
+    'Preparing', 'Ready', 'To Pickup', 'Fitting', 'Active', 'Completed', 'Cancelled'
+  )) NOT VALID;
+
+CREATE TABLE IF NOT EXISTS public.reservation_fitting_records (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reservation_id uuid NOT NULL UNIQUE REFERENCES public.reservations(id) ON DELETE CASCADE,
+  customer_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  confirmed_body_measurements jsonb DEFAULT '{}'::jsonb,
+  fitting_status text NOT NULL DEFAULT 'pending' CHECK (fitting_status IN ('pending', 'fitted', 'completed')),
+  customer_fitting_summary text,
+  staff_internal_notes text,
+  fitted_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  fitted_by_name text,
+  fitted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.reservation_item_alterations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  reservation_item_id uuid NOT NULL UNIQUE REFERENCES public.reservation_items(id) ON DELETE CASCADE,
+  reservation_id uuid NOT NULL REFERENCES public.reservations(id) ON DELETE CASCADE,
+  product_id uuid REFERENCES public.products(id) ON DELETE SET NULL,
+  hem_adjustment_cm numeric DEFAULT 0,
+  sleeve_adjustment_cm numeric DEFAULT 0,
+  waist_adjustment_cm numeric DEFAULT 0,
+  shoulders_adjustment_cm numeric DEFAULT 0,
+  other_adjustments jsonb DEFAULT '{}'::jsonb,
+  alteration_status text NOT NULL DEFAULT 'pending' CHECK (alteration_status IN ('pending', 'in_progress', 'completed', 'cancelled')),
+  customer_alteration_summary text,
+  staff_internal_notes text,
+  assigned_tailor_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  assigned_tailor_name text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION public.reservation_holds_stock(_status text, _deleted boolean)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  SELECT NOT coalesce(_deleted, false)
+     AND lower(trim(coalesce(_status, ''))) IN (
+       'approved', 'confirmed', 'to pay', 'preparing', 'ready', 'to pickup', 'fitting', 'active'
+     );
+$function$;

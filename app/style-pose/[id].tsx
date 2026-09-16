@@ -223,7 +223,7 @@ export default function StylePoseDetailScreen() {
                     </Text>
                     <Text style={[styles.productCategory, { color: colors.secondaryText }]}>{prod.category || 'Apparel'}</Text>
                     <Text style={[styles.productPrice, { color: colors.tint }]}>
-                      ₱{(prod.rental_price || prod.price || 0).toLocaleString()} / day
+                      ₱{(prod.rental_price || prod.price || 0).toLocaleString()}
                     </Text>
                   </View>
 

@@ -198,7 +198,7 @@ export default function ProfileScreen() {
                 <IconSymbol name="calendar" size={20} color={colors.tint} />
                 <View style={{ flex: 1 }}>
                   <Text style={[Type.subtitle, { color: colors.text, fontSize: 14 }]}>Boutique Reservations</Text>
-                  <Text style={[Type.caption, { color: colors.secondaryText }]}>Book in-store fitting slots and pick up ready outfits.</Text>
+                  <Text style={[Type.caption, { color: colors.secondaryText }]}>Reserve garments and pick up your order in-store.</Text>
                 </View>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
@@ -237,7 +237,7 @@ export default function ProfileScreen() {
               {renderSettingItem(
                 'questionmark.circle',
                 'Help & FAQ',
-                'Rentals, fittings, payments, & returns',
+                'Orders, pickup, payments, & returns',
                 () => router.push('/profile/faq' as any),
               )}
               {renderSettingItem(
@@ -442,7 +442,7 @@ export default function ProfileScreen() {
               {profile?.role !== 'staff' && profile?.role !== 'owner' && renderSettingItem(
                 'bubble.left.and.bubble.right',
                 'Message Boutique Support',
-                'Chat directly with our styling and fitting team',
+                'Chat directly with our boutique styling team',
                 async () => {
                   try {
                     const conv = await getOrCreateConversation();
@@ -461,7 +461,7 @@ export default function ProfileScreen() {
               {renderSettingItem(
                 'questionmark.circle',
                 'Help & FAQ',
-                'Rentals, fittings, payments, & returns',
+                'Orders, pickup, payments, & returns',
                 () => router.push('/profile/faq' as any),
               )}
               {renderSettingItem(
