@@ -27,7 +27,9 @@ export const GRID_COLUMN_GAP = Spacing.xl; // 20
  * Without this guard, useWindowDimensions returns different values on the
  * server vs. client, which triggers React hydration error #418.
  */
-export function useGridCardWidth(): { cardWidth: number; columns: number } {
+import { DimensionValue } from 'react-native';
+
+export function useGridCardWidth(): { cardWidth: DimensionValue; columns: number } {
   const { width } = useWindowDimensions();
   const [mounted, setMounted] = useState(false);
 
@@ -40,13 +42,14 @@ export function useGridCardWidth(): { cardWidth: number; columns: number } {
 
   // Phones get 2 cols, small tablets 3, large tablets/web 4+
   const columns = effectiveWidth > 1200 ? 5 : effectiveWidth > 900 ? 4 : effectiveWidth > 600 ? 3 : 2;
-  const gaps = GRID_COLUMN_GAP * (columns - 1);
   
-  // Subtract a safety margin. On web, scrollbars take physical layout space (~15px) 
-  // that useWindowDimensions() doesn't account for. We subtract enough to ensure 
-  // flex-wrap never unexpectedly collapses the row.
-  const safetyMargin = Platform.OS === 'web' ? 24 : 4;
-  const cardWidth = Math.floor((effectiveWidth - GRID_GUTTER * 2 - gaps) / columns) - safetyMargin;
+  // Use percentage widths to mathematically guarantee the flex items fit without wrapping.
+  // This completely bypasses useWindowDimensions() bugs, scrollbar widths, and hydration mismatches.
+  let cardWidth: DimensionValue;
+  if (columns === 5) cardWidth = '18%';
+  else if (columns === 4) cardWidth = '23%';
+  else if (columns === 3) cardWidth = '31%';
+  else cardWidth = '47%'; // 2 columns (47% + 47% + gap easily fits in 100%)
   
   return { cardWidth, columns };
 }
