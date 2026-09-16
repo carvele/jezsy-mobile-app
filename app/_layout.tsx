@@ -3,7 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Platform, LogBox, ActivityIndicator } from 'react-native';
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -34,6 +34,8 @@ import {
 } from '@/src/utils/authReturnTarget';
 import { appVersionService, VersionCheckResult } from '@/src/services/appVersionService';
 import { MandatoryUpdateScreen } from '@/src/components/MandatoryUpdateScreen';
+import { legalService, LegalAcceptanceStatus } from '@/src/services/legalService';
+import { LegalAcceptanceGate } from '@/src/components/LegalAcceptanceGate';
 
 LogBox.ignoreLogs([
   'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
@@ -189,6 +191,45 @@ function InitialLayout() {
     return unsub;
   }, []);
 
+  // Legal acceptance gate state
+  const [legalStatus, setLegalStatus] = useState<LegalAcceptanceStatus | null>(null);
+  const [legalError, setLegalError] = useState<Error | null>(null);
+  const [legalLoading, setLegalLoading] = useState(false);
+  const [legalReady, setLegalReady] = useState(false);
+
+  const checkLegalStatus = useCallback(async () => {
+    if (!session?.user?.id) {
+      setLegalStatus(null);
+      setLegalError(null);
+      setLegalLoading(false);
+      setLegalReady(true);
+      return;
+    }
+    setLegalLoading(true);
+    setLegalError(null);
+    try {
+      const res = await legalService.getLegalAcceptanceStatus();
+      setLegalStatus(res);
+    } catch (err: any) {
+      console.error('[RootLayout] Legal acceptance status check failed:', err);
+      setLegalError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setLegalLoading(false);
+      setLegalReady(true);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      checkLegalStatus();
+    } else {
+      setLegalStatus(null);
+      setLegalError(null);
+      setLegalLoading(false);
+      setLegalReady(true);
+    }
+  }, [session?.user?.id, checkLegalStatus]);
+
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       (document.activeElement as HTMLElement)?.blur?.();
@@ -281,7 +322,8 @@ function InitialLayout() {
   // If there is an active session, profile MUST be initialized before routing can proceed.
   const profileReady = !session || isProfileInitialized;
   const isHardBlocked = versionResult?.status === 'HARD_BLOCK';
-  const flagsReady = !isLoading && !isProfileLoading && profileReady && onboardingSeen !== null && themeLoaded && versionReady;
+  const legalReadyForSession = !session || (legalReady && !legalLoading);
+  const flagsReady = !isLoading && !isProfileLoading && profileReady && onboardingSeen !== null && themeLoaded && versionReady && legalReadyForSession;
 
   // Gates whether the Stack renders at all -- but only for the very first
   // cold-start bootstrap. Flips true once and never back to false, so a
@@ -465,11 +507,36 @@ function InitialLayout() {
     );
   }
 
+  const pathSegments = segments as string[];
+  const isLegalBlocked = Boolean(
+    session && (legalError || (legalStatus?.gate_enabled && !legalStatus?.can_continue))
+  );
+  const isSupportRoute = pathSegments.includes('messages');
+
+  if (isLegalBlocked && !isSupportRoute) {
+    return (
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <LegalAcceptanceGate
+          status={legalStatus}
+          error={legalError}
+          onRetry={checkLegalStatus}
+          onAccepted={() => {
+            setLegalStatus((prev) => (prev ? { ...prev, can_continue: true } : null));
+            setLegalError(null);
+          }}
+        />
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack initialRouteName="(tabs)" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
+        <Stack.Screen name="legal/terms" />
+        <Stack.Screen name="legal/privacy" />
       </Stack>
       {/* Branded loading overlay: covers the Stack during cold bootstrap until routeSettled is confirmed */}
       {!routeSettled && (
