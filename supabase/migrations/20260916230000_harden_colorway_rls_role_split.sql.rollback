@@ -1,0 +1,41 @@
+-- Rollback: Restore the intermediate combined-policy fix
+-- (restores 20260916220000 state, not the original broken state)
+DROP POLICY IF EXISTS "Public read active colorways for public products" ON public.product_colorways;
+DROP POLICY IF EXISTS "Staff read all active colorways" ON public.product_colorways;
+DROP POLICY IF EXISTS "Public read colorway images for public products" ON public.product_colorway_images;
+DROP POLICY IF EXISTS "Staff read all colorway images" ON public.product_colorway_images;
+
+CREATE POLICY "Allow anon and authenticated to view colorways for active products"
+  ON public.product_colorways
+  FOR SELECT
+  TO public
+  USING (
+    is_active = true
+    AND EXISTS (
+      SELECT 1 FROM public.products p
+      WHERE p.id = product_colorways.product_id
+        AND p.deleted = false
+        AND (
+          p.visibility = 'public'
+          OR (auth.role() = 'authenticated' AND public.is_staff_or_admin())
+        )
+    )
+  );
+
+CREATE POLICY "Allow anon and authenticated to view colorway images"
+  ON public.product_colorway_images
+  FOR SELECT
+  TO public
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.product_colorways cw
+      JOIN public.products p ON p.id = cw.product_id
+      WHERE cw.id = product_colorway_images.colorway_id
+        AND cw.is_active = true
+        AND p.deleted = false
+        AND (
+          p.visibility = 'public'
+          OR (auth.role() = 'authenticated' AND public.is_staff_or_admin())
+        )
+    )
+  );
