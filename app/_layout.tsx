@@ -495,6 +495,16 @@ function InitialLayout() {
     }
   }, [hasBootstrapped, isHardBlocked]);
 
+  // Safety fallback: ensure native splash screen and cold-boot overlay are never stuck permanently
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+      setHasBootstrapped(true);
+      setRouteSettled(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   if (isHardBlocked) {
     return (
       <MandatoryUpdateScreen
