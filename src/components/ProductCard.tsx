@@ -109,8 +109,9 @@ export function ProductCard({
               </View>
             )}
             {isNew && !outOfStock && (
-              <View style={[styles.badge, { backgroundColor: colors.tint }]}>
-                <Text style={[styles.badgeText, { color: colors.onTint }]}>NEW</Text>
+              <View style={[styles.badge, styles.badgeRow, { backgroundColor: colors.tint }]}>
+                <IconSymbol name="sparkles" size={10} color={colors.onTint} />
+                <Text style={[styles.badgeText, { color: colors.onTint }]}>NEW ARRIVAL</Text>
               </View>
             )}
             {onSale && (
