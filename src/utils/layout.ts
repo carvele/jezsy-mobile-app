@@ -41,6 +41,6 @@ export function useGridCardWidth(): { cardWidth: number; columns: number } {
   // Phones get 2 cols, small tablets 3, large tablets/web 4+
   const columns = effectiveWidth > 1200 ? 5 : effectiveWidth > 900 ? 4 : effectiveWidth > 600 ? 3 : 2;
   const gaps = GRID_COLUMN_GAP * (columns - 1);
-  const cardWidth = (effectiveWidth - GRID_GUTTER * 2 - gaps) / columns;
+  const cardWidth = Math.floor((effectiveWidth - GRID_GUTTER * 2 - gaps) / columns);
   return { cardWidth, columns };
 }
