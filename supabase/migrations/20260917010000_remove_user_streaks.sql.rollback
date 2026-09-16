@@ -1,0 +1,267 @@
+-- ROLLBACK for 20260917010000_remove_user_streaks.sql
+-- Restores user_streaks table, RLS policies, trigger, update_user_streak(),
+-- and re-injects streak calls into increment_wear_count and process_account_deletion.
+-- Note: the 2 transient gamification rows are NOT restored (derived data).
+
+-- ============================================================
+-- STEP 1: Recreate user_streaks table
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.user_streaks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  current_streak integer NOT NULL DEFAULT 0,
+  longest_streak integer NOT NULL DEFAULT 0,
+  last_worn_date date,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id)
+);
+
+ALTER TABLE public.user_streaks ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================
+-- STEP 2: Recreate RLS policies
+-- ============================================================
+CREATE POLICY "Users can view own streaks"
+  ON public.user_streaks FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own streaks"
+  ON public.user_streaks FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own streaks"
+  ON public.user_streaks FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- ============================================================
+-- STEP 3: Recreate updated_at trigger
+-- ============================================================
+CREATE TRIGGER trg_touch_updated_at
+  BEFORE UPDATE ON public.user_streaks
+  FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+-- ============================================================
+-- STEP 4: Recreate update_user_streak function
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.update_user_streak()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_today date := current_date;
+  v_user_id uuid := auth.uid();
+BEGIN
+  INSERT INTO public.user_streaks (user_id, current_streak, longest_streak, last_worn_date)
+  VALUES (v_user_id, 1, 1, v_today)
+  ON CONFLICT (user_id) DO UPDATE
+  SET
+    current_streak = CASE
+      WHEN user_streaks.last_worn_date = v_today - 1 THEN user_streaks.current_streak + 1
+      WHEN user_streaks.last_worn_date = v_today THEN user_streaks.current_streak
+      ELSE 1
+    END,
+    longest_streak = GREATEST(
+      user_streaks.longest_streak,
+      CASE
+        WHEN user_streaks.last_worn_date = v_today - 1 THEN user_streaks.current_streak + 1
+        WHEN user_streaks.last_worn_date = v_today THEN user_streaks.current_streak
+        ELSE 1
+      END
+    ),
+    last_worn_date = v_today,
+    updated_at = now();
+END;
+$function$;
+
+-- ============================================================
+-- STEP 5: Restore increment_wear_count with streak call
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.increment_wear_count(p_item_id uuid)
+ RETURNS wardrobe_items
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_row wardrobe_items;
+BEGIN
+  UPDATE wardrobe_items
+  SET wear_count = wear_count + 1,
+      last_worn_at = now()
+  WHERE id = p_item_id
+    AND user_id = auth.uid()
+    AND deleted = false
+  RETURNING * INTO v_row;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'wardrobe item % not found or not owned by caller', p_item_id;
+  END IF;
+
+  PERFORM update_user_streak();
+
+  RETURN v_row;
+END;
+$function$;
+
+-- ============================================================
+-- STEP 6: Restore process_account_deletion with user_streaks DELETE
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.process_account_deletion(_request_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_request record;
+  v_target record;
+  v_blocking_reservations integer;
+  v_blocking_payments integer;
+  v_actor_profile record;
+  v_actor_name text;
+BEGIN
+  -- 1. Capability Authorization
+  IF NOT public.can_manage_customers() THEN
+    RAISE EXCEPTION 'Unauthorized: Only administrators on approved devices can process account deletion.';
+  END IF;
+
+  -- 2. Lock & Validate Deletion Request
+  SELECT * INTO v_request
+  FROM public.account_deletion_requests
+  WHERE id = _request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Deletion request not found.';
+  END IF;
+
+  IF v_request.status <> 'pending' THEN
+    RAISE EXCEPTION 'This request has already been processed.';
+  END IF;
+
+  -- 3. Lock & Validate Target Profile
+  SELECT * INTO v_target
+  FROM public.profiles
+  WHERE id = v_request.user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Target customer profile not found.';
+  END IF;
+
+  IF v_target.role <> 'customer' THEN
+    RAISE EXCEPTION 'Target account is not a customer (role: %). Cannot process deletion through customer deletion pipeline.', v_target.role;
+  END IF;
+
+  -- 4. Check Outstanding Obligations
+  SELECT count(*) INTO v_blocking_reservations
+  FROM public.reservations r
+  WHERE r.customer_id = v_request.user_id
+    AND r.deleted = false
+    AND lower(trim(r.status)) <> 'cancelled'
+    AND r.balance_settled_at IS NULL
+    AND (
+      lower(trim(r.payment_status)) <> 'paid'
+      OR
+      (lower(trim(r.payment_type)) = 'deposit' AND r.rental_price > coalesce(r.deposit, 0))
+    );
+
+  SELECT count(*) INTO v_blocking_payments
+  FROM public.payments
+  WHERE user_id = v_request.user_id
+    AND status IN ('awaiting_payment', 'processing');
+
+  IF v_blocking_reservations > 0 OR v_blocking_payments > 0 THEN
+    RETURN jsonb_build_object(
+      'blocked', true,
+      'blocking_reservations', v_blocking_reservations,
+      'blocking_payments', v_blocking_payments
+    );
+  END IF;
+
+  -- 5. Irreversible Child Data Erasure
+  DELETE FROM public.user_measurements WHERE user_id = v_request.user_id;
+  DELETE FROM public.wishlists WHERE user_id = v_request.user_id;
+  DELETE FROM public.wardrobe_items WHERE user_id = v_request.user_id;
+  DELETE FROM public.saved_outfits WHERE user_id = v_request.user_id;
+  DELETE FROM public.capsule_items
+    WHERE capsule_id IN (SELECT id FROM public.capsules WHERE user_id = v_request.user_id);
+  DELETE FROM public.capsules WHERE user_id = v_request.user_id;
+  DELETE FROM public.notifications WHERE user_id = v_request.user_id;
+  DELETE FROM public.stock_notify_requests WHERE user_id = v_request.user_id;
+  DELETE FROM public.announcement_dismissals WHERE user_id = v_request.user_id;
+  DELETE FROM public.user_streaks WHERE user_id = v_request.user_id;
+
+  -- 6. Anonymize Business & Product Interest Records
+  UPDATE public.logs SET user_id = NULL WHERE user_id = v_request.user_id;
+  UPDATE public.feedback SET user_id = NULL WHERE user_id = v_request.user_id;
+  UPDATE public.ar_sessions SET user_id = NULL WHERE user_id = v_request.user_id;
+  UPDATE public.messages SET sender_id = NULL WHERE sender_id = v_request.user_id;
+  UPDATE public.reviews SET user_id = NULL WHERE user_id = v_request.user_id;
+
+  -- 7. Scrub the Profile Row
+  UPDATE public.profiles
+  SET
+    first_name = NULL,
+    last_name = NULL,
+    email = NULL,
+    phone = NULL,
+    address_line = NULL,
+    barangay = NULL,
+    city = NULL,
+    province = NULL,
+    zip_code = NULL,
+    date_of_birth = NULL,
+    gender = NULL,
+    employment_status = NULL,
+    fit_preference = NULL,
+    expo_push_token = NULL,
+    deleted = true,
+    updated_at = now()
+  WHERE id = v_request.user_id;
+
+  -- 8. Transition Request Status to auth_revocation_pending
+  UPDATE public.account_deletion_requests
+  SET
+    status = 'auth_revocation_pending',
+    processed_at = now(),
+    processed_by = auth.uid()
+  WHERE id = _request_id;
+
+  -- 9. Record Immutable Audit Log
+  SELECT first_name, last_name
+  INTO v_actor_profile
+  FROM public.profiles
+  WHERE id = auth.uid();
+
+  v_actor_name := COALESCE(
+    NULLIF(TRIM(CONCAT_WS(' ', v_actor_profile.first_name, v_actor_profile.last_name)), ''),
+    'Administrator'
+  );
+
+  INSERT INTO public.logs (
+    user_id,
+    user_name,
+    action,
+    target_type,
+    target_id,
+    details,
+    timestamp
+  ) VALUES (
+    auth.uid(),
+    v_actor_name,
+    'account_deletion_scrubbed',
+    'account_deletion_request',
+    _request_id::text,
+    jsonb_build_object(
+      'target_user_id', v_request.user_id,
+      'reason', v_request.reason
+    ),
+    now()
+  );
+
+  RETURN jsonb_build_object('blocked', false, 'user_id', v_request.user_id);
+END;
+$function$;
