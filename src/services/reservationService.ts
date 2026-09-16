@@ -18,7 +18,7 @@ export type CustomerReservation = Database['public']['Tables']['reservations']['
 const STATUS_BUCKET_MAP: Record<Exclude<StatusFilter, 'all' | 'returnRefund'>, string[]> = {
   toPay: ['confirmed', 'approved', 'to pay', 'Confirmed', 'Approved', 'To Pay'],
   preparing: ['preparing', 'Preparing'],
-  ready: ['to pickup', 'fitting', 'active', 'ready', 'To Pickup', 'Fitting', 'Active', 'Ready'],
+  ready: ['to pickup', 'active', 'ready', 'To Pickup', 'Active', 'Ready'],
   completed: ['completed', 'Completed'],
   cancelled: ['cancelled', 'Cancelled'],
 };

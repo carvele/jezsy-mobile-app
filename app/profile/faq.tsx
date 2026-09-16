@@ -22,14 +22,14 @@ const FAQ_ITEMS: FAQItem[] = [
   {
     id: '1',
     category: 'Reservations & Booking',
-    question: 'How does boutique rental work?',
-    answer: 'Browse our curated collection in Explore or Wardrobe, pick your garment and size, select your rental dates and pickup/fitting slot, and pay the initial reservation deposit. You can collect your outfit in-store or schedule a fitting session.',
+    question: 'How does boutique pickup work?',
+    answer: 'Browse our curated collection in Explore or Wardrobe, pick your garment and size, select your pickup date and slot, and pay the initial reservation deposit. You can collect your outfit in-store and inspect sizing.',
   },
   {
     id: '2',
     category: 'Reservations & Booking',
-    question: 'Can I try on an outfit before finalizing?',
-    answer: 'Yes! When creating a reservation, select an in-store Fitting appointment slot. Our boutique stylists will assist you with fitting, styling, and any minor adjustments.',
+    question: 'Can I try on an outfit when picking up?',
+    answer: 'Yes! When picking up your order at our boutique, you can try on the garment to verify fit. Our boutique staff can assist with immediate size exchanges subject to stock availability.',
   },
   {
     id: '3',
@@ -40,8 +40,8 @@ const FAQ_ITEMS: FAQItem[] = [
   {
     id: '4',
     category: 'Payments & Pricing',
-    question: 'How are late returns and damage fees calculated?',
-    answer: 'Garments must be returned by the scheduled end date. Overdue returns incur a late fee of ₱500 per day. All items are inspected upon return; minor wear is covered, while significant damage or loss is assessed individually.',
+    question: 'What is the return and refund policy?',
+    answer: 'Purchased items in their original, unworn condition with tags attached are eligible for return or refund requests within 7 days of pickup completion.',
   },
   {
     id: '5',
@@ -94,7 +94,7 @@ export default function FAQScreen() {
           <IconSymbol name="questionmark.circle.fill" size={32} color={colors.tint} />
           <Text style={[styles.heroTitle, { color: colors.text }]}>Frequently Asked Questions</Text>
           <Text style={[styles.heroSubtitle, { color: colors.secondaryText }]}>
-            Everything you need to know about renting, fitting, payments, and returns.
+            Everything you need to know about orders, boutique pickup, payments, and returns.
           </Text>
         </View>
 

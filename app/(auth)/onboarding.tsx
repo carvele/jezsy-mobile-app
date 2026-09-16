@@ -24,7 +24,7 @@ const SLIDES = [
   {
     id: '3',
     title: 'Try Looks in\nAugmented Reality',
-    description: 'Experience clothes virtually before booking a boutique fitting.',
+    description: 'Experience clothes virtually before reserving for boutique pickup.',
     image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1000&auto=format&fit=crop',
   },
 ];
