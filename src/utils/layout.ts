@@ -14,10 +14,10 @@ import { Spacing } from '@/constants/theme';
  */
 
 /** Page padding on each side of a grid. */
-export const GRID_GUTTER = Spacing.lg; // 16
+export const GRID_GUTTER = Spacing.xl; // 20
 
 /** Space between columns. */
-export const GRID_COLUMN_GAP = Spacing.md; // 12
+export const GRID_COLUMN_GAP = Spacing.lg; // 16
 
 /** Usable width for one card in an evenly-divided grid.
  *
@@ -41,6 +41,7 @@ export function useGridCardWidth(): { cardWidth: number; columns: number } {
   // Phones get 2 cols, small tablets 3, large tablets/web 4+
   const columns = effectiveWidth > 1200 ? 5 : effectiveWidth > 900 ? 4 : effectiveWidth > 600 ? 3 : 2;
   const gaps = GRID_COLUMN_GAP * (columns - 1);
-  const cardWidth = Math.floor((effectiveWidth - GRID_GUTTER * 2 - gaps) / columns);
+  // Subtract an extra 1px safety margin so flex-wrap never collapses a row due to microscopic layout drift
+  const cardWidth = Math.floor((effectiveWidth - GRID_GUTTER * 2 - gaps) / columns) - 1;
   return { cardWidth, columns };
 }
