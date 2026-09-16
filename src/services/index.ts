@@ -7,3 +7,4 @@ export * from './reservationService';
 export * from './reviewService';
 export * from './chatService';
 export * from './notificationService';
+export * from './settingsService';

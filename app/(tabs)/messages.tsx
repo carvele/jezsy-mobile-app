@@ -11,7 +11,6 @@ import { announcementService } from '@/src/services';
 import { formatPHDate } from '@/src/utils/dateTime';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { useToast } from '@/src/context/ToastContext';
-import { getDirectChatsPage, DirectChatSummary } from '@/src/services/chatService';
 import { getNotificationsPage, NotificationItem } from '@/src/services/notificationService';
 import { useNotifications } from '@/src/context/NotificationContext';
 import { resolveNotificationRoute } from '@/src/utils/notificationRouting';
@@ -21,7 +20,7 @@ import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour
 export default function InboxScreen() {
   const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline, getOrCreateConversation } = useMessages();
   const { user, profile } = useAuth();
-  const { unreadNonChatCount, markAsRead: markNotifReadInContext } = useNotifications();
+  const { unreadNonChatCount, markAsRead: markNotifReadInContext, markAllAsRead: markAllNotifsReadInContext } = useNotifications();
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -34,8 +33,9 @@ export default function InboxScreen() {
     0
   );
 
-  const [activeTab, setActiveTab] = useState<'shop' | 'friends' | 'notifications'>('shop');
+  const [activeTab, setActiveTab] = useState<'shop' | 'notifications'>('shop');
   const [startingShopChat, setStartingShopChat] = useState(false);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
 
   const handleStartShopChat = useCallback(async () => {
     if (isStaff) return;
@@ -59,54 +59,6 @@ export default function InboxScreen() {
       setStartingShopChat(false);
     }
   }, [isStaff, user, startingShopChat, getOrCreateConversation, router, showToast]);
-  const [directChats, setDirectChats] = useState<DirectChatSummary[]>([]);
-  const [directChatsLoading, setDirectChatsLoading] = useState(true);
-  const [directChatsOffset, setDirectChatsOffset] = useState(0);
-  const [hasMoreDirectChats, setHasMoreDirectChats] = useState(false);
-  const [loadingMoreDirectChats, setLoadingMoreDirectChats] = useState(false);
-
-  const fetchDirectChats = useCallback(async () => {
-    if (!user) {
-      setDirectChats([]);
-      setDirectChatsLoading(false);
-      return;
-    }
-    setDirectChatsLoading(true);
-    try {
-      const res = await getDirectChatsPage(0, 30);
-      setDirectChats(res.items);
-      setDirectChatsOffset(res.nextOffset);
-      setHasMoreDirectChats(res.hasMore);
-    } catch (err) {
-      console.error('Error fetching direct chats:', err);
-      showToast('Could not load direct chats.', 'error');
-    } finally {
-      setDirectChatsLoading(false);
-    }
-  }, [user, showToast]);
-
-  const loadMoreDirectChats = useCallback(async () => {
-    if (!user || loadingMoreDirectChats || !hasMoreDirectChats) return;
-    setLoadingMoreDirectChats(true);
-    try {
-      const res = await getDirectChatsPage(directChatsOffset, 30);
-      setDirectChats((prev) => {
-        const existing = new Set(prev.map((c) => c.id));
-        const novel = res.items.filter((c) => !existing.has(c.id));
-        return [...prev, ...novel];
-      });
-      setDirectChatsOffset(res.nextOffset);
-      setHasMoreDirectChats(res.hasMore);
-    } catch (err) {
-      console.error('Error loading more direct chats:', err);
-    } finally {
-      setLoadingMoreDirectChats(false);
-    }
-  }, [user, directChatsOffset, loadingMoreDirectChats, hasMoreDirectChats]);
-
-  useEffect(() => {
-    fetchDirectChats();
-  }, [fetchDirectChats]);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
@@ -164,6 +116,22 @@ export default function InboxScreen() {
       await markNotifReadInContext(id);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    if (!user || markingAllRead) return;
+    setMarkingAllRead(true);
+    try {
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      await markAllNotifsReadInContext();
+      showToast('All notifications marked as read', 'success');
+    } catch (e) {
+      console.error('Error marking all as read:', e);
+      showToast('Could not mark all as read.', 'error');
+      fetchNotifications();
+    } finally {
+      setMarkingAllRead(false);
     }
   };
 
@@ -254,39 +222,6 @@ export default function InboxScreen() {
                 <Text style={[styles.badgeText, { color: colors.onNotification }]}>{item.unread_customer}</Text>
               </View>
             )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-
-  const renderDirectChatItem = ({ item }: { item: any }) => {
-    return (
-      <TouchableOpacity 
-        style={[styles.conversationItem, { borderBottomColor: colors.border }]}
-        onPress={() => router.push(`/chat/${item.other_user.id}` as any)}
-      >
-        <View style={styles.avatarContainer}>
-          <View style={[styles.avatar, { backgroundColor: colors.tint }]}>
-            <Text style={[styles.avatarText, { color: colors.onTint }]}>
-              {item.other_user?.first_name ? item.other_user.first_name[0].toUpperCase() : 'U'}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.itemContent}>
-          <View style={styles.itemHeader}>
-            <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
-              {item.other_user?.first_name} {item.other_user?.last_name}
-            </Text>
-            <Text style={[styles.time, { color: colors.secondaryText }]}>
-              {formatPHDate(item.updated_at)}
-            </Text>
-          </View>
-          <View style={styles.footer}>
-            <Text style={[styles.lastMessage, { color: colors.secondaryText }]} numberOfLines={1}>
-              @{item.other_user?.username}
-            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -410,6 +345,24 @@ export default function InboxScreen() {
             )}
           </TouchableOpacity>
         )}
+        {activeTab === 'notifications' && notifications.length > 0 && (
+          <TouchableOpacity
+            style={[styles.headerSupportButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={handleMarkAllAsRead}
+            disabled={markingAllRead}
+            accessibilityRole="button"
+            accessibilityLabel="Mark all notifications as read"
+          >
+            {markingAllRead ? (
+              <ActivityIndicator size="small" color={colors.tint} />
+            ) : (
+              <>
+                <IconSymbol name="checkmark.circle" size={13} color={colors.tint} style={{ marginRight: 6 }} />
+                <Text style={[styles.headerSupportText, { color: colors.tint }]}>Mark all read</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
       
 
@@ -428,16 +381,6 @@ export default function InboxScreen() {
                 <Text style={styles.tabBadgeText}>{shopUnreadCount > 99 ? '99+' : shopUnreadCount}</Text>
               </View>
             )}
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.segment, activeTab === 'friends' && [styles.activeSegment, { backgroundColor: colors.card }]]}
-          onPress={() => setActiveTab('friends')}
-        >
-          <View style={styles.segmentContent}>
-            <Text style={[styles.segmentText, { color: activeTab === 'friends' ? colors.text : colors.secondaryText }]}>
-              Friends
-            </Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
@@ -520,39 +463,6 @@ export default function InboxScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderMessageItem}
             contentContainerStyle={styles.list}
-          />
-        )
-      )}
-
-      {/* Friends Tab */}
-      {activeTab === 'friends' && (
-        directChatsLoading ? (
-          <View style={{ paddingHorizontal: Spacing.lg }}>
-            <SkeletonList count={5}><ListRowSkeleton /></SkeletonList>
-          </View>
-        ) : directChats.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <IconSymbol name="person.fill" size={48} color={colors.border} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No friends yet</Text>
-            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-              Connect with mutuals in the My Network tab to chat!
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={directChats}
-            keyExtractor={(item) => item.id}
-            renderItem={renderDirectChatItem}
-            contentContainerStyle={styles.list}
-            onEndReached={loadMoreDirectChats}
-            onEndReachedThreshold={0.4}
-            ListFooterComponent={
-              loadingMoreDirectChats ? (
-                <View style={{ paddingVertical: Spacing.md, alignItems: 'center' }}>
-                  <ActivityIndicator size="small" color={colors.tint} />
-                </View>
-              ) : null
-            }
           />
         )
       )}

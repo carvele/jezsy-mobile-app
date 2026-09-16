@@ -21,7 +21,6 @@ export default function UserProfileScreen() {
   const { showToast } = useToast();
 
   const [profile, setProfile] = useState<any>(null);
-  const [connection, setConnection] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'wardrobe' | 'wishlist'>('wardrobe');
   const [wardrobe, setWardrobe] = useState<any[]>([]);
   const [wishlist, setWishlist] = useState<any[]>([]);
@@ -31,19 +30,12 @@ export default function UserProfileScreen() {
   const [wardrobeAccessDenied, setWardrobeAccessDenied] = useState(false);
   const [wishlistAccessDenied, setWishlistAccessDenied] = useState(false);
 
-  const loadWardrobe = useCallback(async (targetId: string, wardrobePrivacy: string, status?: string) => {
+  const loadWardrobe = useCallback(async (targetId: string, wardrobePrivacy: string) => {
     const isOwner = user?.id === targetId;
-    if (!isOwner) {
-      if (wardrobePrivacy === 'private') {
-        setWardrobeAccessDenied(true);
-        setWardrobeLoading(false);
-        return;
-      }
-      if (wardrobePrivacy === 'connections' && status !== 'accepted') {
-        setWardrobeAccessDenied(true);
-        setWardrobeLoading(false);
-        return;
-      }
+    if (!isOwner && wardrobePrivacy !== 'public') {
+      setWardrobeAccessDenied(true);
+      setWardrobeLoading(false);
+      return;
     }
     try {
       setWardrobeLoading(true);
@@ -64,7 +56,7 @@ export default function UserProfileScreen() {
     }
   }, [user?.id]);
 
-  const loadWishlist = useCallback(async (targetId: string, status?: string) => {
+  const loadWishlist = useCallback(async (targetId: string) => {
     const isOwner = user?.id === targetId;
     let wishlistPrivacy = 'private';
     if (!isOwner) {
@@ -79,12 +71,7 @@ export default function UserProfileScreen() {
         wishlistPrivacy = 'private';
       }
 
-      if (wishlistPrivacy === 'private') {
-        setWishlistAccessDenied(true);
-        setWishlistLoading(false);
-        return;
-      }
-      if (wishlistPrivacy === 'connections' && status !== 'accepted') {
+      if (wishlistPrivacy !== 'public') {
         setWishlistAccessDenied(true);
         setWishlistLoading(false);
         return;
@@ -109,7 +96,7 @@ export default function UserProfileScreen() {
     }
   }, [user?.id]);
 
-  const loadProfileAndConnection = useCallback(async () => {
+  const loadProfile = useCallback(async () => {
     try {
       if (!id) throw new Error('User not found');
 
@@ -121,30 +108,10 @@ export default function UserProfileScreen() {
       const targetId = profileData.id;
       setProfile(profileData);
 
-      // Load Connection
-      const u1 = user!.id < targetId! ? user!.id : targetId!;
-      const u2 = user!.id < targetId! ? targetId! : user!.id;
-      const { data: connData } = await supabase
-        .from('connections')
-        .select('*')
-        .eq('user_id_1', u1)
-        .eq('user_id_2', u2)
-        .maybeSingle();
-
-      setConnection(connData || null);
-
-      // Check if blocked
-      if (connData?.status === 'blocked') {
-        setWardrobeAccessDenied(true);
-        setWishlistAccessDenied(true);
-        setWardrobeLoading(false);
-        setWishlistLoading(false);
-      } else {
-        await Promise.all([
-          loadWardrobe(targetId!, profileData.wardrobe_privacy as string, connData?.status),
-          loadWishlist(targetId!, connData?.status),
-        ]);
-      }
+      await Promise.all([
+        loadWardrobe(targetId!, profileData.wardrobe_privacy as string),
+        loadWishlist(targetId!),
+      ]);
     } catch (err: any) {
       console.log('Error loading profile:', err.message);
       showToast('User not found', 'error');
@@ -152,28 +119,13 @@ export default function UserProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, user, router, showToast, loadWardrobe, loadWishlist]);
+  }, [id, router, showToast, loadWardrobe, loadWishlist]);
 
   useEffect(() => {
     if (id && user) {
-      loadProfileAndConnection();
+      loadProfile();
     }
-  }, [id, user, loadProfileAndConnection]);
-
-  const handleConnect = async () => {
-    try {
-      const u1 = user!.id < profile.id ? user!.id : profile.id;
-      const u2 = user!.id < profile.id ? profile.id : user!.id;
-      const { error } = await supabase
-        .from('connections')
-        .upsert({ user_id_1: u1, user_id_2: u2, status: 'pending', action_user_id: user!.id }, { onConflict: 'user_id_1,user_id_2' });
-      if (error) throw error;
-      showToast('Connection request sent', 'success');
-      loadProfileAndConnection();
-    } catch {
-      showToast('Failed to send request', 'error');
-    }
-  };
+  }, [id, user, loadProfile]);
 
   const renderWardrobeItem = ({ item }: { item: any }) => {
     if (item.product) {
@@ -245,24 +197,6 @@ export default function UserProfileScreen() {
         <Text style={[styles.name, { color: colors.text }]}>
           {profile.first_name} {profile.last_name}
         </Text>
-        
-        {connection?.status !== 'accepted' && profile.id !== user?.id && (
-          <TouchableOpacity 
-            style={[
-              styles.connectButton, 
-              { backgroundColor: connection?.status === 'pending' ? colors.card : colors.tint }
-            ]}
-            onPress={handleConnect}
-            disabled={connection?.status === 'pending'}
-          >
-            <Text style={[
-              styles.connectButtonText, 
-              { color: connection?.status === 'pending' ? colors.text : '#fff' }
-            ]}>
-              {connection?.status === 'pending' ? 'Pending' : 'Connect'}
-            </Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       <View style={[styles.tabs, { borderBottomColor: colors.border }]}>

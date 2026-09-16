@@ -7,7 +7,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
-import { statusBucket, statusLabel, isAwaitingPayment, canReschedule } from '@/src/utils/reservationStatus';
+import { statusBucket, statusLabel, isAwaitingPayment, canReschedule, isReturnEligible } from '@/src/utils/reservationStatus';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import {
@@ -28,6 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { startReservationPayment, submitReservationBalanceReceipt } from '@/src/lib/payments';
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
+import { getReturnRequestWindowDays } from '@/src/services/settingsService';
 import type { PaymentPurpose } from '@/src/utils/reservationPayment';
 
 if (
@@ -225,6 +226,30 @@ export default function ReservationDetailScreen() {
       };
     }, [fetchReservation, fetchPaymentInstructions, id]),
   );
+
+  const [returnWindowDays, setReturnWindowDays] = useState(7);
+
+  useFocusEffect(
+    useCallback(() => {
+      getReturnRequestWindowDays().then(setReturnWindowDays).catch(() => {});
+    }, [])
+  );
+
+  const handleReturnRefundRequest = async () => {
+    const conv = await getOrCreateConversation();
+    if (!conv || !reservation) return;
+    const refId = reservation.display_id || reservation.id.substring(0, 8);
+    router.push({
+      pathname: '/messages/[conversationId]',
+      params: {
+        conversationId: conv.id,
+        ctxType: 'reservation',
+        ctxRef: reservation.id,
+        ctxLabel: `Reservation ${refId}${reservation.product_name ? ` - ${reservation.product_name}` : ''}`,
+        prefill: `I would like to request a return/refund for reservation #${refId}.`,
+      },
+    } as any);
+  };
 
   const handleAskAboutReservation = async () => {
     const conv = await getOrCreateConversation();
@@ -642,14 +667,37 @@ export default function ReservationDetailScreen() {
           </View>
         ))}
 
-        <TouchableOpacity
-          onPress={handleAskAboutReservation}
-          accessibilityRole="button"
-          accessibilityLabel="Ask the shop owner about this reservation"
-          style={styles.askRow}
-        >
-          <Text style={[styles.viewProductLink, { color: colors.tint }]}>Ask about this reservation</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.lg }}>
+          <TouchableOpacity
+            onPress={handleAskAboutReservation}
+            accessibilityRole="button"
+            accessibilityLabel="Ask the shop owner about this reservation"
+            style={{ paddingVertical: Spacing.xs }}
+          >
+            <Text style={[styles.viewProductLink, { color: colors.tint, marginTop: 0 }]}>Ask about this reservation</Text>
+          </TouchableOpacity>
+
+          {reservationState === 'completed' &&
+            isReturnEligible(
+              { completed_at: (reservation as any).completed_at, date: reservation.date },
+              returnWindowDays
+            ) && (
+              <TouchableOpacity
+                onPress={handleReturnRefundRequest}
+                accessibilityRole="button"
+                accessibilityLabel="Request return or refund"
+                style={{
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  paddingHorizontal: Spacing.md,
+                  paddingVertical: 6,
+                  borderRadius: Radius.pill,
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>Return / Refund</Text>
+              </TouchableOpacity>
+            )}
+        </View>
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>

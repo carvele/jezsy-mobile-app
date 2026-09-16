@@ -398,7 +398,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Account & Social</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Account & Privacy</Text>
           <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
             {renderSettingItem(
               'gear',
@@ -407,15 +407,9 @@ export default function ProfileScreen() {
               () => router.push('/profile/account-settings' as any),
             )}
             {renderSettingItem(
-              'person.2.fill',
-              'My Network',
-              'Connections and requests',
-              () => router.push('/network' as any),
-            )}
-            {renderSettingItem(
               'lock.fill',
               'Privacy Settings',
-              'Wardrobe sharing',
+              'Wardrobe and wishlist sharing',
               () => router.push('/profile/privacy-settings' as any),
             )}
             {renderSettingItem(

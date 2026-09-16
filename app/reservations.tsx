@@ -17,12 +17,15 @@ import {
   statusLabel,
   filterLabel,
   formatPaymentDeadline,
+  getReservationCardActions,
 } from '@/src/utils/reservationStatus';
 import {
   getMyReservationsPage,
   getMyReservationStatusCounts,
   CustomerReservation as Reservation,
 } from '@/src/services/reservationService';
+import { getReturnRequestWindowDays } from '@/src/services/settingsService';
+import { useMessages } from '@/src/context/MessagesContext';
 
 // Lines beyond the first, which is the one the parent's product columns
 // already describe. 0 for single-item reservations and for rows fetched
@@ -44,8 +47,10 @@ export default function ReservationsScreen() {
     preparing: 0,
     ready: 0,
     completed: 0,
+    returnRefund: 0,
     cancelled: 0,
   });
+  const [returnWindowDays, setReturnWindowDays] = useState(7);
 
   const params = useLocalSearchParams<{ status?: string }>();
   const initialFilter: StatusFilter = STATUS_FILTERS.includes(params.status as StatusFilter)
@@ -57,19 +62,22 @@ export default function ReservationsScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
+  const { getOrCreateConversation } = useMessages();
 
   const fetchInitialReservations = useCallback(async (filterToFetch: StatusFilter) => {
     if (!session?.user) return;
     setLoading(true);
     try {
-      const [res, counts] = await Promise.all([
+      const [res, counts, windowDays] = await Promise.all([
         getMyReservationsPage(session.user.id, 0, filterToFetch, 20),
         getMyReservationStatusCounts(session.user.id),
+        getReturnRequestWindowDays(),
       ]);
       setReservations(res.items);
       setOffset(res.nextOffset);
       setHasMore(res.hasMore);
       setStatusCounts(counts);
+      setReturnWindowDays(windowDays);
     } catch (err) {
       console.error('Error fetching reservations:', err);
       showToast('Unable to load reservations. Try again.', 'error');
@@ -118,6 +126,30 @@ export default function ReservationsScreen() {
     }
   };
 
+  const handleReturnRefund = useCallback(async (item: Reservation) => {
+    try {
+      const conv = await getOrCreateConversation();
+      if (!conv) {
+        showToast('Unable to open support chat right now. Please try again.', 'error');
+        return;
+      }
+      const refId = item.display_id || item.id.substring(0, 8);
+      router.push({
+        pathname: '/messages/[conversationId]',
+        params: {
+          conversationId: conv.id,
+          ctxType: 'reservation',
+          ctxRef: item.id,
+          ctxLabel: `Reservation ${refId}${item.product_name ? ` - ${item.product_name}` : ''}`,
+          prefill: `I would like to request a return/refund for reservation #${refId}.`,
+        },
+      } as any);
+    } catch (err) {
+      console.error('Error opening return/refund chat:', err);
+      showToast('Could not start return request chat.', 'error');
+    }
+  }, [getOrCreateConversation, router, showToast]);
+
   const renderReservationItem = ({ item }: { item: Reservation }) => {
     const dateStr = item.date ? formatPHDate(item.date) : 'N/A';
     // Only the payment window has a deadline worth flagging -- once it's
@@ -128,6 +160,8 @@ export default function ReservationsScreen() {
     const hasRefundPending =
       statusBucket(item.status) === 'cancelled' &&
       item.payment_status?.toLowerCase() === 'refund required';
+
+    const cardActions = getReservationCardActions(item, { windowDays: returnWindowDays });
 
     return (
       <TouchableOpacity
@@ -179,6 +213,86 @@ export default function ReservationsScreen() {
             <Text style={[styles.price, { color: colors.tint }]}>₱{(item.rental_price || 0).toFixed(2)}</Text>
           </View>
         </View>
+
+        {cardActions.length > 0 && (
+          <View style={[styles.cardActionsRow, { borderTopColor: colors.border }]}>
+            {cardActions.map((action) => {
+              if (action === 'toPay') {
+                return (
+                  <TouchableOpacity
+                    key={action}
+                    style={[styles.cardActionBtn, styles.cardActionBtnPrimary, { backgroundColor: colors.tint }]}
+                    onPress={() => router.push(`/reservations/${item.id}` as any)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Pay for reservation"
+                  >
+                    <Text style={[styles.cardActionBtnText, { color: colors.onTint }]}>To Pay</Text>
+                  </TouchableOpacity>
+                );
+              }
+              if (action === 'returnRefund') {
+                return (
+                  <TouchableOpacity
+                    key={action}
+                    style={[styles.cardActionBtn, styles.cardActionBtnOutline, { borderColor: colors.border }]}
+                    onPress={() => handleReturnRefund(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Request return or refund"
+                  >
+                    <Text style={[styles.cardActionBtnText, { color: colors.text }]}>Return / Refund</Text>
+                  </TouchableOpacity>
+                );
+              }
+              if (action === 'rate') {
+                return (
+                  <TouchableOpacity
+                    key={action}
+                    style={[styles.cardActionBtn, styles.cardActionBtnOutline, { borderColor: colors.tint }]}
+                    onPress={() => router.push('/reservations/to-rate' as any)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Rate reservation item"
+                  >
+                    <IconSymbol name="star.fill" size={13} color={colors.tint} />
+                    <Text style={[styles.cardActionBtnText, { color: colors.tint }]}>Rate</Text>
+                  </TouchableOpacity>
+                );
+              }
+              if (action === 'buyAgain') {
+                return (
+                  <TouchableOpacity
+                    key={action}
+                    style={[styles.cardActionBtn, styles.cardActionBtnOutline, { borderColor: colors.tint }]}
+                    onPress={() => {
+                      if (item.product_id) {
+                        router.push(`/product/${item.product_id}` as any);
+                      } else {
+                        router.push('/explore' as any);
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Buy or reserve again"
+                  >
+                    <Text style={[styles.cardActionBtnText, { color: colors.tint }]}>Buy Again</Text>
+                  </TouchableOpacity>
+                );
+              }
+              if (action === 'viewRefund') {
+                return (
+                  <TouchableOpacity
+                    key={action}
+                    style={[styles.cardActionBtn, styles.cardActionBtnOutline, { borderColor: colors.error }]}
+                    onPress={() => router.push(`/reservations/${item.id}` as any)}
+                    accessibilityRole="button"
+                    accessibilityLabel="View refund details"
+                  >
+                    <Text style={[styles.cardActionBtnText, { color: colors.error }]}>View Refund</Text>
+                  </TouchableOpacity>
+                );
+              }
+              return null;
+            })}
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -234,7 +348,7 @@ export default function ReservationsScreen() {
                 >
                   {label}
                 </Text>
-                {count > 0 && ['toPay', 'preparing', 'ready'].includes(filter) && (
+                {count > 0 && ['toPay', 'preparing', 'ready', 'returnRefund'].includes(filter) && (
                   <View
                     style={[
                       styles.countBadge,
@@ -464,11 +578,38 @@ const styles = StyleSheet.create({
     ...Type.caption,
     marginBottom: Spacing.sm,
   },
-  // Not bodyLargeStrong: that is 700 and this is 800. A price is the loudest
-  // thing on the card by intent, and the scale has no 16/800.
   price: {
     fontSize: 16,
     fontWeight: '800',
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  cardActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.pill,
+    minHeight: 32,
+  },
+  cardActionBtnPrimary: {
+    paddingHorizontal: Spacing.lg,
+  },
+  cardActionBtnOutline: {
+    borderWidth: 1,
+  },
+  cardActionBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

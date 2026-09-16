@@ -1,6 +1,6 @@
 import { NotificationData } from '@/src/types/dto/notification';
 
-const WHITELISTED_ROUTE_REGEX = /^\/(reservations|product|messages|chat)(\/|\?|$)/;
+const WHITELISTED_ROUTE_REGEX = /^\/(reservations|product|messages)(\/|\?|$)/;
 
 /**
  * Resolves a canonical internal app route for a notification payload.
@@ -26,25 +26,21 @@ export function resolveNotificationRoute(data?: NotificationData | null): string
     return null;
   }
 
-  // 3. Product details
+  // 3. Product detail
   if (productId) {
     return `/product/${productId}`;
   }
 
-  // 4. Support chat conversation
+  // 4. Boutique / Support Conversation
   const conversationId = data.conversation_id || (data.entity_type === 'conversation' ? data.entity_id : null);
   if (conversationId) {
     return `/messages/${conversationId}`;
   }
 
-  // 5. Direct P2P chat (requires other user's UUID, never use direct_chat_id as user id)
+  // 5. Direct P2P chat (retired with connections; fallback to messages inbox)
   const isDirectChat = data.entity_type === 'direct_chat' || Boolean(data.direct_chat_id);
   if (isDirectChat) {
-    const otherUserId = data.actor_id || (data.metadata?.other_user_id as string | undefined);
-    if (otherUserId) {
-      return `/chat/${otherUserId}`;
-    }
-    return null;
+    return '/messages';
   }
 
   // 6. Whitelisted deep_link fallback
