@@ -10,7 +10,6 @@ import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { useCart } from '@/src/context/CartContext';
-import { StreakBadge } from '@/src/components/StreakBadge';
 import { useToast } from '@/src/context/ToastContext';
 import { statusBucket } from '@/src/utils/reservationStatus';
 import { getMyUnratedItems } from '@/src/services/reservationService';
@@ -261,8 +260,6 @@ export default function ProfileScreen() {
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.tint }]}>Profile</Text>
         </View>
-        
-        <StreakBadge />
 
         <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.avatar, { backgroundColor: colors.tint }]}>
