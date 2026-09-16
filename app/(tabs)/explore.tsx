@@ -1012,6 +1012,96 @@ export default function ExploreScreen() {
 
   const activeFiltersCount = activeFilterChips.length;
 
+  // Persistent quick-switch for the browse-mode product grid: once a category
+  // is selected, the level-0/level-1 tile grids unmount entirely, leaving only
+  // a breadcrumb/back-arrow to change category. This sits in the grid's
+  // sticky header instead, so switching category or subcategory updates the
+  // grid in place without leaving it. Top-level row is always shown; the
+  // subcategory row only appears when the active category actually has
+  // subcategories, and is omitted in "Shop All" mode (no single active parent).
+  const renderCategorySwitcher = () => {
+    if (topCategories.length === 0) return null;
+    const activeSubs = selectedCategory ? (subCategoriesByParent[selectedCategory] || []) : [];
+    return (
+      <View style={[styles.categorySwitcherWrapper, { borderBottomColor: colors.border }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categorySwitcherRow}>
+          <TouchableOpacity
+            style={[
+              styles.categoryChip,
+              { borderColor: colors.border, backgroundColor: colors.card },
+              showAllProducts && { backgroundColor: colors.tint, borderColor: colors.tint },
+            ]}
+            onPress={() => {
+              if (showAllProducts) return;
+              setSelectedCategory(null);
+              setSelectedSubCategory(null);
+              setShowAllProducts(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Show all products"
+          >
+            <Text style={[styles.categoryChipText, { color: showAllProducts ? colors.onTint : colors.text }]}>All</Text>
+          </TouchableOpacity>
+          {topCategories.map((cat) => {
+            const isActive = !showAllProducts && selectedCategory === cat.name;
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.categoryChip,
+                  { borderColor: colors.border, backgroundColor: colors.card },
+                  isActive && { backgroundColor: colors.tint, borderColor: colors.tint },
+                ]}
+                onPress={() => {
+                  if (isActive) return;
+                  recordCategoryVisit(cat.name);
+                  setShowAllProducts(false);
+                  setSelectedCategory(cat.name);
+                  setSelectedSubCategory(ALL_SUBCATEGORY);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Shop ${cat.name}`}
+              >
+                <Text style={[styles.categoryChipText, { color: isActive ? colors.onTint : colors.text }]}>{cat.name}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {activeSubs.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subCategorySwitcherRow}>
+            <TouchableOpacity
+              style={[styles.subCategoryChip, selectedSubCategory === ALL_SUBCATEGORY && { borderColor: colors.tint }]}
+              onPress={() => setSelectedSubCategory(ALL_SUBCATEGORY)}
+              accessibilityRole="button"
+              accessibilityLabel={`All ${selectedCategory}`}
+            >
+              <Text style={[styles.subCategoryChipText, { color: selectedSubCategory === ALL_SUBCATEGORY ? colors.tint : colors.secondaryText }]}>
+                All {selectedCategory}
+              </Text>
+            </TouchableOpacity>
+            {activeSubs.map((subcat) => {
+              const isActive = selectedSubCategory === subcat.name;
+              return (
+                <TouchableOpacity
+                  key={subcat.id}
+                  style={[styles.subCategoryChip, isActive && { borderColor: colors.tint }]}
+                  onPress={() => setSelectedSubCategory(subcat.name)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Shop ${subcat.name}`}
+                >
+                  <Text style={[styles.subCategoryChipText, { color: isActive ? colors.tint : colors.secondaryText }]}>
+                    {subcat.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+    );
+  };
+
   const renderCategoryNavPills = () => {
     if (matchingNavOptions.length === 0) return null;
     return (
@@ -1542,6 +1632,7 @@ export default function ExploreScreen() {
                   contentContainerStyle={styles.productList}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
+                      {renderCategorySwitcher()}
                       {renderGridHeader(
                         `${processedProducts.length} items found`,
                         `Sort: ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
@@ -2317,6 +2408,39 @@ const styles = StyleSheet.create({
   },
   relatedCategoryPillText: {
     fontSize: 12,
+    fontWeight: '600',
+  },
+  categorySwitcherWrapper: {
+    paddingTop: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  categorySwitcherRow: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  categoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  subCategorySwitcherRow: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  subCategoryChip: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    borderBottomWidth: 2,
+    borderColor: 'transparent',
+  },
+  subCategoryChipText: {
+    fontSize: 13,
     fontWeight: '600',
   },
   modalTitle: {
