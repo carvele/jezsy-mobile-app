@@ -143,14 +143,32 @@ export async function getWardrobeCapsulesPage(
  */
 export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult<void>> {
   try {
-    const { error } = await supabase.from('wardrobe_items').insert({
+    const insertPayload: Record<string, any> = {
       user_id: input.userId,
       category: input.category,
       garment_type: input.garmentType,
       sub_category: input.subCategory ?? null,
       image_url: input.imageUrl,
       color_tags: input.colorTags ?? null,
-    });
+    };
+
+    if (input.pattern) insertPayload.pattern = input.pattern;
+    if (input.material) insertPayload.material = input.material;
+    if (input.fit) insertPayload.fit = input.fit;
+    if (input.lengthType) insertPayload.length_type = input.lengthType;
+    if (input.sleeveType) insertPayload.sleeve_type = input.sleeveType;
+    if (input.neckline) insertPayload.neckline = input.neckline;
+    if (input.silhouette) insertPayload.silhouette = input.silhouette;
+    if (input.occasions && input.occasions.length > 0) insertPayload.occasions = input.occasions;
+    if (input.seasons && input.seasons.length > 0) insertPayload.seasons = input.seasons;
+    if (input.colorDetails && input.colorDetails.length > 0) insertPayload.color_details = input.colorDetails;
+    if (input.isCustomCategory !== undefined) insertPayload.is_custom_category = input.isCustomCategory;
+    if (input.aiAttributes) insertPayload.ai_attributes = input.aiAttributes;
+    if (input.aiConfidence !== undefined) insertPayload.ai_confidence = input.aiConfidence;
+    if (input.userCorrections) insertPayload.user_corrections = input.userCorrections;
+    if (input.embedding) insertPayload.embedding = input.embedding;
+
+    const { error } = await (supabase.from('wardrobe_items') as any).insert(insertPayload);
 
     if (error) {
       throw error;

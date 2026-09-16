@@ -11,6 +11,7 @@
 
 import { evaluateColors, ColorMatchResult } from './colorMatcher';
 import { MannequinCanvasItem, WardrobeItem } from './mannequinConfig';
+import { OutfitExplanation } from './outfitExplainer';
 
 export type GradeLetter = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D';
 
@@ -29,11 +30,14 @@ export interface StylistCritique {
   pillars: {
     colorHarmony: StylePillarBreakdown;
     compositionAndLayers: StylePillarBreakdown;
+    occasionFit?: StylePillarBreakdown;
+    personalPreference?: StylePillarBreakdown;
   };
   tips: string[];
   vibe: string;
   paletteColors: string[];
   isOvercrowded?: boolean;
+  explanation?: OutfitExplanation;
 }
 
 export function scoreToGrade(score: number): GradeLetter {

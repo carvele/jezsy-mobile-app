@@ -32,6 +32,10 @@ import { useToast } from '@/src/context/ToastContext';
 import { ImageCropModal } from '@/src/components/ImageCropModal';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 import { isOnline } from '@/src/services/offlineSync';
+import { fashionVisionEngine } from '@/src/services/fashionVisionEngine';
+import { AIAttributeConfirmationModal } from '@/src/components/AIAttributeConfirmationModal';
+import { ColorPickerModal } from '@/src/components/ColorPickerModal';
+import { ColorDetailItem, GarmentAnalysisResult, UserCorrections } from '@/src/types/dto/aiAttributes';
 
 const { width } = Dimensions.get('window');
 
@@ -74,6 +78,18 @@ export default function AddWardrobeItemScreen() {
   const [categoryModalVisible, setCategoryModalVisible] = useState<boolean>(false);
   const [categorySearch, setCategorySearch] = useState<string>('');
   
+  // AI Analysis & Extended Attributes
+  const [aiAnalysis, setAiAnalysis] = useState<GarmentAnalysisResult | null>(null);
+  const [aiModalVisible, setAiModalVisible] = useState(false);
+  const [isAnalyzingAi, setIsAnalyzingAi] = useState(false);
+  const [userCorrections, setUserCorrections] = useState<UserCorrections | null>(null);
+  const [pattern, setPattern] = useState<string>('Solid');
+  const [material, setMaterial] = useState<string>('Cotton');
+  const [fit, setFit] = useState<string>('Regular');
+  const [occasions, setOccasions] = useState<string[]>(['Casual']);
+  const [colorDetails, setColorDetails] = useState<ColorDetailItem[]>([]);
+  const [colorPickerVisible, setColorPickerVisible] = useState(false);
+
   const [saving, setSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   // Wall-clock (not setTimeout-based) recovery for a save that started while
@@ -213,11 +229,44 @@ export default function AddWardrobeItemScreen() {
     setRawPickedSize(null);
   };
 
-  const handleCropConfirm = (croppedUri: string) => {
+  const handleCropConfirm = async (croppedUri: string) => {
     setImageUri(croppedUri);
     setCropModalVisible(false);
     setRawPickedUri(null);
     setRawPickedSize(null);
+
+    // Trigger AI clothing analysis
+    setIsAnalyzingAi(true);
+    try {
+      const analysis = await fashionVisionEngine.analyzeGarment(croppedUri, {
+        width: rawPickedSize?.width,
+        height: rawPickedSize?.height,
+      });
+      setAiAnalysis(analysis);
+      setAiModalVisible(true);
+    } catch (e) {
+      console.warn('AI analysis error, proceeding with manual entry:', e);
+    } finally {
+      setIsAnalyzingAi(false);
+    }
+  };
+
+  const handleAiConfirm = (confirmed: GarmentAnalysisResult, corrections: UserCorrections | null) => {
+    if (confirmed.garmentType) setGarmentType(confirmed.garmentType as GarmentType);
+    if (confirmed.category) setCategory(confirmed.category);
+    if (confirmed.subcategory) setSubCategory(confirmed.subcategory);
+    if (confirmed.pattern) setPattern(confirmed.pattern);
+    if (confirmed.material) setMaterial(confirmed.material);
+    if (confirmed.fit) setFit(confirmed.fit);
+    if (confirmed.occasions) setOccasions(confirmed.occasions);
+    if (confirmed.colors && confirmed.colors.length > 0) {
+      setColorDetails(confirmed.colors);
+      setSelectedColors(confirmed.colors.map((c) => c.name));
+    }
+    if (corrections) {
+      setUserCorrections(corrections);
+    }
+    setAiModalVisible(false);
   };
 
   const toggleColor = (colorName: string) => {
@@ -382,6 +431,15 @@ export default function AddWardrobeItemScreen() {
           subCategory: subCategory.trim() || null,
           imageUrl: publicUrl,
           colorTags: selectedColors,
+          pattern,
+          material,
+          fit,
+          occasions,
+          colorDetails,
+          isCustomCategory: !CATEGORIES.includes(category),
+          aiAttributes: aiAnalysis ? (aiAnalysis as any) : null,
+          aiConfidence: aiAnalysis?.confidence ?? null,
+          userCorrections: userCorrections ? (userCorrections as any) : null,
         }),
         12000,
       );
@@ -402,7 +460,14 @@ export default function AddWardrobeItemScreen() {
       setRawPickedSize(null);
       setGarmentType(null);
       setSelectedColors([]);
+      setColorDetails([]);
       setSubCategory('');
+      setPattern('Solid');
+      setMaterial('Cotton');
+      setFit('Regular');
+      setOccasions(['Casual']);
+      setAiAnalysis(null);
+      setUserCorrections(null);
 
       // canGoBack() is not reliable here: after a page reload (the exact
       // recovery this flow suggests once upload retries exhaust), Expo
@@ -475,6 +540,12 @@ export default function AddWardrobeItemScreen() {
                 <View style={styles.processingOverlay}>
                   <ActivityIndicator size="large" color={colors.tint} />
                   <Text style={[styles.processingText, { color: colors.tint }]}>Extracting Item...</Text>
+                </View>
+              )}
+              {isAnalyzingAi && (
+                <View style={styles.processingOverlay}>
+                  <ActivityIndicator size="large" color="#E6C687" />
+                  <Text style={[styles.processingText, { color: '#E6C687' }]}>AI Analyzing Garment...</Text>
                 </View>
               )}
               <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImageUri(null)}>
@@ -619,6 +690,15 @@ export default function AddWardrobeItemScreen() {
                 );
               })}
             </View>
+
+            {/* Custom / Arbitrary Color Action */}
+            <TouchableOpacity
+              style={[styles.customColorBtn, { borderColor: colors.border }]}
+              onPress={() => setColorPickerVisible(true)}
+            >
+              <IconSymbol name="plus" size={16} color={colors.tint} />
+              <Text style={[styles.customColorBtnText, { color: colors.tint }]}>Custom Color / HEX</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -648,6 +728,24 @@ export default function AddWardrobeItemScreen() {
         initialSize={rawPickedSize}
         onCancel={handleCropCancel}
         onConfirm={handleCropConfirm}
+      />
+
+      <AIAttributeConfirmationModal
+        visible={aiModalVisible}
+        analysis={aiAnalysis}
+        onConfirm={handleAiConfirm}
+        onCancel={() => setAiModalVisible(false)}
+      />
+
+      <ColorPickerModal
+        visible={colorPickerVisible}
+        onSave={(c) => {
+          setColorDetails((prev) => [...prev, c]);
+          if (!selectedColors.includes(c.name)) {
+            setSelectedColors((prev) => [...prev, c.name]);
+          }
+        }}
+        onClose={() => setColorPickerVisible(false)}
       />
 
       <Modal
@@ -948,5 +1046,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  customColorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.md,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  customColorBtnText: {
+    ...Type.caption,
+    fontWeight: '700',
   },
 });
