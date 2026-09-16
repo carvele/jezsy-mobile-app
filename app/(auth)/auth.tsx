@@ -403,6 +403,15 @@ export default function AuthScreen() {
     }
   };
 
+  // Account creation is 'signup' -> 'otp_verify' (2 steps); 'otp_verify' is
+  // also reachable from the log-in-with-code flow (verificationType
+  // 'login'), which isn't account creation, so the indicator only shows
+  // for the genuine signup path. Mirrors the pill + "N/Total" pattern
+  // already used on profile-setup.tsx, the next screen in this same flow.
+  const SIGNUP_TOTAL_STEPS = 2;
+  const signupStepIndex =
+    mode === 'signup' ? 0 : mode === 'otp_verify' && verificationType === 'signup' ? 1 : null;
+
   const handleOtpTextChange = (text: string) => {
     const cleaned = text.replace(/[^0-9]/g, '').substring(0, 6);
     setOtpCode(cleaned);
@@ -444,6 +453,31 @@ export default function AuthScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Account-creation step indicator: only for the signup -> otp_verify
+              path, not login-with-code (which also passes through otp_verify) */}
+          {signupStepIndex !== null && (
+            <View style={styles.signupStepRow} accessibilityLabel={`Step ${signupStepIndex + 1} of ${SIGNUP_TOTAL_STEPS}`}>
+              <View style={styles.signupStepPills}>
+                {Array.from({ length: SIGNUP_TOTAL_STEPS }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.signupStepPill,
+                      i === signupStepIndex
+                        ? styles.signupStepPillActive
+                        : i < signupStepIndex
+                        ? styles.signupStepPillDone
+                        : styles.signupStepPillUpcoming,
+                    ]}
+                  />
+                ))}
+              </View>
+              <Text style={styles.signupStepCount}>
+                Step {signupStepIndex + 1} of {SIGNUP_TOTAL_STEPS}
+              </Text>
+            </View>
+          )}
+
           {/* Dynamic heading */}
           <View style={styles.headingWrapper}>
             <Text style={styles.title}>{getTitle()}</Text>
@@ -710,6 +744,31 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: Spacing.xxl,
     paddingBottom: 40,
+  },
+  signupStepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginBottom: 20,
+  },
+  signupStepPills: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  signupStepPill: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+  },
+  signupStepPillActive: { backgroundColor: '#fff' },
+  signupStepPillDone: { backgroundColor: 'rgba(255,255,255,0.6)' },
+  signupStepPillUpcoming: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  signupStepCount: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 0.5,
   },
   headingWrapper: {
     marginBottom: 28,
