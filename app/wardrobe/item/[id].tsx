@@ -7,7 +7,6 @@ import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
-import { useAuth } from '@/src/context/AuthContext';
 import { Database } from '@/src/types/database.types';
 import { useToast } from '@/src/context/ToastContext';
 import { ConfirmModal } from '@/src/components/ConfirmModal';
@@ -31,10 +30,8 @@ export default function WardrobeItemDetailScreen() {
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
-  const { session } = useAuth();
 
   const [item, setItem] = useState<WardrobeItem | null>(null);
-  const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [logging, setLogging] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -63,20 +60,6 @@ export default function WardrobeItemDetailScreen() {
     fetchItem();
   }, [fetchItem]);
 
-  const fetchStreak = useCallback(async () => {
-    if (!session?.user?.id) return;
-    const { data } = await supabase
-      .from('user_streaks')
-      .select('current_streak')
-      .eq('user_id', session.user.id)
-      .maybeSingle();
-    setStreak(data?.current_streak || 0);
-  }, [session?.user?.id]);
-
-  useEffect(() => {
-    fetchStreak();
-  }, [fetchStreak]);
-
   const handleLogWear = async () => {
     if (!item) return;
     setLogging(true);
@@ -84,7 +67,6 @@ export default function WardrobeItemDetailScreen() {
       const { data, error } = await supabase.rpc('increment_wear_count', { p_item_id: item.id });
       if (error) throw error;
       setItem(data);
-      await fetchStreak();
       showToast('Wear logged for today.', 'success');
     } catch (err) {
       console.error('Error logging wear:', err);
@@ -209,12 +191,6 @@ export default function WardrobeItemDetailScreen() {
           <View style={[styles.wearCard, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
             <IconSymbol name="chart.bar.fill" size={20} color={colors.tint} />
             <Text style={[styles.wearLabel, { color: colors.text }]}>{wearLabel}</Text>
-          </View>
-          <View style={[styles.wearCard, { backgroundColor: colors.card, borderColor: colors.border, marginLeft: Spacing.sm }]}>
-            <IconSymbol name="flame.fill" size={18} color={colors.tint} />
-            <Text style={[styles.wearLabel, { color: colors.text }]}>
-              {streak}d streak
-            </Text>
           </View>
         </View>
 
