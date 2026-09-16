@@ -199,13 +199,19 @@ export default function ExploreScreen() {
     }
   }, [params.all, params.category, topCategories, handledInitialParams]);
 
-  // products.category_id references a subcategory row directly; these maps
-  // resolve the display names this screen navigates by (set from tile
-  // presses below) back to the ids actually needed to query/search.
+  // products.category_id references a subcategory row directly; this map
+  // resolves the display names this screen navigates by (set from tile
+  // presses below) back to the ids actually needed to query/search. Keyed
+  // per parent category, not globally by subcategory name alone -- two
+  // different parents could otherwise have same-named subcategories (e.g.
+  // "Other"), and a flat name->id map would silently resolve to whichever
+  // parent's row happened to be inserted last, fetching the wrong category's
+  // products for a name that collides.
   const subCategoryIdByName = useMemo(() => {
-    const map: Record<string, string> = {};
-    Object.values(subCategoriesByParent).forEach((subs) => {
-      subs.forEach((s) => { map[s.name] = s.id; });
+    const map: Record<string, Record<string, string>> = {};
+    Object.entries(subCategoriesByParent).forEach(([parentName, subs]) => {
+      map[parentName] = {};
+      subs.forEach((s) => { map[parentName][s.name] = s.id; });
     });
     return map;
   }, [subCategoriesByParent]);
@@ -344,6 +350,13 @@ export default function ExploreScreen() {
 
   // Back button handler
   const searchReqId = useRef(0);
+  // fetchInitialProducts/onRefreshProducts have no debounce, unlike search --
+  // tapping between categories/subcategories quickly (including via the
+  // category quick-switch strip) fires a new request on every tap with no
+  // guard against an earlier, slower-resolving request overwriting a later
+  // one's result. Without this, the grid could end up showing a *different*
+  // category's products than the one currently selected.
+  const productsReqId = useRef(0);
 
   const handleBack = () => {
     if (isSearchActive) {
@@ -480,7 +493,7 @@ export default function ExploreScreen() {
           query = query.eq('category', selectedCategory);
         }
       } else {
-        const subId = subCategoryIdByName[selectedSubCategory];
+        const subId = subCategoryIdByName[selectedCategory]?.[selectedSubCategory];
         if (!subId) return null;
         query = query.or(`category_id.eq.${subId},and(category_id.is.null,sub_category.eq.${selectedSubCategory},category.eq.${selectedCategory})`);
       }
@@ -527,7 +540,7 @@ export default function ExploreScreen() {
       if (selectedSubCategory === ALL_SUBCATEGORY || selectedSubCategory === 'View All') {
         categoryIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
       } else {
-        const subId = subCategoryIdByName[selectedSubCategory];
+        const subId = subCategoryIdByName[selectedCategory]?.[selectedSubCategory];
         if (!subId) return null;
         categoryIds = [subId];
       }
@@ -566,8 +579,10 @@ export default function ExploreScreen() {
 
   // Fetch page 0 whenever the active category/subcategory/"Shop All" mode changes.
   const fetchInitialProducts = useCallback(() => {
+    const currentReqId = ++productsReqId.current;
     const query = buildProductsQuery();
     if (!query) {
+      if (currentReqId !== productsReqId.current) return;
       setProducts([]);
       setProductsError(null);
       return;
@@ -587,6 +602,7 @@ export default function ExploreScreen() {
             const fbQuery = buildDirectProductsQuery();
             if (fbQuery) {
               const { data: fbData, error: fbError } = await fbQuery.range(0, PAGE_SIZE - 1);
+              if (currentReqId !== productsReqId.current) return;
               if (!fbError && fbData) {
                 setProducts(fbData);
                 setHasMoreProducts(fbData.length === PAGE_SIZE);
@@ -595,14 +611,17 @@ export default function ExploreScreen() {
                 return;
               }
             }
+            if (currentReqId !== productsReqId.current) return;
             console.error('Error fetching products:', error);
             setProductsError(error.message || 'Could not load products');
             showToast('Could not load products. Please try again.', 'error');
           } else if (data) {
+            if (currentReqId !== productsReqId.current) return;
             setProducts(data);
             setHasMoreProducts(data.length === PAGE_SIZE);
             setProductsError(null);
           }
+          if (currentReqId !== productsReqId.current) return;
           setLoading(false);
         },
         async (err: unknown) => {
@@ -610,6 +629,7 @@ export default function ExploreScreen() {
           const fbQuery = buildDirectProductsQuery();
           if (fbQuery) {
             const { data: fbData, error: fbError } = await fbQuery.range(0, PAGE_SIZE - 1);
+            if (currentReqId !== productsReqId.current) return;
             if (!fbError && fbData) {
               setProducts(fbData);
               setHasMoreProducts(fbData.length === PAGE_SIZE);
@@ -618,6 +638,7 @@ export default function ExploreScreen() {
               return;
             }
           }
+          if (currentReqId !== productsReqId.current) return;
           console.error('Network or server error loading products:', err);
           setProductsError('Network or server error');
           setLoading(false);
