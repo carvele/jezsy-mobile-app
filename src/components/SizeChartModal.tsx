@@ -16,29 +16,73 @@ interface SizeChartModalProps {
   onClose: () => void;
 }
 
-const COLUMNS: { key: 'bust' | 'waist' | 'hips' | 'inseam' | 'length'; label: string }[] = [
-  { key: 'bust', label: 'Bust' },
-  { key: 'waist', label: 'Waist' },
-  { key: 'hips', label: 'Hips' },
-  { key: 'inseam', label: 'Pants' },
-  { key: 'length', label: 'Length' },
-];
+// Preferred display labels for known metric keys, matched case/spacing
+// -insensitively so admin-entered variants (e.g. "Total Length" vs "length",
+// "Hip" vs "hips") still resolve to one consistent label. Any key not listed
+// here falls back to a title-cased version of the key itself, so a metric
+// from any product category (shoes, bags, accessories...) still renders
+// instead of being silently dropped for not matching a fixed garment list.
+const KNOWN_LABELS: Record<string, string> = {
+  bust: 'Bust', chest: 'Chest', waist: 'Waist', hips: 'Hips', hip: 'Hips',
+  shoulder: 'Shoulder', shoulderwidth: 'Shoulder Width', sleevelength: 'Sleeve Length',
+  bodylength: 'Body Length', thigh: 'Thigh', inseam: 'Pants', outseam: 'Outseam',
+  totallength: 'Total Length', length: 'Length', cuff: 'Cuff', footlength: 'Foot Length',
+  footwidth: 'Foot Width', width: 'Width', height: 'Height', depth: 'Depth',
+  straplength: 'Strap Length',
+};
+
+const titleCase = (key: string) =>
+  key
+    .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase -> spaced
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+const labelFor = (key: string) => {
+  const norm = key.toLowerCase().replace(/[\s_-]+/g, '');
+  return KNOWN_LABELS[norm] || titleCase(key);
+};
 
 export function SizeChartModal({ visible, measurements, sizes, recommendedSize, onClose }: SizeChartModalProps) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const [unit, setUnit] = useState<'cm' | 'in'>('cm');
 
-  // Only show sizes the product actually lists, in canonical apparel order, and only columns with data.
+  // Measurements are keyed by whatever metric names the admin entered for
+  // this product's category -- not just the garment-specific bust/waist/hips
+  // set -- so this reads them generically rather than through the narrower
+  // ProductMeasurements type made for the fit recommender.
+  const raw = measurements as unknown as Record<string, Record<string, number | string | null | undefined> | undefined>;
+
+  // Only show sizes the product actually lists, in canonical apparel order.
   const normalized = normalizeSizes(sizes);
-  const rows = normalized.filter(s => measurements[s]);
-  const activeColumns = COLUMNS.filter(c => rows.some(s => measurements[s]?.[c.key] != null));
+  const rows = normalized.filter(s => raw[s]);
+
+  // Columns are whatever metric keys actually have data, in the order they
+  // first appear, so any category's measurement set renders as authored.
+  const activeColumns = (() => {
+    const seen = new Set<string>();
+    const columns: { key: string; label: string }[] = [];
+    rows.forEach((s) => {
+      const row = raw[s];
+      if (!row) return;
+      Object.keys(row).forEach((key) => {
+        if (row[key] == null || seen.has(key)) return;
+        seen.add(key);
+        columns.push({ key, label: labelFor(key) });
+      });
+    });
+    return columns;
+  })();
 
   // Source data is always centimetres; inches are display-only, rounded to
-  // one decimal since garment measurements don't need finer precision.
-  const formatValue = (cm: number | null | undefined): string => {
-    if (cm == null) return '-';
-    return unit === 'cm' ? String(cm) : (cm * CM_TO_IN).toFixed(1);
+  // one decimal since these measurements don't need finer precision.
+  const formatValue = (cm: number | string | null | undefined): string => {
+    if (cm == null || cm === '') return '-';
+    const num = typeof cm === 'number' ? cm : parseFloat(cm);
+    if (Number.isNaN(num)) return String(cm);
+    return unit === 'cm' ? String(num) : (num * CM_TO_IN).toFixed(1);
   };
 
   if (!visible) return null;
@@ -81,7 +125,7 @@ export function SizeChartModal({ visible, measurements, sizes, recommendedSize, 
           ) : (
             <ScrollView contentContainerStyle={styles.body}>
               <Text style={[styles.caption, { color: colors.secondaryText }]}>
-                Garment measurements in {unit === 'cm' ? 'centimetres' : 'inches'}.
+                Measurements in {unit === 'cm' ? 'centimetres' : 'inches'}.
               </Text>
 
               <View style={[styles.row, styles.headRow, { borderBottomColor: colors.border }]}>
@@ -107,7 +151,7 @@ export function SizeChartModal({ visible, measurements, sizes, recommendedSize, 
                     </Text>
                     {activeColumns.map(c => (
                       <Text key={c.key} style={[styles.cell, { color: colors.secondaryText }]}>
-                        {formatValue(measurements[size]?.[c.key])}
+                        {formatValue(raw[size]?.[c.key])}
                       </Text>
                     ))}
                   </View>
