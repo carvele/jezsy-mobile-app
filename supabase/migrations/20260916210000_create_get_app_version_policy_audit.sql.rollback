@@ -1,0 +1,7 @@
+-- Rollback: 20260916210000_create_get_app_version_policy_audit.sql.rollback
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS public.get_app_version_policy_audit(TEXT, INTEGER, TIMESTAMPTZ);
+
+COMMIT;

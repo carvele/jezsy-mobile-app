@@ -1,0 +1,12 @@
+-- Rollback: 20260916200000_create_app_version_policies.sql.rollback
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS public.set_global_version_enforcement_bypass(BOOLEAN, TEXT);
+DROP FUNCTION IF EXISTS public.update_app_version_policy(TEXT, JSONB, TEXT);
+DROP FUNCTION IF EXISTS public.get_app_version_policy(TEXT);
+
+DROP TABLE IF EXISTS public.app_version_policy_audit;
+DROP TABLE IF EXISTS public.app_version_policies;
+
+COMMIT;
