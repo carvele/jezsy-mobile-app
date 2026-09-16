@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { useWindowDimensions, Platform } from 'react-native';
 import { Spacing } from '@/constants/theme';
 
 /**
@@ -14,10 +14,10 @@ import { Spacing } from '@/constants/theme';
  */
 
 /** Page padding on each side of a grid. */
-export const GRID_GUTTER = Spacing.lg; // 16
+export const GRID_GUTTER = Spacing.xxxl; // 32
 
 /** Space between columns. */
-export const GRID_COLUMN_GAP = Spacing.md; // 12
+export const GRID_COLUMN_GAP = Spacing.xl; // 20
 
 /** Usable width for one card in an evenly-divided grid.
  *
@@ -41,6 +41,12 @@ export function useGridCardWidth(): { cardWidth: number; columns: number } {
   // Phones get 2 cols, small tablets 3, large tablets/web 4+
   const columns = effectiveWidth > 1200 ? 5 : effectiveWidth > 900 ? 4 : effectiveWidth > 600 ? 3 : 2;
   const gaps = GRID_COLUMN_GAP * (columns - 1);
-  const cardWidth = (effectiveWidth - GRID_GUTTER * 2 - gaps) / columns;
+  
+  // Subtract a safety margin. On web, scrollbars take physical layout space (~15px) 
+  // that useWindowDimensions() doesn't account for. We subtract enough to ensure 
+  // flex-wrap never unexpectedly collapses the row.
+  const safetyMargin = Platform.OS === 'web' ? 24 : 4;
+  const cardWidth = Math.floor((effectiveWidth - GRID_GUTTER * 2 - gaps) / columns) - safetyMargin;
+  
   return { cardWidth, columns };
 }

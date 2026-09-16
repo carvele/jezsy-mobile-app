@@ -742,7 +742,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     // Feeds gridCardWidth via GRID_GUTTER, same as Explore's grid.
     paddingHorizontal: GRID_GUTTER,
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     gap: GRID_COLUMN_GAP,
   },
 });

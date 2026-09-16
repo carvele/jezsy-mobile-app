@@ -2216,7 +2216,7 @@ const styles = StyleSheet.create({
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     gap: GRID_COLUMN_GAP,
   },
   suggestionsContainer: {
