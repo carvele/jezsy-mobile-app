@@ -111,11 +111,17 @@ export default function InboxScreen() {
 
   const markAsRead = async (id: string) => {
     if (!user) return;
+    const previous = notifications.find(n => n.id === id);
     try {
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
       await markNotifReadInContext(id);
     } catch (e) {
-      console.error(e);
+      console.error('Failed to persist notification read state:', e);
+      if (previous) {
+        setNotifications(prev => prev.map(n => n.id === id ? previous : n));
+      } else {
+        fetchNotifications();
+      }
     }
   };
 
