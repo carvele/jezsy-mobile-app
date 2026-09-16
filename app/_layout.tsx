@@ -32,6 +32,8 @@ import {
   consumePendingEntryTarget,
   consumeAuthReturnTarget,
 } from '@/src/utils/authReturnTarget';
+import { appVersionService, VersionCheckResult } from '@/src/services/appVersionService';
+import { MandatoryUpdateScreen } from '@/src/components/MandatoryUpdateScreen';
 
 LogBox.ignoreLogs([
   'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
@@ -173,6 +175,20 @@ function InitialLayout() {
 
   const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
 
+  // App version compliance state
+  const [versionResult, setVersionResult] = useState<VersionCheckResult | null>(null);
+  const [versionReady, setVersionReady] = useState(false);
+
+  useEffect(() => {
+    appVersionService.init();
+    const unsub = appVersionService.subscribe((res) => {
+      setVersionResult(res);
+      setVersionReady(true);
+    });
+    appVersionService.checkVersionCompliance();
+    return unsub;
+  }, []);
+
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       (document.activeElement as HTMLElement)?.blur?.();
@@ -180,7 +196,7 @@ function InitialLayout() {
   }, [segments]);
 
   // Latches to true the first time we confirm a fully authenticated + profiled
-  // session. Never resets to false within a mount â€” protects against transient
+  // session. Never resets to false within a mount — protects against transient
   // null profile/session states from silent token refreshes kicking the user
   // out of the tabs they are actively navigating.
   const hasAuthenticated = useRef(false);
@@ -264,7 +280,8 @@ function InitialLayout() {
   // refreshProfile() call still pauses redirects while it's in flight).
   // If there is an active session, profile MUST be initialized before routing can proceed.
   const profileReady = !session || isProfileInitialized;
-  const flagsReady = !isLoading && !isProfileLoading && profileReady && onboardingSeen !== null && themeLoaded;
+  const isHardBlocked = versionResult?.status === 'HARD_BLOCK';
+  const flagsReady = !isLoading && !isProfileLoading && profileReady && onboardingSeen !== null && themeLoaded && versionReady;
 
   // Gates whether the Stack renders at all -- but only for the very first
   // cold-start bootstrap. Flips true once and never back to false, so a
@@ -431,10 +448,22 @@ function InitialLayout() {
   }, [flagsReady, session, segments, profile, router, onboardingSeen, isPasswordRecovery, signOut, routeSettled]);
 
   useEffect(() => {
-    if (hasBootstrapped) {
+    if (hasBootstrapped || isHardBlocked) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [hasBootstrapped]);
+  }, [hasBootstrapped, isHardBlocked]);
+
+  if (isHardBlocked) {
+    return (
+      <MandatoryUpdateScreen
+        policy={versionResult?.policy ?? null}
+        clientVersion={versionResult?.client.version ?? '1.0.0'}
+        onRetry={async () => {
+          await appVersionService.checkVersionCompliance();
+        }}
+      />
+    );
+  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
