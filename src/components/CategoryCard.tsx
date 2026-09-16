@@ -26,13 +26,12 @@ export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
   const colors = Colors[theme];
   const isRail = variant === 'rail';
   const { cardWidth } = useGridCardWidth();
-  const cardHeight = cardWidth / (3 / 2);
 
   return (
     <TouchableOpacity
       style={[
         styles.card,
-        isRail ? styles.cardRail : [styles.cardGrid, { width: cardWidth, height: cardHeight }],
+        isRail ? styles.cardRail : [styles.cardGrid, { width: cardWidth, aspectRatio: 1.5 }],
         { backgroundColor: colors.imagePlaceholder },
       ]}
       onPress={onPress}
