@@ -45,7 +45,7 @@ export function useGridCardWidth(): { cardWidth: DimensionValue; columns: number
   
   // Use percentage widths to mathematically guarantee the flex items fit without wrapping.
   // This completely bypasses useWindowDimensions() bugs, scrollbar widths, and hydration mismatches.
-  let cardWidth: string;
+  let cardWidth: DimensionValue;
   if (columns === 5) cardWidth = '18%';
   else if (columns === 4) cardWidth = '23%';
   else if (columns === 3) cardWidth = '31%';
