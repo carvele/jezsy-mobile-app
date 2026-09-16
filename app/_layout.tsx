@@ -21,7 +21,7 @@ import { NotificationProvider } from '@/src/context/NotificationContext';
 import { ToastProvider } from '@/src/context/ToastContext';
 import { AppThemeProvider, useThemeContext } from '@/src/context/ThemeContext';
 import { handleRecoveryUrl } from '@/src/utils/recoveryLink';
-import { hasSeenOnboarding } from '@/src/utils/onboarding';
+import { hasSeenOnboarding, onOnboardingSeenChanged } from '@/src/utils/onboarding';
 import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
 import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoticeModal';
 import { initWebUpdateChecker } from '@/src/utils/webUpdateChecker';
@@ -315,6 +315,7 @@ function InitialLayout() {
 
   useEffect(() => {
     hasSeenOnboarding().then(setOnboardingSeen);
+    return onOnboardingSeenChanged((seen) => setOnboardingSeen(seen));
   }, []);
 
   // Gates the redirect effect on every run (same as before, so a later
