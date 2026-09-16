@@ -1,0 +1,24 @@
+-- Rollback for Product -> Colorway -> Gallery Architecture Evolution
+-- Migration Rollback: 20260916160000_create_product_colorways.sql.rollback
+
+BEGIN;
+
+-- 1. Drop functions and triggers
+DROP TRIGGER IF EXISTS trg_sync_product_default_colorway ON public.products;
+DROP FUNCTION IF EXISTS public.sync_product_default_colorway();
+
+DROP TRIGGER IF EXISTS trg_touch_product_colorway_updated_at ON public.product_colorways;
+DROP FUNCTION IF EXISTS public.touch_product_colorway_updated_at();
+
+DROP FUNCTION IF EXISTS public.upsert_product_with_colorways(JSONB, JSONB);
+DROP FUNCTION IF EXISTS public.backfill_canonical_sibling_colorways();
+
+-- 2. Remove default_colorway_id column from products
+DROP INDEX IF EXISTS public.idx_products_default_colorway_id;
+ALTER TABLE public.products DROP COLUMN IF EXISTS default_colorway_id;
+
+-- 3. Drop tables and related objects
+DROP TABLE IF EXISTS public.product_colorway_images CASCADE;
+DROP TABLE IF EXISTS public.product_colorways CASCADE;
+
+COMMIT;
