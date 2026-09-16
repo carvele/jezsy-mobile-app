@@ -9,7 +9,7 @@ module.exports = {
   expo: {
     name: "jezsy-mobile-app",
     slug: "jezsy-mobile-app",
-    version: "1.0.0",
+    version: "1.1.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "jezsymobileapp",
@@ -27,6 +27,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.jezsy.mobileapp",
+      buildNumber: "2",
       usesAppleSignIn: true,
       infoPlist: {
         NSCameraUsageDescription: "JezSy uses your camera for the virtual try-on and AR experience.",
@@ -38,6 +39,7 @@ module.exports = {
     },
     android: {
       package: "com.jezsy.mobileapp",
+      versionCode: 2,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       adaptiveIcon: {
         backgroundColor: "#E6F4FE",
