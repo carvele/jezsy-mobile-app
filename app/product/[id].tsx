@@ -49,14 +49,7 @@ import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 import { SoftAuthModal } from '@/src/components/SoftAuthModal';
 import { AuthAction } from '@/src/utils/authReturnTarget';
 
-type ProductColorwayImage = Database["public"]["Tables"]["product_colorway_images"]["Row"];
-type ProductColorway = Database["public"]["Tables"]["product_colorways"]["Row"] & {
-  product_colorway_images: ProductColorwayImage[];
-};
-
-type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed & {
-  product_colorways?: ProductColorway[];
-};
+type Product = Database["public"]["Tables"]["products"]["Row"] & WithCategoryEmbed;
 type ProductVariant = Database["public"]["Views"]["product_variants"]["Row"];
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -67,41 +60,6 @@ const { width, height: SCREEN_HEIGHT } = Dimensions.get("window");
 // close to this on a mid-size phone and drifted on anything smaller/larger.
 const GOLDEN_RATIO = 1.618;
 const IMAGE_GALLERY_HEIGHT = SCREEN_HEIGHT / GOLDEN_RATIO;
-
-const COLOR_SWATCH_MAP: Record<string, string> = {
-  black: '#1f2937',
-  white: '#f9fafb',
-  cream: '#fef3c7',
-  custard: '#fdf6e2',
-  navy: '#1e3a8a',
-  blue: '#3b82f6',
-  yellow: '#eab308',
-  red: '#ef4444',
-  green: '#22c55e',
-  emerald: '#10b981',
-  gray: '#9ca3af',
-  grey: '#9ca3af',
-  pink: '#ec4899',
-  purple: '#a855f7',
-  orange: '#f97316',
-  brown: '#78350f',
-  rust: '#b7410e',
-  burgundy: '#800020',
-  sage: '#9aa889',
-  beige: '#f5f5dc',
-  charcoal: '#374151',
-  gold: '#d4af37',
-  silver: '#cbd5e1',
-};
-
-const getColorDot = (name: string): string => {
-  if (!name) return '#cbd5e1';
-  const clean = name.toLowerCase().trim();
-  for (const [key, hex] of Object.entries(COLOR_SWATCH_MAP)) {
-    if (clean.includes(key)) return hex;
-  }
-  return '#cbd5e1';
-};
 
 const PLACEHOLDER_ASSET = require("@/assets/images/partial-react-logo.png");
 
@@ -115,9 +73,8 @@ const getPlaceholderImageUri = (): string => {
 
 export default function ProductDetailScreen() {
   const { showToast } = useToast();
-  const { id, initialColor } = useLocalSearchParams<{ id: string; initialColor?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
-  const [activeColorwayId, setActiveColorwayId] = useState<string | null>(null);
   const [siblingProducts, setSiblingProducts] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const [lovedByCount, setLovedByCount] = useState(0);
@@ -159,52 +116,38 @@ export default function ProductDetailScreen() {
       const fetchProductAndInventory = async () => {
         try {
           const [productRes, invRes] = await Promise.all([
-            supabase
-              .from("products")
-              .select(`*, ${CATEGORY_SELECT}, product_colorways(*, product_colorway_images(*))`)
-              .eq("id", id)
-              .single(),
+            supabase.from("products").select(`*, ${CATEGORY_SELECT}`).eq("id", id).single(),
             supabase.from("product_variants").select("*").eq("product_doc_id", id)
           ]);
 
           if (productRes.error) {
             console.error("Error fetching product:", productRes.error);
           } else if (productRes.data) {
-            const data = productRes.data as unknown as Product;
+            const data = productRes.data;
             setProduct(data);
-
-            // Resolve colorways array if present
-            const colorways: ProductColorway[] = (data.product_colorways || [])
-              .filter((cw) => cw.is_active)
-              .sort((a, b) => a.sort_order - b.sort_order);
-
-            // Determine active colorway: initialColor param -> default_colorway_id -> is_default -> first colorway
-            let chosenColorway: ProductColorway | null = null;
-            if (colorways.length > 0) {
-              if (initialColor) {
-                chosenColorway = colorways.find(
-                  (cw) => cw.color_name.toLowerCase() === initialColor.toLowerCase()
-                ) || null;
-              }
-              if (!chosenColorway && data.default_colorway_id) {
-                chosenColorway = colorways.find((cw) => cw.id === data.default_colorway_id) || null;
-              }
-              if (!chosenColorway) {
-                chosenColorway = colorways.find((cw) => cw.is_default) || colorways[0];
+            
+            // Fetch loved by data
+            const { data: lovedData } = await supabase.rpc('get_product_loved_by', { p_product_id: id });
+            if (lovedData && lovedData[0]) {
+              setLovedByCount(lovedData[0].total_count || 0);
+              setLovedByUsers((lovedData[0].public_users as any[]) || []);
+            }
+            
+            if (invRes.data) {
+              setInventory(invRes.data);
+              if (invRes.data.length === 1) {
+                if (invRes.data[0].size) setSelectedSize((prev) => prev || invRes.data[0].size);
+                if (invRes.data[0].color) setSelectedColor((prev) => prev || invRes.data[0].color);
               }
             }
 
-            if (chosenColorway) {
-              setActiveColorwayId(chosenColorway.id);
-              setSelectedColor(chosenColorway.color_name);
-            } else {
-              setActiveColorwayId(null);
-              const canonicalColor = data.base_color?.trim() || (data.color ? data.color.split(",")[0].trim() : null);
-              setSelectedColor(canonicalColor);
+            const canonicalColor = data.base_color?.trim() || (data.color ? data.color.split(",")[0].trim() : null);
+            setSelectedColor(canonicalColor);
+            if (data.sizes && data.sizes.length === 1 && data.sizes[0]) {
+              setSelectedSize((prev) => prev || data.sizes![0]);
             }
-            setActiveImageIndex(0);
 
-            // Fetch sibling products sharing the same style_code (legacy backward compatibility fallback)
+            // Fetch sibling products sharing the same style_code
             if (data.style_code) {
               const { data: siblings } = await supabase
                 .from("products")
@@ -219,24 +162,6 @@ export default function ProductDetailScreen() {
               }
             } else {
               setSiblingProducts([]);
-            }
-            
-            // Fetch loved by data
-            const { data: lovedData } = await supabase.rpc('get_product_loved_by', { p_product_id: id });
-            if (lovedData && lovedData[0]) {
-              setLovedByCount(lovedData[0].total_count || 0);
-              setLovedByUsers((lovedData[0].public_users as any[]) || []);
-            }
-            
-            if (invRes.data) {
-              setInventory(invRes.data);
-              if (invRes.data.length === 1) {
-                if (invRes.data[0].size) setSelectedSize((prev) => prev || invRes.data[0].size);
-              }
-            }
-
-            if (data.sizes && data.sizes.length === 1 && data.sizes[0]) {
-              setSelectedSize((prev) => prev || data.sizes![0]);
             }
 
             // Compute size + color recommendations if user is logged in
@@ -259,7 +184,7 @@ export default function ProductDetailScreen() {
       };
 
       fetchProductAndInventory();
-    }, [id, initialColor, user?.id])
+    }, [id, user?.id])
   );
 
   useEffect(() => {
@@ -384,75 +309,53 @@ export default function ProductDetailScreen() {
     } as any);
   };
 
-  // Normalized colorways from the active product
-  const productColorways = useMemo(() => {
-    if (!product?.product_colorways) return [];
-    return [...product.product_colorways]
-      .filter((cw) => cw.is_active)
-      .sort((a, b) => a.sort_order - b.sort_order);
-  }, [product?.product_colorways]);
-
-  // Active colorway object if one is selected
-  const activeColorway = useMemo(() => {
-    if (!productColorways.length) return null;
-    if (activeColorwayId) {
-      const found = productColorways.find((cw) => cw.id === activeColorwayId);
-      if (found) return found;
-    }
-    if (selectedColor) {
-      const found = productColorways.find(
-        (cw) => cw.color_name.toLowerCase() === selectedColor.toLowerCase()
-      );
-      if (found) return found;
-    }
-    return productColorways[0] || null;
-  }, [productColorways, activeColorwayId, selectedColor]);
-
-  // Available colors list combining first-class colorways, sibling products, and direct colors
   const colorsList = useMemo(() => {
     if (!product) return [];
-    
-    // First priority: first-class product_colorways
-    if (productColorways.length > 0) {
-      return productColorways.map((cw) => cw.color_name);
+    if (siblingProducts && siblingProducts.length > 0) {
+      const set = new Set<string>();
+      if (product.base_color) set.add(product.base_color.trim());
+      if (product.color) {
+        product.color.split(",").map((c: string) => c.trim()).filter(Boolean).forEach((c: string) => set.add(c));
+      }
+      siblingProducts.forEach((s) => {
+        if (s.base_color) set.add(s.base_color.trim());
+        if (s.color) {
+          s.color.split(",").map((c: string) => c.trim()).filter(Boolean).forEach((c: string) => set.add(c));
+        }
+      });
+      return Array.from(set);
     }
+    if (product.color) {
+      return [...new Set(product.color.split(",").map((c: string) => c.trim()).filter(Boolean))];
+    }
+    if (product.base_color) {
+      return [product.base_color.trim()];
+    }
+    return [];
+  }, [product, siblingProducts]);
 
-    // Fallback: legacy sibling products and direct colors
-    const directColors = product.color
-      ? product.color.split(",").map((c) => c.trim()).filter(Boolean)
-      : [];
-    if (product.base_color && !directColors.includes(product.base_color.trim())) {
-      directColors.unshift(product.base_color.trim());
+  const imageGallery = useMemo(() => {
+    if (product?.images && product.images.length > 0) {
+      return product.images;
     }
-    const siblingColors = siblingProducts
-      .map((s) => s.base_color?.trim() || (s.color ? s.color.split(",")[0].trim() : null))
-      .filter((c): c is string => Boolean(c));
-    return [...new Set([...siblingColors, ...directColors])];
-  }, [product, productColorways, siblingProducts]);
+    if (product?.image_url) {
+      return [product.image_url];
+    }
+    const placeholder = getPlaceholderImageUri();
+    return placeholder ? [placeholder] : [""];
+  }, [product?.images, product?.image_url]);
 
   const handleSelectColor = (color: string) => {
     tapLight();
     setSelectedColor(color);
 
-    // 1. If product has first-class colorways, switch instantly in-memory
-    if (productColorways.length > 0) {
-      const matchingCw = productColorways.find(
-        (cw) => cw.color_name.toLowerCase() === color.toLowerCase()
-      );
-      if (matchingCw) {
-        setActiveColorwayId(matchingCw.id);
-        setActiveImageIndex(0);
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-        return;
-      }
-    }
-
-    // 2. If this color belongs to a legacy sibling product, navigate using router.replace
-    const matchingSibling = siblingProducts.find(
-      (s) =>
-        (s.base_color && s.base_color.toLowerCase() === color.toLowerCase()) ||
-        (s.color && s.color.toLowerCase().split(",").map((c: string) => c.trim()).includes(color.toLowerCase()))
-    );
+    const matchingSibling = siblingProducts.find((s) => {
+      const sColors = [
+        s.base_color?.toLowerCase().trim(),
+        ...(s.color ? s.color.split(",").map((c: string) => c.toLowerCase().trim()) : []),
+      ].filter(Boolean);
+      return sColors.includes(color.toLowerCase().trim());
+    });
 
     if (matchingSibling && matchingSibling.id !== product?.id) {
       router.replace({
@@ -462,69 +365,16 @@ export default function ProductDetailScreen() {
       return;
     }
 
-    // 3. For legacy single-product internal color variants, scroll carousel if 1:1
     const directColors = product?.color
-      ? product.color.split(",").map((c) => c.trim()).filter(Boolean)
+      ? product.color.split(",").map((c: string) => c.trim()).filter(Boolean)
       : [];
     if (siblingProducts.length <= 1 && directColors.length > 1 && directColors.length === imageGallery.length) {
-      const idx = directColors.findIndex((c) => c.toLowerCase() === color.toLowerCase());
+      const idx = directColors.findIndex((c: string) => c.toLowerCase() === color.toLowerCase());
       if (idx >= 0 && idx < imageGallery.length) {
         flatListRef.current?.scrollToIndex({ index: idx, animated: true });
         setActiveImageIndex(idx);
       }
     }
-  };
-
-  // Resolve image gallery: active colorway gallery -> product images -> product image_url -> placeholder
-  const imageGallery = useMemo(() => {
-    if (activeColorway) {
-      const colorwayImages = (activeColorway.product_colorway_images || [])
-        .slice()
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map((img) => img.image_url)
-        .filter(Boolean);
-
-      if (colorwayImages.length > 0) {
-        return colorwayImages;
-      }
-      if (activeColorway.primary_image_url) {
-        return [activeColorway.primary_image_url];
-      }
-    }
-
-    if (product?.images && product.images.length > 0) {
-      return product.images;
-    }
-    if (product?.image_url) {
-      return [product.image_url];
-    }
-    const placeholderUri = getPlaceholderImageUri();
-    return placeholderUri ? [placeholderUri] : [""];
-  }, [activeColorway, product?.images, product?.image_url]);
-
-  const getStockInfo = (size?: string | null, color?: string | null): number | null => {
-    if (inventory && inventory.length > 0) {
-      if (size) {
-        const inv = inventory.find((i: any) =>
-          i.size === size &&
-          (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
-        );
-        if (inv) return inv.is_available ? 1 : 0;
-        // If variants are tracked for this product, an unlisted variant combination has 0 available
-        const hasSizeVariant = inventory.some((i: any) => i.size === size);
-        if (hasSizeVariant) return 0;
-      } else if (color) {
-        const matching = inventory.filter((i: any) => !i.color || i.color.toLowerCase() === color.toLowerCase());
-        if (matching.length > 0) {
-          return matching.some((i: any) => i.is_available) ? 1 : 0;
-        }
-      }
-    }
-    // Fallback to top-level product stock if variants are not tracked
-    if (product?.stock !== null && product?.stock !== undefined) {
-      return product.stock;
-    }
-    return null;
   };
 
   if (loading) {
@@ -550,6 +400,31 @@ export default function ProductDetailScreen() {
       </View>
     );
   }
+
+  const getStockInfo = (size?: string | null, color?: string | null): number | null => {
+    if (inventory && inventory.length > 0) {
+      if (size) {
+        const inv = inventory.find((i: any) =>
+          i.size === size &&
+          (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
+        );
+        if (inv) return inv.is_available ? 1 : 0;
+        // If variants are tracked for this product, an unlisted variant combination has 0 available
+        const hasSizeVariant = inventory.some((i: any) => i.size === size);
+        if (hasSizeVariant) return 0;
+      } else if (color) {
+        const matching = inventory.filter((i: any) => !i.color || i.color.toLowerCase() === color.toLowerCase());
+        if (matching.length > 0) {
+          return matching.some((i: any) => i.is_available) ? 1 : 0;
+        }
+      }
+    }
+    // Fallback to top-level product stock if variants are not tracked
+    if (product.stock !== null && product.stock !== undefined) {
+      return product.stock;
+    }
+    return null;
+  };
 
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
   // tracked and out of stock.
@@ -579,23 +454,9 @@ export default function ProductDetailScreen() {
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            getItemLayout={(_, index) => ({
-              length: width,
-              offset: width * index,
-              index,
-            })}
             onMomentumScrollEnd={(e) => {
               const index = Math.round(e.nativeEvent.contentOffset.x / width);
-              if (index >= 0 && index < imageGallery.length && index !== activeImageIndex) {
-                setActiveImageIndex(index);
-                // Synchronize color if single-product has 1:1 color-to-image gallery
-                const directColors = product?.color
-                  ? product.color.split(",").map((c) => c.trim()).filter(Boolean)
-                  : [];
-                if (siblingProducts.length <= 1 && directColors.length > 1 && directColors.length === imageGallery.length && directColors[index]) {
-                  setSelectedColor(directColors[index]);
-                }
-              }
+              setActiveImageIndex(index);
             }}
             renderItem={({ item, index }) => (
               <TouchableOpacity
@@ -759,12 +620,12 @@ export default function ProductDetailScreen() {
           </View>
 
           {/* Colour is a variant selection, not merely a product attribute. */}
-          {(colorsList.length > 0 || product.color) && (
+          {colorsList.length > 0 && (
             <View style={styles.section} accessibilityRole="radiogroup" accessibilityLabel="Colour options">
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Colour</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
                 {colorsList.map((color) => {
-                  const isSelected = selectedColor?.toLowerCase() === color.toLowerCase();
+                  const isSelected = selectedColor === color;
                   
                   // Check if this color has any stock for the current size (or any size if none selected)
                   const isAvailable = (() => {
@@ -798,25 +659,6 @@ export default function ProductDetailScreen() {
                       accessibilityHint={isOutOfStock ? `Colour ${color} is out of stock${selectedSize ? ` in size ${selectedSize}` : ''}` : `Selects ${color} as the colour option`}
                       accessibilityState={{ selected: isSelected }}
                     >
-                      {/* Circular Color Swatch / Selection Indicator */}
-                      <View
-                        style={[
-                          styles.colorCircleIndicator,
-                          { borderColor: isSelected ? colors.tint : (color.toLowerCase() === 'white' ? colors.border : 'transparent') },
-                          isSelected && styles.colorCircleIndicatorActive,
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.colorCircleInner,
-                            {
-                              backgroundColor:
-                                (productColorways.find((cw) => cw.color_name.toLowerCase() === color.toLowerCase())?.hex_color) ||
-                                getColorDot(color),
-                            },
-                          ]}
-                        />
-                      </View>
                       <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }, isOutOfStock && { textDecorationLine: 'line-through' }]}>{color}</Text>
                     </TouchableOpacity>
                   );
@@ -1287,33 +1129,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   description: { fontSize: 15, lineHeight: 24 },
   optionsList: { gap: Spacing.md, paddingRight: Spacing.xl },
   optionButton: { minHeight: 44, paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
-  colorOptionButton: {
-    minHeight: 44,
-    paddingHorizontal: Spacing.md,
-    justifyContent: 'center',
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  colorCircleIndicator: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  colorCircleIndicatorActive: {
-    borderWidth: 2,
-  },
-  colorCircleInner: {
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-  },
+  colorOptionButton: { minHeight: 44, paddingHorizontal: Spacing.lg, justifyContent: 'center', borderRadius: Radius.pill, borderWidth: 1 },
   optionText: { fontSize: 15, fontWeight: "600" },
   quantityRow: { flexDirection: "row", alignItems: "center", gap: Spacing.lg },
   quantityBtn: {
