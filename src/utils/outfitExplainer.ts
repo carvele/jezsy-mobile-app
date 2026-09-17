@@ -221,26 +221,26 @@ export function explainOutfit(
   } else if (colorMatch.label.includes('Neutral') || colorMatch.label.includes('Monochrome')) {
     colorStory = 'The cohesive neutral tones provide understated elegance without visual competition.';
   } else if (colorMatch.label.includes('Complementary')) {
-    colorStory = 'The contrasting hues create an intentional visual pop anchored by balanced proportions.';
+    colorStory = 'The contrasting hues create an intentional visual pop anchored by structured contrast.';
   } else if (colorMatch.label.includes('Analogous')) {
     colorStory = 'Adjacent color harmonies produce a seamless, calming gradient across your ensemble.';
   } else if (colorMatch.score >= 80) {
-    colorStory = 'The selected color combination creates a pleasing, balanced contrast.';
+    colorStory = 'The selected color combination creates clean visual contrast across pieces.';
   } else {
     colorStory = 'An expressive, high-contrast mix with noticeable visual contrast.';
   }
 
   // 2. Silhouette & Composition
-  let silhouetteNote = 'Balanced top and bottom proportions.';
+  let silhouetteNote = 'Proportioned top and bottom coverage.';
   if (hasDress) {
     const dressFeatures = [semantics.length, semantics.waist, semantics.neckline].filter(Boolean);
     if (dressFeatures.length > 0) {
-      silhouetteNote = `A cohesive one-piece foundation featuring a ${dressFeatures.join(' with ')} that creates an elongated, refined silhouette.`;
+      silhouetteNote = `A unified one-piece foundation featuring a ${dressFeatures.join(' with ')} that creates an elongated, refined silhouette.`;
     } else {
       silhouetteNote = 'A unified one-piece foundation creating a streamlined, elongated silhouette.';
     }
   } else if (hasOuter && hasTop && hasBottom) {
-    silhouetteNote = 'Layering with structured outerwear adds depth and frames the torso with balanced proportions.';
+    silhouetteNote = 'Layering with structured outerwear adds depth and frames the torso with clean structure.';
   } else if (hasOuter) {
     silhouetteNote = 'Layering with outerwear adds depth, structure, and versatile temperature adjustment.';
   } else if (hasShoes) {
@@ -251,8 +251,27 @@ export function explainOutfit(
   const occ = targetOccasion || 'everyday';
   let occasionFit = `Suited for ${occ} settings with effortless comfort.`;
   const lowerOcc = occ.toLowerCase();
-  if (lowerOcc.includes('work') || lowerOcc.includes('office') || lowerOcc.includes('business')) {
-    occasionFit = 'Structured styling appropriate for professional, focused environments.';
+
+  const hasAthleticPiece = items.some((item) => {
+    const text = [
+      (item as any).name,
+      item.sub_category,
+      item.category,
+      item.description,
+      (item as any).where_worn_often,
+      ((item as any).occasions || []).join(' '),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return text.match(/\b(running|gym|workout|jogging|athletic|track|sweatpants|jersey)\b/) !== null;
+  });
+
+  const isFormalEvent = lowerOcc.includes('formal') || lowerOcc.includes('wedding') || lowerOcc.includes('black tie') || lowerOcc.includes('gala');
+
+  if (isFormalEvent && hasAthleticPiece) {
+    occasionFit = 'Athletic garments conflict with the elevated dress code required for formal celebrations.';
+  } else if (lowerOcc.includes('work') || lowerOcc.includes('office') || lowerOcc.includes('business')) {
+    occasionFit = hasAthleticPiece
+      ? 'Athletic items clash with professional office standards.'
+      : 'Structured styling appropriate for professional, focused environments.';
   } else if (lowerOcc.includes('formal') || lowerOcc.includes('wedding') || lowerOcc.includes('church')) {
     occasionFit = 'Refined cut and tailored balance designed for formal celebrations, church, and ceremonies.';
   } else if (lowerOcc.includes('dinner') || lowerOcc.includes('date') || lowerOcc.includes('night')) {
@@ -263,8 +282,10 @@ export function explainOutfit(
 
   // 4. Headline
   let headline = 'Likely to Work Well';
-  if (isStatementWithNeutralAnchor && hasNeutralBlazerOrOuter) {
-    headline = 'Smart Casual Statement Look';
+  if (isFormalEvent && hasAthleticPiece) {
+    headline = 'Formality Mismatch';
+  } else if (isStatementWithNeutralAnchor && hasNeutralBlazerOrOuter) {
+    headline = lowerOcc.includes('casual') ? 'Street-Style High-Low Look' : 'Tailored Statement Look';
   } else if (hasDress && (semantics.neckline || semantics.waist)) {
     headline = 'Graceful & Tailored Silhouette';
   } else if (colorMatch.score >= 88) {
@@ -281,7 +302,12 @@ export function explainOutfit(
   let whatCouldBeBetter = '';
   let stylingTip = '';
 
-  if (isStatementWithNeutralAnchor && hasNeutralBlazerOrOuter && hasSneakersOrCasualShoes) {
+  if (isFormalEvent && hasAthleticPiece) {
+    summary = 'Athletic pieces in this outfit conflict directly with the formal dress code expected for this event.';
+    whyThisWorks = '';
+    whatCouldBeBetter = 'Replace athletic garments (such as running shorts or sneakers) with tailored formalwear.';
+    stylingTip = 'Align garment formality across all pieces when attending a formal event.';
+  } else if (isStatementWithNeutralAnchor && hasNeutralBlazerOrOuter && hasSneakersOrCasualShoes) {
     summary = 'Your blazer gives structure to the graphic shirt, while the sneakers keep the outfit relaxed and comfortable.';
     whyThisWorks = 'The tailored blazer frames the expressive print with clean lines, and the sneakers ground the look in effortless smart-casual style.';
     whatCouldBeBetter = 'The shirt already has several bright colors, so keeping the remaining pieces simple can help it stay the main focus.';
@@ -295,7 +321,7 @@ export function explainOutfit(
     const dressName = namesByType['Dress']?.[0] || 'dress';
     const detailSnippets = [semantics.neckline, semantics.waist, semantics.sleeves].filter(Boolean);
     const detailClause = detailSnippets.length > 0 ? ` with its ${detailSnippets.join(' and ')}` : '';
-    summary = `The ${dressName}${detailClause} provides an effortless standalone look with balanced visual flow.`;
+    summary = `The ${dressName}${detailClause} provides an effortless standalone look with continuous vertical flow.`;
     whyThisWorks = 'A unified one-piece garment naturally eliminates top-and-bottom cut lines, creating a flattering vertical line.';
     whatCouldBeBetter = hasShoes ? 'Ensure the hemline pairs harmoniously with your shoe height.' : 'Adding footwear will anchor the proportion and polish the silhouette.';
     stylingTip = userNotesSneakerMention && hasShoes && hasSneakersOrCasualShoes
@@ -304,8 +330,8 @@ export function explainOutfit(
   } else {
     const topDesc = namesByType['Top']?.[0] || 'top';
     const bottomDesc = namesByType['Bottom']?.[0] || 'bottom';
-    summary = `These pieces balance well together because the ${topDesc} pairs naturally with the ${bottomDesc}, while the ${allColors.slice(0, 2).join(' and ') || 'palette'} establishes a clear color story.`;
-    whyThisWorks = 'Harmonious color distribution and balanced proportions create an intentional aesthetic.';
+    summary = `The ${topDesc} pairs with the ${bottomDesc}, while the ${allColors.slice(0, 2).join(' and ') || 'palette'} establishes the color foundation.`;
+    whyThisWorks = 'Complementary colors and clear silhouette definition create an intentional aesthetic.';
     whatCouldBeBetter = hasOuter ? 'Keep inner sleeve lengths smooth beneath the outer layer.' : 'A lightweight jacket or belt can define the transition between top and bottom.';
     stylingTip = userNotesSneakerMention && hasShoes && hasSneakersOrCasualShoes
       ? 'Pairing with sneakers respects your favorite casual routine.'
@@ -314,7 +340,9 @@ export function explainOutfit(
 
   // 6. Pro Tip
   let proTip = stylingTip || 'Consider minimal jewelry or a leather belt to cleanly define the waistline.';
-  if (personalAffinity?.negativeSignals.length) {
+  if (isFormalEvent && hasAthleticPiece) {
+    proTip = 'Formal celebrations call for tailored separates, dress shoes, or a formal suit.';
+  } else if (personalAffinity?.negativeSignals.length) {
     proTip = `Tip: ${personalAffinity.negativeSignals[0]}. Try swapping an accessory if you prefer your classic routine.`;
   } else if (hasOuter && !isStatementWithNeutralAnchor) {
     proTip = 'Cuff the sleeves slightly for a modern, relaxed proportion.';

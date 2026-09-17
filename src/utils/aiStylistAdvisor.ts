@@ -133,27 +133,35 @@ export function extractColors(
   return deduped;
 }
 
+export interface GarmentSemanticData {
+  category: string;
+  subCategory: string;
+  color: string;
+  whereWornOften: string;
+  description: string;
+  userNotes: string;
+  occasions: string[];
+  seasons: string[];
+  photoUrl?: string;
+  wardrobeItemId?: string;
+  combinedText: string;
+}
+
 /**
  * Extracts full authoritative metadata text for an item from user-entered attributes.
+ * Preserves all 11 user-entered metadata dimensions without downgrading or overwriting.
  */
 function getItemSemanticText(
   item: MannequinCanvasItem,
   wardrobeItem?: WardrobeItem
-): {
-  category: string;
-  subCategory: string;
-  whereWornOften: string;
-  description: string;
-  userNotes: string;
-  combinedText: string;
-} {
+): GarmentSemanticData {
   const category = wardrobeItem?.category || item.garment_type || '';
   const subCategory = wardrobeItem?.sub_category || '';
+  const color = (wardrobeItem as any)?.color || (wardrobeItem as any)?.colors || '';
   const whereWornOften = (
     (wardrobeItem as any)?.where_worn_often ||
     (wardrobeItem as any)?.whereWornOften ||
     (wardrobeItem as any)?.ai_attributes?.whereWornOften ||
-    ((wardrobeItem as any)?.occasions || []).join(' ') ||
     ''
   );
   const description = (
@@ -166,50 +174,82 @@ function getItemSemanticText(
     (wardrobeItem as any)?.ai_attributes?.userNotes ||
     ''
   );
+  const occasions: string[] = (wardrobeItem as any)?.occasions || [];
+  const seasons: string[] = (wardrobeItem as any)?.seasons || [];
+  const photoUrl = (wardrobeItem as any)?.photo_url || item.image_url || undefined;
+  const wardrobeItemId = item.wardrobe_item_id || (wardrobeItem as any)?.id || undefined;
 
   const combinedText = [
     item.name,
     category,
     subCategory,
+    color,
     whereWornOften,
     description,
     userNotes,
+    occasions.join(' '),
+    seasons.join(' '),
   ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase();
 
-  return { category, subCategory, whereWornOften, description, userNotes, combinedText };
+  return {
+    category,
+    subCategory,
+    color,
+    whereWornOften,
+    description,
+    userNotes,
+    occasions,
+    seasons,
+    photoUrl,
+    wardrobeItemId,
+    combinedText,
+  };
 }
 
 /**
  * Determines whether an item is athletic based on user metadata.
+ * Uses explicit user text (where worn often, description, subcategory, notes) as primary evidence.
  */
-function isAthleticGarment(semantic: { combinedText: string; whereWornOften: string; description: string }): boolean {
-  const { combinedText, whereWornOften, description } = semantic;
-  // If user explicitly stated where worn often is gym/running/workout
+function isAthleticGarment(semantic: GarmentSemanticData): boolean {
+  const { combinedText, whereWornOften, description, userNotes, subCategory, occasions } = semantic;
+  // User explicitly stated where worn often is gym/running/workout
   if (whereWornOften.match(/\b(running|gym|workout|jogging|training|sport|track|fitness)\b/i)) {
     return true;
   }
-  // If description specifically notes athletic/exercise use
+  // Explicit occasion tags include athletic/workout/gym/running
+  if (occasions.some((o) => o.match(/\b(running|gym|workout|sports?|training)\b/i))) {
+    return true;
+  }
+  // Description specifically notes athletic/exercise use
   if (description.match(/\b(running|exercise|gym|workout|jogging|athletic|training|sports?)\b/i)) {
     return true;
   }
-  // If category or name denotes athletic wear
-  return combinedText.match(/\b(running shorts|gym shorts|track pants|sweatpants|sports bra|jersey|athletic sneakers|running shoes|workout leggings)\b/i) !== null;
+  // User notes specifically note athletic/exercise use
+  if (userNotes.match(/\b(running|exercise|gym|workout|jogging|athletic|training|sports?)\b/i)) {
+    return true;
+  }
+  // Subcategory explicitly athletic
+  if (subCategory.match(/\b(running|gym|workout|track|sweatpants|sports bra|athletic sneakers|running shoes)\b/i)) {
+    return true;
+  }
+  // Combined text matches athletic phrases, avoiding false positives
+  return combinedText.match(/\b(running shorts|gym shorts|track pants|sweatpants|sports bra|jersey|athletic sneakers|running shoes|workout leggings|gym wear|workout top)\b/i) !== null;
 }
 
 /**
  * Determines whether an item is formal/tailored based on user metadata.
  */
-function isFormalGarment(semantic: { combinedText: string }): boolean {
+function isFormalGarment(semantic: GarmentSemanticData): boolean {
   return semantic.combinedText.match(/\b(blazer|suit|tuxedo|gown|evening dress|cocktail dress|tailored|trousers?|dress pants|slacks|oxfords?|loafers?|derby|heels?|pumps?)\b/i) !== null;
 }
 
 /**
  * Determines whether footwear is sporty/casual sneakers.
  */
-function isCasualOrSportyFootwear(semantic: { combinedText: string }): boolean {
+function isCasualOrSportyFootwear(semantic: GarmentSemanticData): boolean {
   return semantic.combinedText.match(/\b(sneakers?|running shoes|trainers?|canvas shoes|slip.?on|flip.?flop|sandals?)\b/i) !== null;
 }
 
@@ -226,6 +266,7 @@ export function gradeOutfit(
   const additionalContext = (context?.additionalContext ?? '').trim();
   const occLower = occasion.toLowerCase();
   const addLower = additionalContext.toLowerCase();
+  const fullContextText = `${occLower} ${addLower}`.trim();
 
   // Part 28: Empty Mannequin handling
   if (!items || items.length === 0) {
@@ -330,11 +371,13 @@ export function gradeOutfit(
   const missingTopOnly = !hasDressOrFullBody && !hasOuterwear && hasBottom && !hasTop;
   const onlyAccessories = !hasDressOrFullBody && !hasTop && !hasBottom && !hasOuterwear;
 
-  // Occasion Nature Detection
-  const isHighFormality = occLower.match(/\b(wedding|formal|black.?tie|white.?tie|gala|ball|cocktail)\b/) !== null;
-  const isProfessional = occLower.match(/\b(interview|office|work|business|conference|church)\b/) !== null;
-  const isCasualOccasion = occLower.match(/\b(casual|day out|everyday|streetwear|school|errands|travel|park|hanging out)\b/) !== null;
-  const isAthleticOccasion = occLower.match(/\b(sport|gym|workout|running|yoga|fitness|athletic|training)\b/) !== null;
+  // Occasion Nature Detection (Part 6 & Part 7)
+  const isBeachOrResort = fullContextText.match(/\b(beach|resort|pool|vacation)\b/) !== null;
+  const isBeachWedding = isBeachOrResort && fullContextText.match(/\b(wedding)\b/) !== null;
+  const isHighFormality = !isBeachWedding && fullContextText.match(/\b(wedding|formal|black.?tie|white.?tie|gala|ball|cocktail|ceremony|reception)\b/) !== null;
+  const isProfessional = fullContextText.match(/\b(interview|office|work|business|conference|church)\b/) !== null;
+  const isCasualOccasion = fullContextText.match(/\b(casual|day out|everyday|streetwear|school|errands|travel|park|hanging out)\b/) !== null;
+  const isAthleticOccasion = fullContextText.match(/\b(sport|gym|workout|running|yoga|fitness|athletic|training)\b/) !== null;
 
   // Contradiction Analysis (NO AVERAGE FORMALITY)
   const contradictions: string[] = [];
@@ -344,7 +387,7 @@ export function gradeOutfit(
 
   for (const entry of itemSemantics) {
     const { item, semantic } = entry;
-    const name = item.name || semantic.category || 'Item';
+    const name = item.name || semantic.subCategory || semantic.category || 'Item';
     if (isAthleticGarment(semantic)) {
       athleticPieces.push(name);
     } else if (isFormalGarment(semantic)) {
@@ -393,7 +436,7 @@ export function gradeOutfit(
     }
   }
 
-  // Grounded search in user's actual wardrobe for real replacements (Part 23)
+  // Grounded search in user's actual wardrobe for real replacements (Part 16 & Part 24)
   const findRealWardrobeAlternative = (slot: 'bottom' | 'top' | 'shoes', formality: 'formal' | 'casual'): string | null => {
     if (!wardrobeLookup) return null;
     for (const w of Object.values(wardrobeLookup)) {
@@ -428,9 +471,9 @@ export function gradeOutfit(
   const paletteColors = extractColors(items, wardrobeLookup);
   const colorEval: ColorMatchResult = evaluateColors(paletteColors);
 
-  // Overall Assessment Formulation (Part 2 & Part 7)
+  // Overall Assessment Formulation (Part 13: Qualitative, no numeric scores or letter grades)
   let assessment: OverallAssessment = 'Appropriate for this occasion';
-  let headline = 'Refined & Harmonious';
+  let headline = 'Appropriate Outfit';
   let verdict = '';
   let stylistsTake = '';
   let whatWorks: string | undefined;
@@ -472,25 +515,67 @@ export function gradeOutfit(
       }
     }
   } else if (missingTopOnly) {
-    assessment = 'Incomplete outfit';
-    headline = 'Missing Upper-Body Garment';
-    verdict = 'A bottom piece is present, but an upper-body garment is needed.';
-    stylistsTake = 'A wearable outfit requires an upper-body piece to complement the selected bottom.';
-    whatsMissing = 'Top — add a shirt, blouse, or top to complete the look.';
-    tips.push('Add a matching top from your wardrobe drawer.');
+    // Check contextual intent for bottom + shoes without a top
+    if (isHighFormality && athleticPieces.length > 0) {
+      // Running shorts + running shoes for wedding -> strong contextual contradiction
+      assessment = 'Not appropriate for this occasion';
+      headline = 'Formality Mismatch';
+      verdict = `Athletic shorts and running shoes conflict directly with the formal standards of a ${occasionLabel}.`;
+      stylistsTake = 'Running shorts and running shoes are athletic gear that strongly clash with the elevated formal dress code required for a wedding.';
+      whatWorks = undefined;
+      whatCouldBeBetter = 'Replace athletic shorts and running shoes with tailored formalwear such as trousers and dress shoes.';
+      const realFormalBottom = findRealWardrobeAlternative('bottom', 'formal');
+      const realFormalShoes = findRealWardrobeAlternative('shoes', 'formal');
+      const missingPieces = ['Formal upper-body garment (dress shirt or formal top).'];
+      if (!realFormalBottom) {
+        missingPieces.push('Formal bottom: JeZsy could not find a suitable formal alternative in your current wardrobe.');
+      }
+      if (!realFormalShoes) {
+        missingPieces.push('Formal footwear: JeZsy could not find suitable formal footwear in your current wardrobe.');
+      }
+      whatsMissing = missingPieces.join(' ');
+      tips.push('Weddings call for tailored, elegant attire rather than athletic activewear.');
+    } else if (isAthleticOccasion) {
+      // Running shorts + running shoes for Running context -> activity appropriate
+      assessment = 'Appropriate for this occasion';
+      headline = 'Functional Running Gear';
+      verdict = `Athletic shorts and running shoes are functional for ${occasionLabel}.`;
+      stylistsTake = `Running shorts and running shoes provide high mobility and cushioning suitable for ${occasionLabel}.`;
+      whatWorks = 'Garments are purpose-built for athletic movement, breathability, and physical activity.';
+      whatCouldBeBetter = 'Add a breathable athletic running tee or tank if upper-body sun protection or coverage is desired.';
+      whatsMissing = 'Upper-body layer — add a performance running tee or tank if needed.';
+      tips.push('Opt for moisture-wicking materials for optimal performance during workouts.');
+    } else if (isCasualOccasion) {
+      // Running shorts + running shoes for Casual day out -> contextually evaluated, not automatically rejected
+      assessment = 'Could work with changes';
+      headline = 'Relaxed Athleisure';
+      verdict = `A relaxed athleisure base that could work for ${occasionLabel}, but needs an upper layer.`;
+      stylistsTake = 'Running shorts and sneakers provide relaxed comfort for everyday downtime, but adding a casual t-shirt or hoodie is needed for complete public wear.';
+      whatWorks = 'Athletic pieces provide casual comfort and high mobility for informal downtime.';
+      whatCouldBeBetter = 'Add a casual t-shirt, tank, or hoodie to complete the outfit for public wear.';
+      whatsMissing = 'Top — add a casual t-shirt, tank, or hoodie to complete your everyday look.';
+      tips.push('Pair with a relaxed crewneck t-shirt or hoodie for an effortless athleisure style.');
+    } else {
+      assessment = 'Incomplete outfit';
+      headline = 'Missing Upper-Body Garment';
+      verdict = 'A bottom piece is present, but an upper-body garment is needed.';
+      stylistsTake = 'A wearable outfit requires an upper-body piece to complement the selected bottom.';
+      whatsMissing = 'Top — add a shirt, blouse, or top to complete the look.';
+      tips.push('Add a matching top from your wardrobe drawer.');
+    }
   } else if (missingBaseTopUnderOuter) {
     // Outerwear + Bottoms + Shoes without an inner top
     if (isHighFormality && athleticPieces.length > 0) {
-      // Test 1: Blazer + Running shorts + Sneakers for Wedding
+      // Test 1 Failure Case: Blazer + Running shorts + Sneakers for Wedding
       assessment = 'Not appropriate for this occasion';
       headline = 'Formality & Structural Mismatch';
       verdict = `This combination is not suitable for a ${occasionLabel}.`;
-      stylistsTake = `The blazer adds tailored structure, but the running shorts and sneakers keep the outfit predominantly athletic and casual. For a wedding, these pieces pull in conflicting directions, and the missing upper-body base layer leaves the outfit incomplete.`;
+      stylistsTake = 'The blazer adds an elevated element, but the running shorts and running sneakers make the outfit predominantly athletic and casual. That conflicts with the stated wedding setting, and the missing base layer also leaves the outfit incomplete.';
       whatWorks = undefined; // Strictly omitted for fundamentally mismatched outfits
 
       const betterPoints: string[] = [];
       betterPoints.push('Running shorts are athletic wear, conflicting directly with wedding attire standards.');
-      if (shoes.length > 0 && isCasualOrSportyFootwear(itemSemantics.find((e) => shoes.some((s) => s.id === e.item.id))?.semantic || { combinedText: '' })) {
+      if (shoes.length > 0 && isCasualOrSportyFootwear(itemSemantics.find((e) => shoes.some((s) => s.id === e.item.id))?.semantic || { combinedText: '', whereWornOften: '', description: '', userNotes: '', subCategory: '', occasions: [], category: '', color: '', seasons: [] })) {
         betterPoints.push('Sneakers reinforce a casual/sporty aesthetic unsuitable for a formal wedding.');
       }
       betterPoints.push('The blazer requires an appropriate base top or shirt underneath.');
@@ -516,11 +601,11 @@ export function gradeOutfit(
         tips.push('Your current wardrobe does not contain an obvious formal bottom for this occasion.');
       }
     } else if (isCasualOccasion) {
-      // Test 2: Blazer + Running shorts + Sneakers for Casual Day Out
+      // Blazer + Running shorts + Sneakers for Casual Day Out
       assessment = 'Could work with changes';
       headline = 'High-Low Streetwear Concept';
       verdict = `An interesting high-low contrast that could work for ${occasionLabel}, but needs an inner top.`;
-      stylistsTake = `Pairing a tailored blazer with casual shorts and sneakers creates a recognizable high-low streetwear aesthetic, but the outfit currently lacks an inner top under the blazer.`;
+      stylistsTake = 'Pairing a tailored blazer with casual shorts and sneakers creates a recognizable high-low streetwear aesthetic, but the outfit currently lacks an inner top under the blazer.';
       whatWorks = 'The tailored structure of the blazer contrasts deliberately with relaxed athletic pieces for an intentional high-low vibe.';
       whatCouldBeBetter = 'Add a simple inner top (such as a plain crewneck t-shirt or tank) so the blazer can be styled open or closed comfortably.';
       whatsMissing = 'An upper-body base layer — add a t-shirt or casual top underneath the blazer.';
@@ -543,7 +628,7 @@ export function gradeOutfit(
     whatCouldBeBetter = contradictions.join(' ');
     tips.push(`Adjust garment formality to better align with ${occasionLabel}.`);
   } else if (hasDressOrFullBody) {
-    // Tests 3 & 4: Dress or Jumpsuit one-piece foundations
+    // Dress or Jumpsuit one-piece foundations
     const dressEntry = itemSemantics.find((e) => fullBodyItems.some((f) => f.id === e.item.id));
     const isDressAthletic = dressEntry ? isAthleticGarment(dressEntry.semantic) : false;
 
@@ -557,10 +642,10 @@ export function gradeOutfit(
       tips.push('Choose a cocktail or evening dress for formal events.');
     } else {
       assessment = 'Appropriate for this occasion';
-      headline = 'Graceful One-Piece Silhouette';
+      headline = 'Elevated One-Piece Silhouette';
       verdict = `A complete head-to-toe foundation that works well for ${occasionLabel}.`;
       stylistsTake = `The one-piece garment provides clean vertical continuity and a complete silhouette. ${hasShoes ? 'Footwear anchors the overall proportion.' : 'Adding footwear will finish the look.'}`;
-      whatWorks = 'A one-piece foundation naturally creates an unbroken, cohesive silhouette with balanced proportions.';
+      whatWorks = 'A one-piece foundation provides complete head-to-toe vertical continuity without competing layers.';
       if (!hasShoes && isHighFormality) {
         assessment = 'Could work with changes';
         whatCouldBeBetter = 'Footwear is an essential component for formal occasions.';
@@ -576,25 +661,68 @@ export function gradeOutfit(
     }
   } else if (hasTop && hasBottom) {
     // Complete Separates
-    if (isHighFormality && (athleticPieces.length > 0 || (shoes.length > 0 && isCasualOrSportyFootwear(itemSemantics.find((e) => shoes.some((s) => s.id === e.item.id))?.semantic || { combinedText: '' })))) {
+    if (isHighFormality && (athleticPieces.length > 0 || (shoes.length > 0 && isCasualOrSportyFootwear(itemSemantics.find((e) => shoes.some((s) => s.id === e.item.id))?.semantic || { combinedText: '', whereWornOften: '', description: '', userNotes: '', subCategory: '', occasions: [], category: '', color: '', seasons: [] })))) {
       assessment = 'Not appropriate for this occasion';
       headline = 'Formality Mismatch';
       verdict = `The casual or athletic pieces are out of place for a ${occasionLabel}.`;
-      stylistsTake = `While the separates provide coverage, the styling is too casual for a wedding.`;
+      stylistsTake = 'While the separates provide coverage, the styling is too casual for a wedding.';
       whatWorks = undefined;
       whatCouldBeBetter = 'Elevate the pieces by replacing athletic garments with tailored formal wear.';
       tips.push('Swap casual items for formal alternatives.');
+    } else if (isBeachWedding) {
+      // Beach wedding allows tailored shorts, linen shirts, resort styling
+      assessment = 'Appropriate for this occasion';
+      headline = 'Refined Resort Styling';
+      verdict = `Tailored resort pieces well-suited for a ${occasionLabel}.`;
+      stylistsTake = 'The tailored shorts and elevated top fit the relaxed yet celebratory expectations of a beach wedding.';
+      whatWorks = 'Tailored lightweight pieces balance polished styling with beach-ready breathability.';
+      if (!hasShoes) {
+        whatCouldBeBetter = 'Pair with clean loafers or refined resort sandals to finish the beach wedding look.';
+        tips.push('Choose footwear suitable for sand or boardwalk settings.');
+      }
+    } else if (isHighFormality) {
+      assessment = 'Appropriate for this occasion';
+      headline = 'Elevated Formal Ensemble';
+      verdict = `Tailored separates aligned with the formal expectations of ${occasionLabel}.`;
+      stylistsTake = `The tailored pieces establish an elevated presentation appropriate for ${occasionLabel}.`;
+      whatWorks = 'The structured pieces provide a clean, formal silhouette appropriate for formal celebrations.';
+      if (!hasShoes) {
+        assessment = 'Could work with changes';
+        whatCouldBeBetter = 'Formal events require appropriate dress footwear.';
+        tips.push('Complete the look with formal shoes.');
+      }
+    } else if (isProfessional) {
+      assessment = 'Appropriate for this occasion';
+      headline = 'Professional Workplace Separates';
+      verdict = `Structured pieces suitable for a ${occasionLabel} environment.`;
+      stylistsTake = 'The combination provides tailored structure and polished presence appropriate for professional settings.';
+      whatWorks = 'Structured styling delivers a crisp, work-ready silhouette.';
+      if (!hasShoes) {
+        whatCouldBeBetter = 'Adding office-appropriate shoes will finish the presentation.';
+        tips.push('Pair with loafers or work shoes.');
+      }
+    } else if (isAthleticOccasion) {
+      assessment = 'Appropriate for this occasion';
+      headline = 'Functional Athletic Gear';
+      verdict = `Performance pieces suited for ${occasionLabel}.`;
+      stylistsTake = 'The athletic separates offer optimal mobility and functional performance for physical activity.';
+      whatWorks = 'Activewear fabrics and cuts support natural movement and breathability.';
     } else {
       assessment = 'Appropriate for this occasion';
-      headline = 'Balanced & Cohesive Ensemble';
-      verdict = `A solid combination of separates calibrated for ${occasionLabel}.`;
-      stylistsTake = 'The proportions between top and bottom are well-proportioned, creating a functional and stylish outfit.';
-      whatWorks = 'The top and bottom anchor each other in silhouette and coverage.';
+      headline = 'Casual Everyday Outfit';
+      verdict = `Comfortable separates suited for ${occasionLabel}.`;
+      stylistsTake = 'The pieces create a relaxed, wearable outfit for informal daily wear.';
+      whatWorks = 'The upper and lower garments provide practical comfort and effortless daytime styling.';
       if (!hasShoes) {
         whatCouldBeBetter = 'Adding footwear will complete the head-to-toe presentation.';
-        tips.push('Choose shoes that complement the formality of your outfit.');
+        tips.push('Choose shoes that complement your outfit.');
       }
     }
+  }
+
+  // Strict invariant: when outfit is not appropriate, whyThisWorks must NOT be displayed
+  if (assessment === 'Not appropriate for this occasion') {
+    whatWorks = undefined;
   }
 
   // Personalization influence (Part 25: separate from objective occasion compatibility)
