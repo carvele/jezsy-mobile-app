@@ -118,7 +118,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS 
+AS $$
 DECLARE
   v_res reservations%rowtype;
   v_window_days integer := 7;
@@ -146,7 +146,7 @@ BEGIN
 
   RETURN (now() - v_anchor) <= (v_window_days || ' days')::interval;
 END;
-;
+$$;
 
 REVOKE ALL ON FUNCTION public.is_reservation_return_eligible(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_reservation_return_eligible(uuid) TO authenticated, anon;
@@ -164,7 +164,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS 
+AS $$
 DECLARE
   v_actor uuid := auth.uid();
   v_res reservations%rowtype;
@@ -239,9 +239,10 @@ BEGIN
     'submitted_at', v_req.submitted_at
   );
 END;
-;
+$$;
 
 REVOKE ALL ON FUNCTION public.request_customer_refund(uuid, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.request_customer_refund(uuid, text, text, text) FROM anon;
 GRANT EXECUTE ON FUNCTION public.request_customer_refund(uuid, text, text, text) TO authenticated;
 
 -- ============================================================================
@@ -255,7 +256,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS 
+AS $$
 DECLARE
   v_actor uuid := auth.uid();
   v_res reservations%rowtype;
@@ -310,9 +311,10 @@ BEGIN
 
   RETURN jsonb_build_object('success', true, 'reservation_id', _reservation_id);
 END;
-;
+$$;
 
 REVOKE ALL ON FUNCTION public.cancel_customer_reservation(uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.cancel_customer_reservation(uuid, text) FROM anon;
 GRANT EXECUTE ON FUNCTION public.cancel_customer_reservation(uuid, text) TO authenticated;
 
 -- ============================================================================
@@ -327,7 +329,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS 
+AS $$
 DECLARE
   v_actor uuid := auth.uid();
   v_req return_refund_requests%rowtype;
@@ -396,7 +398,8 @@ BEGIN
     'decision', v_normalized_decision
   );
 END;
-;
+$$;
 
 REVOKE ALL ON FUNCTION public.review_return_refund_request(uuid, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.review_return_refund_request(uuid, text, text) FROM anon;
 GRANT EXECUTE ON FUNCTION public.review_return_refund_request(uuid, text, text) TO authenticated;

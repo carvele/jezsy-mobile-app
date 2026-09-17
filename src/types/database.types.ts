@@ -2303,6 +2303,76 @@ export type Database = {
           },
         ]
       }
+      return_refund_requests: {
+        Row: {
+          created_at: string
+          customer_id: string
+          details: string | null
+          id: string
+          photo_path: string | null
+          reason_category: string
+          reservation_id: string
+          resolution_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          details?: string | null
+          id?: string
+          photo_path?: string | null
+          reason_category: string
+          reservation_id: string
+          resolution_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          details?: string | null
+          id?: string
+          photo_path?: string | null
+          reason_category?: string
+          reservation_id?: string
+          resolution_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "return_refund_requests_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_refund_requests_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_refund_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       review_votes: {
         Row: {
           created_at: string
@@ -3074,6 +3144,10 @@ export type Database = {
       can_operate_reservations: { Args: never; Returns: boolean }
       can_publish_legal_documents: { Args: never; Returns: boolean }
       can_view_customer_measurements: { Args: never; Returns: boolean }
+      cancel_customer_reservation: {
+        Args: { _reason?: string; _reservation_id: string }
+        Returns: Json
+      }
       cancel_reservation_as_manager: {
         Args: {
           _expected_status: string
@@ -3466,6 +3540,10 @@ export type Database = {
       }
       is_device_approved: { Args: never; Returns: boolean }
       is_owner: { Args: never; Returns: boolean }
+      is_reservation_return_eligible: {
+        Args: { _reservation_id: string }
+        Returns: boolean
+      }
       is_staff_or_admin: { Args: never; Returns: boolean }
       low_stock_threshold: { Args: never; Returns: number }
       mark_direct_message_read: {
@@ -3597,6 +3675,15 @@ export type Database = {
         Returns: Json
       }
       request_account_deletion: { Args: { _reason?: string }; Returns: string }
+      request_customer_refund: {
+        Args: {
+          _details?: string
+          _photo_path?: string
+          _reason_category: string
+          _reservation_id: string
+        }
+        Returns: Json
+      }
       request_reschedule:
         | {
             Args: {
@@ -3655,6 +3742,10 @@ export type Database = {
           _reservation_id: string
           _staff_note?: string
         }
+        Returns: Json
+      }
+      review_return_refund_request: {
+        Args: { _decision: string; _notes?: string; _request_id: string }
         Returns: Json
       }
       save_pose_guide: {
