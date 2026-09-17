@@ -2317,6 +2317,8 @@ export type Database = {
           reviewed_by: string | null
           status: string
           submitted_at: string
+          under_review_at: string | null
+          under_review_by: string | null
           updated_at: string
         }
         Insert: {
@@ -2332,6 +2334,8 @@ export type Database = {
           reviewed_by?: string | null
           status?: string
           submitted_at?: string
+          under_review_at?: string | null
+          under_review_by?: string | null
           updated_at?: string
         }
         Update: {
@@ -2347,6 +2351,8 @@ export type Database = {
           reviewed_by?: string | null
           status?: string
           submitted_at?: string
+          under_review_at?: string | null
+          under_review_by?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2367,6 +2373,13 @@ export type Database = {
           {
             foreignKeyName: "return_refund_requests_reviewed_by_fkey"
             columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_refund_requests_under_review_by_fkey"
+            columns: ["under_review_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
