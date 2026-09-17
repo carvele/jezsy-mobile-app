@@ -15,20 +15,29 @@ export async function getReturnRequestWindowDays(): Promise<number> {
     const { data, error } = await supabase
       .from('settings')
       .select('key, value')
-      .in('key', ['commerce.return_request_window_days', 'commerce_policies'])
-      .limit(2);
+      .in('key', ['returnRequestWindow', 'commerce.return_request_window_days', 'commerce_policies'])
+      .limit(3);
     if (error) throw error;
     let days = DEFAULT_RETURN_REQUEST_WINDOW_DAYS;
     if (data && data.length > 0) {
-      const directRow = data.find((r) => r.key === 'commerce.return_request_window_days');
-      if (directRow && directRow.value != null) {
-        const val = typeof directRow.value === 'number' ? directRow.value : Number(directRow.value);
-        if (!Number.isNaN(val) && val > 0) days = val;
+      const canonicalRow = data.find((r) => r.key === 'returnRequestWindow');
+      if (canonicalRow && canonicalRow.value != null) {
+        const rawDays = typeof canonicalRow.value === 'object' && canonicalRow.value !== null
+          ? (canonicalRow.value as Record<string, unknown>).days
+          : canonicalRow.value;
+        const parsed = typeof rawDays === 'number' ? rawDays : Number(rawDays);
+        if (!Number.isNaN(parsed) && parsed > 0) days = parsed;
       } else {
-        const policyRow = data.find((r) => r.key === 'commerce_policies');
-        const policyVal = (policyRow?.value as Record<string, unknown> | null)?.return_request_window_days;
-        if (typeof policyVal === 'number' && policyVal > 0) {
-          days = policyVal;
+        const directRow = data.find((r) => r.key === 'commerce.return_request_window_days');
+        if (directRow && directRow.value != null) {
+          const val = typeof directRow.value === 'number' ? directRow.value : Number(directRow.value);
+          if (!Number.isNaN(val) && val > 0) days = val;
+        } else {
+          const policyRow = data.find((r) => r.key === 'commerce_policies');
+          const policyVal = (policyRow?.value as Record<string, unknown> | null)?.return_request_window_days;
+          if (typeof policyVal === 'number' && policyVal > 0) {
+            days = policyVal;
+          }
         }
       }
     }

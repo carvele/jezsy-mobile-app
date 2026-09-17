@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, LayoutAnimation, Platform, UIManager, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -364,17 +364,30 @@ export default function ReservationDetailScreen() {
   // Manual transfer path. Uploading only records the claim -- staff still have
   // to verify it, which is what stops a junk image from holding the item.
   //
-  // Opens the instructions/metadata form instead of the image picker directly
-  // -- a customer must be shown WHERE to send money and give staff structured
-  // context (method/amount/reference) before a bare receipt image is judged
-  // in isolation. Defaults the method to whichever single manual method is
-  // enabled; if both are enabled the customer picks.
+  // Availability is method-authoritative: if either GCash or Bank Transfer is
+  // enabled, manual payment is available for the customer.
+  const gcashEnabled = Boolean(paymentInstructions?.gcash_enabled);
+  const bankEnabled = Boolean(paymentInstructions?.bank_transfer_enabled);
+  const isManualPaymentEnabled = gcashEnabled || bankEnabled;
+
+  const manualPaymentButtonLabel = useMemo(() => {
+    if (gcashEnabled && !bankEnabled) return 'Pay via GCash transfer / Upload receipt';
+    if (bankEnabled && !gcashEnabled) return 'Pay via bank transfer / Upload receipt';
+    return 'Pay by transfer / Upload receipt';
+  }, [gcashEnabled, bankEnabled]);
+
+  const balanceManualPaymentButtonLabel = useMemo(() => {
+    if (gcashEnabled && !bankEnabled) return 'Pay balance via GCash / Upload receipt';
+    if (bankEnabled && !gcashEnabled) return 'Pay balance via bank / Upload receipt';
+    return 'Pay balance by transfer / Upload receipt';
+  }, [gcashEnabled, bankEnabled]);
+
   const openManualPayment = () => {
-    if (!paymentInstructions?.manual_payment_enabled) return;
+    if (!isManualPaymentEnabled) return;
     const onlyMethod: ManualMethod | null =
-      paymentInstructions.gcash_enabled && !paymentInstructions.bank_transfer_enabled
+      gcashEnabled && !bankEnabled
         ? 'gcash'
-        : paymentInstructions.bank_transfer_enabled && !paymentInstructions.gcash_enabled
+        : bankEnabled && !gcashEnabled
           ? 'bank_transfer'
           : null;
     setManualMethod(onlyMethod);
@@ -434,11 +447,11 @@ export default function ReservationDetailScreen() {
   };
 
   const openBalanceManualPayment = () => {
-    if (!paymentInstructions?.manual_payment_enabled) return;
+    if (!isManualPaymentEnabled) return;
     const onlyMethod: ManualMethod | null =
-      paymentInstructions.gcash_enabled && !paymentInstructions.bank_transfer_enabled
+      gcashEnabled && !bankEnabled
         ? 'gcash'
-        : paymentInstructions.bank_transfer_enabled && !paymentInstructions.gcash_enabled
+        : bankEnabled && !gcashEnabled
           ? 'bank_transfer'
           : null;
     const rawBal = (reservation?.rental_price || 0) - (reservation?.deposit || 0);
@@ -931,18 +944,18 @@ export default function ReservationDetailScreen() {
               </TouchableOpacity>
             )}
 
-            {paymentInstructions?.manual_payment_enabled && !showManualPayment && (
+            {isManualPaymentEnabled && !showManualPayment && (
               <TouchableOpacity
                 style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingReceipt || isPaymentProcessing ? 0.6 : 1 }]}
                 onPress={openManualPayment}
                 disabled={payBusy || uploadingReceipt || isPaymentProcessing}
                 accessibilityRole="button"
-                accessibilityLabel="Pay by manual transfer"
+                accessibilityLabel={manualPaymentButtonLabel}
                 accessibilityHint="Shows where to send payment, then lets you upload a receipt for staff to check"
                 accessibilityState={{ disabled: payBusy || uploadingReceipt || isPaymentProcessing }}
               >
                 <Text style={[styles.paySecondaryText, { color: colors.text }]}>
-                  I&apos;ll pay by transfer
+                  {manualPaymentButtonLabel}
                 </Text>
               </TouchableOpacity>
             )}
@@ -1188,7 +1201,7 @@ export default function ReservationDetailScreen() {
             >
               {payBusy ? <ActivityIndicator color={colors.onTint} /> : <Text style={[styles.payPrimaryText, { color: colors.onTint }]}>Pay balance with GCash</Text>}
             </TouchableOpacity>
-            {paymentInstructions?.manual_payment_enabled && (
+            {isManualPaymentEnabled && (
               <TouchableOpacity
                 style={[styles.paySecondary, { borderColor: colors.tint }]}
                 onPress={openBalanceManualPayment}
@@ -1222,18 +1235,18 @@ export default function ReservationDetailScreen() {
               )}
             </TouchableOpacity>
 
-            {paymentInstructions?.manual_payment_enabled && !showBalanceManualPayment && (
+            {isManualPaymentEnabled && !showBalanceManualPayment && (
               <TouchableOpacity
                 style={[styles.paySecondary, { borderColor: colors.border, opacity: payBusy || uploadingBalanceReceipt ? 0.6 : 1 }]}
                 onPress={openBalanceManualPayment}
                 disabled={payBusy || uploadingBalanceReceipt}
                 accessibilityRole="button"
-                accessibilityLabel="Pay remaining balance by manual transfer"
+                accessibilityLabel={balanceManualPaymentButtonLabel}
                 accessibilityHint="Shows where to send remaining balance, then lets you upload a receipt for staff to check"
                 accessibilityState={{ disabled: payBusy || uploadingBalanceReceipt }}
               >
                 <Text style={[styles.paySecondaryText, { color: colors.text }]}>
-                  I&apos;ll pay balance by transfer
+                  {balanceManualPaymentButtonLabel}
                 </Text>
               </TouchableOpacity>
             )}
