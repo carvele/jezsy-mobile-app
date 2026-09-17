@@ -71,11 +71,29 @@ const getPlaceholderImageUri = (): string => {
   return "";
 };
 
+// Cache sold count keyed by style_code (or product_id when no style_code)
+// to prevent visual flicker when navigating between color siblings.
+const styleSoldCountCache = new Map<string, number>();
+
+const formatSoldCount = (count: number): string => {
+  if (count >= 1_000_000) {
+    const m = count / 1_000_000;
+    return `${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M`;
+  }
+  if (count >= 1000) {
+    const k = count / 1000;
+    return `${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}k`;
+  }
+  return count.toLocaleString();
+};
+
 export default function ProductDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
-  const [reviewStats, setReviewStats] = useState<{ average: number; count: number } | null>(null);
+  const [soldCount, setSoldCount] = useState<number | null>(() => {
+    return id ? (styleSoldCountCache.get(id) ?? null) : null;
+  });
   const [siblingProducts, setSiblingProducts] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const [lovedByCount, setLovedByCount] = useState(0);
@@ -116,10 +134,10 @@ export default function ProductDetailScreen() {
     useCallback(() => {
       const fetchProductAndInventory = async () => {
         try {
-          const [productRes, invRes, statsRes] = await Promise.all([
+          const [productRes, invRes, soldRes] = await Promise.all([
             supabase.from("products").select(`*, ${CATEGORY_SELECT}`).eq("id", id).single(),
             supabase.from("product_variants").select("*").eq("product_doc_id", id),
-            supabase.rpc("get_review_stats" as any, { p_product_id: id })
+            supabase.rpc("get_product_sold_count", { p_product_id: id }),
           ]);
 
           if (productRes.error) {
@@ -128,12 +146,16 @@ export default function ProductDetailScreen() {
             const data = productRes.data;
             setProduct(data);
 
-            if (statsRes && statsRes.data) {
-              const statsData = statsRes.data as any;
-              setReviewStats({
-                average: Number(statsData.average || 0),
-                count: Number(statsData.count || 0),
-              });
+            if (data.style_code && styleSoldCountCache.has(data.style_code)) {
+              setSoldCount(styleSoldCountCache.get(data.style_code)!);
+            }
+
+            if (soldRes && typeof soldRes.data === 'number') {
+              setSoldCount(soldRes.data);
+              if (data.style_code) {
+                styleSoldCountCache.set(data.style_code, soldRes.data);
+              }
+              styleSoldCountCache.set(data.id, soldRes.data);
             }
             
             // Fetch loved by data
@@ -368,6 +390,12 @@ export default function ProductDetailScreen() {
     });
 
     if (matchingSibling && matchingSibling.id !== product?.id) {
+      if (product?.style_code && soldCount !== null) {
+        styleSoldCountCache.set(product.style_code, soldCount);
+      }
+      if (soldCount !== null) {
+        styleSoldCountCache.set(matchingSibling.id, soldCount);
+      }
       router.replace({
         pathname: "/product/[id]",
         params: { id: matchingSibling.id },
@@ -574,26 +602,13 @@ export default function ProductDetailScreen() {
 
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{product.name}</Text>
 
-          {(() => {
-            const displayRating = reviewStats !== null
-              ? reviewStats.average
-              : (product.rating ? Number(product.rating) : 0);
-            const displayReviewCount = reviewStats !== null
-              ? reviewStats.count
-              : (product.review_count || 0);
-
-            if (displayReviewCount <= 0 || displayRating <= 0) return null;
-
-            return (
-              <View style={styles.ratingRow}>
-                <IconSymbol name="star.fill" size={13} color={colors.tint} />
-                <Text style={[styles.ratingValue, { color: colors.text }]}>{displayRating.toFixed(1)}</Text>
-                <Text style={[styles.ratingCount, { color: colors.secondaryText }]}>
-                  ({displayReviewCount} {displayReviewCount === 1 ? 'review' : 'reviews'})
-                </Text>
-              </View>
-            );
-          })()}
+          {soldCount !== null && soldCount > 0 ? (
+            <View style={styles.soldRow}>
+              <Text style={[styles.soldText, { color: colors.secondaryText }]}>
+                {formatSoldCount(soldCount)} sold
+              </Text>
+            </View>
+          ) : null}
 
           {/* Social Proof: Loved By */}
           {lovedByCount > 0 && (
@@ -887,11 +902,7 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
 
           {/* Customer Reviews & Ratings */}
-          <ReviewsList
-            productId={product.id}
-            productName={product.name}
-            onStatsLoaded={setReviewStats}
-          />
+          <ReviewsList productId={product.id} productName={product.name} />
 
           {/* Styled Looks - real curated editorial content, ahead of the
               algorithmic Complete the Look suggestions below */}
@@ -1134,9 +1145,8 @@ const createStyles = (colors: any) => StyleSheet.create({
   // price 24/800, which read as two headings.
   // 26 has no slot; headline is 24/800, same weight two points down.
   title: { ...Type.headline, marginBottom: 6 },
-  ratingRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
-  ratingValue: { fontSize: 13, fontWeight: "700" },
-  ratingCount: { fontSize: 13 },
+  soldRow: { marginBottom: 6 },
+  soldText: { ...Type.caption, fontWeight: "500" },
   priceRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, marginBottom: Spacing.xl },
   price: { ...Type.title },
   priceOriginal: { fontSize: 14, textDecorationLine: 'line-through', fontWeight: '500' },

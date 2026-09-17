@@ -1,0 +1,4 @@
+-- Rollback: 20260917143000_get_product_sold_count_rpc.sql.rollback
+
+DROP FUNCTION IF EXISTS public.get_product_sold_count(uuid);
+DROP INDEX IF EXISTS public.idx_products_style_code;
