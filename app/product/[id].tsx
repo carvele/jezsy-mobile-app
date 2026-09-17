@@ -412,29 +412,33 @@ export default function ProductDetailScreen() {
     );
   }
 
+  // product_variants only carries a boolean is_available (plus is_low_stock/
+  // stock_status) -- there is no per-variant quantity column. Treating
+  // is_available as a quantity (true -> 1, false -> 0) produced a fixed
+  // "Only 1 left" that never changed as reservations were made, decoupled
+  // from products.stock (the real, live-decrementing shared count). Use the
+  // real number for any available variant instead of fabricating one.
   const getStockInfo = (size?: string | null, color?: string | null): number | null => {
+    const realStock = product.stock ?? null;
     if (inventory && inventory.length > 0) {
       if (size) {
         const inv = inventory.find((i: any) =>
           i.size === size &&
           (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
         );
-        if (inv) return inv.is_available ? 1 : 0;
+        if (inv) return inv.is_available ? (realStock ?? 1) : 0;
         // If variants are tracked for this product, an unlisted variant combination has 0 available
         const hasSizeVariant = inventory.some((i: any) => i.size === size);
         if (hasSizeVariant) return 0;
       } else if (color) {
         const matching = inventory.filter((i: any) => !i.color || i.color.toLowerCase() === color.toLowerCase());
         if (matching.length > 0) {
-          return matching.some((i: any) => i.is_available) ? 1 : 0;
+          return matching.some((i: any) => i.is_available) ? (realStock ?? 1) : 0;
         }
       }
     }
     // Fallback to top-level product stock if variants are not tracked
-    if (product.stock !== null && product.stock !== undefined) {
-      return product.stock;
-    }
-    return null;
+    return realStock;
   };
 
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
@@ -451,7 +455,13 @@ export default function ProductDetailScreen() {
   const canPurchase = !isSizingUnavailable && hasRequiredSelection && !selectedSizeOutOfStock && !isProductOutOfStock;
   const sizeChart = (product.measurements as ProductMeasurements | null) || null;
   const hasSizeChart = !!sizeChart && (product.sizes || []).some(s => sizeChart[s]);
-  const maxQuantity = 10;
+  // 10 is just a sane upper bound for the stepper UI -- selectedStock (the
+  // real per-size/colour inventory count) is the actual cap. Capping only at
+  // 10 let a customer request more units than existed: with 1 in stock, the
+  // "+" button still climbed to 10, and create_reservation_multi has no
+  // stock check of its own, so the reservation would have been accepted for
+  // 9 units that don't exist.
+  const maxQuantity = selectedStock !== null ? Math.max(Math.min(10, selectedStock), 0) : 10;
   const effectiveQuantity = Math.min(Math.max(quantity, 1), Math.max(maxQuantity, 1));
 
   return (
