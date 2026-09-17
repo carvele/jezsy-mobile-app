@@ -203,9 +203,17 @@ export default function ReservationsScreen() {
     const badgeColor = getStatusColor(displayState.badgeColorType);
 
     return (
-      <TouchableOpacity
-        style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-        accessible={true}
+      // The action buttons below (To Pay, Cancel, Return/Refund, ...) used to
+      // live inside this card's own onPress. On web that put a real <button>
+      // inside a <button> -- invalid HTML, and every action's click also
+      // bubbled to the card's navigate-to-details handler. Splitting the
+      // navigable area (header+body) from the actions row as siblings, both
+      // inside a plain, non-interactive View carrying the card's visual
+      // border/background, removes the DOM nesting instead of just working
+      // around its side effect.
+      <View style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <TouchableOpacity
+          accessible={true}
         accessibilityRole="button"
         accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${displayState.label}${hasRefundPending ? ', refund in progress' : ''}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
         accessibilityHint="View reservation details"
@@ -252,6 +260,7 @@ export default function ReservationsScreen() {
             <Text style={[styles.price, { color: colors.tint }]}>₱{(item.rental_price || 0).toFixed(2)}</Text>
           </View>
         </View>
+      </TouchableOpacity>
 
         {cardActions.length > 0 && (
           <View style={[styles.cardActionsRow, { borderTopColor: colors.border }]}>
@@ -345,7 +354,7 @@ export default function ReservationsScreen() {
             })}
           </View>
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 

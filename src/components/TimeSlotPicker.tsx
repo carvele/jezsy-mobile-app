@@ -316,8 +316,14 @@ export function TimeSlotPicker({
         <Pressable
           style={styles.modalOverlay}
           onPress={() => setPickerOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel="Close time picker"
+          // Explicit "none": react-native-web defaults any Pressable with an
+          // onPress to role="button" (hence an actual <button> tag) even with
+          // no accessibilityRole prop at all. This backdrop wraps the sheet's
+          // own "Done" button (accessibilityRole="button"), so leaving the
+          // default in place still nests a <button> inside a <button>. The
+          // Done button already gives screen readers a real, labelled close
+          // action -- this backdrop is just a tap-outside-to-dismiss layer.
+          accessibilityRole="none"
         >
           <TouchableOpacity style={[styles.sheet, { backgroundColor: colors.card }]} activeOpacity={1}>
             <View style={styles.sheetHeader}>
