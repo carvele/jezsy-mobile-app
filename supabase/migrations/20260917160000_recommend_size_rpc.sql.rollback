@@ -1,0 +1,71 @@
+-- Rollback for 20260917160000_recommend_size_rpc.sql
+
+DROP FUNCTION IF EXISTS public.search_catalog(text, text[], text[], text[], text[], text[], text[], boolean, boolean, boolean, numeric, numeric, text, boolean, jsonb);
+
+CREATE OR REPLACE FUNCTION public.search_catalog(
+  search_query text DEFAULT NULL::text,
+  category_ids text[] DEFAULT NULL::text[],
+  size_filters text[] DEFAULT NULL::text[],
+  color_filters text[] DEFAULT NULL::text[],
+  fit_filters text[] DEFAULT NULL::text[],
+  material_filters text[] DEFAULT NULL::text[],
+  tag_filters text[] DEFAULT NULL::text[],
+  on_sale_only boolean DEFAULT false,
+  new_arrivals_only boolean DEFAULT false,
+  ar_only boolean DEFAULT false,
+  min_price numeric DEFAULT NULL::numeric,
+  max_price numeric DEFAULT NULL::numeric,
+  sort_by text DEFAULT 'recommended'::text
+)
+RETURNS SETOF public.products
+LANGUAGE sql
+SET search_path TO 'public'
+AS $function$
+  SELECT p.*
+  FROM public.products p
+  WHERE p.visibility = 'public' AND p.deleted = false
+    AND (
+      (search_query IS NULL AND category_ids IS NULL) OR
+      (search_query IS NOT NULL AND category_ids IS NULL AND p.name ILIKE '%' || search_query || '%') OR
+      (search_query IS NULL AND category_ids IS NOT NULL AND p.category_id = ANY(category_ids)) OR
+      (search_query IS NOT NULL AND category_ids IS NOT NULL AND (p.name ILIKE '%' || search_query || '%' OR p.category_id = ANY(category_ids)))
+    )
+    AND (size_filters IS NULL OR p.sizes && size_filters)
+    AND (color_filters IS NULL OR 
+      EXISTS (
+        SELECT 1 FROM unnest(color_filters) AS c
+        WHERE p.color ILIKE '%' || c || '%' OR p.base_color ILIKE '%' || c || '%'
+      )
+    )
+    AND (fit_filters IS NULL OR 
+      EXISTS (
+        SELECT 1 FROM unnest(fit_filters) AS f
+        WHERE p.fit_and_sizing ILIKE '%' || f || '%'
+      )
+    )
+    AND (material_filters IS NULL OR 
+      EXISTS (
+        SELECT 1 FROM unnest(material_filters) AS m
+        WHERE p.material ILIKE '%' || m || '%'
+      )
+    )
+    AND (tag_filters IS NULL OR p.tags && tag_filters)
+    AND (NOT on_sale_only OR p.on_sale = true)
+    AND (NOT new_arrivals_only OR p.is_new_arrival = true)
+    AND (NOT ar_only OR (p.model_3d_url IS NOT NULL AND 'AR Try-On' = ANY(p.tags)))
+    AND (min_price IS NULL OR COALESCE(p.sale_price, p.price) >= min_price)
+    AND (max_price IS NULL OR COALESCE(p.sale_price, p.price) <= max_price)
+  ORDER BY
+    CASE WHEN p.stock > 0 THEN 0 ELSE 1 END ASC,
+    CASE WHEN sort_by = 'priceAsc' THEN COALESCE(p.sale_price, p.price) END ASC,
+    CASE WHEN sort_by = 'priceDesc' THEN COALESCE(p.sale_price, p.price) END DESC,
+    CASE WHEN sort_by = 'popular' THEN p.review_count END DESC,
+    CASE WHEN sort_by = 'rating' THEN p.rating END DESC,
+    p.created_at DESC,
+    p.id ASC;
+$function$;
+
+GRANT EXECUTE ON FUNCTION public.search_catalog(text, text[], text[], text[], text[], text[], text[], boolean, boolean, boolean, numeric, numeric, text) TO authenticated, anon;
+
+DROP FUNCTION IF EXISTS public.recommend_size(jsonb, jsonb, text, text);
+DROP FUNCTION IF EXISTS public.to_numeric(jsonb);

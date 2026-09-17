@@ -65,7 +65,8 @@ const SORT_OPTIONS = [
   { id: 'newest', label: 'Newest Arrivals' },
   { id: 'priceAsc', label: 'Price: Low to High' },
   { id: 'priceDesc', label: 'Price: High to Low' },
-  { id: 'popular', label: 'Most Popular' },
+  { id: 'bestSelling', label: 'Best Selling' },
+  { id: 'popular', label: 'Most Reviewed' },
   { id: 'rating', label: 'Best Rated' },
 ];
 
@@ -423,6 +424,8 @@ export default function ExploreScreen() {
         min_price: isNaN(minPrice as number) ? null : minPrice,
         max_price: isNaN(maxPrice as number) ? null : maxPrice,
         sort_by: selectedSort,
+        my_size_only: selectedMySizeOnly,
+        user_measurements: sizingMeasurements || null,
       }).select(PRODUCT_SELECT);
 
       if (error) {
@@ -471,7 +474,7 @@ export default function ExploreScreen() {
     subCategoryIdsMatching, showToast,
     selectedSizes, selectedColors, selectedFits, selectedMaterials, selectedTags,
     selectedSaleOnly, selectedNewArrivalsOnly, selectedArOnly,
-    customMinPrice, customMaxPrice, selectedPriceRange, selectedSort,
+    customMinPrice, customMaxPrice, selectedPriceRange, selectedSort, selectedMySizeOnly, sizingMeasurements,
   ]);
 
   // Trigger search on query change
@@ -579,12 +582,14 @@ export default function ExploreScreen() {
       min_price: isNaN(minPrice as number) ? null : minPrice,
       max_price: isNaN(maxPrice as number) ? null : maxPrice,
       sort_by: selectedSort,
+      my_size_only: selectedMySizeOnly,
+      user_measurements: sizingMeasurements || null,
     }).select(PRODUCT_SELECT);
   }, [
     showAllProducts, selectedCategory, selectedSubCategory, subCategoriesByParent, subCategoryIdByName,
     selectedSizes, selectedColors, selectedFits, selectedMaterials, selectedTags,
     selectedSaleOnly, selectedNewArrivalsOnly, selectedArOnly,
-    customMinPrice, customMaxPrice, selectedPriceRange, selectedSort,
+    customMinPrice, customMaxPrice, selectedPriceRange, selectedSort, selectedMySizeOnly, sizingMeasurements,
   ]);
 
   // Fetch page 0 whenever the active category/subcategory/"Shop All" mode changes.
@@ -824,28 +829,18 @@ export default function ExploreScreen() {
       }
     }
 
-    if (!selectedMySizeOnly) {
-      // Availability is the primary ranking gate: sold-out items always sort
-      // last so in-stock products dominate browsable inventory. The secondary
-      // order (server-assigned score, newest, price etc.) is preserved within
-      // each availability group via a stable sort.
-      return [...source].sort((a, b) => {
-        const aOut = typeof a.stock === 'number' && a.stock <= 0;
-        const bOut = typeof b.stock === 'number' && b.stock <= 0;
-        if (aOut === bOut) return 0;
-        return aOut ? 1 : -1;
-      });
-    }
-
-    return source.filter((product) => {
-      const rec = recommendedSizes.get(product.id);
-      if (!rec) return false;
-      const sizes = product.sizes || [];
-      if (sizes.length > 0 && !sizes.includes(rec)) return false;
-      return true;
+    // Availability is the primary ranking gate: sold-out items always sort
+    // last so in-stock products dominate browsable inventory. The secondary
+    // order (server-assigned score, newest, price etc.) is preserved within
+    // each availability group via a stable sort.
+    return [...source].sort((a, b) => {
+      const aOut = typeof a.stock === 'number' && a.stock <= 0;
+      const bOut = typeof b.stock === 'number' && b.stock <= 0;
+      if (aOut === bOut) return 0;
+      return aOut ? 1 : -1;
     });
   }, [
-    products, searchResults, isSearchActive, selectedMySizeOnly, recommendedSizes,
+    products, searchResults, isSearchActive,
     selectedSizes, selectedColors, selectedArOnly, selectedFits, selectedMaterials, selectedTags,
     customMinPrice, customMaxPrice, selectedPriceRange,
   ]);
