@@ -346,8 +346,16 @@ BEGIN
     RAISE EXCEPTION 'Request not found.' USING ERRCODE = 'P0002';
   END IF;
 
-  IF v_req.status IN ('approved', 'refunded') THEN
-    RAISE EXCEPTION 'Request has already been approved or refunded.' USING ERRCODE = 'check_violation';
+  IF v_req.status = 'approved' THEN
+    RAISE EXCEPTION 'Request has already been approved.' USING ERRCODE = 'check_violation';
+  ELSIF v_req.status = 'rejected' THEN
+    RAISE EXCEPTION 'Request has already been rejected.' USING ERRCODE = 'check_violation';
+  ELSIF v_req.status = 'refunded' THEN
+    RAISE EXCEPTION 'Request has already been refunded.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_req.status = 'under_review' AND v_normalized_decision = 'under_review' THEN
+    RAISE EXCEPTION 'Request is already under review.' USING ERRCODE = 'check_violation';
   END IF;
 
   IF v_normalized_decision = 'approve' THEN
