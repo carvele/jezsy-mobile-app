@@ -524,12 +524,43 @@ export async function updateItem(
       ai_attributes: Object.keys(updatedAiAttributes).length > 0 ? updatedAiAttributes : null,
     };
 
-    const { data: updated, error: updateErr } = await (supabase.from('wardrobe_items') as any)
+    let { data: updated, error: updateErr } = await (supabase.from('wardrobe_items') as any)
       .update(updatePayload)
       .eq('id', itemId)
       .eq('user_id', userId)
       .select('*')
       .single();
+
+    // Fallback: If newer columns (e.g. ai_attributes, occasions) are pending in schema cache or unapplied migration, retry with base columns
+    if (updateErr && (updateErr.code === 'PGRST204' || updateErr.message?.includes('schema cache') || updateErr.message?.includes('column'))) {
+      const basePayload: Record<string, any> = {
+        category: effectiveCategory,
+        sub_category: effectiveSub,
+        garment_type: newBucket,
+        description: effectiveDesc,
+        user_notes: effectiveNotes,
+        color_tags: effectiveColorTags,
+      };
+
+      errorReporting.capture(new DomainError({
+        code: 'WARN_WARDROBE_ITEM_UPDATE_FALLBACK',
+        message: `Rich update failed (${updateErr.message}); retrying with baseline supported columns.`,
+        domain: 'wardrobe',
+        context: { operation: 'updateItem', itemId, userId, originalError: updateErr.message },
+      }));
+
+      const retry = await (supabase.from('wardrobe_items') as any)
+        .update(basePayload)
+        .eq('id', itemId)
+        .eq('user_id', userId)
+        .select('*')
+        .single();
+
+      if (!retry.error) {
+        return domainOk(retry.data as WardrobeItem);
+      }
+      updateErr = retry.error;
+    }
 
     if (updateErr) {
       throw updateErr;

@@ -227,6 +227,53 @@ describe('wardrobeService', () => {
       expect(result.ok).toBe(false);
       expect(captureSpy).toHaveBeenCalled();
     });
+
+    it('falls back to baseline supported columns when ai_attributes triggers PGRST204 schema error', async () => {
+      const existingItem = {
+        id: 'item-1',
+        user_id: 'user-1',
+        category: 'Clothing',
+        sub_category: 'Activewear / Shorts',
+        garment_type: 'Bottom',
+        description: 'Running shorts',
+      };
+
+      const baseUpdated = {
+        ...existingItem,
+        description: 'Updated running shorts',
+        user_notes: 'My favorite shorts',
+      };
+
+      const mockChain: any = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest
+          .fn()
+          .mockResolvedValueOnce({ data: existingItem, error: null }) // Initial fetch
+          .mockResolvedValueOnce({ data: null, error: { code: 'PGRST204', message: "Could not find the 'ai_attributes' column" } }) // Rich update fails
+          .mockResolvedValueOnce({ data: baseUpdated, error: null }), // Fallback update succeeds
+        update: jest.fn().mockReturnThis(),
+      };
+
+      (supabase.from as jest.Mock).mockReturnValue(mockChain);
+
+      const result = await updateItem('item-1', 'user-1', {
+        description: 'Updated running shorts',
+        userNotes: 'My favorite shorts',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.description).toBe('Updated running shorts');
+      }
+      // Verify retry called with base columns without ai_attributes or occasions
+      expect(mockChain.update).toHaveBeenLastCalledWith(
+        expect.not.objectContaining({
+          ai_attributes: expect.anything(),
+          occasions: expect.anything(),
+        })
+      );
+    });
   });
 
   describe('capsule operations', () => {
