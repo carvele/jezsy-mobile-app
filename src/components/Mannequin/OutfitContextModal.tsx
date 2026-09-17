@@ -19,23 +19,6 @@ import { OutfitContext } from '@/src/utils/aiStylistAdvisor';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const OCCASIONS = [
-  'Everyday / Casual',
-  'Work / Office',
-  'School',
-  'Date',
-  'Dinner',
-  'Party',
-  'Wedding / Formal Event',
-  'Church',
-  'Interview',
-  'Sports / Gym',
-  'Travel',
-  'Beach',
-  'Outdoor',
-  'Custom',
-] as const;
-
 interface Props {
   visible: boolean;
   onConfirm: (context: OutfitContext) => void;
@@ -46,29 +29,25 @@ export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
 
-  const [selectedOccasion, setSelectedOccasion] = useState<string>('');
-  const [customOccasion, setCustomOccasion] = useState('');
+  const [occasion, setOccasion] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
 
-  const effectiveOccasion = selectedOccasion === 'Custom' ? customOccasion.trim() : selectedOccasion;
-  const canProceed = effectiveOccasion.length > 0;
+  const trimmedOccasion = occasion.trim();
+  const canProceed = trimmedOccasion.length > 0;
 
   const handleConfirm = () => {
     if (!canProceed) return;
     const ctx: OutfitContext = {
-      occasion: effectiveOccasion,
+      occasion: trimmedOccasion,
       additionalContext: additionalContext.trim() || undefined,
     };
-    // Reset for next time
-    setSelectedOccasion('');
-    setCustomOccasion('');
+    setOccasion('');
     setAdditionalContext('');
     onConfirm(ctx);
   };
 
   const handleCancel = () => {
-    setSelectedOccasion('');
-    setCustomOccasion('');
+    setOccasion('');
     setAdditionalContext('');
     onCancel();
   };
@@ -100,69 +79,45 @@ export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <Text style={[styles.title, { color: colors.text }]}>
-                Where are you wearing this outfit?
-              </Text>
-              <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-                JeZsy will evaluate your outfit for the selected occasion.
-              </Text>
-
-              {/* Occasion grid */}
-              <View style={styles.occasionGrid}>
-                {OCCASIONS.map((occ) => {
-                  const isSelected = selectedOccasion === occ;
-                  return (
-                    <TouchableOpacity
-                      key={occ}
-                      style={[
-                        styles.occasionChip,
-                        {
-                          borderColor: isSelected ? colors.tint : colors.border,
-                          backgroundColor: isSelected ? colors.tint : colors.card,
-                        },
-                      ]}
-                      onPress={() => setSelectedOccasion(occ)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      <Text style={[styles.occasionChipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                        {occ}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Custom occasion input */}
-              {selectedOccasion === 'Custom' && (
+              {/* Primary field: Where are you wearing this outfit? */}
+              <View style={styles.formRow}>
+                <Text style={[styles.label, { color: colors.text }]}>
+                  Where are you wearing this outfit?
+                </Text>
                 <TextInput
                   keyboardAppearance={theme}
-                  style={[styles.customInput, { color: colors.text, borderColor: colors.tint, backgroundColor: colors.card }]}
-                  placeholder="E.g. Wedding Guest, Family Gathering, Graduation..."
+                  style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                  placeholder="Example: Wedding"
                   placeholderTextColor={colors.secondaryText}
-                  value={customOccasion}
-                  onChangeText={setCustomOccasion}
+                  value={occasion}
+                  onChangeText={setOccasion}
                   autoFocus
-                  maxLength={80}
+                  maxLength={100}
                 />
-              )}
+              </View>
 
-              {/* Additional context */}
-              <Text style={[styles.contextLabel, { color: colors.text }]}>
-                Anything else JeZsy should consider? (Optional)
-              </Text>
-              <TextInput
-                keyboardAppearance={theme}
-                style={[styles.contextInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                placeholder="Example: It may rain, I will be walking a lot, and I want to look smart but comfortable."
-                placeholderTextColor={colors.secondaryText}
-                value={additionalContext}
-                onChangeText={setAdditionalContext}
-                multiline
-                numberOfLines={3}
-                maxLength={500}
-                textAlignVertical="top"
-              />
+              {/* Optional field: Anything else JeZsy should consider? */}
+              <View style={styles.formRow}>
+                <Text style={[styles.label, { color: colors.text }]}>
+                  Anything else JeZsy should consider? (Optional)
+                </Text>
+                <TextInput
+                  keyboardAppearance={theme}
+                  style={[
+                    styles.input,
+                    styles.contextInput,
+                    { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }
+                  ]}
+                  placeholder="Example: It may rain and I will be walking a lot."
+                  placeholderTextColor={colors.secondaryText}
+                  value={additionalContext}
+                  onChangeText={setAdditionalContext}
+                  multiline
+                  numberOfLines={3}
+                  maxLength={500}
+                  textAlignVertical="top"
+                />
+              </View>
             </ScrollView>
 
             {/* Actions */}
@@ -174,6 +129,8 @@ export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
                 style={[styles.checkBtn, { backgroundColor: canProceed ? colors.tint : colors.border }]}
                 onPress={handleConfirm}
                 disabled={!canProceed}
+                accessibilityRole="button"
+                accessibilityLabel="Check My Outfit"
               >
                 <IconSymbol name="sparkles" size={14} color={canProceed ? colors.onTint : colors.secondaryText} />
                 <Text style={[styles.checkBtnText, { color: canProceed ? colors.onTint : colors.secondaryText }]}>
@@ -191,123 +148,107 @@ export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   kavWrapper: {
-    justifyContent: 'flex-end',
+    width: '100%',
   },
   sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    maxHeight: SCREEN_HEIGHT * 0.88,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    maxHeight: SCREEN_HEIGHT * 0.85,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    borderBottomWidth: 1,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(201,169,110,0.12)',
   },
   headerBadgeText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   closeBtn: {
-    padding: 6,
+    padding: Spacing.xs,
   },
   scroll: {
-    flexGrow: 0,
+    maxHeight: SCREEN_HEIGHT * 0.55,
   },
   scrollContent: {
-    padding: Spacing.xl,
-    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xl,
     gap: Spacing.lg,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '800',
-    lineHeight: 26,
+  formRow: {
+    gap: Spacing.xs,
   },
-  subtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: -Spacing.sm,
-  },
-  occasionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  occasionChip: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1.5,
-  },
-  occasionChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  customInput: {
-    height: 48,
-    borderRadius: Radius.md,
-    borderWidth: 1.5,
-    paddingHorizontal: Spacing.lg,
-    ...Type.bodyStrong,
-  },
-  contextLabel: {
-    fontSize: 14,
+  label: {
+    ...Type.body,
     fontWeight: '700',
   },
-  contextInput: {
-    minHeight: 80,
+  input: {
+    height: 52,
     borderRadius: Radius.md,
     borderWidth: 1,
     paddingHorizontal: Spacing.lg,
+    ...Type.bodyStrong,
+  },
+  contextInput: {
+    height: 90,
     paddingTop: 12,
     paddingBottom: 12,
-    fontSize: 13,
-    lineHeight: 19,
+    textAlignVertical: 'top',
   },
   actions: {
     flexDirection: 'row',
-    padding: Spacing.lg,
-    gap: Spacing.sm,
-    borderTopWidth: 1,
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   cancelBtn: {
     flex: 1,
     height: 48,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   cancelBtnText: {
-    fontSize: 14,
+    ...Type.body,
     fontWeight: '600',
   },
   checkBtn: {
     flex: 2,
     height: 48,
-    borderRadius: Radius.md,
+    borderRadius: Radius.pill,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    elevation: 2,
   },
   checkBtnText: {
-    fontSize: 14,
+    ...Type.bodyStrong,
     fontWeight: '700',
   },
 });

@@ -32,7 +32,7 @@ export interface UserStyleProfileDto {
   updatedAt?: string;
 }
 
-export type OutfitFeedbackType = 'saved' | 'rejected' | 'liked' | 'disliked' | 'worn' | 'rated';
+export type OutfitFeedbackType = 'saved' | 'rejected' | 'liked' | 'disliked' | 'worn' | 'rated' | 'passed';
 
 export interface OutfitFeedbackInput {
   userId: string;

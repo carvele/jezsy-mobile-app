@@ -1,5 +1,7 @@
 import { gradeOutfit } from '../aiStylistAdvisor';
 import { MannequinCanvasItem } from '../mannequinConfig';
+import { UserStyleProfileDto } from '../../types/dto/styleProfile';
+import { DEFAULT_STYLE_PROFILE, updateProfileFromFeedback } from '../personalStyleEngine';
 
 function mockItem(
   id: string,
@@ -226,5 +228,95 @@ describe('aiStylistAdvisor - Deterministic Outfit Grader', () => {
     expect(critique.pillars.occasionFit).toBeDefined();
     expect(critique.pillars.occasionFit?.score).toBeGreaterThanOrEqual(80);
     expect(critique.vibe).toBe('Athleisure');
+  });
+
+  // Test 5: One dress on mannequin evaluated for Wedding - not classified as missing top and bottom
+  test('TEST 5: single dress on mannequin evaluated for Wedding is recognized as complete one-piece, not missing top and bottom', () => {
+    const dress = mockItem('d1', 'Dress', 'Navy Maxi Dress', 'navy');
+    dress.wardrobeItem.description = 'Long fitted dress with short sleeves, bow detail around the neck and fitted waist.';
+    dress.wardrobeItem.where_worn_often = 'Church, dinner and work';
+    const lookup = { [dress.wardrobeItem.id]: dress.wardrobeItem };
+
+    const critique = gradeOutfit([dress.canvasItem], lookup, { occasion: 'Wedding' });
+
+    // Must NOT say missing top and bottom
+    expect(critique.pillars.compositionAndLayers.title).toBe('Complete One-Piece Ensemble');
+    expect(critique.whatsMissing).not.toContain('top');
+    expect(critique.whatsMissing).not.toContain('bottom');
+    // Footwear may be identified as missing for formal wedding
+    expect(critique.whatsMissing?.toLowerCase()).toContain('footwear');
+  });
+
+  // Test 6: Top + Bottom without shoes evaluated for Wedding - identifies footwear needed
+  test('TEST 6: Top + Bottom without shoes evaluated for Wedding identifies that footwear is needed', () => {
+    const top = mockItem('t1', 'Top', 'White Dress Shirt', 'white');
+    const bottom = mockItem('b1', 'Bottom', 'Charcoal Trousers', 'charcoal');
+    const lookup = {
+      [top.wardrobeItem.id]: top.wardrobeItem,
+      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([top.canvasItem, bottom.canvasItem], lookup, { occasion: 'Wedding' });
+    expect(critique.whatsMissing?.toLowerCase()).toContain('footwear');
+    expect(critique.tips.some((t) => t.toLowerCase().includes('shoes'))).toBe(true);
+  });
+
+  // Test 7: Evaluate SAME outfit twice for Casual vs Wedding - scores dynamically change
+  test('TEST 7: evaluates the SAME outfit dynamically based on occasion context', () => {
+    const shirt = mockItem('c1', 'Top', 'Graphic T-Shirt', 'black');
+    shirt.wardrobeItem.description = 'Casual cotton graphic t-shirt';
+    const jeans = mockItem('c2', 'Bottom', 'Denim Jeans', 'blue');
+    const sneakers = mockItem('c3', 'Shoes', 'White Sneakers', 'white');
+    sneakers.wardrobeItem.where_worn_often = 'Casual and everyday';
+    const lookup = {
+      [shirt.wardrobeItem.id]: shirt.wardrobeItem,
+      [jeans.wardrobeItem.id]: jeans.wardrobeItem,
+      [sneakers.wardrobeItem.id]: sneakers.wardrobeItem,
+    };
+
+    const casualCritique = gradeOutfit([shirt.canvasItem, jeans.canvasItem, sneakers.canvasItem], lookup, {
+      occasion: 'Casual day',
+    });
+
+    const weddingCritique = gradeOutfit([shirt.canvasItem, jeans.canvasItem, sneakers.canvasItem], lookup, {
+      occasion: 'Wedding',
+    });
+
+    // Evaluation must be occasion-aware and dynamic, not a fixed hardcoded score
+    expect(casualCritique.score).toBeGreaterThan(weddingCritique.score);
+    expect(casualCritique.pillars.occasionFit?.score).toBeGreaterThan(weddingCritique.pillars.occasionFit?.score || 0);
+    expect(weddingCritique.verdict.toLowerCase()).toContain('wedding');
+  });
+
+  // Test 8: Personal feedback isolation per user
+  test('TEST 8: personal feedback influences future evaluations isolated per user', () => {
+    const dress = mockItem('d1', 'Dress', 'Emerald Satin Dress', 'emerald');
+    const shoes = mockItem('s1', 'Shoes', 'Gold Heels', 'gold');
+    const lookup = {
+      [dress.wardrobeItem.id]: dress.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
+    };
+
+    // User A likes emerald and gold
+    let userAProfile: UserStyleProfileDto = {
+      userId: 'user-a',
+      ...DEFAULT_STYLE_PROFILE,
+    };
+    userAProfile = updateProfileFromFeedback(userAProfile, 'liked', [dress.wardrobeItem, shoes.wardrobeItem], 'Dinner');
+
+    // User B dislikes / passed on emerald
+    let userBProfile: UserStyleProfileDto = {
+      userId: 'user-b',
+      ...DEFAULT_STYLE_PROFILE,
+    };
+    userBProfile = updateProfileFromFeedback(userBProfile, 'passed', [dress.wardrobeItem, shoes.wardrobeItem], 'Dinner');
+
+    const critiqueA = gradeOutfit([dress.canvasItem, shoes.canvasItem], lookup, { occasion: 'Dinner' }, userAProfile);
+    const critiqueB = gradeOutfit([dress.canvasItem, shoes.canvasItem], lookup, { occasion: 'Dinner' }, userBProfile);
+
+    // User A should have higher personalization satisfaction than User B
+    expect(critiqueA.pillars.personalPreference).toBeDefined();
+    expect(critiqueB.pillars.personalPreference).toBeDefined();
+    expect(critiqueA.pillars.personalPreference!.score).toBeGreaterThanOrEqual(critiqueB.pillars.personalPreference!.score);
   });
 });
