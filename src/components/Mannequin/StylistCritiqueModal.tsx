@@ -8,10 +8,11 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { StylistCritique, GradeLetter } from '@/src/utils/aiStylistAdvisor';
+import { StylistCritique, OverallAssessment } from '@/src/utils/aiStylistAdvisor';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -39,37 +40,44 @@ export function StylistCritiqueModal({
 
   if (!visible) return null;
 
-  const getGradeColor = (grade: GradeLetter): { bg: string; text: string; border: string } => {
-    if (grade.startsWith('A')) {
-      return { bg: 'rgba(34,197,94,0.15)', text: '#16A34A', border: '#22C55E' };
+  const effectiveOccasion = critique.context?.occasion || occasion;
+  const additionalContext = critique.context?.additionalContext;
+
+  const getAssessmentStyle = (assessment: OverallAssessment) => {
+    switch (assessment) {
+      case 'Appropriate for this occasion':
+        return {
+          bg: 'rgba(34,197,94,0.15)',
+          text: '#16A34A',
+          border: '#22C55E',
+          icon: 'checkmark.circle.fill' as const,
+        };
+      case 'Could work with changes':
+        return {
+          bg: 'rgba(234,179,8,0.15)',
+          text: '#CA8A04',
+          border: '#EAB308',
+          icon: 'exclamationmark.triangle.fill' as const,
+        };
+      case 'Not appropriate for this occasion':
+        return {
+          bg: 'rgba(239,68,68,0.15)',
+          text: '#DC2626',
+          border: '#EF4444',
+          icon: 'xmark.circle.fill' as const,
+        };
+      case 'Incomplete outfit':
+      default:
+        return {
+          bg: 'rgba(59,130,246,0.15)',
+          text: '#2563EB',
+          border: '#3B82F6',
+          icon: 'exclamationmark.circle' as const,
+        };
     }
-    if (grade.startsWith('B')) {
-      return { bg: 'rgba(59,130,246,0.15)', text: '#2563EB', border: '#3B82F6' };
-    }
-    if (grade.startsWith('C')) {
-      return { bg: 'rgba(234,179,8,0.15)', text: '#CA8A04', border: '#EAB308' };
-    }
-    return { bg: 'rgba(239,68,68,0.15)', text: '#DC2626', border: '#EF4444' };
   };
 
-  const getStatusBadge = (status: 'excellent' | 'good' | 'warning' | 'alert') => {
-    switch (status) {
-      case 'excellent':
-        return { label: 'Excellent', color: '#16A34A', bg: 'rgba(34,197,94,0.12)' };
-      case 'good':
-        return { label: 'Good', color: colors.tint, bg: colors.tint + '18' };
-      case 'warning':
-        return { label: 'Attention', color: '#D97706', bg: 'rgba(217,119,6,0.12)' };
-      case 'alert':
-        return { label: 'Incomplete', color: '#DC2626', bg: 'rgba(220,38,38,0.12)' };
-    }
-  };
-
-  const gradeStyle = getGradeColor(critique.grade);
-  const colorPillarBadge = getStatusBadge(critique.pillars.colorHarmony.status);
-  const compPillarBadge = getStatusBadge(critique.pillars.compositionAndLayers.status);
-  const occPillarBadge = critique.pillars.occasionFit ? getStatusBadge(critique.pillars.occasionFit.status) : null;
-  const personalPillarBadge = critique.pillars.personalPreference ? getStatusBadge(critique.pillars.personalPreference.status) : null;
+  const assessmentStyle = getAssessmentStyle(critique.assessment);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -79,7 +87,7 @@ export function StylistCritiqueModal({
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <View style={styles.headerTitleWrap}>
               <View style={[styles.headerBadge, { backgroundColor: colors.tint + '18' }]}>
-                <IconSymbol name="sparkles" size={12} color={colors.tint} />
+                <IconSymbol name="sparkles" size={13} color={colors.tint} />
                 <Text style={[styles.headerBadgeText, { color: colors.tint }]}>JeZsy Stylist</Text>
               </View>
             </View>
@@ -98,66 +106,100 @@ export function StylistCritiqueModal({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* Top Score Banner */}
-            <View style={[styles.scoreCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.scoreRow}>
-                {/* Grade Badge */}
+            {/* Occasion & Context Card */}
+            {effectiveOccasion ? (
+              <View style={[styles.contextCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.contextHeader}>
+                  <View style={[styles.occasionBadge, { backgroundColor: colors.tint + '18', borderColor: colors.tint + '40' }]}>
+                    <IconSymbol name="pin.fill" size={11} color={colors.tint} />
+                    <Text style={[styles.occasionBadgeText, { color: colors.tint }]}>
+                      {effectiveOccasion}
+                    </Text>
+                  </View>
+                </View>
+                {additionalContext ? (
+                  <Text style={[styles.contextNotes, { color: colors.secondaryText }]}>
+                    &quot;{additionalContext}&quot;
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* YOUR OUTFIT — Actual Mannequin Items */}
+            {critique.mannequinItems && critique.mannequinItems.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Your Outfit</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.outfitItemsRow}
+                >
+                  {critique.mannequinItems.map((item, idx) => (
+                    <View
+                      key={item.id || idx}
+                      style={[styles.outfitItemCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    >
+                      {item.image_url ? (
+                        <Image source={{ uri: item.image_url }} style={styles.outfitItemImage} contentFit="contain" />
+                      ) : (
+                        <View style={[styles.outfitItemPlaceholder, { backgroundColor: colors.surface }]}>
+                          <IconSymbol name="tshirt.fill" size={22} color={colors.secondaryText} />
+                        </View>
+                      )}
+                      <Text style={[styles.outfitItemName, { color: colors.text }]} numberOfLines={1}>
+                        {item.name || 'Garment'}
+                      </Text>
+                      <Text style={[styles.outfitItemType, { color: colors.secondaryText }]} numberOfLines={1}>
+                        {item.garment_type || 'Piece'}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* OVERALL ASSESSMENT (Qualitative - No 0-100 or letter scores) */}
+            <View style={[styles.assessmentCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.assessmentHeader}>
                 <View
                   style={[
-                    styles.gradeBadge,
-                    { backgroundColor: gradeStyle.bg, borderColor: gradeStyle.border },
+                    styles.assessmentPill,
+                    { backgroundColor: assessmentStyle.bg, borderColor: assessmentStyle.border },
                   ]}
                 >
-                  <Text style={[styles.gradeText, { color: gradeStyle.text }]}>{critique.grade}</Text>
-                  <Text style={[styles.gradeSub, { color: gradeStyle.text }]}>{critique.score}/100</Text>
+                  <IconSymbol name={assessmentStyle.icon} size={14} color={assessmentStyle.text} />
+                  <Text style={[styles.assessmentPillText, { color: assessmentStyle.text }]}>
+                    {critique.assessment}
+                  </Text>
                 </View>
 
-                {/* Headline & Vibe */}
-                <View style={styles.scoreInfo}>
-                  <Text style={[styles.scoreHeadline, { color: colors.text }]}>{critique.headline}</Text>
-                  <View style={styles.vibeRow}>
-                    <View style={[styles.vibePill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      <IconSymbol name="tag.fill" size={10} color={colors.secondaryText} />
-                      <Text style={[styles.vibeText, { color: colors.secondaryText }]}>{critique.vibe}</Text>
-                    </View>
-                  </View>
+                <View style={[styles.vibePill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <IconSymbol name="tag.fill" size={10} color={colors.secondaryText} />
+                  <Text style={[styles.vibeText, { color: colors.secondaryText }]}>{critique.vibe}</Text>
                 </View>
               </View>
 
-              {/* Occasion Badge */}
-              {occasion && (
-                <View style={styles.occasionBadgeRow}>
-                  <View style={[styles.occasionBadge, { backgroundColor: colors.tint + '15', borderColor: colors.tint + '40' }]}>
-                    <IconSymbol name="pin.fill" size={11} color={colors.tint} />
-                    <Text style={[styles.occasionBadgeText, { color: colors.tint }]}>{occasion}</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Progress meter */}
-              <View style={[styles.meterTrack, { backgroundColor: colors.surface }]}>
-                <View
-                  style={[
-                    styles.meterFill,
-                    { width: `${Math.max(5, critique.score)}%`, backgroundColor: gradeStyle.border },
-                  ]}
-                />
-              </View>
+              <Text style={[styles.assessmentHeadline, { color: colors.text }]}>{critique.headline}</Text>
+              {critique.verdict ? (
+                <Text style={[styles.assessmentVerdict, { color: colors.secondaryText }]}>
+                  {critique.verdict}
+                </Text>
+              ) : null}
             </View>
 
-            {/* Stylist Honest Verdict Quote */}
-            <View style={[styles.verdictCard, { backgroundColor: colors.tint + '0C', borderColor: colors.tint + '30' }]}>
-              <View style={styles.verdictHeader}>
+            {/* STYLIST'S TAKE — Honest, direct assessment */}
+            <View style={[styles.takeCard, { backgroundColor: colors.tint + '0C', borderColor: colors.tint + '30' }]}>
+              <View style={styles.takeHeader}>
                 <IconSymbol name="bubble.left.and.bubble.right" size={13} color={colors.tint} />
-                <Text style={[styles.verdictTitle, { color: colors.tint }]}>Stylist&apos;s Take</Text>
+                <Text style={[styles.takeTitle, { color: colors.tint }]}>Stylist&apos;s Take</Text>
               </View>
-              <Text style={[styles.verdictText, { color: colors.text }]}>
-                &quot;{critique.verdict}&quot;
+              <Text style={[styles.takeText, { color: colors.text }]}>
+                &quot;{critique.stylistsTake || critique.verdict}&quot;
               </Text>
             </View>
 
             {/* Evaluated Color Palette Chips */}
-            {critique.paletteColors.length > 0 && (
+            {critique.paletteColors && critique.paletteColors.length > 0 && (
               <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Colors in This Outfit</Text>
                 <View style={styles.paletteRow}>
@@ -176,22 +218,33 @@ export function StylistCritiqueModal({
               </View>
             )}
 
-            {/* Structured Insights: What Works, What Could Be Better, Stylist's Tip */}
-            {(critique.whatWorks || critique.whatCouldBeBetter || critique.stylistTip) && (
-              <View style={styles.section}>
-                {critique.whatWorks && (
-                  <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(34,197,94,0.3)' }]}>
-                    <View style={styles.insightHeader}>
-                      <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(34,197,94,0.15)' }]}>
-                        <IconSymbol name="checkmark.circle.fill" size={13} color="#16A34A" />
-                      </View>
-                      <Text style={[styles.insightTitle, { color: '#16A34A' }]}>WHY THIS WORKS</Text>
-                    </View>
-                    <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatWorks}</Text>
+            {/* WHY THIS WORKS — Strictly omitted when outfit is fundamentally inappropriate or lacks genuine strengths */}
+            {critique.whatWorks && (
+              <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(34,197,94,0.3)' }]}>
+                <View style={styles.insightHeader}>
+                  <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(34,197,94,0.15)' }]}>
+                    <IconSymbol name="checkmark.circle.fill" size={13} color="#16A34A" />
                   </View>
-                )}
+                  <Text style={[styles.insightTitle, { color: '#16A34A' }]}>WHY THIS WORKS</Text>
+                </View>
+                <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatWorks}</Text>
+              </View>
+            )}
 
-            {/* WHAT'S MISSING — only shown when outfit is incomplete */}
+            {/* WHAT COULD BE BETTER — Specific grounded issues */}
+            {critique.whatCouldBeBetter && (
+              <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(217,119,6,0.3)' }]}>
+                <View style={styles.insightHeader}>
+                  <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(217,119,6,0.15)' }]}>
+                    <IconSymbol name="exclamationmark.triangle.fill" size={13} color="#D97706" />
+                  </View>
+                  <Text style={[styles.insightTitle, { color: '#D97706' }]}>WHAT COULD BE BETTER</Text>
+                </View>
+                <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatCouldBeBetter}</Text>
+              </View>
+            )}
+
+            {/* WHAT'S MISSING — Rendered ONLY when something is genuinely missing */}
             {critique.whatsMissing && (
               <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(239,68,68,0.3)' }]}>
                 <View style={styles.insightHeader}>
@@ -204,121 +257,27 @@ export function StylistCritiqueModal({
               </View>
             )}
 
-            {critique.whatCouldBeBetter && (
-              <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(217,119,6,0.3)', marginTop: Spacing.sm }]}>
-                <View style={styles.insightHeader}>
-                  <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(217,119,6,0.15)' }]}>
-                    <IconSymbol name="exclamationmark.triangle.fill" size={13} color="#D97706" />
-                  </View>
-                  <Text style={[styles.insightTitle, { color: '#D97706' }]}>WHAT COULD BE BETTER</Text>
-                </View>
-                <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatCouldBeBetter}</Text>
-              </View>
-            )}
-
-                {critique.stylistTip && (
-                  <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: colors.tint + '40', marginTop: Spacing.sm }]}>
-                    <View style={styles.insightHeader}>
-                      <View style={[styles.insightIconBadge, { backgroundColor: colors.tint + '18' }]}>
-                        <IconSymbol name="sparkles" size={13} color={colors.tint} />
+            {/* STYLIST TIPS — Actionable recommendations */}
+            {critique.tips && critique.tips.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Stylist Tips</Text>
+                <View style={styles.tipsList}>
+                  {critique.tips.map((tip, idx) => (
+                    <View
+                      key={idx}
+                      style={[styles.tipCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    >
+                      <View style={[styles.tipIconWrap, { backgroundColor: colors.tint + '18' }]}>
+                        <IconSymbol name="lightbulb" size={12} color={colors.tint} />
                       </View>
-                      <Text style={[styles.insightTitle, { color: colors.tint }]}>STYLIST&apos;S TIP</Text>
+                      <Text style={[styles.tipText, { color: colors.text }]}>{tip}</Text>
                     </View>
-                    <Text style={[styles.insightBody, { color: colors.text }]}>{critique.stylistTip}</Text>
-                  </View>
-                )}
+                  ))}
+                </View>
               </View>
             )}
 
-            {/* Pillar 1: Colors */}
-            <View style={[styles.pillarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.pillarHeader}>
-                <View style={styles.pillarTitleRow}>
-                  <IconSymbol name="paintpalette.fill" size={14} color={colors.tint} />
-                  <Text style={[styles.pillarTitle, { color: colors.text }]}>Colors</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: colorPillarBadge.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: colorPillarBadge.color }]}>
-                    {colorPillarBadge.label}
-                  </Text>
-                </View>
-              </View>
-              <Text style={[styles.pillarSubtitle, { color: colors.tint }]}>
-                {critique.pillars.colorHarmony.title} ({critique.pillars.colorHarmony.score}/100)
-              </Text>
-              <Text style={[styles.pillarFeedback, { color: colors.secondaryText }]}>
-                {critique.pillars.colorHarmony.feedback}
-              </Text>
-            </View>
-
-            {/* Pillar 2: What works together */}
-            <View style={[styles.pillarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.pillarHeader}>
-                <View style={styles.pillarTitleRow}>
-                  <IconSymbol name="tshirt.fill" size={14} color={colors.tint} />
-                  <Text style={[styles.pillarTitle, { color: colors.text }]}>What works together</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: compPillarBadge.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: compPillarBadge.color }]}>
-                    {compPillarBadge.label}
-                  </Text>
-                </View>
-              </View>
-              <Text style={[styles.pillarSubtitle, { color: colors.tint }]}>
-                {critique.pillars.compositionAndLayers.title} ({critique.pillars.compositionAndLayers.score}/100)
-              </Text>
-              <Text style={[styles.pillarFeedback, { color: colors.secondaryText }]}>
-                {critique.pillars.compositionAndLayers.feedback}
-              </Text>
-            </View>
-
-            {/* Pillar 3: Occasion Calibration */}
-            {critique.pillars.occasionFit && occPillarBadge && (
-              <View style={[styles.pillarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.pillarHeader}>
-                  <View style={styles.pillarTitleRow}>
-                    <IconSymbol name="pin.fill" size={14} color={colors.tint} />
-                    <Text style={[styles.pillarTitle, { color: colors.text }]}>Occasion Calibration</Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: occPillarBadge.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: occPillarBadge.color }]}>
-                      {occPillarBadge.label}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[styles.pillarSubtitle, { color: colors.tint }]}>
-                  {critique.pillars.occasionFit.title} ({critique.pillars.occasionFit.score}/100)
-                </Text>
-                <Text style={[styles.pillarFeedback, { color: colors.secondaryText }]}>
-                  {critique.pillars.occasionFit.feedback}
-                </Text>
-              </View>
-            )}
-
-            {/* Pillar 4: Personal Style Match */}
-            {critique.pillars.personalPreference && personalPillarBadge && (
-              <View style={[styles.pillarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.pillarHeader}>
-                  <View style={styles.pillarTitleRow}>
-                    <IconSymbol name="sparkles" size={14} color={colors.tint} />
-                    <Text style={[styles.pillarTitle, { color: colors.text }]}>Personal Style Alignment</Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: personalPillarBadge.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: personalPillarBadge.color }]}>
-                      {personalPillarBadge.label}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[styles.pillarSubtitle, { color: colors.tint }]}>
-                  {critique.pillars.personalPreference.title} ({critique.pillars.personalPreference.score}/100)
-                </Text>
-                <Text style={[styles.pillarFeedback, { color: colors.secondaryText }]}>
-                  {critique.pillars.personalPreference.feedback}
-                </Text>
-              </View>
-            )}
-
-            {/* Personalization Feedback Row */}
+            {/* Personalization: Train Your Stylist */}
             {onFeedback && (
               <View style={[styles.feedbackSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={styles.feedbackHeader}>
@@ -383,43 +342,23 @@ export function StylistCritiqueModal({
               </View>
             )}
 
-            {/* Stylist Pro-Tips */}
-            {critique.tips.length > 0 && (
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>More Styling Tips</Text>
-                <View style={styles.tipsList}>
-                  {critique.tips.map((tip, idx) => (
-                    <View
-                      key={idx}
-                      style={[styles.tipCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    >
-                      <View style={[styles.tipIconWrap, { backgroundColor: colors.tint + '18' }]}>
-                        <IconSymbol name="lightbulb" size={12} color={colors.tint} />
-                      </View>
-                      <Text style={[styles.tipText, { color: colors.text }]}>{tip}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Fashion Stylist Disclaimer */}
+            {/* Stylist Context Disclaimer */}
             <View style={[styles.disclaimerCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.disclaimerHeader}>
                 <IconSymbol name="info.circle.fill" size={12} color={colors.secondaryText} />
                 <Text style={[styles.disclaimerTitle, { color: colors.secondaryText }]}>
-                  About JeZsy&apos;s Score
+                  About JeZsy&apos;s Stylist
                 </Text>
               </View>
               <Text style={[styles.disclaimerText, { color: colors.secondaryText }]}>
-                JeZsy&apos;s outfit compatibility score reflects how well this outfit matches your selected occasion based on styling criteria, color coordination, and outfit completeness. Personal style is subjective.
+                JeZsy evaluates outfit compatibility against your selected occasion using garment structure, dress code appropriateness, completeness, and color harmony. Personal style is subjective.
               </Text>
             </View>
           </ScrollView>
 
           {/* Bottom Actions */}
           <View style={[styles.bottomBar, { borderTopColor: colors.border, backgroundColor: colors.card }]}>
-            {onSaveLook && critique.score > 0 && (
+            {onSaveLook && critique.mannequinItems && critique.mannequinItems.length > 0 && (
               <TouchableOpacity
                 style={[styles.saveActionBtn, { backgroundColor: colors.tint }]}
                 onPress={() => {
@@ -466,7 +405,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderLeftWidth: 1,
     borderRightWidth: 1,
-    maxHeight: SCREEN_HEIGHT * 0.85,
+    maxHeight: SCREEN_HEIGHT * 0.88,
   },
   header: {
     flexDirection: 'row',
@@ -503,59 +442,16 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     gap: Spacing.lg,
   },
-  /* Score Card */
-  scoreCard: {
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
+  /* Context Card */
+  contextCard: {
+    padding: Spacing.md,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    gap: Spacing.md,
+    gap: 6,
   },
-  scoreRow: {
+  contextHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-  },
-  gradeBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  gradeText: {
-    ...Type.headline,
-    lineHeight: 28,
-  },
-  gradeSub: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  scoreInfo: {
-    flex: 1,
-    gap: Spacing.xs,
-  },
-  scoreHeadline: {
-    ...Type.bodyLargeStrong,
-  },
-  vibeRow: {
-    flexDirection: 'row',
-  },
-  vibePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    gap: Spacing.xs,
-  },
-  vibeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  occasionBadgeRow: {
-    flexDirection: 'row',
   },
   occasionBadge: {
     flexDirection: 'row',
@@ -567,207 +463,132 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   occasionBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  meterTrack: {
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  meterFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  /* Verdict Card */
-  verdictCard: {
-    padding: 14,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    gap: 6,
-  },
-  verdictHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  verdictTitle: {
     fontSize: 12,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
-  verdictText: {
-    fontSize: 13,
-    lineHeight: 19,
+  contextNotes: {
+    fontSize: 12,
     fontStyle: 'italic',
   },
-  /* Palette Row */
-  section: {
+  /* Your Outfit Items */
+  outfitItemsRow: {
     gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  paletteRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  paletteChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    gap: 6,
-  },
-  colorDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.2)',
-  },
-  paletteText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  /* Pillars */
-  pillarCard: {
-    padding: 14,
+  outfitItemCard: {
+    width: 90,
     borderRadius: Radius.md,
     borderWidth: 1,
-    gap: 6,
+    padding: Spacing.xs,
+    alignItems: 'center',
   },
-  pillarHeader: {
+  outfitItemImage: {
+    width: 64,
+    height: 64,
+    borderRadius: Radius.sm,
+    marginBottom: 4,
+  },
+  outfitItemPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: Radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  outfitItemName: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    width: '100%',
+  },
+  outfitItemType: {
+    fontSize: 9,
+    textAlign: 'center',
+    width: '100%',
+  },
+  /* Overall Assessment Card */
+  assessmentCard: {
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    gap: Spacing.sm,
+  },
+  assessmentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
   },
-  pillarTitleRow: {
+  assessmentPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
   },
-  pillarTitle: {
-    fontSize: 14,
+  assessmentPillText: {
+    fontSize: 12,
     fontWeight: '700',
   },
-  statusBadge: {
+  vibePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: Radius.sm,
-  },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  pillarSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  pillarFeedback: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  /* Tips */
-  tipsList: {
-    gap: Spacing.sm,
-  },
-  tipCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    gap: 10,
-  },
-  tipIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 1,
-  },
-  tipText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  /* Bottom Bar */
-  bottomBar: {
-    flexDirection: 'row',
-    padding: Spacing.lg,
-    borderTopWidth: 1,
-    gap: 10,
-  },
-  saveActionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
-    gap: 6,
-  },
-  saveActionText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  doneActionBtn: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-  },
-  doneActionText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  /* Disclaimer */
-  disclaimerCard: {
-    padding: Spacing.md,
-    borderRadius: Radius.md,
     borderWidth: 1,
     gap: Spacing.xs,
-    marginTop: Spacing.xs,
   },
-  disclaimerHeader: {
+  vibeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  assessmentHeadline: {
+    ...Type.bodyLargeStrong,
+    fontSize: 16,
+    marginTop: 4,
+  },
+  assessmentVerdict: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  /* Stylist's Take Card */
+  takeCard: {
+    padding: 14,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: 6,
+  },
+  takeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
-  disclaimerTitle: {
-    fontSize: 11,
+  takeTitle: {
+    fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
-  disclaimerText: {
-    fontSize: 11,
-    lineHeight: 16,
+  takeText: {
+    fontSize: 13,
+    lineHeight: 19,
   },
-  /* Structured Insight Cards */
+  /* Insights: What Works, What Could Be Better, What's Missing */
   insightCard: {
     padding: Spacing.md,
     borderRadius: Radius.md,
     borderWidth: 1,
-    gap: 6,
+    gap: Spacing.xs,
   },
   insightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.xs,
   },
   insightIconBadge: {
     width: 20,
@@ -778,15 +599,68 @@ const styles = StyleSheet.create({
   },
   insightTitle: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.5,
   },
   insightBody: {
     fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '500',
+    lineHeight: 18,
   },
-  /* Feedback Row */
+  /* Palette */
+  section: {
+    gap: Spacing.sm,
+  },
+  sectionTitle: {
+    ...Type.label,
+  },
+  paletteRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+  },
+  paletteChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    gap: 5,
+  },
+  colorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  paletteText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  /* Tips */
+  tipsList: {
+    gap: Spacing.xs,
+  },
+  tipCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: Spacing.sm,
+  },
+  tipIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  /* Feedback */
   feedbackSection: {
     padding: Spacing.md,
     borderRadius: Radius.md,
@@ -796,39 +670,87 @@ const styles = StyleSheet.create({
   feedbackHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   feedbackTitle: {
     fontSize: 12,
     fontWeight: '700',
   },
   feedbackSub: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 12,
+    marginBottom: 4,
   },
   feedbackBtnRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
-    marginTop: Spacing.xs,
   },
   feedbackChip: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Radius.pill,
+    paddingVertical: 6,
+    borderRadius: Radius.sm,
     borderWidth: 1,
+    gap: 4,
   },
   feedbackChipText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '600',
   },
   feedbackSavedNote: {
     fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  /* Disclaimer */
+  disclaimerCard: {
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: Spacing.xs,
+  },
+  disclaimerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  disclaimerTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  disclaimerText: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  /* Bottom Bar */
+  bottomBar: {
+    padding: Spacing.md,
+    borderTopWidth: 1,
+    gap: Spacing.xs,
+  },
+  saveActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    gap: 6,
+  },
+  saveActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  doneActionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  doneActionText: {
+    fontSize: 13,
     fontWeight: '600',
-    marginTop: 4,
   },
 });
