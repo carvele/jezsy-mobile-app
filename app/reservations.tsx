@@ -485,6 +485,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.sm,
     gap: Spacing.sm,
+    // react-native-web's FlatList content container can default to
+    // flexWrap: 'wrap' even with horizontal set, unlike ScrollView --
+    // without this override, chips silently stack into a single vertical
+    // column at narrow (mobile) viewport widths instead of scrolling
+    // sideways in one row.
+    flexWrap: 'nowrap',
   },
   filterChip: {
     flexDirection: 'row',

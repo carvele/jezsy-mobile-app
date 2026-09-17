@@ -72,5 +72,11 @@ const styles = StyleSheet.create({
   list: {
     paddingLeft: Spacing.xxl,
     paddingRight: 10,
+    // react-native-web's FlatList content container can default to
+    // flexWrap: 'wrap' even with horizontal set, unlike ScrollView --
+    // without this override, cards silently stack into a single vertical
+    // column at narrow (mobile) viewport widths instead of scrolling
+    // sideways in one row.
+    flexWrap: 'nowrap',
   },
 });
