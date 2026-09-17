@@ -21,3 +21,13 @@ export function useFloatingTabBarMetrics() {
 
   return { barBottom, barHeight, isCompact, clearance: barBottom + barHeight };
 }
+
+/**
+ * Global layout contract for scrollable screens.
+ * Returns the bottom padding required to clear the floating tab bar
+ * plus some breathing room, ensuring content isn't obscured.
+ */
+export function useSharedBottomInset() {
+  const { clearance } = useFloatingTabBarMetrics();
+  return clearance + 24;
+}

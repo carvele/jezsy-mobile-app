@@ -34,6 +34,7 @@ import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useToast } from '@/src/context/ToastContext';
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
+import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
@@ -75,6 +76,7 @@ const renderSheetBackdrop = (props: React.ComponentProps<typeof BottomSheetBackd
 );
 
 export default function ExploreScreen() {
+  const bottomInset = useSharedBottomInset();
   const { columns } = useGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -1441,7 +1443,7 @@ export default function ExploreScreen() {
                   key={`grid-${columns}`}
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
-                  contentContainerStyle={styles.productList}
+                  contentContainerStyle={[styles.productList, { paddingBottom: bottomInset }]}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderGridHeader(
@@ -1492,7 +1494,7 @@ export default function ExploreScreen() {
           {/* Level 0: Categories Grid */}
           {!selectedCategory && !showAllProducts && (
             <ScrollView
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
               refreshControl={
                 <RefreshControl
                   refreshing={categoriesLoading}
@@ -1579,7 +1581,7 @@ export default function ExploreScreen() {
           {/* Level 1: Sub-Categories View in a 2-Column Grid Layout */}
           {selectedCategory && !selectedSubCategory && (
             <ScrollView
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
               refreshControl={
                 <RefreshControl
                   refreshing={categoriesLoading}
@@ -1658,7 +1660,7 @@ export default function ExploreScreen() {
                   key={`grid-${columns}`}
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
-                  contentContainerStyle={styles.productList}
+                  contentContainerStyle={[styles.productList, { paddingBottom: bottomInset }]}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderCategorySwitcher()}
@@ -2195,7 +2197,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     // Feeds gridCardWidth via GRID_GUTTER; changing it resizes the cards to match.
     paddingHorizontal: GRID_GUTTER,
-    paddingBottom: 120,
+    
   },
   welcomeTitle: {
     fontSize: 22,
@@ -2331,7 +2333,7 @@ const styles = StyleSheet.create({
     // the inset gridCardWidth assumes. Split across two containers because the
     // FlatList pads the page and the row pads between columns.
     paddingHorizontal: GRID_GUTTER - PRODUCT_ROW_INSET,
-    paddingBottom: 120,
+    
   },
   productRow: {
     flexDirection: 'row',

@@ -16,8 +16,10 @@ import { useNotifications } from '@/src/context/NotificationContext';
 import { resolveNotificationRoute } from '@/src/utils/notificationRouting';
 
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
+import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 
 export default function InboxScreen() {
+  const bottomInset = useSharedBottomInset();
   const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline, getOrCreateConversation } = useMessages();
   const { user, profile } = useAuth();
   const { unreadNonChatCount, markAsRead: markNotifReadInContext, markAllAsRead: markAllNotifsReadInContext } = useNotifications();
@@ -468,7 +470,7 @@ export default function InboxScreen() {
             data={conversations}
             keyExtractor={(item) => item.id}
             renderItem={renderMessageItem}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
           />
         )
       )}
@@ -492,7 +494,7 @@ export default function InboxScreen() {
             data={notifications}
             renderItem={renderNotificationItem}
             keyExtractor={item => item.id}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={[styles.list, { paddingBottom: bottomInset }]}
             onEndReached={loadMoreNotifications}
             onEndReachedThreshold={0.4}
             ListFooterComponent={
@@ -605,7 +607,6 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: 120, // clears the floating tab bar at its largest bottom inset
   },
   conversationItem: {
     flexDirection: 'row',

@@ -34,6 +34,7 @@ import { useToast } from '@/src/context/ToastContext';
 import { MannequinView } from '@/src/components/Mannequin/MannequinView';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
+import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
@@ -57,6 +58,7 @@ const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessor
 type WearFilter = 'all' | 'never' | 'neglected';
 
 export default function WardrobeScreen() {
+  const bottomInset = useSharedBottomInset();
   const { cardWidth, columns } = useGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -691,7 +693,7 @@ export default function WardrobeScreen() {
           key={`items-grid-${columns}`}
           numColumns={columns}
           columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }}
+          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: bottomInset }}
           ListHeaderComponent={itemsHeader}
           initialNumToRender={8}
           windowSize={7}
@@ -772,7 +774,7 @@ export default function WardrobeScreen() {
             </TouchableOpacity>
           </ScrollView>
         ) : (
-          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 }]}>
+          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}>
             <BrandEmptyState
               icon="sparkles"
               title="No Saved Outfits"
@@ -783,7 +785,7 @@ export default function WardrobeScreen() {
           </ScrollView>
         )
       ) : activeTab === 'capsules' ? (
-        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 }]}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}>
           {capsules.length > 0 ? (
             <>
               {capsules.map((c) => (
@@ -944,6 +946,12 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
     paddingRight: Spacing.lg,
     paddingBottom: Spacing.sm,
+    // react-native-web's FlatList content container can default to
+    // flexWrap: 'wrap' even with horizontal set, unlike ScrollView --
+    // without this override, cards silently stack into a single vertical
+    // column at narrow (mobile) viewport widths instead of scrolling
+    // sideways in one row.
+    flexWrap: 'nowrap',
   },
   columnWrapper: {
     justifyContent: 'space-between',
