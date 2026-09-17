@@ -580,14 +580,15 @@ export default function HomeScreen() {
               message="New pieces are on their way. Check back soon."
             />
           ) : (
-            <FlatList
-              data={trendingProducts}
-              horizontal
-              showsHorizontalScrollIndicator={Platform.OS === 'web'}
-              contentContainerStyle={{ paddingHorizontal: Spacing.lg, gap: Spacing.md }}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <ProductCard product={item} variant="rail" />}
-            />
+            <View style={styles.trendingGrid}>
+              {trendingProducts.map((item) => (
+                <ProductCard
+                  key={item.id}
+                  product={item}
+                  variant="grid"
+                />
+              ))}
+            </View>
           )}
         </View>
 
@@ -707,6 +708,13 @@ const styles = StyleSheet.create({
   // Edits Section
   sectionContainer: {
     marginBottom: 40,
+  },
+  trendingGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: GRID_COLUMN_GAP,
+    paddingHorizontal: Spacing.xl,
   },
   sectionTitle: {
     ...Type.title,
