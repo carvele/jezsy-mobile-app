@@ -205,8 +205,14 @@ export default function PaymentScreen() {
         </View>
       ) : Platform.OS === 'web' ? (
         <View style={[styles.center, styles.flexOne]}>
+          <View style={[styles.webCheckoutIcon, { backgroundColor: colors.tint + '1a', borderColor: colors.tint }]}>
+            <IconSymbol name="lock.fill" size={28} color={colors.tint} />
+          </View>
           <Text style={[styles.settlingText, { color: colors.text }]}>
             You&apos;ll be taken to PayMongo&apos;s secure checkout in a new tab.
+          </Text>
+          <Text style={[styles.settlingHint, { color: colors.secondaryText }]}>
+            We&apos;ll pick this reservation back up automatically once payment is confirmed.
           </Text>
           <TouchableOpacity
             onPress={openWebCheckout}
@@ -246,8 +252,16 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: Spacing.xs, width: 32 },
   headerTitle: { ...Type.subtitle },
-  settlingText: { ...Type.bodyLargeStrong, marginTop: Spacing.lg },
+  settlingText: { ...Type.bodyLargeStrong, marginTop: Spacing.lg, textAlign: 'center' },
   settlingHint: { fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: Spacing.sm },
+  webCheckoutIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   webCheckoutBtn: {
     marginTop: Spacing.xl,
     paddingHorizontal: Spacing.xxl,
