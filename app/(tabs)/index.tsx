@@ -4,7 +4,6 @@ import {
   View,
   Text,
   ScrollView,
-  FlatList,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
@@ -606,14 +605,16 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-        alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {},
   header: {
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     flexDirection: 'row',
-        alignItems: 'center',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   brandLogo: {
     ...Type.headline,
@@ -679,7 +680,8 @@ const styles = StyleSheet.create({
   },
   heroDots: {
     flexDirection: 'row',
-        gap: Spacing.xs,
+    justifyContent: 'center',
+    gap: Spacing.xs,
     marginTop: Spacing.lg,
   },
   heroDot: {
@@ -698,7 +700,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
-        alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // Edits Section
