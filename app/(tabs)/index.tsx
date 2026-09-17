@@ -357,7 +357,7 @@ export default function HomeScreen() {
             <Animated.ScrollView
               ref={heroScrollRef}
               horizontal
-              showsHorizontalScrollIndicator={false}
+              showsHorizontalScrollIndicator={Platform.OS === 'web'}
               snapToInterval={heroCardWidth + HERO_CARD_GAP}
               decelerationRate="fast"
               contentContainerStyle={styles.heroCarouselContent}
@@ -540,7 +540,7 @@ export default function HomeScreen() {
         {topCategories.length > 0 && (
           <View style={styles.sectionContainer}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Shop by Category</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.editsScrollContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.editsScrollContainer}>
               {topCategories.map((cat) => (
                 <CategoryCard
                   key={cat.id}
@@ -583,7 +583,7 @@ export default function HomeScreen() {
             <FlatList
               data={trendingProducts}
               horizontal
-              showsHorizontalScrollIndicator={false}
+              showsHorizontalScrollIndicator={Platform.OS === 'web'}
               contentContainerStyle={{ paddingHorizontal: Spacing.lg, gap: Spacing.md }}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => <ProductCard product={item} variant="rail" />}
