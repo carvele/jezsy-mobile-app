@@ -143,13 +143,25 @@ export async function getWardrobeCapsulesPage(
  */
 export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult<void>> {
   try {
+    const effectiveColorTags = input.colorTags && input.colorTags.length > 0
+      ? input.colorTags
+      : input.color
+      ? [input.color]
+      : null;
+
+    const effectiveOccasions = input.occasions && input.occasions.length > 0
+      ? input.occasions
+      : input.whereWornOften
+      ? [input.whereWornOften]
+      : null;
+
     const insertPayload: Record<string, any> = {
       user_id: input.userId,
       category: input.category,
       garment_type: input.garmentType,
       sub_category: input.subCategory ?? null,
       image_url: input.imageUrl,
-      color_tags: input.colorTags ?? null,
+      color_tags: effectiveColorTags,
     };
 
     if (input.description) insertPayload.description = input.description;
@@ -161,22 +173,37 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
     if (input.sleeveType) insertPayload.sleeve_type = input.sleeveType;
     if (input.neckline) insertPayload.neckline = input.neckline;
     if (input.silhouette) insertPayload.silhouette = input.silhouette;
-    if (input.occasions && input.occasions.length > 0) insertPayload.occasions = input.occasions;
+    if (effectiveOccasions) insertPayload.occasions = effectiveOccasions;
     if (input.seasons && input.seasons.length > 0) insertPayload.seasons = input.seasons;
     if (input.colorDetails && input.colorDetails.length > 0) insertPayload.color_details = input.colorDetails;
     if (input.isCustomCategory !== undefined) insertPayload.is_custom_category = input.isCustomCategory;
-    if (input.aiAttributes) {
-      insertPayload.ai_attributes = {
-        ...input.aiAttributes,
-        description: input.description ?? (input.aiAttributes as any).description,
-        userNotes: input.userNotes ?? (input.aiAttributes as any).userNotes,
+
+    const hasAiAttrs = Boolean(
+      input.aiAttributes ||
+      input.color ||
+      input.whereWornOften ||
+      input.description !== undefined ||
+      input.userNotes !== undefined
+    );
+    if (hasAiAttrs) {
+      const aiAttrs: Record<string, any> = {
+        ...(input.aiAttributes || {}),
       };
-    } else if (input.description || input.userNotes) {
-      insertPayload.ai_attributes = {
-        description: input.description,
-        userNotes: input.userNotes,
-      };
+      if (input.color || (input.aiAttributes as any)?.rawColor) {
+        aiAttrs.rawColor = input.color || (input.aiAttributes as any)?.rawColor;
+      }
+      if (input.whereWornOften || (input.aiAttributes as any)?.whereWornOften) {
+        aiAttrs.whereWornOften = input.whereWornOften || (input.aiAttributes as any)?.whereWornOften;
+      }
+      if (input.description !== undefined || (input.aiAttributes as any)?.description !== undefined) {
+        aiAttrs.description = input.description ?? (input.aiAttributes as any)?.description;
+      }
+      if (input.userNotes !== undefined || (input.aiAttributes as any)?.userNotes !== undefined) {
+        aiAttrs.userNotes = input.userNotes ?? (input.aiAttributes as any)?.userNotes;
+      }
+      insertPayload.ai_attributes = aiAttrs;
     }
+
     if (input.aiConfidence !== undefined) insertPayload.ai_confidence = input.aiConfidence;
     if (input.userCorrections) insertPayload.user_corrections = input.userCorrections;
     if (input.embedding) insertPayload.embedding = input.embedding;

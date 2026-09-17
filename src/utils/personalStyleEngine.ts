@@ -136,7 +136,7 @@ export function updateProfileFromFeedback(
   };
 
   const isPositive = feedbackType === 'liked' || feedbackType === 'saved' || feedbackType === 'worn';
-  const isNegative = feedbackType === 'rejected' || feedbackType === 'disliked';
+  const isNegative = feedbackType === 'rejected' || feedbackType === 'disliked' || feedbackType === 'passed';
 
   for (const item of items) {
     const colors: string[] = Array.isArray(item.color_tags) ? item.color_tags : [];

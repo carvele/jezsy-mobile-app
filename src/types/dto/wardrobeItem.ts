@@ -6,7 +6,9 @@ export interface AddWardrobeItemInput {
   garmentType: string;
   subCategory?: string | null;
   imageUrl: string;
+  color?: string | null;
   colorTags?: string[] | null;
+  whereWornOften?: string | null;
   description?: string | null;
   userNotes?: string | null;
   pattern?: string | null;
@@ -38,7 +40,9 @@ export interface WardrobeItemDto {
   garment_type: string | null;
   sub_category: string | null;
   image_url: string | null;
+  color?: string | null;
   color_tags: string[] | null;
+  where_worn_often?: string | null;
   wear_count: number;
   last_worn_at: string | null;
   created_at: string;
@@ -59,4 +63,5 @@ export interface WardrobeItemDto {
   ai_attributes?: Record<string, unknown> | null;
   ai_confidence?: number | null;
   user_corrections?: Record<string, unknown> | null;
+  embedding?: unknown | null;
 }

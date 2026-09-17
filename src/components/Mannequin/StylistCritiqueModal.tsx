@@ -21,9 +21,19 @@ interface Props {
   occasion?: string;
   onClose: () => void;
   onSaveLook?: () => void;
+  onFeedback?: (feedbackType: 'liked' | 'passed' | 'worn') => void;
+  feedbackGiven?: 'liked' | 'passed' | 'worn' | null;
 }
 
-export function StylistCritiqueModal({ visible, critique, occasion, onClose, onSaveLook }: Props) {
+export function StylistCritiqueModal({
+  visible,
+  critique,
+  occasion,
+  onClose,
+  onSaveLook,
+  onFeedback,
+  feedbackGiven,
+}: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
 
@@ -58,6 +68,8 @@ export function StylistCritiqueModal({ visible, critique, occasion, onClose, onS
   const gradeStyle = getGradeColor(critique.grade);
   const colorPillarBadge = getStatusBadge(critique.pillars.colorHarmony.status);
   const compPillarBadge = getStatusBadge(critique.pillars.compositionAndLayers.status);
+  const occPillarBadge = critique.pillars.occasionFit ? getStatusBadge(critique.pillars.occasionFit.status) : null;
+  const personalPillarBadge = critique.pillars.personalPreference ? getStatusBadge(critique.pillars.personalPreference.status) : null;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -173,7 +185,7 @@ export function StylistCritiqueModal({ visible, critique, occasion, onClose, onS
                       <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(34,197,94,0.15)' }]}>
                         <IconSymbol name="checkmark.circle.fill" size={13} color="#16A34A" />
                       </View>
-                      <Text style={[styles.insightTitle, { color: '#16A34A' }]}>WHAT WORKS</Text>
+                      <Text style={[styles.insightTitle, { color: '#16A34A' }]}>WHY THIS WORKS</Text>
                     </View>
                     <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatWorks}</Text>
                   </View>
@@ -259,6 +271,117 @@ export function StylistCritiqueModal({ visible, critique, occasion, onClose, onS
                 {critique.pillars.compositionAndLayers.feedback}
               </Text>
             </View>
+
+            {/* Pillar 3: Occasion Calibration */}
+            {critique.pillars.occasionFit && occPillarBadge && (
+              <View style={[styles.pillarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.pillarHeader}>
+                  <View style={styles.pillarTitleRow}>
+                    <IconSymbol name="pin.fill" size={14} color={colors.tint} />
+                    <Text style={[styles.pillarTitle, { color: colors.text }]}>Occasion Calibration</Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: occPillarBadge.bg }]}>
+                    <Text style={[styles.statusBadgeText, { color: occPillarBadge.color }]}>
+                      {occPillarBadge.label}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.pillarSubtitle, { color: colors.tint }]}>
+                  {critique.pillars.occasionFit.title} ({critique.pillars.occasionFit.score}/100)
+                </Text>
+                <Text style={[styles.pillarFeedback, { color: colors.secondaryText }]}>
+                  {critique.pillars.occasionFit.feedback}
+                </Text>
+              </View>
+            )}
+
+            {/* Pillar 4: Personal Style Match */}
+            {critique.pillars.personalPreference && personalPillarBadge && (
+              <View style={[styles.pillarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.pillarHeader}>
+                  <View style={styles.pillarTitleRow}>
+                    <IconSymbol name="sparkles" size={14} color={colors.tint} />
+                    <Text style={[styles.pillarTitle, { color: colors.text }]}>Personal Style Alignment</Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: personalPillarBadge.bg }]}>
+                    <Text style={[styles.statusBadgeText, { color: personalPillarBadge.color }]}>
+                      {personalPillarBadge.label}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.pillarSubtitle, { color: colors.tint }]}>
+                  {critique.pillars.personalPreference.title} ({critique.pillars.personalPreference.score}/100)
+                </Text>
+                <Text style={[styles.pillarFeedback, { color: colors.secondaryText }]}>
+                  {critique.pillars.personalPreference.feedback}
+                </Text>
+              </View>
+            )}
+
+            {/* Personalization Feedback Row */}
+            {onFeedback && (
+              <View style={[styles.feedbackSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.feedbackHeader}>
+                  <IconSymbol name="sparkles" size={13} color={colors.tint} />
+                  <Text style={[styles.feedbackTitle, { color: colors.text }]}>Train Your Stylist</Text>
+                </View>
+                <Text style={[styles.feedbackSub, { color: colors.secondaryText }]}>
+                  Does this outfit match your personal style?
+                </Text>
+                <View style={styles.feedbackBtnRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.feedbackChip,
+                      { borderColor: colors.border, backgroundColor: feedbackGiven === 'liked' ? colors.tint + '20' : colors.surface },
+                      feedbackGiven === 'liked' && { borderColor: colors.tint },
+                    ]}
+                    onPress={() => onFeedback('liked')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Like this outfit"
+                  >
+                    <IconSymbol name="hand.thumbsup.fill" size={13} color={feedbackGiven === 'liked' ? colors.tint : colors.text} />
+                    <Text style={[styles.feedbackChipText, { color: feedbackGiven === 'liked' ? colors.tint : colors.text }]}>
+                      Like
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.feedbackChip,
+                      { borderColor: colors.border, backgroundColor: feedbackGiven === 'passed' ? 'rgba(239,68,68,0.15)' : colors.surface },
+                      feedbackGiven === 'passed' && { borderColor: '#EF4444' },
+                    ]}
+                    onPress={() => onFeedback('passed')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Pass on this outfit"
+                  >
+                    <IconSymbol name="hand.thumbsdown.fill" size={13} color={feedbackGiven === 'passed' ? '#EF4444' : colors.text} />
+                    <Text style={[styles.feedbackChipText, { color: feedbackGiven === 'passed' ? '#EF4444' : colors.text }]}>
+                      Pass
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.feedbackChip,
+                      { borderColor: colors.border, backgroundColor: feedbackGiven === 'worn' ? 'rgba(34,197,94,0.15)' : colors.surface },
+                      feedbackGiven === 'worn' && { borderColor: '#16A34A' },
+                    ]}
+                    onPress={() => onFeedback('worn')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Mark as worn"
+                  >
+                    <IconSymbol name="checkmark.circle.fill" size={13} color={feedbackGiven === 'worn' ? '#16A34A' : colors.text} />
+                    <Text style={[styles.feedbackChipText, { color: feedbackGiven === 'worn' ? '#16A34A' : colors.text }]}>
+                      Wore This
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {feedbackGiven && (
+                  <Text style={[styles.feedbackSavedNote, { color: colors.tint }]}>
+                    Preference saved! JeZsy will personalize future styling based on this.
+                  </Text>
+                )}
+              </View>
+            )}
 
             {/* Stylist Pro-Tips */}
             {critique.tips.length > 0 && (
@@ -662,5 +785,50 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     fontWeight: '500',
+  },
+  /* Feedback Row */
+  feedbackSection: {
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: Spacing.xs,
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  feedbackTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  feedbackSub: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  feedbackBtnRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  feedbackChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  feedbackChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  feedbackSavedNote: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });

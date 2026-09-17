@@ -38,6 +38,8 @@ import { gradeOutfit, StylistCritique, OutfitContext } from '@/src/utils/aiStyli
 import { StylistCritiqueModal } from './StylistCritiqueModal';
 import { OutfitContextModal } from './OutfitContextModal';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
+import { styleProfileService } from '@/src/services/styleProfileService';
+import { updateProfileFromFeedback } from '@/src/utils/personalStyleEngine';
 
 // Enable layout animation for Android (Old Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
@@ -178,6 +180,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   const [outfitContextVisible, setOutfitContextVisible] = useState(false);
   const [activeCritique, setActiveCritique] = useState<StylistCritique | null>(null);
   const [activeStylistContext, setActiveStylistContext] = useState<OutfitContext | null>(null);
+  const [userFeedback, setUserFeedback] = useState<'liked' | 'passed' | 'worn' | null>(null);
 
   // Consolidates less-frequently-used actions (Load/Clear/Share) behind one button.
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
@@ -972,9 +975,18 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       {/* JeZsy Stylist — context modal (appears before scoring) */}
       <OutfitContextModal
         visible={outfitContextVisible}
-        onConfirm={(ctx) => {
+        onConfirm={async (ctx) => {
           setOutfitContextVisible(false);
-          const critique = gradeOutfit(canvasItems, wardrobeLookup, ctx);
+          setUserFeedback(null);
+          let profile = null;
+          if (session?.user?.id) {
+            try {
+              profile = await styleProfileService.getProfile(session.user.id);
+            } catch {
+              // fallback gracefully
+            }
+          }
+          const critique = gradeOutfit(canvasItems, wardrobeLookup, ctx, profile);
           setActiveCritique(critique);
           setActiveStylistContext(ctx);
           setStylistModalVisible(true);
@@ -990,6 +1002,34 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
           occasion={activeStylistContext?.occasion}
           onClose={() => setStylistModalVisible(false)}
           onSaveLook={() => setSaveModalVisible(true)}
+          onFeedback={async (feedbackType) => {
+            setUserFeedback(feedbackType);
+            if (!session?.user?.id) return;
+            try {
+              const currentProfile = await styleProfileService.getProfile(session.user.id);
+              const canvasWardrobeItems = canvasItems
+                .map((ci) => wardrobeLookup[ci.wardrobe_item_id])
+                .filter(Boolean) as WardrobeItem[];
+              const updatedProfile = updateProfileFromFeedback(
+                currentProfile,
+                feedbackType,
+                canvasWardrobeItems,
+                activeStylistContext?.occasion
+              );
+              await styleProfileService.saveProfile(updatedProfile);
+              showToast(
+                feedbackType === 'liked'
+                  ? 'Saved to your style preferences! ✨'
+                  : feedbackType === 'passed'
+                  ? 'Noted! We will avoid similar pairings.'
+                  : 'Great! Saved as worn outfit.',
+                'success'
+              );
+            } catch (e) {
+              console.warn('Failed to save stylist feedback:', e);
+            }
+          }}
+          feedbackGiven={userFeedback}
         />
       )}
 

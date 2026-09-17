@@ -12,6 +12,8 @@
 import { evaluateColors, ColorMatchResult } from './colorMatcher';
 import { MannequinCanvasItem, WardrobeItem } from './mannequinConfig';
 import { OutfitExplanation } from './outfitExplainer';
+import { UserStyleProfileDto } from '../types/dto/styleProfile';
+import { computePersonalAffinity } from './personalStyleEngine';
 
 export type GradeLetter = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D';
 
@@ -146,7 +148,8 @@ function inferOutfitFormality(
 export function gradeOutfit(
   items: MannequinCanvasItem[],
   wardrobeLookup?: Record<string, WardrobeItem>,
-  context?: OutfitContext
+  context?: OutfitContext,
+  profile?: UserStyleProfileDto | null
 ): StylistCritique {
   const occasion = context?.occasion ?? '';
   const additionalContext = (context?.additionalContext ?? '').toLowerCase();
@@ -368,6 +371,39 @@ export function gradeOutfit(
     tips.unshift('Try swapping one high-saturation piece for a neutral tone (cream, navy, or charcoal).');
   }
 
+  // Analyze where_worn_often across all canvas items
+  let whereWornBonus = 0;
+  let whereWornNote = '';
+  let whereWornConflict = '';
+  if (occasion) {
+    const occLower = occasion.toLowerCase();
+    for (const item of items) {
+      const w = wardrobeLookup?.[item.wardrobe_item_id];
+      const wwo = (
+        (w as any)?.where_worn_often ||
+        (w as any)?.whereWornOften ||
+        (w as any)?.ai_attributes?.whereWornOften ||
+        ((w as any)?.occasions || []).join(' ')
+      ).toLowerCase();
+      if (!wwo) continue;
+
+      const occKeywords = occLower.split(/[\s,/]+/).filter((k: string) => k.length > 2);
+      const isMatch = occKeywords.some((k: string) => wwo.includes(k));
+      if (isMatch && whereWornBonus < 8) {
+        whereWornBonus += 5;
+        if (!whereWornNote) {
+          whereWornNote = `You noted wearing this piece often for ${wwo}, making it a natural fit for this occasion.`;
+        }
+      } else {
+        const isAthleticPiece = wwo.match(/\b(gym|jogging|workout|running|sport)\b/) !== null;
+        const isFormalOccasion = occLower.match(/\b(wedding|formal|gala|black tie|interview)\b/) !== null;
+        if (isAthleticPiece && isFormalOccasion && !whereWornConflict) {
+          whereWornConflict = `${item.name || 'This piece'} is noted for usual athletic wear (${wwo}), which contrasts with a ${occasion}.`;
+        }
+      }
+    }
+  }
+
   // Occasion fit
   const formalityGap = Math.abs(outfitFormality - occasionFormality);
   let occasionScore = Math.round(Math.max(0, Math.min(100, 100 - formalityGap * 12)));
@@ -396,6 +432,18 @@ export function gradeOutfit(
     occasionFeedback = `The outfit is mostly appropriate for ${occasion} with minor adjustments possible.`;
   }
 
+  occasionScore = Math.min(100, occasionScore + whereWornBonus);
+  if (whereWornConflict) {
+    occasionScore = Math.max(25, occasionScore - 12);
+  }
+  if (whereWornNote) {
+    occasionFeedback = occasionFeedback ? `${occasionFeedback} ${whereWornNote}` : whereWornNote;
+  }
+  if (whereWornConflict) {
+    occasionFeedback = occasionFeedback ? `${occasionFeedback} ${whereWornConflict}` : whereWornConflict;
+    tips.push(whereWornConflict);
+  }
+
   if (mentionsRain) {
     const hasRainCoat = outers.some((o) => {
       const desc = [wardrobeLookup?.[o.wardrobe_item_id]?.description, o.name].filter(Boolean).join(' ').toLowerCase();
@@ -415,9 +463,28 @@ export function gradeOutfit(
   const occasionStatus: StylePillarBreakdown['status'] = occasionScore >= 85 ? 'excellent' : occasionScore >= 70 ? 'good' : occasionScore >= 55 ? 'warning' : 'alert';
   const occasionPillar: StylePillarBreakdown = { score: occasionScore, status: occasionStatus, title: occasionTitle, feedback: occasionFeedback };
 
+  // Personalization via Style Profile
+  let personalPillar: StylePillarBreakdown | undefined;
+  let personalAffinityScore = 75;
+  if (profile) {
+    const resolvedWardrobeItems = items.map((i) => wardrobeLookup?.[i.wardrobe_item_id] || (i as any)).filter(Boolean);
+    const affinity = computePersonalAffinity(resolvedWardrobeItems as WardrobeItem[], profile, occasion);
+    personalAffinityScore = affinity.score;
+    const personalStatus: StylePillarBreakdown['status'] =
+      personalAffinityScore >= 85 ? 'excellent' : personalAffinityScore >= 70 ? 'good' : personalAffinityScore >= 55 ? 'warning' : 'alert';
+    personalPillar = {
+      score: personalAffinityScore,
+      status: personalStatus,
+      title: 'Style Profile Alignment',
+      feedback: affinity.recommendationNote || 'Evaluated against your saved style preferences.',
+    };
+  }
+
   // Overall score
   const isBodyIncomplete = !hasDressOrFullBody && !(hasTop && hasBottom) && !hasOuterwear;
-  const rawScore = (colorScore * 0.45) + (compScore * 0.35) + (occasionScore * 0.20);
+  const rawScore = (profile && profile.feedbackCount > 0)
+    ? (colorScore * 0.35) + (compScore * 0.30) + (occasionScore * 0.20) + (personalAffinityScore * 0.15)
+    : (colorScore * 0.45) + (compScore * 0.35) + (occasionScore * 0.20);
   let maxCap = 100;
   if (isOvercrowded) maxCap = 65;
   else if (isBodyIncomplete) maxCap = 58;
@@ -541,6 +608,7 @@ export function gradeOutfit(
       colorHarmony: { score: colorScore, status: colorStatus, title: colorTitle, feedback: colorFeedback },
       compositionAndLayers: { score: compScore, status: compStatus, title: compTitle, feedback: compFeedback },
       occasionFit: occasion ? occasionPillar : undefined,
+      personalPreference: personalPillar,
     },
     tips: tips.slice(0, 3), vibe, paletteColors, isOvercrowded,
   };
