@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DimensionValue, useWindowDimensions } from 'react-native';
+import { DimensionValue, useWindowDimensions, Platform } from 'react-native';
 import { Spacing } from '@/constants/theme';
 
 /**
@@ -51,7 +51,10 @@ export function useGridCardWidth(): { cardWidth: DimensionValue; columns: number
   // implies. Computing an exact pixel width instead (floored, so rounding
   // can only leave slack, never overflow) mathematically guarantees columns
   // fit regardless of gap/gutter values.
-  const contentWidth = effectiveWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP * (columns - 1);
+  const isWeb = Platform.OS === 'web';
+  const webScrollbarSlack = isWeb ? 16 : 0;
+  const contentWidth = effectiveWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP * (columns - 1) - webScrollbarSlack;
+  
   // Subtract 1px to provide slack for Android's Yoga layout engine, which
   // often wraps exact-fit flex items due to floating point inaccuracies.
   const cardWidth: DimensionValue = Math.floor(contentWidth / columns) - 1;
