@@ -634,9 +634,9 @@ export default function AddWardrobeItemScreen() {
             />
           </View>
 
-          {/* Tell JeZy about this item */}
+          {/* Describe Your Item */}
           <View style={styles.formRow}>
-            <Text style={[styles.sectionHeading, { color: colors.text }]}>Tell JeZy about this item</Text>
+            <Text style={[styles.sectionHeading, { color: colors.text }]}>Describe Your Item</Text>
             <TextInput
               keyboardAppearance={theme}
               style={[
@@ -644,7 +644,7 @@ export default function AddWardrobeItemScreen() {
                 styles.largeTextArea,
                 { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }
               ]}
-              placeholder="Example: Navy blue fit-and-flare midi dress with short sleeves, a bow-tie neckline, fitted waist, polyester fabric, suitable for work, dinner, church and semi-formal events."
+              placeholder="Example: Navy blue fit-and-flare midi dress with short sleeves, a bow-tie neckline and fitted waist. Polyester fabric. I usually wear it to work, church, dinner and semi-formal events."
               placeholderTextColor={colors.secondaryText}
               value={description}
               onChangeText={setDescription}
@@ -653,15 +653,15 @@ export default function AddWardrobeItemScreen() {
               maxLength={2000}
             />
             <Text style={[styles.helperText, { color: colors.secondaryText }]}>
-              Describe the color, style, material, fit, details, and where you usually wear it.
+              Describe anything you know about this item, such as its color, style, material, fit, details, and when you usually wear it.
             </Text>
           </View>
 
-          {/* Notes for JeZy (Personal Notes) */}
+          {/* Personal Notes */}
           <View style={styles.formRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Notes for JeZy (Optional)</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Personal Notes (Optional)</Text>
             <Text style={[styles.subLabel, { color: colors.secondaryText, marginBottom: 2 }]}>
-              Private notes just for you and your personal stylist (e.g. favorite pairings, weather habits, or memories).
+              Add anything personal that may help JeZsy style this item for you.
             </Text>
             <TextInput
               keyboardAppearance={theme}
@@ -670,7 +670,7 @@ export default function AddWardrobeItemScreen() {
                 styles.textArea,
                 { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }
               ]}
-              placeholder="Example: I love wearing this with sneakers. / This was a gift. / I only wear this during rainy weather."
+              placeholder="Example: I love wearing this with sneakers. / I only wear this during rainy weather. / This is one of my favorite pieces."
               placeholderTextColor={colors.secondaryText}
               value={userNotes}
               onChangeText={setUserNotes}
@@ -861,112 +861,7 @@ export default function AddWardrobeItemScreen() {
             </View>
           </View>
 
-          {/* Pattern / Design Selector */}
-          <View style={styles.formRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Pattern / Design</Text>
-            <View style={styles.chipWrapRow}>
-              {COMMON_PATTERNS.map((p) => {
-                const isSelected = pattern === p;
-                return (
-                  <TouchableOpacity
-                    key={p}
-                    style={[
-                      styles.chip,
-                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
-                    ]}
-                    onPress={() => {
-                      setPattern(p);
-                    }}
-                  >
-                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                      {p}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {(pattern === 'Custom' || !COMMON_PATTERNS.includes(pattern)) && (
-              <TextInput
-                keyboardAppearance={theme}
-                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginTop: Spacing.sm }]}
-                placeholder="Enter custom pattern / design..."
-                placeholderTextColor={colors.secondaryText}
-                value={customPattern}
-                onChangeText={(text) => {
-                  setCustomPattern(text);
-                }}
-              />
-            )}
-          </View>
 
-          {/* Fabric / Material Selector */}
-          <View style={styles.formRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Fabric / Material</Text>
-            <View style={styles.chipWrapRow}>
-              {COMMON_MATERIALS.map((m) => {
-                const isSelected = material === m;
-                return (
-                  <TouchableOpacity
-                    key={m}
-                    style={[
-                      styles.chip,
-                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
-                    ]}
-                    onPress={() => {
-                      setMaterial(m);
-                    }}
-                  >
-                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                      {m}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {(material === 'Other' || !COMMON_MATERIALS.includes(material)) && (
-              <TextInput
-                keyboardAppearance={theme}
-                style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginTop: Spacing.sm }]}
-                placeholder="Enter custom fabric / material..."
-                placeholderTextColor={colors.secondaryText}
-                value={customMaterial}
-                onChangeText={(text) => {
-                  setCustomMaterial(text);
-                }}
-              />
-            )}
-          </View>
-
-          {/* Fit Selector */}
-          <View style={styles.formRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Fit</Text>
-            <View style={styles.chipWrapRow}>
-              {(garmentType === 'Bottom'
-                ? ['Regular', 'Slim', 'Straight', 'Tapered', 'Wide-leg', 'Skinny', 'Relaxed']
-                : garmentType === 'Shoes'
-                ? ['Regular', 'Wide', 'Narrow']
-                : COMMON_FITS
-              ).map((f) => {
-                const isSelected = fit === f;
-                return (
-                  <TouchableOpacity
-                    key={f}
-                    style={[
-                      styles.chip,
-                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
-                    ]}
-                    onPress={() => {
-                      setFit(f);
-                    }}
-                  >
-                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
-                      {f}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
 
           {/* When can I wear this? Multi-Select */}
           <View style={styles.formRow}>
@@ -1056,6 +951,81 @@ export default function AddWardrobeItemScreen() {
 
             {moreDetailsOpen && (
               <View style={[styles.moreDetailsContainer, { borderColor: colors.border }]}>
+                {/* Pattern / Design — optional, description is primary source */}
+                <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600' }]}>Pattern / Design (Optional)</Text>
+                <View style={styles.chipWrapRow}>
+                  {COMMON_PATTERNS.map((p) => {
+                    const isSel = pattern === p;
+                    return (
+                      <TouchableOpacity
+                        key={p}
+                        style={[styles.chip, { borderColor: colors.border, backgroundColor: isSel ? colors.tint : colors.card }]}
+                        onPress={() => setPattern(p)}
+                      >
+                        <Text style={[styles.chipText, { color: isSel ? colors.onTint : colors.text }]}>{p}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {(pattern === 'Custom' || !COMMON_PATTERNS.includes(pattern)) && (
+                  <TextInput
+                    keyboardAppearance={theme}
+                    style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginTop: Spacing.sm }]}
+                    placeholder="Enter custom pattern / design..."
+                    placeholderTextColor={colors.secondaryText}
+                    value={customPattern}
+                    onChangeText={setCustomPattern}
+                  />
+                )}
+
+                {/* Fabric / Material — optional */}
+                <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Fabric / Material (Optional)</Text>
+                <View style={styles.chipWrapRow}>
+                  {COMMON_MATERIALS.map((m) => {
+                    const isSel = material === m;
+                    return (
+                      <TouchableOpacity
+                        key={m}
+                        style={[styles.chip, { borderColor: colors.border, backgroundColor: isSel ? colors.tint : colors.card }]}
+                        onPress={() => setMaterial(m)}
+                      >
+                        <Text style={[styles.chipText, { color: isSel ? colors.onTint : colors.text }]}>{m}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {(material === 'Other' || !COMMON_MATERIALS.includes(material)) && (
+                  <TextInput
+                    keyboardAppearance={theme}
+                    style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card, marginTop: Spacing.sm }]}
+                    placeholder="Enter custom fabric / material..."
+                    placeholderTextColor={colors.secondaryText}
+                    value={customMaterial}
+                    onChangeText={setCustomMaterial}
+                  />
+                )}
+
+                {/* Fit — optional */}
+                <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Fit (Optional)</Text>
+                <View style={styles.chipWrapRow}>
+                  {(garmentType === 'Bottom'
+                    ? ['Regular', 'Slim', 'Straight', 'Tapered', 'Wide-leg', 'Skinny', 'Relaxed']
+                    : garmentType === 'Shoes'
+                    ? ['Regular', 'Wide', 'Narrow']
+                    : COMMON_FITS
+                  ).map((f) => {
+                    const isSel = fit === f;
+                    return (
+                      <TouchableOpacity
+                        key={f}
+                        style={[styles.chip, { borderColor: colors.border, backgroundColor: isSel ? colors.tint : colors.card }]}
+                        onPress={() => setFit(f)}
+                      >
+                        <Text style={[styles.chipText, { color: isSel ? colors.onTint : colors.text }]}>{f}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
                 {(garmentType === 'Top' || garmentType === 'Dress') && (
                   <>
                     <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600' }]}>Neckline / Collar</Text>

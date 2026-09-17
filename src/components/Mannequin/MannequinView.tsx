@@ -34,8 +34,9 @@ import {
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { buildSilhouetteParams } from '@/src/utils/bodySilhouette';
-import { gradeOutfit } from '@/src/utils/aiStylistAdvisor';
+import { gradeOutfit, StylistCritique, OutfitContext } from '@/src/utils/aiStylistAdvisor';
 import { StylistCritiqueModal } from './StylistCritiqueModal';
+import { OutfitContextModal } from './OutfitContextModal';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
 
 // Enable layout animation for Android (Old Architecture only)
@@ -172,21 +173,18 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Stylist Critique Modal State
+  // Stylist Critique Modal State — triggered by user via OutfitContextModal, not auto-scored
   const [stylistModalVisible, setStylistModalVisible] = useState(false);
+  const [outfitContextVisible, setOutfitContextVisible] = useState(false);
+  const [activeCritique, setActiveCritique] = useState<StylistCritique | null>(null);
+  const [activeStylistContext, setActiveStylistContext] = useState<OutfitContext | null>(null);
 
-  // Consolidates the less-frequently-used Load/Clear/Share actions behind one
-  // button so the toolbar reads as two clear priorities (Stylist, Save)
-  // instead of five competing ones.
+  // Consolidates less-frequently-used actions (Load/Clear/Share) behind one button.
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
 
   const wardrobeLookup = useMemo(() => {
     return Object.fromEntries(wardrobeItems.map((w) => [w.id, w]));
   }, [wardrobeItems]);
-
-  const activeCritique = useMemo(() => {
-    return gradeOutfit(canvasItems, wardrobeLookup);
-  }, [canvasItems, wardrobeLookup]);
 
   // Filtered wardrobe items for the drawer
   const filteredItems = useMemo(() => {
@@ -524,12 +522,12 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               if (canvasItems.length === 0) {
                 showToast('Add garments to the mannequin first!', 'info');
               } else {
-                setStylistModalVisible(true);
+                setOutfitContextVisible(true);
               }
             }}
             disabled={canvasItems.length === 0}
             accessibilityRole="button"
-            accessibilityLabel="AI Stylist critique outfit"
+            accessibilityLabel="JeZsy Stylist — evaluate outfit"
           >
             <IconSymbol name="sparkles" size={13} color={colors.tint} />
             <Text style={[styles.stylistBtnText, { color: colors.tint }]}>Stylist</Text>
@@ -971,13 +969,29 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
         </View>
       </Modal>
       )}
-      {/* ── Stylist Critique Modal ── */}
-      <StylistCritiqueModal
-        visible={stylistModalVisible}
-        critique={activeCritique}
-        onClose={() => setStylistModalVisible(false)}
-        onSaveLook={() => setSaveModalVisible(true)}
+      {/* JeZsy Stylist — context modal (appears before scoring) */}
+      <OutfitContextModal
+        visible={outfitContextVisible}
+        onConfirm={(ctx) => {
+          setOutfitContextVisible(false);
+          const critique = gradeOutfit(canvasItems, wardrobeLookup, ctx);
+          setActiveCritique(critique);
+          setActiveStylistContext(ctx);
+          setStylistModalVisible(true);
+        }}
+        onCancel={() => setOutfitContextVisible(false)}
       />
+
+      {/* JeZsy Stylist Critique Modal */}
+      {activeCritique && (
+        <StylistCritiqueModal
+          visible={stylistModalVisible}
+          critique={activeCritique}
+          occasion={activeStylistContext?.occasion}
+          onClose={() => setStylistModalVisible(false)}
+          onSaveLook={() => setSaveModalVisible(true)}
+        />
+      )}
 
       {/* ── More Actions Menu (Load / Clear / Share) ── */}
       {moreMenuVisible && (

@@ -526,7 +526,7 @@ class FashionVisionEngineImpl implements IFashionVisionEngine {
       moreDetails,
       confidence: 0.75,
       modelMetadata: {
-        name: 'JeZy-Geometric-Fallback',
+        name: 'JeZsy-Geometric-Fallback',
         version: '1.0.0',
         timestamp,
       },
