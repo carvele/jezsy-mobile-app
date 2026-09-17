@@ -10,6 +10,10 @@ import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { useToast } from '@/src/context/ToastContext';
 import { ConfirmModal } from '@/src/components/ConfirmModal';
+import {
+  normalizeGarment,
+  resolveEffectiveGarmentBucket,
+} from '@/src/utils/garmentSemanticClassifier';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
@@ -47,7 +51,24 @@ export default function WardrobeItemDetailScreen() {
         .eq('id', id)
         .single();
       if (error) throw error;
-      setItem(data);
+      if (data) {
+        const effective = resolveEffectiveGarmentBucket(data);
+        if (effective !== data.garment_type && (data.garment_type === 'Top' || !data.garment_type)) {
+          supabase
+            .from('wardrobe_items')
+            .update({ garment_type: effective })
+            .eq('id', data.id)
+            .then(({ error: updateErr }) => {
+              if (updateErr) {
+                console.warn('Could not auto-heal wardrobe item bucket:', updateErr);
+              }
+            });
+          data.garment_type = effective;
+        }
+        setItem(data);
+      } else {
+        setItem(null);
+      }
     } catch (err) {
       console.error('Error fetching wardrobe item:', err);
       setItem(null);
@@ -118,6 +139,16 @@ export default function WardrobeItemDetailScreen() {
       ? 'Never worn'
       : `Worn ${item.wear_count} time${item.wear_count === 1 ? '' : 's'}${item.last_worn_at ? ` · last worn ${timeAgo(item.last_worn_at)}` : ''}`;
 
+  const normalized = normalizeGarment(
+    item.category || '',
+    item.sub_category || '',
+    item.color_tags && item.color_tags.length > 0 ? item.color_tags.join(', ') : '',
+    (item as any).where_worn_often || '',
+    item.description || '',
+    item.user_notes || ''
+  );
+  const effectiveGarmentType = resolveEffectiveGarmentBucket(item);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
@@ -161,14 +192,19 @@ export default function WardrobeItemDetailScreen() {
         />
 
         <View style={styles.tagsRow}>
-          {item.garment_type && (
+          {effectiveGarmentType && (
             <View style={[styles.tag, { backgroundColor: colors.tint }]}>
-              <Text style={[styles.tagText, { color: colors.onTint }]}>{item.garment_type}</Text>
+              <Text style={[styles.tagText, { color: colors.onTint }]}>{effectiveGarmentType}</Text>
             </View>
           )}
-          {item.category && (
+          {item.category && item.category !== effectiveGarmentType && (
             <View style={[styles.tag, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
               <Text style={[styles.tagText, { color: colors.text }]}>{item.category}</Text>
+            </View>
+          )}
+          {normalized?.subtype && normalized.subtype !== effectiveGarmentType && (
+            <View style={[styles.tag, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}>
+              <Text style={[styles.tagText, { color: colors.tint }]}>{normalized.subtype}</Text>
             </View>
           )}
         </View>

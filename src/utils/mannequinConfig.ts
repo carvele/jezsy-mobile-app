@@ -1,6 +1,8 @@
 import { Database } from '@/src/types/database.types';
+import { resolveEffectiveGarmentBucket } from './garmentSemanticClassifier';
 
 export type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
+
 
 export interface MannequinCanvasItem {
   id: string; // unique instance ID on the canvas
@@ -84,7 +86,7 @@ export function createMannequinItem(
   wardrobeItem: WardrobeItem,
   currentMaxZIndex: number = 0
 ): MannequinCanvasItem {
-  const gType = wardrobeItem.garment_type || 'Top';
+  const gType = resolveEffectiveGarmentBucket(wardrobeItem) || 'Top';
   const defaults = CATEGORY_PLACEMENT_DEFAULTS[gType] || DEFAULT_FALLBACK_PLACEMENT;
 
   return {
