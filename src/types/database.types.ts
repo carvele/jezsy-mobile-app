@@ -844,6 +844,142 @@ export type Database = {
           },
         ]
       }
+      legal_acceptances: {
+        Row: {
+          acceptance_method: string
+          accepted_at: string
+          client_platform: string
+          content_sha256: string
+          document_id: string
+          document_type: string
+          document_version: string
+          id: string
+          legal_subject_id: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          acceptance_method?: string
+          accepted_at?: string
+          client_platform: string
+          content_sha256: string
+          document_id: string
+          document_type: string
+          document_version: string
+          id?: string
+          legal_subject_id: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          acceptance_method?: string
+          accepted_at?: string
+          client_platform?: string
+          content_sha256?: string
+          document_id?: string
+          document_type?: string
+          document_version?: string
+          id?: string
+          legal_subject_id?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_acceptances_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "legal_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_document_views: {
+        Row: {
+          client_platform: string
+          document_id: string
+          document_version: string
+          id: string
+          legal_subject_id: string
+          user_id: string | null
+          viewed_at: string
+        }
+        Insert: {
+          client_platform: string
+          document_id: string
+          document_version: string
+          id?: string
+          legal_subject_id: string
+          user_id?: string | null
+          viewed_at?: string
+        }
+        Update: {
+          client_platform?: string
+          document_id?: string
+          document_version?: string
+          id?: string
+          legal_subject_id?: string
+          user_id?: string | null
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_document_views_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "legal_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_documents: {
+        Row: {
+          content_markdown: string
+          content_sha256: string
+          created_at: string
+          created_by: string | null
+          document_type: string
+          effective_at: string
+          id: string
+          is_active: boolean
+          is_published: boolean
+          published_at: string | null
+          published_by: string | null
+          title: string
+          version: string
+        }
+        Insert: {
+          content_markdown: string
+          content_sha256: string
+          created_at?: string
+          created_by?: string | null
+          document_type: string
+          effective_at?: string
+          id?: string
+          is_active?: boolean
+          is_published?: boolean
+          published_at?: string | null
+          published_by?: string | null
+          title: string
+          version: string
+        }
+        Update: {
+          content_markdown?: string
+          content_sha256?: string
+          created_at?: string
+          created_by?: string | null
+          document_type?: string
+          effective_at?: string
+          id?: string
+          is_active?: boolean
+          is_published?: boolean
+          published_at?: string | null
+          published_by?: string | null
+          title?: string
+          version?: string
+        }
+        Relationships: []
+      }
       logs: {
         Row: {
           action: string | null
@@ -2645,6 +2781,24 @@ export type Database = {
         }
         Relationships: []
       }
+      user_legal_subjects: {
+        Row: {
+          created_at: string
+          legal_subject_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          legal_subject_id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          legal_subject_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_measurements: {
         Row: {
           created_at: string
@@ -2704,7 +2858,6 @@ export type Database = {
           color_tags: string[] | null
           created_at: string
           deleted: boolean | null
-          description: string | null
           garment_type: string | null
           id: string
           image_url: string | null
@@ -2712,7 +2865,6 @@ export type Database = {
           product_id: string | null
           sub_category: string | null
           user_id: string | null
-          user_notes: string | null
           wear_count: number
         }
         Insert: {
@@ -2720,7 +2872,6 @@ export type Database = {
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
-          description?: string | null
           garment_type?: string | null
           id?: string
           image_url?: string | null
@@ -2728,7 +2879,6 @@ export type Database = {
           product_id?: string | null
           sub_category?: string | null
           user_id?: string | null
-          user_notes?: string | null
           wear_count?: number
         }
         Update: {
@@ -2736,7 +2886,6 @@ export type Database = {
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
-          description?: string | null
           garment_type?: string | null
           id?: string
           image_url?: string | null
@@ -2744,7 +2893,6 @@ export type Database = {
           product_id?: string | null
           sub_category?: string | null
           user_id?: string | null
-          user_notes?: string | null
           wear_count?: number
         }
         Relationships: [
@@ -2841,6 +2989,15 @@ export type Database = {
         }
         Returns: Json
       }
+      accept_legal_documents: {
+        Args: {
+          _client_platform: string
+          _privacy_document_id: string
+          _terms_document_id: string
+          _user_agent?: string
+        }
+        Returns: Json
+      }
       activate_staff_account: { Args: never; Returns: Json }
       adjust_inventory_on_hand: {
         Args: { p_delta: number; p_inventory_id: string; p_reason: string }
@@ -2909,6 +3066,7 @@ export type Database = {
       can_manage_staff: { Args: never; Returns: boolean }
       can_operate_inventory: { Args: never; Returns: boolean }
       can_operate_reservations: { Args: never; Returns: boolean }
+      can_publish_legal_documents: { Args: never; Returns: boolean }
       can_view_customer_measurements: { Args: never; Returns: boolean }
       cancel_reservation_as_manager: {
         Args: {
@@ -3094,6 +3252,7 @@ export type Database = {
         }[]
       }
       get_inventory_health_analytics: { Args: never; Returns: Json }
+      get_legal_acceptance_status: { Args: never; Returns: Json }
       get_most_wishlisted_products: {
         Args: never
         Returns: {
@@ -3105,6 +3264,10 @@ export type Database = {
       }
       get_or_create_direct_chat: {
         Args: { other_user_id: string }
+        Returns: string
+      }
+      get_or_create_legal_subject_id: {
+        Args: { _user_id: string }
         Returns: string
       }
       get_outfit_privacy: { Args: { p_user_id: string }; Returns: string }
@@ -3132,6 +3295,10 @@ export type Database = {
           p_timezone?: string
         }
         Returns: Json
+      }
+      get_product_sold_count: {
+        Args: { p_product_id: string }
+        Returns: number
       }
       get_public_outfits_for_product: {
         Args: { p_product_id: string }
@@ -3260,7 +3427,6 @@ export type Database = {
           color_tags: string[] | null
           created_at: string
           deleted: boolean | null
-          description: string | null
           garment_type: string | null
           id: string
           image_url: string | null
@@ -3268,7 +3434,6 @@ export type Database = {
           product_id: string | null
           sub_category: string | null
           user_id: string | null
-          user_notes: string | null
           wear_count: number
         }
         SetofOptions: {
@@ -3344,6 +3509,16 @@ export type Database = {
         }
         Returns: Json
       }
+      publish_legal_document_version: {
+        Args: {
+          _content_markdown: string
+          _document_type: string
+          _effective_at?: string
+          _title: string
+          _version: string
+        }
+        Returns: Json
+      }
       recalculate_inventory_stock: { Args: never; Returns: Json }
       record_boutique_sale: {
         Args: {
@@ -3353,6 +3528,10 @@ export type Database = {
           p_quantity: number
           p_unit_price: number
         }
+        Returns: Json
+      }
+      record_legal_document_view: {
+        Args: { _client_platform: string; _document_id: string }
         Returns: Json
       }
       record_reservation_balance: {
