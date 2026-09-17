@@ -1,0 +1,15 @@
+-- Rollback for 20260917180000_customer_cancellation_and_return_refund
+
+DROP FUNCTION IF EXISTS public.review_return_refund_request(uuid, text, text);
+DROP FUNCTION IF EXISTS public.cancel_customer_reservation(uuid, text);
+DROP FUNCTION IF EXISTS public.request_customer_refund(uuid, text, text, text);
+DROP FUNCTION IF EXISTS public.is_reservation_return_eligible(uuid);
+
+DELETE FROM public.settings WHERE key = 'returnRequestWindow';
+
+DROP POLICY IF EXISTS "Auth delete own return-refund-evidence" ON storage.objects;
+DROP POLICY IF EXISTS "Auth read own or staff read return-refund-evidence" ON storage.objects;
+DROP POLICY IF EXISTS "Auth upload to own return-refund-evidence folder" ON storage.objects;
+DELETE FROM storage.buckets WHERE id = 'return-refund-evidence';
+
+DROP TABLE IF EXISTS public.return_refund_requests CASCADE;

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -23,21 +23,28 @@ import {
 import {
   getMyReservationsPage,
   getMyReservationStatusCounts,
+  cancelCustomerReservation,
   CustomerReservation as Reservation,
 } from '@/src/services/reservationService';
 import { getReturnRequestWindowDays } from '@/src/services/settingsService';
-import { useMessages } from '@/src/context/MessagesContext';
+import { ReturnRefundModal } from '@/src/components/reservations/ReturnRefundModal';
 
 // Lines beyond the first, which is the one the parent's product columns
-// already describe. 0 for single-item reservations and for rows fetched
-// without the aggregate.
-const extraItemCount = (reservation: Reservation): number =>
-  Math.max(0, (reservation.reservation_items?.[0]?.count ?? 1) - 1);
+// already describe. Supports both aggregated count and array length.
+const extraItemCount = (reservation: Reservation): number => {
+  if (!reservation.reservation_items) return 0;
+  const first = reservation.reservation_items[0];
+  if (first && typeof first.count === 'number') {
+    return Math.max(0, first.count - 1);
+  }
+  return Math.max(0, reservation.reservation_items.length - 1);
+};
 
 
 export default function ReservationsScreen() {
   const { session } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [refundModalItem, setRefundModalItem] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -63,7 +70,6 @@ export default function ReservationsScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
-  const { getOrCreateConversation } = useMessages();
 
   const fetchInitialReservations = useCallback(async (filterToFetch: StatusFilter) => {
     if (!session?.user) return;
@@ -130,29 +136,32 @@ export default function ReservationsScreen() {
     }
   };
 
-  const handleReturnRefund = useCallback(async (item: Reservation) => {
-    try {
-      const conv = await getOrCreateConversation();
-      if (!conv) {
-        showToast('Unable to open support chat right now. Please try again.', 'error');
-        return;
-      }
-      const refId = item.display_id || item.id.substring(0, 8);
-      router.push({
-        pathname: '/messages/[conversationId]',
-        params: {
-          conversationId: conv.id,
-          ctxType: 'reservation',
-          ctxRef: item.id,
-          ctxLabel: `Reservation ${refId}${item.product_name ? ` - ${item.product_name}` : ''}`,
-          prefill: `I would like to request a return/refund for reservation #${refId}.`,
+  const handleReturnRefund = useCallback((item: Reservation) => {
+    setRefundModalItem(item);
+  }, []);
+
+  const handleCancelReservation = useCallback((item: Reservation) => {
+    Alert.alert(
+      'Cancel Reservation',
+      'Are you sure you want to cancel this reservation? The held item will be released back into boutique inventory.',
+      [
+        { text: 'Keep Reservation', style: 'cancel' },
+        {
+          text: 'Cancel Reservation',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await cancelCustomerReservation(item.id);
+            if (res.ok) {
+              showToast('Reservation cancelled.', 'success');
+              fetchInitialReservations(activeFilter);
+            } else {
+              showToast(res.error.message || 'Could not cancel reservation.', 'error');
+            }
+          },
         },
-      } as any);
-    } catch (err) {
-      console.error('Error opening return/refund chat:', err);
-      showToast('Could not start return request chat.', 'error');
-    }
-  }, [getOrCreateConversation, router, showToast]);
+      ]
+    );
+  }, [activeFilter, fetchInitialReservations, showToast]);
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {
     const dateStr = item.date ? formatPHDate(item.date) : 'N/A';
@@ -231,6 +240,19 @@ export default function ReservationsScreen() {
                     accessibilityLabel="Pay for reservation"
                   >
                     <Text style={[styles.cardActionBtnText, { color: colors.onTint }]}>To Pay</Text>
+                  </TouchableOpacity>
+                );
+              }
+              if (action === 'cancelReservation') {
+                return (
+                  <TouchableOpacity
+                    key={action}
+                    style={[styles.cardActionBtn, styles.cardActionBtnOutline, { borderColor: colors.border }]}
+                    onPress={() => handleCancelReservation(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel reservation"
+                  >
+                    <Text style={[styles.cardActionBtnText, { color: colors.secondaryText }]}>Cancel</Text>
                   </TouchableOpacity>
                 );
               }
@@ -435,6 +457,15 @@ export default function ReservationsScreen() {
           }
         />
       )}
+
+      <ReturnRefundModal
+        visible={Boolean(refundModalItem)}
+        reservation={refundModalItem}
+        onClose={() => setRefundModalItem(null)}
+        onSuccess={() => {
+          fetchInitialReservations(activeFilter);
+        }}
+      />
     </SafeAreaView>
   );
 }

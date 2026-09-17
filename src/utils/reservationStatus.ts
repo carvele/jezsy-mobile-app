@@ -165,6 +165,7 @@ export interface CustomerReservationDisplayInput {
   payment_status?: string | null;
   countdown?: boolean | null;
   payment_due_at?: string | null;
+  refund_request_status?: string | null;
 }
 
 export interface CustomerReservationDisplayState {
@@ -184,7 +185,7 @@ export interface CustomerReservationDisplayState {
  * on a reservation that has already settled or is under review).
  *
  * Priority order fails safely:
- * 1. Cancelled / Refunded / Refund Required
+ * 1. Cancelled / Refunded / Refund Required / Refund Under Review
  * 2. Completed
  * 3. Preparing / Ready / To Pickup
  * 4. Paid while backend status still To Pay -> 'Payment Received'
@@ -196,11 +197,22 @@ export function getCustomerReservationDisplayState(
 ): CustomerReservationDisplayState {
   const rawStatus = (reservation.status || '').trim().toLowerCase();
   const paymentStatus = (reservation.payment_status || '').trim().toLowerCase();
+  const refundReqStatus = (reservation.refund_request_status || '').trim().toLowerCase();
   const countdown = reservation.countdown;
   const bucket = statusBucket(reservation.status);
 
-  // 1. Cancelled / Refunded / Refund Required
-  if (paymentStatus === 'refund required') {
+  // 1. Cancelled / Refunded / Refund Required / Refund Under Review
+  if (['submitted', 'under_review'].includes(refundReqStatus)) {
+    return {
+      label: 'Refund Under Review',
+      bucket: 'returnRefund',
+      filterBucket: 'cancelled',
+      badgeColorType: 'paymentUnderReview',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+  if (paymentStatus === 'refund required' || refundReqStatus === 'approved') {
     return {
       label: 'Refund in Progress',
       bucket: 'returnRefund',
@@ -300,7 +312,13 @@ export function getCustomerReservationDisplayState(
   };
 }
 
-export type ReservationCardAction = 'toPay' | 'returnRefund' | 'rate' | 'buyAgain' | 'viewRefund';
+export type ReservationCardAction =
+  | 'toPay'
+  | 'cancelReservation'
+  | 'returnRefund'
+  | 'rate'
+  | 'buyAgain'
+  | 'viewRefund';
 
 export interface ReservationActionInput {
   status: string | null;
@@ -310,6 +328,9 @@ export interface ReservationActionInput {
   completed_at?: string | null;
   date?: string | null;
   reviewed?: boolean;
+  hasUnratedItems?: boolean;
+  isFullyRated?: boolean;
+  refund_request_status?: string | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -337,14 +358,15 @@ export function isReturnEligible(
  * Resolves customer-facing action buttons for a reservation card.
  *
  * Rules:
- * - Active awaiting payment -> ['toPay']
+ * - Active awaiting payment -> ['toPay', 'cancelReservation']
  * - Active holds in progress (paid, under review, preparing, ready) -> []
- * - Completed + within return window + not rated -> ['returnRefund', 'rate']
- * - Completed + within return window + already rated -> ['returnRefund']
- * - Completed + return window expired + not rated -> ['buyAgain', 'rate']
+ * - Completed + within return window + unrated -> ['returnRefund', 'rate']
+ * - Completed + within return window + rated -> ['returnRefund']
+ * - Completed + return window expired + unrated -> ['buyAgain', 'rate']
  * - Completed + return window expired + rated -> ['buyAgain']
- * - Return/refund request pending -> ['viewRefund']
- * - Refunded / return completed -> ['buyAgain']
+ * - Return/refund request under review -> ['viewRefund'] (+ 'rate' if hasUnratedItems)
+ * - Refund approved / liability required -> ['viewRefund']
+ * - Refunded -> ['buyAgain']
  * - Cancelled -> []
  */
 export function getReservationCardActions(
@@ -353,23 +375,36 @@ export function getReservationCardActions(
 ): ReservationCardAction[] {
   const displayState = getCustomerReservationDisplayState(reservation);
   const paymentStatus = (reservation.payment_status || '').toLowerCase().trim();
+  const requestStatus = (reservation.refund_request_status || '').toLowerCase().trim();
 
-  // Return/refund request pending review
-  if (paymentStatus === 'refund required') {
+  // Rate capability: if hasUnratedItems is provided, use it; otherwise fallback to !reviewed / !isFullyRated
+  const canRate = reservation.hasUnratedItems !== undefined
+    ? reservation.hasUnratedItems
+    : (reservation.isFullyRated !== undefined ? !reservation.isFullyRated : !reservation.reviewed);
+
+  // 1. Active return/refund request under operational review
+  if (['submitted', 'under_review'].includes(requestStatus)) {
+    const actions: ReservationCardAction[] = ['viewRefund'];
+    if (canRate) actions.push('rate');
+    return actions;
+  }
+
+  // 2. Approved refund liability / Refund in progress
+  if (paymentStatus === 'refund required' || requestStatus === 'approved') {
     return ['viewRefund'];
   }
 
-  // Refund already completed
-  if (paymentStatus === 'refunded') {
+  // 3. Refund completed
+  if (paymentStatus === 'refunded' || requestStatus === 'refunded') {
     return ['buyAgain'];
   }
 
-  // Active holds awaiting payment
+  // 4. Unpaid To Pay: can pay or cancel
   if (displayState.showToPayAction) {
-    return ['toPay'];
+    return ['toPay', 'cancelReservation'];
   }
 
-  // Active holds in progress (paid, under review, preparing, ready)
+  // 5. Active holds in progress (paid, under review, preparing, ready)
   if (
     displayState.bucket === 'toPay' ||
     displayState.bucket === 'paymentUnderReview' ||
@@ -380,7 +415,7 @@ export function getReservationCardActions(
     return [];
   }
 
-  // Completed reservation
+  // 6. Completed reservation
   if (displayState.bucket === 'completed' || statusBucket(reservation.status) === 'completed') {
     const eligible = isReturnEligible(
       { completed_at: reservation.completed_at, date: reservation.date },
@@ -388,13 +423,18 @@ export function getReservationCardActions(
       options.referenceTime ?? Date.now()
     );
 
-    const isRated = Boolean(reservation.reviewed);
-
+    const actions: ReservationCardAction[] = [];
     if (eligible) {
-      return isRated ? ['returnRefund'] : ['returnRefund', 'rate'];
+      actions.push('returnRefund');
     } else {
-      return isRated ? ['buyAgain'] : ['buyAgain', 'rate'];
+      actions.push('buyAgain');
     }
+
+    if (canRate) {
+      actions.push('rate');
+    }
+
+    return actions;
   }
 
   // Cancelled or unknown
