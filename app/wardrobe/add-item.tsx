@@ -27,13 +27,11 @@ import { wardrobeService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { removeBackground } from '@six33/react-native-bg-removal';
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
-import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { useToast } from '@/src/context/ToastContext';
 import { ImageCropModal } from '@/src/components/ImageCropModal';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 import { isOnline } from '@/src/services/offlineSync';
 import { fashionVisionEngine } from '@/src/services/fashionVisionEngine';
-import { AIAttributeConfirmationModal } from '@/src/components/AIAttributeConfirmationModal';
 import { ColorPickerModal } from '@/src/components/ColorPickerModal';
 import { ColorDetailItem, GarmentAnalysisResult, UserCorrections } from '@/src/types/dto/aiAttributes';
 
@@ -55,6 +53,38 @@ const CATEGORIES = [
 const GARMENT_TYPES = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'] as const;
 type GarmentType = (typeof GARMENT_TYPES)[number];
 
+const COMMON_OCCASIONS = [
+  'Casual',
+  'Everyday',
+  'Work',
+  'Business Casual',
+  'Formal',
+  'Cocktail',
+  'Date Night',
+  'Party',
+  'Interview',
+  'Dinner',
+];
+const COMMON_PATTERNS = ['Solid', 'Striped', 'Floral', 'Plaid', 'Polka Dot', 'Graphic', 'Animal Print'];
+const COMMON_FITS = ['Regular', 'Slim', 'Oversized', 'Tailored', 'Loose', 'Fitted'];
+const COMMON_MATERIALS = ['Cotton', 'Denim', 'Linen', 'Silk', 'Wool', 'Polyester', 'Leather', 'Knit', 'Velvet'];
+const QUICK_COLOR_PALETTE = [
+  { name: 'Black', hex: '#212121' },
+  { name: 'Charcoal', hex: '#374151' },
+  { name: 'Grey', hex: '#9E9E9E' },
+  { name: 'White', hex: '#FFFFFF' },
+  { name: 'Navy', hex: '#1B2A4A' },
+  { name: 'Blue', hex: '#1E88E5' },
+  { name: 'Burgundy', hex: '#800020' },
+  { name: 'Red', hex: '#E53935' },
+  { name: 'Pink', hex: '#E91E63' },
+  { name: 'Olive', hex: '#556B2F' },
+  { name: 'Green', hex: '#43A047' },
+  { name: 'Beige', hex: '#F5F5DC' },
+  { name: 'Brown', hex: '#795548' },
+  { name: 'Gold', hex: '#D4AF37' },
+];
+
 export default function AddWardrobeItemScreen() {
   const { showToast } = useToast();
   const theme = useColorScheme();
@@ -72,21 +102,20 @@ export default function AddWardrobeItemScreen() {
   const [category, setCategory] = useState<string>('Evening Wear');
   const [garmentType, setGarmentType] = useState<GarmentType | null>(null);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const [colorOptions, setColorOptions] = useState<ColorOption[]>(DEFAULT_COLOR_OPTIONS);
   const [subCategory, setSubCategory] = useState<string>('');
   const [removeBg, setRemoveBg] = useState<boolean>(true);
   const [categoryModalVisible, setCategoryModalVisible] = useState<boolean>(false);
   const [categorySearch, setCategorySearch] = useState<string>('');
   
-  // AI Analysis & Extended Attributes
+  // Vision Analysis & Extended Attributes
   const [aiAnalysis, setAiAnalysis] = useState<GarmentAnalysisResult | null>(null);
-  const [aiModalVisible, setAiModalVisible] = useState(false);
   const [isAnalyzingAi, setIsAnalyzingAi] = useState(false);
   const [userCorrections, setUserCorrections] = useState<UserCorrections | null>(null);
   const [pattern, setPattern] = useState<string>('Solid');
   const [material, setMaterial] = useState<string>('Cotton');
   const [fit, setFit] = useState<string>('Regular');
   const [occasions, setOccasions] = useState<string[]>(['Casual']);
+  const [customOccasion, setCustomOccasion] = useState<string>('');
   const [colorDetails, setColorDetails] = useState<ColorDetailItem[]>([]);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
 
@@ -126,10 +155,6 @@ export default function AddWardrobeItemScreen() {
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    fetchColorOptions().then(setColorOptions);
   }, []);
 
   useEffect(() => {
@@ -237,10 +262,21 @@ export default function AddWardrobeItemScreen() {
         height: rawPickedSize?.height,
       });
       setAiAnalysis(analysis);
-      setAiModalVisible(true);
+      if (analysis.garmentType) setGarmentType(analysis.garmentType as GarmentType);
+      if (analysis.category) setCategory(analysis.category);
+      if (analysis.subcategory) setSubCategory(analysis.subcategory);
+      if (analysis.pattern) setPattern(analysis.pattern);
+      if (analysis.material) setMaterial(analysis.material);
+      if (analysis.fit) setFit(analysis.fit);
+      if (analysis.occasions && analysis.occasions.length > 0) setOccasions(analysis.occasions);
+      if (analysis.colors && analysis.colors.length > 0) {
+        setColorDetails(analysis.colors);
+        setSelectedColors(analysis.colors.map((c) => c.name));
+      }
+      showToast('Vision analysis applied to form below.', 'success');
     } catch (e) {
-      console.warn('AI analysis error, proceeding with manual entry:', e);
-      showToast('AI analysis could not complete. You can enter details manually.', 'info');
+      console.warn('Vision analysis error, proceeding with manual entry:', e);
+      showToast('Vision analysis could not complete. You can enter details manually.', 'info');
     } finally {
       setIsAnalyzingAi(false);
     }
@@ -252,32 +288,6 @@ export default function AddWardrobeItemScreen() {
     setRawPickedUri(null);
     setRawPickedSize(null);
     runAiAnalysis(croppedUri);
-  };
-
-  const handleAiConfirm = (confirmed: GarmentAnalysisResult, corrections: UserCorrections | null) => {
-    if (confirmed.garmentType) setGarmentType(confirmed.garmentType as GarmentType);
-    if (confirmed.category) setCategory(confirmed.category);
-    if (confirmed.subcategory) setSubCategory(confirmed.subcategory);
-    if (confirmed.pattern) setPattern(confirmed.pattern);
-    if (confirmed.material) setMaterial(confirmed.material);
-    if (confirmed.fit) setFit(confirmed.fit);
-    if (confirmed.occasions) setOccasions(confirmed.occasions);
-    if (confirmed.colors && confirmed.colors.length > 0) {
-      setColorDetails(confirmed.colors);
-      setSelectedColors(confirmed.colors.map((c) => c.name));
-    }
-    if (corrections) {
-      setUserCorrections(corrections);
-    }
-    setAiModalVisible(false);
-  };
-
-  const toggleColor = (colorName: string) => {
-    setSelectedColors((prev) =>
-      prev.includes(colorName)
-        ? prev.filter((c) => c !== colorName)
-        : [...prev, colorName]
-    );
   };
 
   // Bounds an upload/DB call so a dropped connection surfaces a clear,
@@ -425,6 +435,45 @@ export default function AddWardrobeItemScreen() {
         .getPublicUrl(uploadData.path);
 
       setStatusMessage('Saving details...');
+
+      // Compute user corrections if user modified any values that vision analysis populated
+      let finalUserCorrections: UserCorrections | null = userCorrections;
+      if (aiAnalysis) {
+        const original: UserCorrections['original'] = {
+          garmentType: aiAnalysis.garmentType,
+          category: aiAnalysis.category,
+          subcategory: aiAnalysis.subcategory,
+          colors: aiAnalysis.colors.map((c) => c.name),
+          pattern: aiAnalysis.pattern,
+          material: aiAnalysis.material,
+          fit: aiAnalysis.fit,
+          occasions: aiAnalysis.occasions,
+        };
+        const corrected: UserCorrections['corrected'] = {
+          garmentType: garmentType || undefined,
+          category,
+          subcategory: subCategory.trim() || undefined,
+          colors: colorDetails.map((c) => c.name),
+          pattern,
+          material,
+          fit,
+          occasions,
+        };
+        const hasDifferences =
+          original.garmentType !== corrected.garmentType ||
+          original.category !== corrected.category ||
+          original.subcategory !== corrected.subcategory ||
+          original.pattern !== corrected.pattern ||
+          original.material !== corrected.material ||
+          original.fit !== corrected.fit ||
+          JSON.stringify(original.occasions) !== JSON.stringify(corrected.occasions) ||
+          JSON.stringify(original.colors) !== JSON.stringify(corrected.colors);
+
+        if (hasDifferences) {
+          finalUserCorrections = { original, corrected, correctedAt: new Date().toISOString() };
+        }
+      }
+
       // Insert wardrobe item row via wardrobeService with bounded timeout
       const result = await withTimeout(
         wardrobeService.addItem({
@@ -442,7 +491,7 @@ export default function AddWardrobeItemScreen() {
           isCustomCategory: !CATEGORIES.includes(category),
           aiAttributes: aiAnalysis ? (aiAnalysis as any) : null,
           aiConfidence: aiAnalysis?.confidence ?? null,
-          userCorrections: userCorrections ? (userCorrections as any) : null,
+          userCorrections: finalUserCorrections ? (finalUserCorrections as any) : null,
         }),
         12000,
       );
@@ -469,6 +518,7 @@ export default function AddWardrobeItemScreen() {
       setMaterial('Cotton');
       setFit('Regular');
       setOccasions(['Casual']);
+      setCustomOccasion('');
       setAiAnalysis(null);
       setUserCorrections(null);
 
@@ -569,7 +619,7 @@ export default function AddWardrobeItemScreen() {
           )}
         </View>
 
-        {/* Explicit AI Trigger & Status */}
+        {/* Vision Analysis Trigger & Status */}
         {imageUri && (
           <View style={styles.aiActionCard}>
             <TouchableOpacity
@@ -590,16 +640,32 @@ export default function AddWardrobeItemScreen() {
               )}
               <Text style={styles.aiAnalyzeBtnText}>
                 {isAnalyzingAi
-                  ? 'Analyzing Clothing with AI...'
+                  ? 'Analyzing Clothing...'
                   : aiAnalysis
-                  ? '✨ Review / Re-Analyze with AI'
-                  : '✨ Analyze Clothing with AI'}
+                  ? '🔄 Re-Analyze Clothing'
+                  : '✨ Analyze Clothing with Vision'}
               </Text>
             </TouchableOpacity>
+
             {aiAnalysis && (
-              <Text style={[styles.aiStatusText, { color: colors.secondaryText }]}>
-                Detected: {aiAnalysis.garmentType} • {aiAnalysis.subcategory || aiAnalysis.category} • {aiAnalysis.pattern} ({Math.round(aiAnalysis.confidence * 100)}% Match)
-              </Text>
+              <View style={[styles.aiBadgeContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.aiBadgeHeader}>
+                  <Text style={[styles.aiBadgeTitle, { color: colors.tint }]}>
+                    Vision Analysis
+                  </Text>
+                  <View style={[styles.confidencePill, { backgroundColor: colors.tint }]}>
+                    <Text style={[styles.confidencePillText, { color: colors.onTint }]}>
+                      {Math.round(aiAnalysis.confidence * 100)}% Confidence
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.aiStatusText, { color: colors.text }]}>
+                  Detected: {aiAnalysis.garmentType} • {aiAnalysis.subcategory || aiAnalysis.category} • {aiAnalysis.pattern}
+                </Text>
+                <Text style={[styles.aiHintText, { color: colors.secondaryText }]}>
+                  Attributes have been populated below. You can review and adjust any field directly.
+                </Text>
+              </View>
             )}
           </View>
         )}
@@ -648,11 +714,7 @@ export default function AddWardrobeItemScreen() {
             </View>
           </View>
 
-          {/* Category Selector -- opens a searchable list instead of a
-              horizontal chip scroller. That scroller only ever showed the
-              first 2-3 of 23 categories with no scroll affordance, which
-              read as if those were the only options rather than a
-              partially-hidden list. */}
+          {/* Category Selector -- opens a searchable list */}
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Category</Text>
             <TouchableOpacity
@@ -693,50 +755,258 @@ export default function AddWardrobeItemScreen() {
             />
           </View>
 
-          {/* Color Tags Multi-Select */}
+          {/* Dynamic Colors Section with Hex Chips */}
           <View style={styles.formRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Colors</Text>
-            <View style={styles.colorPalette}>
-              {colorOptions.map((col) => {
-                const isSelected = selectedColors.includes(col.name);
-                const isWhite = col.name === 'White';
+            <View style={styles.labelRow}>
+              <Text style={[styles.label, { color: colors.text }]}>Colors</Text>
+              <TouchableOpacity
+                style={[styles.customColorInlineBtn, { borderColor: colors.tint }]}
+                onPress={() => setColorPickerVisible(true)}
+              >
+                <IconSymbol name="plus" size={14} color={colors.tint} />
+                <Text style={[styles.customColorInlineBtnText, { color: colors.tint }]}>Add Custom Color / HEX</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Active Detected / Selected Color Chips */}
+            {colorDetails.length > 0 ? (
+              <View style={styles.colorChipsWrap}>
+                {colorDetails.map((c, index) => {
+                  const isWhite = c.hex.toLowerCase() === '#ffffff' || c.name.toLowerCase() === 'white';
+                  return (
+                    <View
+                      key={`${c.name}-${index}`}
+                      style={[styles.colorDetailChip, { backgroundColor: colors.card, borderColor: colors.border }]}
+                    >
+                      <View
+                        style={[
+                          styles.colorDetailSwatch,
+                          {
+                            backgroundColor: c.hex,
+                            borderColor: isWhite ? '#CCCCCC' : 'rgba(255,255,255,0.2)',
+                            borderWidth: 1,
+                          }
+                        ]}
+                      />
+                      <Text style={[styles.colorDetailName, { color: colors.text }]}>
+                        {c.name}
+                        {c.role ? ` (${c.role === 'dominant' ? 'dom' : c.role === 'secondary' ? 'sec' : c.role})` : ''}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.colorDetailRemove}
+                        onPress={() => {
+                          setColorDetails((prev) => prev.filter((_, i) => i !== index));
+                          setSelectedColors((prev) => prev.filter((name) => name !== c.name));
+                        }}
+                        accessibilityLabel={`Remove color ${c.name}`}
+                      >
+                        <IconSymbol name="xmark" size={12} color={colors.secondaryText} />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={[styles.subLabel, { color: colors.secondaryText, marginVertical: Spacing.xs }]}>
+                No colors selected yet. Choose from the quick palette or add custom HEX below.
+              </Text>
+            )}
+
+            {/* Quick Color Palette */}
+            <Text style={[styles.subLabel, { color: colors.secondaryText, marginTop: Spacing.xs }]}>
+              Quick add colors:
+            </Text>
+            <View style={styles.quickPaletteRow}>
+              {QUICK_COLOR_PALETTE.map((col) => {
+                const isAlreadyActive = colorDetails.some(
+                  (c) => c.name.toLowerCase() === col.name.toLowerCase() || c.hex.toLowerCase() === col.hex.toLowerCase()
+                );
                 return (
                   <TouchableOpacity
                     key={col.name}
                     style={[
-                      styles.colorCircle,
+                      styles.quickColorPill,
                       {
-                        backgroundColor: col.hex,
-                        borderColor: isSelected ? colors.tint : isWhite ? '#CCCCCC' : '#444444',
-                        borderWidth: isSelected ? 3 : 1,
+                        backgroundColor: isAlreadyActive ? colors.tint : colors.card,
+                        borderColor: isAlreadyActive ? colors.tint : colors.border,
                       }
                     ]}
-                    onPress={() => toggleColor(col.name)}
-                    activeOpacity={0.8}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: isSelected }}
-                    accessibilityLabel={col.name}
+                    onPress={() => {
+                      if (isAlreadyActive) {
+                        setColorDetails((prev) => prev.filter((c) => c.name.toLowerCase() !== col.name.toLowerCase()));
+                        setSelectedColors((prev) => prev.filter((name) => name.toLowerCase() !== col.name.toLowerCase()));
+                      } else {
+                        const newItem: ColorDetailItem = { name: col.name, hex: col.hex, role: 'accent', confidence: 1.0 };
+                        setColorDetails((prev) => [...prev, newItem]);
+                        if (!selectedColors.includes(col.name)) {
+                          setSelectedColors((prev) => [...prev, col.name]);
+                        }
+                      }
+                    }}
                   >
-                    {isSelected && (
-                      <IconSymbol
-                        name="checkmark"
-                        size={16}
-                        color={col.name === 'White' || col.name === 'Gold' || col.name === 'Silver' ? 'black' : '#FFFFFF'}
-                      />
-                    )}
+                    <View
+                      style={[
+                        styles.quickColorDot,
+                        {
+                          backgroundColor: col.hex,
+                          borderColor: col.name === 'White' ? '#CCC' : 'rgba(0,0,0,0.2)',
+                          borderWidth: 1,
+                        }
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.quickColorText,
+                        { color: isAlreadyActive ? colors.onTint : colors.text }
+                      ]}
+                    >
+                      {col.name}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
+          </View>
 
-            {/* Custom / Arbitrary Color Action */}
-            <TouchableOpacity
-              style={[styles.customColorBtn, { borderColor: colors.border }]}
-              onPress={() => setColorPickerVisible(true)}
-            >
-              <IconSymbol name="plus" size={16} color={colors.tint} />
-              <Text style={[styles.customColorBtnText, { color: colors.tint }]}>Custom Color / HEX</Text>
-            </TouchableOpacity>
+          {/* Pattern Selector */}
+          <View style={styles.formRow}>
+            <Text style={[styles.label, { color: colors.text }]}>Pattern</Text>
+            <View style={styles.chipWrapRow}>
+              {COMMON_PATTERNS.map((p) => {
+                const isSelected = pattern === p;
+                return (
+                  <TouchableOpacity
+                    key={p}
+                    style={[
+                      styles.chip,
+                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
+                    ]}
+                    onPress={() => setPattern(p)}
+                  >
+                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
+                      {p}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Material Selector */}
+          <View style={styles.formRow}>
+            <Text style={[styles.label, { color: colors.text }]}>Material</Text>
+            <View style={styles.chipWrapRow}>
+              {COMMON_MATERIALS.map((m) => {
+                const isSelected = material === m;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[
+                      styles.chip,
+                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
+                    ]}
+                    onPress={() => setMaterial(m)}
+                  >
+                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
+                      {m}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Fit Selector */}
+          <View style={styles.formRow}>
+            <Text style={[styles.label, { color: colors.text }]}>Fit</Text>
+            <View style={styles.chipWrapRow}>
+              {COMMON_FITS.map((f) => {
+                const isSelected = fit === f;
+                return (
+                  <TouchableOpacity
+                    key={f}
+                    style={[
+                      styles.chip,
+                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
+                    ]}
+                    onPress={() => setFit(f)}
+                  >
+                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
+                      {f}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Occasions Multi-Select */}
+          <View style={styles.formRow}>
+            <Text style={[styles.label, { color: colors.text }]}>Occasions</Text>
+            <View style={styles.chipWrapRow}>
+              {COMMON_OCCASIONS.map((occ) => {
+                const isSelected = occasions.includes(occ);
+                return (
+                  <TouchableOpacity
+                    key={occ}
+                    style={[
+                      styles.chip,
+                      { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
+                    ]}
+                    onPress={() => {
+                      setOccasions((prev) =>
+                        prev.includes(occ) ? prev.filter((o) => o !== occ) : [...prev, occ]
+                      );
+                    }}
+                  >
+                    <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
+                      {isSelected ? `✓ ${occ}` : occ}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {/* Also render any custom occasions that were added */}
+              {occasions.filter((o) => !COMMON_OCCASIONS.includes(o)).map((customOcc) => (
+                <TouchableOpacity
+                  key={customOcc}
+                  style={[
+                    styles.chip,
+                    { borderColor: colors.border, backgroundColor: colors.tint }
+                  ]}
+                  onPress={() => {
+                    setOccasions((prev) => prev.filter((o) => o !== customOcc));
+                  }}
+                >
+                  <Text style={[styles.chipText, { color: colors.onTint }]}>
+                    ✓ {customOcc} ✕
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Custom occasion input */}
+            <View style={styles.customOccasionRow}>
+              <TextInput
+                keyboardAppearance={theme}
+                style={[styles.customOccasionInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
+                placeholder="Add custom occasion (e.g. Wedding, Travel)..."
+                placeholderTextColor={colors.secondaryText}
+                value={customOccasion}
+                onChangeText={setCustomOccasion}
+              />
+              <TouchableOpacity
+                style={[styles.customOccasionAddBtn, { backgroundColor: colors.tint }]}
+                onPress={() => {
+                  const trimmed = customOccasion.trim();
+                  if (trimmed && !occasions.includes(trimmed)) {
+                    setOccasions((prev) => [...prev, trimmed]);
+                    setCustomOccasion('');
+                  }
+                }}
+              >
+                <Text style={[styles.customOccasionAddBtnText, { color: colors.onTint }]}>+ Add</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -766,13 +1036,6 @@ export default function AddWardrobeItemScreen() {
         initialSize={rawPickedSize}
         onCancel={handleCropCancel}
         onConfirm={handleCropConfirm}
-      />
-
-      <AIAttributeConfirmationModal
-        visible={aiModalVisible}
-        analysis={aiAnalysis}
-        onConfirm={handleAiConfirm}
-        onCancel={() => setAiModalVisible(false)}
       />
 
       <ColorPickerModal
@@ -1085,20 +1348,101 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  customColorBtn: {
+  labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: Spacing.md,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    justifyContent: 'space-between',
+  },
+  customColorInlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    alignSelf: 'flex-start',
   },
-  customColorBtnText: {
-    ...Type.caption,
+  customColorInlineBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  colorChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  colorDetailChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    gap: 8,
+  },
+  colorDetailSwatch: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+  },
+  colorDetailName: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  colorDetailRemove: {
+    padding: 2,
+    marginLeft: 2,
+  },
+  quickPaletteRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: Spacing.xs,
+  },
+  quickColorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    gap: 6,
+  },
+  quickColorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  quickColorText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  customOccasionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  customOccasionInput: {
+    flex: 1,
+    height: 42,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    fontSize: 13,
+  },
+  customOccasionAddBtn: {
+    height: 42,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customOccasionAddBtnText: {
     fontWeight: '700',
+    fontSize: 13,
   },
   aiActionCard: {
     marginHorizontal: Spacing.xl,
@@ -1121,9 +1465,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
+  aiBadgeContainer: {
+    width: '100%',
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    marginTop: Spacing.sm,
+  },
+  aiBadgeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  aiBadgeTitle: {
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  confidencePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+  },
+  confidencePillText: {
+    fontWeight: '700',
+    fontSize: 11,
+  },
   aiStatusText: {
-    fontSize: 12,
-    marginTop: 6,
-    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  aiHintText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
 });
