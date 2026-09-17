@@ -1,10 +1,12 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { formatPHDate, formatTimeLabel } from '@/src/utils/dateTime';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { BrandEmptyState } from '@/src/components/BrandEmptyState';
+import { ErrorRetryState } from '@/src/components/ErrorRetryState';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -46,6 +48,9 @@ export default function ReservationsScreen() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [refundModalItem, setRefundModalItem] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -71,9 +76,13 @@ export default function ReservationsScreen() {
   const colors = Colors[theme];
   const { showToast } = useToast();
 
-  const fetchInitialReservations = useCallback(async (filterToFetch: StatusFilter) => {
+  const fetchInitialReservations = useCallback(async (filterToFetch: StatusFilter, isRefresh = false) => {
     if (!session?.user) return;
-    setLoading(true);
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const [res, counts, windowDays] = await Promise.all([
         getMyReservationsPage(session.user.id, 0, filterToFetch, 20),
@@ -85,11 +94,21 @@ export default function ReservationsScreen() {
       setHasMore(res.hasMore);
       setStatusCounts(counts);
       setReturnWindowDays(windowDays);
+      setLoadError(null);
     } catch (err) {
       console.error('Error fetching reservations:', err);
-      showToast('Unable to load reservations. Try again.', 'error');
+      setReservations((prev) => {
+        if (prev.length === 0) {
+          setLoadError('Unable to load reservations. Please check your connection and try again.');
+        } else {
+          showToast('Unable to refresh reservations.', 'error');
+        }
+        return prev;
+      });
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      setIsRetrying(false);
     }
   }, [session?.user, showToast]);
 
@@ -103,6 +122,13 @@ export default function ReservationsScreen() {
     setActiveFilter(filter);
     fetchInitialReservations(filter);
   }, [fetchInitialReservations]);
+
+  const handleRetry = useCallback(() => {
+    setIsRetrying(true);
+    setLoading(true);
+    setLoadError(null);
+    fetchInitialReservations(activeFilter, false);
+  }, [fetchInitialReservations, activeFilter]);
 
   const loadMoreReservations = useCallback(async () => {
     if (!session?.user || loadingMore || !hasMore || loading) return;
@@ -399,9 +425,18 @@ export default function ReservationsScreen() {
         />
       )}
 
-      {loading ? (
-        <View style={{ paddingHorizontal: Spacing.xl }}>
+      {loading && !refreshing && reservations.length === 0 ? (
+        <View style={{ paddingHorizontal: Spacing.xl, paddingTop: Spacing.md }}>
           <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
+        </View>
+      ) : loadError && reservations.length === 0 ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <ErrorRetryState
+            title="Unable to load reservations"
+            message={loadError}
+            onRetry={handleRetry}
+            isRetrying={isRetrying}
+          />
         </View>
       ) : reservations.length === 0 && activeFilter !== 'all' ? (
         <View style={styles.centerContainer}>
@@ -425,21 +460,14 @@ export default function ReservationsScreen() {
           </TouchableOpacity>
         </View>
       ) : reservations.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <IconSymbol name="calendar.badge.exclamationmark" size={64} color={colors.border} />
-          <Text style={[styles.emptyText, { color: colors.text }]}>No reservations yet</Text>
-          <Text style={[styles.emptySubtext, { color: colors.secondaryText }]}>
-            Your store pickup reservations and orders will appear here.
-          </Text>
-          <TouchableOpacity
-            style={[styles.exploreButton, { backgroundColor: colors.tint }]}
-            onPress={() => router.navigate('/(tabs)/explore')}
-            accessibilityRole="button"
-            accessibilityLabel="Explore Catalog"
-            accessibilityHint="Opens the product catalog to browse items"
-          >
-            <Text style={[styles.exploreButtonText, { color: colors.onTint }]}>Explore Catalog</Text>
-          </TouchableOpacity>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <BrandEmptyState
+            icon="bag.fill"
+            title="No orders yet"
+            message="Your store-pickup purchases and order history will appear here."
+            actionLabel="Explore Catalog"
+            onAction={() => router.navigate('/(tabs)/explore')}
+          />
         </View>
       ) : (
         <FlatList
@@ -450,6 +478,13 @@ export default function ReservationsScreen() {
           showsVerticalScrollIndicator={false}
           onEndReached={loadMoreReservations}
           onEndReachedThreshold={0.4}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchInitialReservations(activeFilter, true)}
+              tintColor={colors.tint}
+            />
+          }
           ListFooterComponent={
             loadingMore ? (
               <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
