@@ -95,7 +95,6 @@ export default function ProductDetailScreen() {
   const [soldCount, setSoldCount] = useState<number | null>(() => {
     return id ? (styleSoldCountCache.get(id) ?? null) : null;
   });
-  const [siblingProducts, setSiblingProducts] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const [lovedByCount, setLovedByCount] = useState(0);
   const [lovedByUsers, setLovedByUsers] = useState<any[]>([]);
@@ -183,22 +182,15 @@ export default function ProductDetailScreen() {
               setSelectedSize((prev) => prev || data.sizes![0]);
             }
 
-            // Fetch sibling products sharing the same style_code
-            if (data.style_code) {
-              const { data: siblings } = await supabase
-                .from("products")
-                .select(`id, name, base_color, color, image_url, images, style_code`)
-                .eq("style_code", data.style_code)
-                .eq("deleted", false)
-                .eq("visibility", "public");
-              if (siblings && siblings.length > 0) {
-                setSiblingProducts(siblings);
-              } else {
-                setSiblingProducts([]);
-              }
-            } else {
-              setSiblingProducts([]);
-            }
+            // Sibling-product navigation on colour select was removed
+            // entirely (not just scoped tighter) -- style_code turned out to
+            // be auto-generated from name initials during seeding, so
+            // unrelated products can collide on the same code regardless of
+            // category (e.g. "Bowknot Mini Dress" and "Metal-Detail Loafers"
+            // both landed on "JZ-BM-1001"). Selecting a colour swatch used to
+            // navigate straight from a dress to a pair of shoes. Colour
+            // selection now only ever changes local state for this product's
+            // own colour options -- see colorsList and handleSelectColor.
 
             // Compute size + color recommendations if user is logged in
             if (user?.id && data.measurements) {
@@ -355,20 +347,8 @@ export default function ProductDetailScreen() {
 
   const colorsList = useMemo(() => {
     if (!product) return [];
-    if (siblingProducts && siblingProducts.length > 0) {
-      const set = new Set<string>();
-      if (product.base_color) set.add(product.base_color.trim());
-      if (product.color) {
-        product.color.split(",").map((c: string) => c.trim()).filter(Boolean).forEach((c: string) => set.add(c));
-      }
-      siblingProducts.forEach((s) => {
-        if (s.base_color) set.add(s.base_color.trim());
-        if (s.color) {
-          s.color.split(",").map((c: string) => c.trim()).filter(Boolean).forEach((c: string) => set.add(c));
-        }
-      });
-      return Array.from(set);
-    }
+    // Only this product's own colours -- see the removed sibling-product
+    // lookup below for why merging in other products' colours isn't safe.
     if (product.color) {
       return [...new Set(product.color.split(",").map((c: string) => c.trim()).filter(Boolean))];
     }
@@ -376,7 +356,7 @@ export default function ProductDetailScreen() {
       return [product.base_color.trim()];
     }
     return [];
-  }, [product, siblingProducts]);
+  }, [product]);
 
   const imageGallery = useMemo(() => {
     if (product?.images && product.images.length > 0) {
@@ -393,32 +373,13 @@ export default function ProductDetailScreen() {
     tapLight();
     setSelectedColor(color);
 
-    const matchingSibling = siblingProducts.find((s) => {
-      const sColors = [
-        s.base_color?.toLowerCase().trim(),
-        ...(s.color ? s.color.split(",").map((c: string) => c.toLowerCase().trim()) : []),
-      ].filter(Boolean);
-      return sColors.includes(color.toLowerCase().trim());
-    });
-
-    if (matchingSibling && matchingSibling.id !== product?.id) {
-      if (product?.style_code && soldCount !== null) {
-        styleSoldCountCache.set(product.style_code, soldCount);
-      }
-      if (soldCount !== null) {
-        styleSoldCountCache.set(matchingSibling.id, soldCount);
-      }
-      router.replace({
-        pathname: "/product/[id]",
-        params: { id: matchingSibling.id },
-      });
-      return;
-    }
-
+    // Colour selection never navigates to a different product -- it only
+    // ever changes local state for this product's own colours. See the
+    // removed sibling-product lookup above.
     const directColors = product?.color
       ? product.color.split(",").map((c: string) => c.trim()).filter(Boolean)
       : [];
-    if (siblingProducts.length <= 1 && directColors.length > 1 && directColors.length === imageGallery.length) {
+    if (directColors.length > 1 && directColors.length === imageGallery.length) {
       const idx = directColors.findIndex((c: string) => c.toLowerCase() === color.toLowerCase());
       if (idx >= 0 && idx < imageGallery.length) {
         flatListRef.current?.scrollToIndex({ index: idx, animated: true });
