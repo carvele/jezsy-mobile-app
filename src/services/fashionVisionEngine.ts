@@ -88,6 +88,8 @@ async function getClipPipeline(): Promise<any> {
   if (clipPipelinePromise) return clipPipelinePromise;
   clipPipelinePromise = (async () => {
     try {
+      // eslint-disable-next-line import/no-unresolved
+      // @ts-ignore
       const { pipeline, env } = await import('@xenova/transformers');
       env.allowLocalModels = false;
       env.useBrowserCache = true;
