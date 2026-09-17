@@ -28,7 +28,11 @@ DECLARE
   v_variants_created INTEGER := 0;
   v_sizes TEXT[];
   v_sku_str TEXT;
+  v_existing_inv_id UUID;
+  v_reserved_conflict TEXT;
+  v_now TIMESTAMPTZ := timezone('utc'::text, now());
 BEGIN
+  -- 1. Authorization boundary
   IF auth.role() <> 'service_role' AND NOT public.is_staff_or_admin() THEN
     RAISE EXCEPTION 'Access denied: staff or admin privileges required' USING ERRCODE = '42501';
   END IF;
@@ -37,6 +41,7 @@ BEGIN
     RAISE EXCEPTION 'Product payload cannot be null';
   END IF;
 
+  -- 2. Extract Colorways / Colors
   IF _colorways_payload IS NOT NULL AND jsonb_array_length(_colorways_payload) > 0 THEN
     FOR v_colorway_elem IN SELECT * FROM jsonb_array_elements(_colorways_payload) LOOP
       IF (v_colorway_elem->>'is_default')::boolean IS TRUE THEN
@@ -69,14 +74,29 @@ BEGIN
     FOR v_colorway_elem IN SELECT * FROM jsonb_array_elements(_colorways_payload) LOOP
       v_color_names := array_append(v_color_names, v_colorway_elem->>'color_name');
     END LOOP;
+  ELSIF _product_payload->'colors' IS NOT NULL 
+    AND jsonb_typeof(_product_payload->'colors') = 'array' 
+    AND jsonb_array_length(_product_payload->'colors') > 0 THEN
+    v_color_names := ARRAY(SELECT jsonb_array_elements_text(_product_payload->'colors'));
+    v_default_color_name := v_color_names[1];
+  ELSIF _product_payload->>'color' IS NOT NULL AND trim(_product_payload->>'color') <> '' THEN
+    v_color_names := ARRAY(
+      SELECT trim(elem) 
+      FROM unnest(string_to_array(_product_payload->>'color', ',')) AS elem 
+      WHERE trim(elem) <> ''
+    );
+    IF array_length(v_color_names, 1) > 0 THEN
+      v_default_color_name := v_color_names[1];
+    END IF;
   ELSE
-    v_color_names := ARRAY(SELECT jsonb_array_elements_text(CASE WHEN _product_payload->'colors' IS NOT NULL THEN _product_payload->'colors' ELSE '[]'::jsonb END));
+    v_color_names := ARRAY[''];
+    v_default_color_name := NULL;
   END IF;
 
   v_sizes := ARRAY(SELECT jsonb_array_elements_text(_product_payload->'sizes'));
   v_style_code := COALESCE(_product_payload->>'style_code', '');
 
-  -- Upsert Product
+  -- 3. Upsert Product
   IF _product_payload->>'id' IS NOT NULL AND (_product_payload->>'id')::text <> '' THEN
     v_product_id := (_product_payload->>'id')::uuid;
     IF v_style_code = '' THEN
@@ -110,10 +130,10 @@ BEGIN
       tags = COALESCE(ARRAY(SELECT jsonb_array_elements_text(_product_payload->'tags')), tags),
       pattern = COALESCE(_product_payload->>'pattern', pattern),
       base_color = COALESCE(v_default_color_name, _product_payload->>'base_color', base_color),
-      color = CASE WHEN array_length(v_color_names, 1) > 0 THEN array_to_string(v_color_names, ', ') ELSE color END,
+      color = CASE WHEN array_length(v_color_names, 1) > 0 AND v_color_names[1] <> '' THEN array_to_string(v_color_names, ', ') ELSE color END,
       image_url = COALESCE(v_default_colorway->>'primary_image_url', (v_default_images_array)[1], _product_payload->>'imageUrl', image_url),
       images = CASE WHEN _product_payload->'images' IS NOT NULL THEN ARRAY(SELECT jsonb_array_elements_text(_product_payload->'images')) ELSE (CASE WHEN array_length(v_default_images_array, 1) > 0 THEN v_default_images_array ELSE images END) END,
-      updated_at = timezone('utc'::text, now())
+      updated_at = v_now
     WHERE id = v_product_id;
   ELSE
     INSERT INTO public.products (
@@ -148,7 +168,7 @@ BEGIN
       ARRAY(SELECT jsonb_array_elements_text(_product_payload->'tags')),
       COALESCE(_product_payload->>'pattern', 'Solid'),
       COALESCE(v_default_color_name, _product_payload->>'base_color'),
-      array_to_string(v_color_names, ', '),
+      CASE WHEN array_length(v_color_names, 1) > 0 AND v_color_names[1] <> '' THEN array_to_string(v_color_names, ', ') ELSE '' END,
       COALESCE(v_default_colorway->>'primary_image_url', (v_default_images_array)[1], _product_payload->>'imageUrl'),
       CASE WHEN _product_payload->'images' IS NOT NULL THEN ARRAY(SELECT jsonb_array_elements_text(_product_payload->'images')) ELSE v_default_images_array END,
       (_product_payload->>'created_by')::uuid
@@ -160,7 +180,7 @@ BEGIN
     END IF;
   END IF;
 
-  -- Colorways Upsert
+  -- 4. Colorways Upsert (if colorways payload provided)
   IF _colorways_payload IS NOT NULL AND jsonb_array_length(_colorways_payload) > 0 THEN
     UPDATE public.product_colorways
     SET is_default = false
@@ -178,7 +198,7 @@ BEGIN
           sort_order = COALESCE((v_colorway_elem->>'sort_order')::integer, 0),
           is_default = (v_colorway_elem->>'color_name' = v_default_color_name),
           is_active = COALESCE((v_colorway_elem->>'is_active')::boolean, true),
-          updated_at = timezone('utc'::text, now())
+          updated_at = v_now
         WHERE id = v_new_colorway_id AND product_id = v_product_id;
       ELSE
         INSERT INTO public.product_colorways (
@@ -235,12 +255,33 @@ BEGIN
     END IF;
   END IF;
 
-  -- Inventory Matrix Generation (INV-005)
+  -- 5. Inventory Matrix Generation (INV-005)
   IF array_length(v_sizes, 1) > 0 THEN
-    IF array_length(v_color_names, 1) IS NULL THEN
+    IF array_length(v_color_names, 1) IS NULL OR array_length(v_color_names, 1) = 0 THEN
       v_color_names := ARRAY[''];
     END IF;
 
+    -- 5a. Check reservation guard before pruning
+    SELECT string_agg(
+      format('%s / %s (%s unit(s) reserved)', COALESCE(NULLIF(color, ''), 'Standard'), size, reserved),
+      ', '
+    )
+    INTO v_reserved_conflict
+    FROM public.inventory i
+    WHERE i.product_doc_id = v_product_id
+      AND i.deleted = false
+      AND COALESCE(i.reserved, 0) > 0
+      AND (
+        NOT (i.size = ANY(v_sizes)) OR
+        NOT (i.color = ANY(v_color_names))
+      );
+
+    IF v_reserved_conflict IS NOT NULL THEN
+      RAISE EXCEPTION 'Cannot remove variant(s) with active customer reservations: %', v_reserved_conflict
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 5b. Upsert matrix combinations
     FOREACH v_size_elem IN ARRAY v_sizes LOOP
       FOREACH v_color_elem IN ARRAY v_color_names LOOP
         
@@ -249,31 +290,68 @@ BEGIN
           v_sku_str := v_style_code || '-' || v_size_elem;
         END IF;
 
-        INSERT INTO public.inventory (
-          product_doc_id, item, category, sku, size, color, pattern, variant_sku,
-          total, reserved, available, deleted
-        ) VALUES (
-          v_product_id,
-          _product_payload->>'name',
-          _product_payload->>'category',
-          v_style_code,
-          v_size_elem,
-          v_color_elem,
-          '',
-          v_sku_str,
-          0, 0, 0, false
-        )
-        ON CONFLICT (product_doc_id, size, color) DO UPDATE SET
-          deleted = false
-        WHERE public.inventory.deleted = true;
-        
-        v_variants_created := v_variants_created + 1;
+        -- Check for existing active row
+        SELECT id INTO v_existing_inv_id
+        FROM public.inventory
+        WHERE product_doc_id = v_product_id
+          AND deleted = false
+          AND size = v_size_elem
+          AND color = v_color_elem
+        LIMIT 1;
+
+        IF v_existing_inv_id IS NOT NULL THEN
+          -- Active variant exists, update non-stock metadata
+          UPDATE public.inventory
+          SET item = _product_payload->>'name',
+              category = _product_payload->>'category',
+              sku = v_style_code,
+              updated_at = v_now
+          WHERE id = v_existing_inv_id;
+        ELSE
+          -- Check if soft-deleted row exists to restore
+          SELECT id INTO v_existing_inv_id
+          FROM public.inventory
+          WHERE product_doc_id = v_product_id
+            AND deleted = true
+            AND size = v_size_elem
+            AND color = v_color_elem
+          ORDER BY (total > 0) DESC, updated_at DESC
+          LIMIT 1;
+
+          IF v_existing_inv_id IS NOT NULL THEN
+            UPDATE public.inventory
+            SET deleted = false,
+                item = _product_payload->>'name',
+                category = _product_payload->>'category',
+                sku = v_style_code,
+                updated_at = v_now
+            WHERE id = v_existing_inv_id;
+          ELSE
+            INSERT INTO public.inventory (
+              product_doc_id, item, category, sku, size, color, pattern, variant_sku,
+              total, reserved, available, deleted, created_at, updated_at
+            ) VALUES (
+              v_product_id,
+              _product_payload->>'name',
+              _product_payload->>'category',
+              v_style_code,
+              v_size_elem,
+              v_color_elem,
+              '',
+              v_sku_str,
+              0, 0, 0, false,
+              v_now, v_now
+            );
+            v_variants_created := v_variants_created + 1;
+          END IF;
+        END IF;
       END LOOP;
     END LOOP;
     
-    -- Deactivate variants that are no longer in the matrix, if they have no stock/reservations
+    -- 5c. Soft-prune variants missing from matrix that have zero stock and zero reservations
     UPDATE public.inventory
-    SET deleted = true
+    SET deleted = true,
+        updated_at = v_now
     WHERE product_doc_id = v_product_id
       AND deleted = false
       AND (
@@ -283,6 +361,8 @@ BEGIN
       AND (total = 0 OR total IS NULL)
       AND (reserved = 0 OR reserved IS NULL);
       
+    -- 5d. Recalculate stock and status for parent product
+    PERFORM public.sync_product_stock(v_product_id);
   END IF;
 
   RETURN jsonb_build_object(
