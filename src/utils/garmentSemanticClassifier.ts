@@ -361,3 +361,36 @@ export function inferSystemBucket(
 ): string {
   return normalizeGarment(category, subCategory, '', '', description).systemBucket;
 }
+
+/**
+ * Resolves the effective system bucket for an item, healing legacy items
+ * that were saved with the naive fallback ('Top') when evidence shows
+ * they are Bottom, Outerwear, Shoes, Dress, or Accessory.
+ */
+export function resolveEffectiveGarmentBucket(item: {
+  garment_type?: string | null;
+  category?: string | null;
+  sub_category?: string | null;
+  description?: string | null;
+  color_tags?: string[] | null;
+  where_worn_often?: string | null;
+  user_notes?: string | null;
+}): string {
+  const colorStr = item.color_tags && item.color_tags.length > 0 ? item.color_tags.join(', ') : '';
+  const norm = normalizeGarment(
+    item.category || '',
+    item.sub_category || '',
+    colorStr,
+    item.where_worn_often || '',
+    item.description || '',
+    item.user_notes || ''
+  );
+  if (norm.family !== 'Unknown') {
+    if (!item.garment_type || item.garment_type === 'Top') {
+      return norm.systemBucket;
+    }
+  }
+  return item.garment_type || norm.systemBucket || 'Top';
+}
+
+

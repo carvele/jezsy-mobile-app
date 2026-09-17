@@ -9,6 +9,7 @@ import {
   domainFail,
   errorReporting,
 } from './observability';
+import { resolveEffectiveGarmentBucket } from '../utils/garmentSemanticClassifier';
 
 export type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 export type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
@@ -68,6 +69,19 @@ export async function getWardrobeItemsPage(
   const raw = data ?? [];
   const hasMore = raw.length > limit;
   const items = raw.slice(0, limit);
+
+  // Self-heal legacy items where garment_type was set to 'Top' but evidence proves otherwise
+  for (const item of items) {
+    const effective = resolveEffectiveGarmentBucket(item);
+    if (effective !== item.garment_type && (item.garment_type === 'Top' || !item.garment_type)) {
+      item.garment_type = effective;
+      supabase
+        .from('wardrobe_items')
+        .update({ garment_type: effective })
+        .eq('id', item.id)
+        .then(() => {});
+    }
+  }
 
   return {
     items,

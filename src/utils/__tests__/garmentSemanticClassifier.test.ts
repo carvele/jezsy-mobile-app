@@ -2,6 +2,7 @@ import {
   extractGarmentEvidence,
   normalizeGarment,
   inferSystemBucket,
+  resolveEffectiveGarmentBucket,
 } from '../garmentSemanticClassifier';
 
 // Helper — classify by subCategory + description, mimicking add-item flow
@@ -393,4 +394,60 @@ describe('garmentSemanticClassifier', () => {
       expect(ev.family).toBe('Bottom');
     });
   });
+
+  // =========================================================================
+  // HEALING LEGACY ITEMS — resolveEffectiveGarmentBucket
+  // =========================================================================
+  describe('resolveEffectiveGarmentBucket', () => {
+    test('corrects legacy item with garment_type "Top" and sub_category "Activewear / Shorts" to "Bottom"', () => {
+      const legacyShorts = {
+        garment_type: 'Top',
+        category: 'Clothing',
+        sub_category: 'Activewear / Shorts',
+        description: '',
+      };
+      expect(resolveEffectiveGarmentBucket(legacyShorts)).toBe('Bottom');
+    });
+
+    test('corrects legacy item with garment_type "Top" and sub_category "Cardigan" to "Outerwear"', () => {
+      const legacyCardigan = {
+        garment_type: 'Top',
+        category: 'Clothing',
+        sub_category: 'Cardigan',
+        description: '',
+      };
+      expect(resolveEffectiveGarmentBucket(legacyCardigan)).toBe('Outerwear');
+    });
+
+    test('corrects legacy item with garment_type "Top" and sub_category "Running Shoes" to "Shoes"', () => {
+      const legacyShoes = {
+        garment_type: 'Top',
+        category: 'Footwear',
+        sub_category: 'Running Shoes',
+        description: '',
+      };
+      expect(resolveEffectiveGarmentBucket(legacyShoes)).toBe('Shoes');
+    });
+
+    test('retains "Top" when item is genuinely a top', () => {
+      const genuineTop = {
+        garment_type: 'Top',
+        category: 'Clothing',
+        sub_category: 'T-Shirt',
+        description: '',
+      };
+      expect(resolveEffectiveGarmentBucket(genuineTop)).toBe('Top');
+    });
+
+    test('retains already correct garment_type "Bottom"', () => {
+      const correctBottom = {
+        garment_type: 'Bottom',
+        category: 'Clothing',
+        sub_category: 'Activewear / Shorts',
+        description: '',
+      };
+      expect(resolveEffectiveGarmentBucket(correctBottom)).toBe('Bottom');
+    });
+  });
 });
+

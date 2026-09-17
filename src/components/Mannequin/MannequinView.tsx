@@ -42,6 +42,7 @@ import { OutfitContextModal } from './OutfitContextModal';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
 import { styleProfileService } from '@/src/services/styleProfileService';
 import { updateProfileFromFeedback } from '@/src/utils/personalStyleEngine';
+import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
 
 // Enable layout animation for Android (Old Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
@@ -195,7 +196,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   const filteredItems = useMemo(() => {
     if (selectedCategory === 'All') return wardrobeItems;
     return wardrobeItems.filter(
-      (item) => (item.garment_type || '').toLowerCase() === selectedCategory.toLowerCase()
+      (item) => (resolveEffectiveGarmentBucket(item) || '').toLowerCase() === selectedCategory.toLowerCase()
     );
   }, [wardrobeItems, selectedCategory]);
 
@@ -335,12 +336,12 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
     try {
       // Embed both standard boutique fields AND spatial canvas coordinates into items JSONB
       const itemsPayload = canvasItems.map((item) => ({
-        slot: (item.garment_type || 'Top').toLowerCase(),
+        slot: (resolveEffectiveGarmentBucket(item) || item.garment_type || 'Top').toLowerCase(),
         product_id: item.wardrobe_item_id,
         wardrobe_item_id: item.wardrobe_item_id,
         image_url: item.image_url,
         name: item.name,
-        garment_type: item.garment_type,
+        garment_type: resolveEffectiveGarmentBucket(item) || item.garment_type,
         owned: true,
         x: item.x,
         y: item.y,
@@ -453,7 +454,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
             wardrobe_item_id: s.wardrobe_item_id || s.product_id || '',
             image_url: s.image_url || matchingWardrobe?.image_url || '',
             name: s.name || matchingWardrobe?.sub_category || matchingWardrobe?.category || 'Item',
-            garment_type: s.garment_type || matchingWardrobe?.garment_type || s.slot || 'Top',
+            garment_type: s.garment_type || (matchingWardrobe ? resolveEffectiveGarmentBucket(matchingWardrobe) : s.slot) || 'Top',
             x: typeof s.x === 'number' ? s.x : 0,
             y: typeof s.y === 'number' ? s.y : (0.16 + idx * 0.2),
             scale: typeof s.scale === 'number' ? s.scale : 1.0,
