@@ -2858,6 +2858,7 @@ export type Database = {
           color_tags: string[] | null
           created_at: string
           deleted: boolean | null
+          description: string | null
           garment_type: string | null
           id: string
           image_url: string | null
@@ -2865,6 +2866,7 @@ export type Database = {
           product_id: string | null
           sub_category: string | null
           user_id: string | null
+          user_notes: string | null
           wear_count: number
         }
         Insert: {
@@ -2872,6 +2874,7 @@ export type Database = {
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
+          description?: string | null
           garment_type?: string | null
           id?: string
           image_url?: string | null
@@ -2879,6 +2882,7 @@ export type Database = {
           product_id?: string | null
           sub_category?: string | null
           user_id?: string | null
+          user_notes?: string | null
           wear_count?: number
         }
         Update: {
@@ -2886,6 +2890,7 @@ export type Database = {
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
+          description?: string | null
           garment_type?: string | null
           id?: string
           image_url?: string | null
@@ -2893,6 +2898,7 @@ export type Database = {
           product_id?: string | null
           sub_category?: string | null
           user_id?: string | null
+          user_notes?: string | null
           wear_count?: number
         }
         Relationships: [
@@ -3427,6 +3433,7 @@ export type Database = {
           color_tags: string[] | null
           created_at: string
           deleted: boolean | null
+          description: string | null
           garment_type: string | null
           id: string
           image_url: string | null
@@ -3434,6 +3441,7 @@ export type Database = {
           product_id: string | null
           sub_category: string | null
           user_id: string | null
+          user_notes: string | null
           wear_count: number
         }
         SetofOptions: {
