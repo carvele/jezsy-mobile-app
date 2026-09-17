@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ONBOARDING_SEEN_KEY = 'jezsy_onboarding_seen';
 
-const listeners: Array<(seen: boolean) => void> = [];
+const listeners: ((seen: boolean) => void)[] = [];
 
 export function onOnboardingSeenChanged(callback: (seen: boolean) => void) {
   listeners.push(callback);

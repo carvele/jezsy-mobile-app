@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useWindowDimensions, Platform } from 'react-native';
+import { DimensionValue, useWindowDimensions } from 'react-native';
 import { Spacing } from '@/constants/theme';
 
 /**
@@ -27,7 +27,7 @@ export const GRID_COLUMN_GAP = Spacing.xl; // 20
  * Without this guard, useWindowDimensions returns different values on the
  * server vs. client, which triggers React hydration error #418.
  */
-import { DimensionValue } from 'react-native';
+
 
 export function useGridCardWidth(): { cardWidth: DimensionValue; columns: number } {
   const { width } = useWindowDimensions();
