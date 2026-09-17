@@ -1468,7 +1468,7 @@ export function gradeOutfit(
   profile?: UserStyleProfileDto | null
 ): StylistCritique {
   const contextInterpretation = interpretOutfitContext(context);
-  const { rawOccasion, rawAdditionalContext, activity, occasionType, timeOfDay } =
+  const { rawOccasion, rawAdditionalContext, activity, occasionType, timeOfDay, weather } =
     contextInterpretation;
   const occasionLabel = rawOccasion || 'your day';
 
