@@ -60,7 +60,7 @@ export function ProductCard({
     ? 'Out of stock'
     : lowStock
     ? `Only ${stock} left`
-    : `${stock} in stock`;
+    : null;
 
   const stockColor = outOfStock ? colors.error : lowStock ? colors.warning : colors.secondaryText;
 
