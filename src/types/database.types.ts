@@ -3528,6 +3528,26 @@ export type Database = {
         Returns: Json
       }
       recalculate_inventory_stock: { Args: never; Returns: Json }
+      recommend_size: {
+        Args: {
+          category?: string
+          fit_preference?: string
+          product_measurements: Json
+          user_measurements: Json
+        }
+        Returns: string
+      }
+      reconcile_product_variants: {
+        Args: {
+          p_actor_id?: string
+          p_category?: string
+          p_desired_variants: Json
+          p_product_id: string
+          p_product_name?: string
+          p_style_code?: string
+        }
+        Returns: Json
+      }
       record_boutique_sale: {
         Args: {
           p_idempotency_key: string
@@ -3664,12 +3684,14 @@ export type Database = {
           material_filters?: string[]
           max_price?: number
           min_price?: number
+          my_size_only?: boolean
           new_arrivals_only?: boolean
           on_sale_only?: boolean
           search_query?: string
           size_filters?: string[]
           sort_by?: string
           tag_filters?: string[]
+          user_measurements?: Json
         }
         Returns: {
           ar_data: Json
@@ -3849,6 +3871,7 @@ export type Database = {
         }
         Returns: Json
       }
+      to_numeric: { Args: { val: Json }; Returns: number }
       transition_mfa_reset_to_awaiting: {
         Args: { p_operation_id: string; p_target_id: string }
         Returns: undefined
