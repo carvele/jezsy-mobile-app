@@ -1,7 +1,7 @@
 import { supabase } from '@/src/lib/supabase';
 import { OffsetPageResult } from '@/src/types/pagination';
 import { Database } from '@/src/types/database.types';
-import { AddWardrobeItemInput, CapsuleItemInput } from '@/src/types/dto/wardrobeItem';
+import { AddWardrobeItemInput, CapsuleItemInput, UpdateWardrobeItemInput } from '@/src/types/dto/wardrobeItem';
 import {
   DomainError,
   DomainResult,
@@ -9,7 +9,7 @@ import {
   domainFail,
   errorReporting,
 } from './observability';
-import { resolveEffectiveGarmentBucket } from '../utils/garmentSemanticClassifier';
+import { resolveEffectiveGarmentBucket, inferSystemBucket } from '../utils/garmentSemanticClassifier';
 
 export type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 export type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
@@ -232,8 +232,18 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
         garment_type: input.garmentType,
         sub_category: input.subCategory ?? null,
         image_url: input.imageUrl,
-        color_tags: input.colorTags ?? null,
+        color_tags: effectiveColorTags ?? input.colorTags ?? null,
       };
+      if (input.description) basePayload.description = input.description;
+      if (input.userNotes) basePayload.user_notes = input.userNotes;
+
+      errorReporting.capture(new DomainError({
+        code: 'WARN_WARDROBE_ITEM_ADD_FALLBACK',
+        message: `Rich insert failed (${error.message}); retrying with baseline supported columns.`,
+        domain: 'wardrobe',
+        context: { operation: 'addItem', userId: input.userId, originalError: error.message },
+      }));
+
       const retry = await (supabase.from('wardrobe_items') as any).insert(basePayload);
       if (!retry.error) {
         return domainOk(undefined);
@@ -397,11 +407,159 @@ export async function updateCapsuleGoal(capsuleId: string, targetCount: number):
   }
 }
 
+/**
+ * Updates an existing wardrobe item with authenticated ownership verification,
+ * semantic bucket recomputation, color and occasion tokenization, and deep ai_attributes preservation.
+ */
+export async function updateItem(
+  itemId: string,
+  userId: string,
+  input: UpdateWardrobeItemInput
+): Promise<DomainResult<WardrobeItem>> {
+  try {
+    if (!itemId) {
+      throw new Error('Item ID is required for update');
+    }
+    if (!userId) {
+      throw new Error('User ID is required for update');
+    }
+
+    // 1. Fetch current item to ensure ownership and read existing ai_attributes
+    const { data: existing, error: fetchErr } = await supabase
+      .from('wardrobe_items')
+      .select('*')
+      .eq('id', itemId)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchErr || !existing) {
+      throw fetchErr || new Error('Item not found or unauthorized');
+    }
+
+    const existingRecord = existing as any;
+
+    // 2. Resolve field values (use new input if provided, otherwise preserve existing)
+    const effectiveCategory = (input.category !== undefined ? input.category.trim() : (existingRecord.category || 'Clothing')) || 'Clothing';
+    const effectiveSub = input.subCategory !== undefined ? (input.subCategory?.trim() || null) : existingRecord.sub_category;
+    const effectiveDesc = input.description !== undefined ? (input.description?.trim() || null) : existingRecord.description;
+    const effectiveNotes = input.userNotes !== undefined ? (input.userNotes?.trim() || null) : existingRecord.user_notes;
+
+    // 3. Recompute canonical system bucket using canonical classifier
+    const newBucket = inferSystemBucket(effectiveCategory, effectiveSub || '', effectiveDesc || '');
+
+    // 4. Recompute color tags and raw color string
+    let effectiveColorTags = existingRecord.color_tags;
+    let rawColorStr = existingRecord.ai_attributes?.rawColor ?? null;
+
+    if (input.color !== undefined) {
+      const trimmedColor = input.color?.trim() || '';
+      rawColorStr = trimmedColor || null;
+      if (trimmedColor) {
+        const parsed = trimmedColor
+          .split(/[,/&]|\band\b/i)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        effectiveColorTags = parsed.length > 0 ? parsed : [trimmedColor];
+      } else {
+        effectiveColorTags = null;
+      }
+    }
+
+    // 5. Recompute occasions and whereWornOften
+    let effectiveOccasions = existingRecord.occasions ?? null;
+    let rawWhereWornStr = existingRecord.ai_attributes?.whereWornOften ?? null;
+
+    if (input.whereWornOften !== undefined) {
+      const trimmedWhereWorn = input.whereWornOften?.trim() || '';
+      rawWhereWornStr = trimmedWhereWorn || null;
+      if (trimmedWhereWorn) {
+        const parsed = trimmedWhereWorn
+          .split(/[,/&]|\band\b/i)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        effectiveOccasions = parsed.length > 0 ? parsed : [trimmedWhereWorn];
+      } else {
+        effectiveOccasions = null;
+      }
+    }
+
+    // 6. Deep merge ai_attributes: preserve all unrelated keys (visual ML, confidence, etc.)
+    const updatedAiAttributes: Record<string, any> = {
+      ...((existingRecord.ai_attributes as Record<string, any>) || {}),
+    };
+
+    if (rawColorStr !== null) {
+      updatedAiAttributes.rawColor = rawColorStr;
+    } else {
+      delete updatedAiAttributes.rawColor;
+    }
+
+    if (rawWhereWornStr !== null) {
+      updatedAiAttributes.whereWornOften = rawWhereWornStr;
+    } else {
+      delete updatedAiAttributes.whereWornOften;
+    }
+
+    if (effectiveDesc !== null) {
+      updatedAiAttributes.description = effectiveDesc;
+    } else {
+      delete updatedAiAttributes.description;
+    }
+
+    if (effectiveNotes !== null) {
+      updatedAiAttributes.userNotes = effectiveNotes;
+    } else {
+      delete updatedAiAttributes.userNotes;
+    }
+
+    // 7. Assemble update payload
+    const updatePayload: Record<string, any> = {
+      category: effectiveCategory,
+      sub_category: effectiveSub,
+      garment_type: newBucket,
+      description: effectiveDesc,
+      user_notes: effectiveNotes,
+      color_tags: effectiveColorTags,
+      occasions: effectiveOccasions,
+      ai_attributes: Object.keys(updatedAiAttributes).length > 0 ? updatedAiAttributes : null,
+    };
+
+    const { data: updated, error: updateErr } = await (supabase.from('wardrobe_items') as any)
+      .update(updatePayload)
+      .eq('id', itemId)
+      .eq('user_id', userId)
+      .select('*')
+      .single();
+
+    if (updateErr) {
+      throw updateErr;
+    }
+
+    return domainOk(updated as WardrobeItem);
+  } catch (err: any) {
+    const domainError = new DomainError({
+      code: err?.code || 'ERR_WARDROBE_ITEM_UPDATE_FAILED',
+      message: err?.message || 'Failed to update wardrobe item',
+      domain: 'wardrobe',
+      context: { operation: 'updateItem', itemId, userId },
+      cause: err,
+    });
+
+    errorReporting.capture(domainError, {
+      domain: 'wardrobe',
+      operation: 'updateItem',
+    });
+
+    return domainFail(domainError);
+  }
+}
+
 export const wardrobeService = {
   getItemsPage: getWardrobeItemsPage,
   getOutfitsPage: getWardrobeOutfitsPage,
   getCapsulesPage: getWardrobeCapsulesPage,
   addItem,
+  updateItem,
   addCapsuleItem,
   removeCapsuleItem,
   deleteCapsule,
