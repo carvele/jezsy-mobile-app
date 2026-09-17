@@ -266,7 +266,15 @@ export function explainOutfit(
 
   const isFormalEvent = lowerOcc.includes('formal') || lowerOcc.includes('wedding') || lowerOcc.includes('black tie') || lowerOcc.includes('gala');
 
-  if (isFormalEvent && hasAthleticPiece) {
+  const isSwimmingEvent = lowerOcc.includes('swim');
+  const hasIncompatibleWaterGarment = items.some((item) => {
+    const text = [(item as any).name, item.sub_category, item.category, item.description].filter(Boolean).join(' ').toLowerCase();
+    return text.match(/\b(knit|sweater|denim|jean|suede|velvet|blazer|mary jane|wool)\b/) !== null;
+  });
+
+  if (isSwimmingEvent && hasIncompatibleWaterGarment) {
+    occasionFit = 'Regular fashion separates (knits, denim, suede) conflict with the water exposure required for swimming.';
+  } else if (isFormalEvent && hasAthleticPiece) {
     occasionFit = 'Athletic garments conflict with the elevated dress code required for formal celebrations.';
   } else if (lowerOcc.includes('work') || lowerOcc.includes('office') || lowerOcc.includes('business')) {
     occasionFit = hasAthleticPiece
@@ -282,7 +290,9 @@ export function explainOutfit(
 
   // 4. Headline
   let headline = 'Likely to Work Well';
-  if (isFormalEvent && hasAthleticPiece) {
+  if (isSwimmingEvent && hasIncompatibleWaterGarment) {
+    headline = 'Activity & Water Mismatch';
+  } else if (isFormalEvent && hasAthleticPiece) {
     headline = 'Formality Mismatch';
   } else if (isStatementWithNeutralAnchor && hasNeutralBlazerOrOuter) {
     headline = lowerOcc.includes('casual') ? 'Street-Style High-Low Look' : 'Tailored Statement Look';
@@ -302,7 +312,12 @@ export function explainOutfit(
   let whatCouldBeBetter = '';
   let stylingTip = '';
 
-  if (isFormalEvent && hasAthleticPiece) {
+  if (isSwimmingEvent && hasIncompatibleWaterGarment) {
+    summary = 'This outfit includes pieces (such as knits, denim, or suede) that will absorb water and become damaged during swimming.';
+    whyThisWorks = '';
+    whatCouldBeBetter = 'Replace fashion garments with functional swimwear and pool-safe footwear.';
+    stylingTip = 'Active swimming requires chlorine-resistant, water-compatible fabrics.';
+  } else if (isFormalEvent && hasAthleticPiece) {
     summary = 'Athletic pieces in this outfit conflict directly with the formal dress code expected for this event.';
     whyThisWorks = '';
     whatCouldBeBetter = 'Replace athletic garments (such as running shorts or sneakers) with tailored formalwear.';

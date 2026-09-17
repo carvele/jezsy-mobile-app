@@ -1,4 +1,9 @@
-import { gradeOutfit, extractColors } from '../aiStylistAdvisor';
+import {
+  gradeOutfit,
+  extractColors,
+  interpretOutfitContext,
+  buildGarmentSemanticProfile,
+} from '../aiStylistAdvisor';
 import { MannequinCanvasItem } from '../mannequinConfig';
 import { DEFAULT_STYLE_PROFILE, updateProfileFromFeedback } from '../personalStyleEngine';
 
@@ -580,5 +585,215 @@ describe('aiStylistAdvisor - Critical Context & Garment Compatibility Engine', (
 
     expect(updated.feedbackCount).toBe(1);
     expect(updated.preferredColors).toContain('black');
+  });
+
+  // =========================================================================
+  // PHASE 28-34: STYLIST INTELLIGENCE REBUILD REGRESSION SUITE
+  // =========================================================================
+
+  test('PHASE 28 REGRESSION: Active Swimming with Sweater + Denim Skirt + Suede Mary Janes is NOT APPROPRIATE', () => {
+    const sweater = mockItem('sw_1', 'Top', 'Cropped Turtleneck Sweater', {
+      category: 'Top',
+      sub_category: 'Sweater',
+      color: 'maroon, burgundy',
+      description:
+        'Maroon/burgundy ribbed-knit cropped turtleneck sweater featuring dropped shoulders and voluminous balloon sleeves with fitted cuffs.',
+    });
+    const skirt = mockItem('sk_1', 'Bottom', 'Denim Micro Mini Skirt', {
+      category: 'Bottom',
+      sub_category: 'Denim Skirt',
+      color: 'blue denim',
+      description:
+        'Medium-to-dark wash blue denim micro mini skirt featuring classic five-pocket styling, contrast stitching, and a raw/finished bottom hem.',
+    });
+    const flats = mockItem('fl_1', 'Shoes', 'Mary Jane Ballet Flats', {
+      category: 'Shoes',
+      sub_category: 'Flats',
+      color: 'chocolate brown',
+      description:
+        'Chocolate brown suede (or velvet) Mary Jane ballet flats featuring a rounded-square toe, low-profile sole, and an instep strap with a gold-tone buckle.',
+    });
+
+    const lookup = {
+      [sweater.wardrobeItem.id]: sweater.wardrobeItem,
+      [skirt.wardrobeItem.id]: skirt.wardrobeItem,
+      [flats.wardrobeItem.id]: flats.wardrobeItem,
+    };
+
+    const critique = gradeOutfit(
+      [sweater.canvasItem, skirt.canvasItem, flats.canvasItem],
+      lookup,
+      {
+        occasion: 'Swimming',
+        additionalContext: "I'll swimming a lot on the pool",
+      }
+    );
+
+    // 1. Must produce "Not appropriate for this occasion"
+    expect(critique.assessment).toBe('Not appropriate for this occasion');
+
+    // 2. No numeric scores or letter grades
+    expect((critique as any).score).toBeUndefined();
+    expect((critique as any).grade).toBeUndefined();
+
+    // 3. Must recognize active swimming
+    expect(critique.contextInterpretation?.activity).toBe('activeSwimming');
+    expect(critique.contextInterpretation?.waterExposure).toBe('high');
+
+    // 4. Contradictions must identify multiple water incompatibilities
+    expect(critique.contradictions && critique.contradictions.length >= 3).toBe(true);
+    const joinedContradictions = critique.contradictions?.join(' ').toLowerCase() || '';
+    expect(joinedContradictions).toMatch(/swim|water/);
+    expect(joinedContradictions).toMatch(/knit|sweater/);
+    expect(joinedContradictions).toMatch(/denim/);
+    expect(joinedContradictions).toMatch(/suede|velvet|mary jane|flats|footwear/);
+
+    // 5. Stylist's take explains why active swimming contradicts these fashion separates
+    expect(critique.stylistsTake.toLowerCase()).toMatch(/active.*swimming|swimming.*pool/);
+    expect(critique.stylistsTake.toLowerCase()).toMatch(/knit.*sweater|sweater/);
+    expect(critique.stylistsTake.toLowerCase()).toMatch(/denim/);
+
+    // 6. Visual palette coordination does NOT override contradiction
+    if (critique.whatWorks) {
+      expect(critique.whatWorks.toLowerCase()).toMatch(/palette|visual/);
+      expect(critique.whatWorks.toLowerCase()).toMatch(/does not overcome|contradiction|activity mismatch/);
+    }
+
+    // 7. What's missing requires swim-appropriate clothing
+    expect(critique.whatsMissing?.toLowerCase()).toMatch(/swim/);
+  });
+
+  test('PHASE 30 REGRESSION: Pool party distinguishes social gathering from active swimming', () => {
+    const shirt = mockItem('sh_1', 'Top', 'Linen Shirt', {
+      category: 'Top',
+      sub_category: 'Linen Button-Down',
+      color: 'white',
+      description: 'Breezy lightweight linen shirt for summer',
+    });
+    const shorts = mockItem('sh_2', 'Bottom', 'Chino Shorts', {
+      category: 'Bottom',
+      sub_category: 'Chino Shorts',
+      color: 'beige',
+      description: 'Casual chino shorts for warm weather',
+    });
+    const sandals = mockItem('sh_3', 'Shoes', 'Slides', {
+      category: 'Shoes',
+      sub_category: 'Pool Slides',
+      color: 'tan',
+      description: 'Waterproof pool slides',
+    });
+
+    const lookup = {
+      [shirt.wardrobeItem.id]: shirt.wardrobeItem,
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
+      [sandals.wardrobeItem.id]: sandals.wardrobeItem,
+    };
+
+    const critique = gradeOutfit(
+      [shirt.canvasItem, shorts.canvasItem, sandals.canvasItem],
+      lookup,
+      { occasion: 'Pool party' }
+    );
+
+    // Pool party social setting is NOT treated as active swimming
+    expect(critique.contextInterpretation?.activity).toBe('poolsideSocial');
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+    expect(critique.headline).toBe('Poolside Social Ensemble');
+  });
+
+  test('PHASE 29 REGRESSION: Same outfit evaluated differently for Casual day out vs Swimming', () => {
+    const sweater = mockItem('sw_1', 'Top', 'Ribbed Sweater', {
+      category: 'Top',
+      sub_category: 'Sweater',
+      color: 'burgundy',
+      description: 'Ribbed knit sweater',
+    });
+    const skirt = mockItem('sk_1', 'Bottom', 'Denim Skirt', {
+      category: 'Bottom',
+      sub_category: 'Denim Skirt',
+      color: 'blue denim',
+      description: 'Denim mini skirt',
+    });
+    const flats = mockItem('fl_1', 'Shoes', 'Mary Jane Flats', {
+      category: 'Shoes',
+      sub_category: 'Flats',
+      color: 'brown',
+      description: 'Mary Jane ballet flats',
+    });
+
+    const lookup = {
+      [sweater.wardrobeItem.id]: sweater.wardrobeItem,
+      [skirt.wardrobeItem.id]: skirt.wardrobeItem,
+      [flats.wardrobeItem.id]: flats.wardrobeItem,
+    };
+
+    const casualCritique = gradeOutfit(
+      [sweater.canvasItem, skirt.canvasItem, flats.canvasItem],
+      lookup,
+      { occasion: 'Casual day out' }
+    );
+
+    const swimCritique = gradeOutfit(
+      [sweater.canvasItem, skirt.canvasItem, flats.canvasItem],
+      lookup,
+      { occasion: 'Swimming', additionalContext: "I'll be swimming a lot in the pool" }
+    );
+
+    // Casual day out accepts the outfit; Swimming strictly rejects it
+    expect(casualCritique.assessment).toBe('Appropriate for this occasion');
+    expect(swimCritique.assessment).toBe('Not appropriate for this occasion');
+    expect(casualCritique.verdict).not.toBe(swimCritique.verdict);
+  });
+
+  test('PHASE 19 REGRESSION: Spectating context "Watching my kids swim" does not require swimwear', () => {
+    const top = mockItem('1', 'Top', 'Cotton T-shirt', { color: 'white', description: 'Casual tee' });
+    const bottom = mockItem('2', 'Bottom', 'Denim Jeans', { color: 'blue', description: 'Blue jeans' });
+    const shoes = mockItem('3', 'Shoes', 'Sneakers', { color: 'white' });
+    const lookup = {
+      [top.wardrobeItem.id]: top.wardrobeItem,
+      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
+    };
+
+    const critique = gradeOutfit(
+      [top.canvasItem, bottom.canvasItem, shoes.canvasItem],
+      lookup,
+      { occasion: 'Community Pool', additionalContext: 'Watching my kids swim from the bench' }
+    );
+
+    expect(critique.contextInterpretation?.isSpectatingOnly).toBe(true);
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+  });
+
+  test('PHASE 33 REGRESSION: User subcategory "Running Shorts" retained in structured profile', () => {
+    const shorts = mockItem('rs_1', 'Bottom', 'Shorts', {
+      category: 'Bottom',
+      sub_category: 'Running Shorts',
+      color: 'black',
+      description: 'Athletic running shorts',
+    });
+
+    const profile = buildGarmentSemanticProfile(shorts.canvasItem, shorts.wardrobeItem);
+    expect(profile.rawUserData.subCategory).toBe('Running Shorts');
+    expect(profile.styleSignals.athletic).toBe(true);
+  });
+
+  test('PHASE 33 REGRESSION: Multi-color user entry "Navy Blue, White" preserves both colors', () => {
+    const item = mockItem('c_1', 'Top', 'Striped Polo', {
+      color: 'Navy Blue, White',
+    });
+    const colors = extractColors([item.canvasItem], { [item.wardrobeItem.id]: item.wardrobeItem });
+    expect(colors).toContain('Navy Blue');
+    expect(colors).toContain('White');
+  });
+
+  test('PHASE 4 REGRESSION: interpretOutfitContext extracts structured signals cleanly', () => {
+    const ctx = interpretOutfitContext({
+      occasion: 'Swimming',
+      additionalContext: "I'll be swimming a lot in the pool",
+    });
+    expect(ctx.activity).toBe('activeSwimming');
+    expect(ctx.waterExposure).toBe('high');
+    expect(ctx.mobilityRequirement).toBe('high');
   });
 });

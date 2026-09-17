@@ -106,21 +106,19 @@ export function StylistCritiqueModal({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* Occasion & Context Card */}
+            {/* YOUR CONTEXT */}
             {effectiveOccasion ? (
               <View style={[styles.contextCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.contextHeader}>
-                  <View style={[styles.occasionBadge, { backgroundColor: colors.tint + '18', borderColor: colors.tint + '40' }]}>
-                    <IconSymbol name="pin.fill" size={11} color={colors.tint} />
-                    <Text style={[styles.occasionBadgeText, { color: colors.tint }]}>
-                      {effectiveOccasion}
-                    </Text>
-                  </View>
+                <Text style={[styles.contextSectionLabel, { color: colors.secondaryText }]}>YOUR CONTEXT</Text>
+                <View style={styles.contextRow}>
+                  <Text style={[styles.contextFieldLabel, { color: colors.text }]}>Where: </Text>
+                  <Text style={[styles.contextFieldValue, { color: colors.text }]}>{effectiveOccasion}</Text>
                 </View>
                 {additionalContext ? (
-                  <Text style={[styles.contextNotes, { color: colors.secondaryText }]}>
-                    &quot;{additionalContext}&quot;
-                  </Text>
+                  <View style={[styles.contextRow, { marginTop: 4 }]}>
+                    <Text style={[styles.contextFieldLabel, { color: colors.text }]}>Additional context: </Text>
+                    <Text style={[styles.contextFieldValue, { color: colors.secondaryText }]}>{additionalContext}</Text>
+                  </View>
                 ) : null}
               </View>
             ) : null}
@@ -187,6 +185,19 @@ export function StylistCritiqueModal({
               ) : null}
             </View>
 
+            {/* WHY JEZSY SAYS THIS — Evidence-grounded explanation */}
+            {critique.whyJezsySaysThis ? (
+              <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.insightHeader}>
+                  <View style={[styles.insightIconBadge, { backgroundColor: colors.tint + '18' }]}>
+                    <IconSymbol name="sparkles" size={13} color={colors.tint} />
+                  </View>
+                  <Text style={[styles.insightTitle, { color: colors.tint }]}>WHY JEZSY SAYS THIS</Text>
+                </View>
+                <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whyJezsySaysThis}</Text>
+              </View>
+            ) : null}
+
             {/* Evaluated Color Palette Chips */}
             {critique.paletteColors && critique.paletteColors.length > 0 && (
               <View style={styles.section}>
@@ -207,14 +218,14 @@ export function StylistCritiqueModal({
               </View>
             )}
 
-            {/* WHY THIS WORKS — Strictly omitted when outfit is fundamentally inappropriate or lacks genuine strengths */}
+            {/* WHAT WORKS — Strictly omitted when outfit lacks genuine strengths or has unmitigated conflicts */}
             {critique.whatWorks && (
               <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(34,197,94,0.3)' }]}>
                 <View style={styles.insightHeader}>
                   <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(34,197,94,0.15)' }]}>
                     <IconSymbol name="checkmark.circle.fill" size={13} color="#16A34A" />
                   </View>
-                  <Text style={[styles.insightTitle, { color: '#16A34A' }]}>WHY THIS WORKS</Text>
+                  <Text style={[styles.insightTitle, { color: '#16A34A' }]}>WHAT WORKS</Text>
                 </View>
                 <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatWorks}</Text>
               </View>
@@ -243,6 +254,30 @@ export function StylistCritiqueModal({
                   <Text style={[styles.insightTitle, { color: '#DC2626' }]}>WHAT&apos;S MISSING</Text>
                 </View>
                 <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatsMissing}</Text>
+              </View>
+            )}
+
+            {/* WARDROBE ALTERNATIVES — Real owned wardrobe items only */}
+            {critique.wardrobeAlternatives && critique.wardrobeAlternatives.length > 0 && (
+              <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={styles.insightHeader}>
+                  <View style={[styles.insightIconBadge, { backgroundColor: colors.tint + '18' }]}>
+                    <IconSymbol name="tshirt.fill" size={13} color={colors.tint} />
+                  </View>
+                  <Text style={[styles.insightTitle, { color: colors.tint }]}>WARDROBE ALTERNATIVES</Text>
+                </View>
+                {critique.wardrobeAlternatives.map((alt, idx) => (
+                  <View key={idx} style={[styles.altItemRow, idx > 0 && { marginTop: 8 }]}>
+                    <IconSymbol
+                      name={alt.found ? 'checkmark.circle.fill' : 'info.circle.fill'}
+                      size={14}
+                      color={alt.found ? '#16A34A' : colors.secondaryText}
+                    />
+                    <Text style={[styles.altItemText, { color: colors.text }]}>
+                      {alt.recommendationText}
+                    </Text>
+                  </View>
+                ))}
               </View>
             )}
 
@@ -449,26 +484,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
   },
-  contextHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  occasionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-  },
-  occasionBadgeText: {
-    fontSize: 12,
+  contextSectionLabel: {
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 2,
   },
-  contextNotes: {
-    fontSize: 12,
-    fontStyle: 'italic',
+  contextRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+  },
+  contextFieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  contextFieldValue: {
+    fontSize: 13,
+  },
+  altItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  altItemText: {
+    fontSize: 13,
+    lineHeight: 18,
+    flex: 1,
   },
   /* Your Outfit Items */
   outfitItemsRow: {
