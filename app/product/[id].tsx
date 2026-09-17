@@ -75,6 +75,7 @@ export default function ProductDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
+  const [reviewStats, setReviewStats] = useState<{ average: number; count: number } | null>(null);
   const [siblingProducts, setSiblingProducts] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const [lovedByCount, setLovedByCount] = useState(0);
@@ -115,9 +116,10 @@ export default function ProductDetailScreen() {
     useCallback(() => {
       const fetchProductAndInventory = async () => {
         try {
-          const [productRes, invRes] = await Promise.all([
+          const [productRes, invRes, statsRes] = await Promise.all([
             supabase.from("products").select(`*, ${CATEGORY_SELECT}`).eq("id", id).single(),
-            supabase.from("product_variants").select("*").eq("product_doc_id", id)
+            supabase.from("product_variants").select("*").eq("product_doc_id", id),
+            supabase.rpc("get_review_stats" as any, { p_product_id: id })
           ]);
 
           if (productRes.error) {
@@ -125,6 +127,14 @@ export default function ProductDetailScreen() {
           } else if (productRes.data) {
             const data = productRes.data;
             setProduct(data);
+
+            if (statsRes && statsRes.data) {
+              const statsData = statsRes.data as any;
+              setReviewStats({
+                average: Number(statsData.average || 0),
+                count: Number(statsData.count || 0),
+              });
+            }
             
             // Fetch loved by data
             const { data: lovedData } = await supabase.rpc('get_product_loved_by', { p_product_id: id });
@@ -564,13 +574,26 @@ export default function ProductDetailScreen() {
 
           <Text accessibilityRole="header" style={[styles.title, { color: colors.text }]}>{product.name}</Text>
 
-          {product.rating && product.review_count ? (
-            <View style={styles.ratingRow}>
-              <IconSymbol name="star.fill" size={13} color={colors.tint} />
-              <Text style={[styles.ratingValue, { color: colors.text }]}>{product.rating.toFixed(1)}</Text>
-              <Text style={[styles.ratingCount, { color: colors.secondaryText }]}>({product.review_count} reviews)</Text>
-            </View>
-          ) : null}
+          {(() => {
+            const displayRating = reviewStats !== null
+              ? reviewStats.average
+              : (product.rating ? Number(product.rating) : 0);
+            const displayReviewCount = reviewStats !== null
+              ? reviewStats.count
+              : (product.review_count || 0);
+
+            if (displayReviewCount <= 0 || displayRating <= 0) return null;
+
+            return (
+              <View style={styles.ratingRow}>
+                <IconSymbol name="star.fill" size={13} color={colors.tint} />
+                <Text style={[styles.ratingValue, { color: colors.text }]}>{displayRating.toFixed(1)}</Text>
+                <Text style={[styles.ratingCount, { color: colors.secondaryText }]}>
+                  ({displayReviewCount} {displayReviewCount === 1 ? 'review' : 'reviews'})
+                </Text>
+              </View>
+            );
+          })()}
 
           {/* Social Proof: Loved By */}
           {lovedByCount > 0 && (
@@ -864,7 +887,11 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
 
           {/* Customer Reviews & Ratings */}
-          <ReviewsList productId={product.id} productName={product.name} />
+          <ReviewsList
+            productId={product.id}
+            productName={product.name}
+            onStatsLoaded={setReviewStats}
+          />
 
           {/* Styled Looks - real curated editorial content, ahead of the
               algorithmic Complete the Look suggestions below */}

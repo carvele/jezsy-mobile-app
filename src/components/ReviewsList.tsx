@@ -13,11 +13,12 @@ import { useToast } from '@/src/context/ToastContext';
 interface ReviewsListProps {
   productId: string;
   productName?: string;
+  onStatsLoaded?: (stats: { average: number; count: number }) => void;
 }
 
 type VoteType = 'like' | 'dislike';
 
-export function ReviewsList({ productId, productName }: ReviewsListProps) {
+export function ReviewsList({ productId, productName, onStatsLoaded }: ReviewsListProps) {
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -34,16 +35,19 @@ export function ReviewsList({ productId, productName }: ReviewsListProps) {
       const { data, error } = await supabase.rpc('get_review_stats' as any, { p_product_id: productId });
       if (!error && data) {
         const statsData = data as any;
+        const count = Number(statsData.count || 0);
+        const average = Number(statsData.average || 0);
         setStats({
-          count: Number(statsData.count || 0),
-          average: Number(statsData.average || 0),
+          count,
+          average,
           breakdown: Array.isArray(statsData.breakdown) ? statsData.breakdown : [0, 0, 0, 0, 0],
         });
+        onStatsLoaded?.({ average, count });
       }
     } catch (e) {
       console.error('Error fetching review stats:', e);
     }
-  }, [productId]);
+  }, [productId, onStatsLoaded]);
 
   const fetchPreviewReviews = useCallback(async () => {
     setLoading(true);
