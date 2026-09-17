@@ -994,7 +994,7 @@ export default function ExploreScreen() {
 
     return (
       <View style={styles.breadcrumbWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.breadcrumbsContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.breadcrumbsContainer}>
           {breadcrumbItems}
         </ScrollView>
       </View>
@@ -1055,7 +1055,7 @@ export default function ExploreScreen() {
     const activeSubs = selectedCategory ? (subCategoriesByParent[selectedCategory] || []) : [];
     return (
       <View style={[styles.categorySwitcherWrapper, { borderBottomColor: colors.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categorySwitcherRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.categorySwitcherRow}>
           <TouchableOpacity
             style={[
               styles.categoryChip,
@@ -1100,7 +1100,7 @@ export default function ExploreScreen() {
         </ScrollView>
 
         {activeSubs.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subCategorySwitcherRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.subCategorySwitcherRow}>
             <TouchableOpacity
               style={[styles.subCategoryChip, selectedSubCategory === ALL_SUBCATEGORY && { borderColor: colors.tint }]}
               onPress={() => setSelectedSubCategory(ALL_SUBCATEGORY)}
@@ -1140,7 +1140,7 @@ export default function ExploreScreen() {
         <Text style={[styles.relatedCategoriesHeading, { color: colors.secondaryText }]}>
           Related Categories
         </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.relatedCategoriesScroll}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.relatedCategoriesScroll}>
           {matchingNavOptions.map((opt) => (
             <TouchableOpacity
               key={opt.id}
@@ -1168,7 +1168,7 @@ export default function ExploreScreen() {
     const isAllActive = !selectedNewArrivalsOnly && !selectedSaleOnly && !selectedArOnly && !selectedMySizeOnly;
     return (
       <View style={[styles.quickFiltersWrapper, { borderBottomColor: colors.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFiltersScroll}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.quickFiltersScroll}>
           <TouchableOpacity
             style={[
               styles.quickFilterChip,
@@ -1307,7 +1307,7 @@ export default function ExploreScreen() {
       {/* Active Filter Tags */}
       {activeFiltersCount > 0 && (
         <View style={[styles.activeFiltersWrapper, { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.activeFiltersScroll}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.activeFiltersScroll}>
             <TouchableOpacity
               onPress={clearAllFiltersDirectly}
               style={[styles.clearAllTag, { borderColor: colors.border }]}
