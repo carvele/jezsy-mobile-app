@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, LayoutAnimation, Platform, UIManager, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
@@ -30,6 +30,7 @@ import { resolveSignedStorageUrl } from '@/src/utils/signedStorageUrl';
 import { useMessages } from '@/src/context/MessagesContext';
 import { TimeSlotPicker } from '@/src/components/TimeSlotPicker';
 import { useToast } from '@/src/context/ToastContext';
+import { showAlert } from '@/src/utils/alert';
 import * as ImagePicker from 'expo-image-picker';
 import { startReservationPayment, submitReservationBalanceReceipt } from '@/src/lib/payments';
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
@@ -261,7 +262,7 @@ export default function ReservationDetailScreen() {
 
   const handleCancelReservation = useCallback(() => {
     if (!reservation) return;
-    Alert.alert(
+    showAlert(
       'Cancel Reservation',
       'Are you sure you want to cancel this reservation? The held item will be released back into boutique inventory.',
       [
