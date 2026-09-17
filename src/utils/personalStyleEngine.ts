@@ -71,9 +71,19 @@ export function computePersonalAffinity(
     if (item.garment_type && profile.preferredGarmentTypes.includes(item.garment_type)) {
       affinityPoints += 3;
     }
-    if ((item as any).fit && explicit.dislikedFits?.includes((item as any).fit)) {
+    const fit = (item as any).fit || (item as any).ai_attributes?.fit;
+    if (fit && profile.preferredFits.includes(fit)) {
+      affinityPoints += 5;
+      positiveSignals.push(`Features preferred fit: ${fit}`);
+    }
+    const sub = (item.sub_category || '').toLowerCase();
+    if (profile.styleKeywords.some((kw) => kw && sub.includes(kw.toLowerCase()))) {
+      affinityPoints += 5;
+      positiveSignals.push(`Matches personal style favorite: ${item.sub_category}`);
+    }
+    if (fit && explicit.dislikedFits?.includes(fit)) {
       affinityPoints -= 25;
-      negativeSignals.push(`Features avoided fit: ${(item as any).fit}`);
+      negativeSignals.push(`Features avoided fit: ${fit}`);
     }
 
     // 3. Patterns
@@ -142,6 +152,23 @@ export function updateProfileFromFeedback(
         if (updated.feedbackCount >= 3 && !updated.avoidedColors.includes(c) && !updated.preferredColors.includes(c)) {
           updated.avoidedColors.push(c);
         }
+      }
+    }
+
+    if (isPositive) {
+      if (item.garment_type && !updated.preferredGarmentTypes.includes(item.garment_type)) {
+        updated.preferredGarmentTypes.push(item.garment_type);
+      }
+      const fit = (item as any).fit || (item as any).ai_attributes?.fit;
+      if (fit && !updated.preferredFits.includes(fit)) {
+        updated.preferredFits.push(fit);
+      }
+      const sub = (item.sub_category || '').toLowerCase();
+      if (sub.includes('sneaker') && !updated.styleKeywords.includes('Sneakers')) {
+        updated.styleKeywords.push('Sneakers');
+      }
+      if ((fit || '').toLowerCase().includes('oversized') && !updated.styleKeywords.includes('Oversized')) {
+        updated.styleKeywords.push('Oversized');
       }
     }
   }

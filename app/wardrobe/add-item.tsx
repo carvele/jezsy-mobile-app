@@ -31,9 +31,8 @@ import { useToast } from '@/src/context/ToastContext';
 import { ImageCropModal } from '@/src/components/ImageCropModal';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 import { isOnline } from '@/src/services/offlineSync';
-import { fashionVisionEngine } from '@/src/services/fashionVisionEngine';
 import { ColorPickerModal } from '@/src/components/ColorPickerModal';
-import { ColorDetailItem, GarmentAnalysisResult, UserCorrections } from '@/src/types/dto/aiAttributes';
+import { ColorDetailItem } from '@/src/types/dto/aiAttributes';
 
 const { width } = Dimensions.get('window');
 
@@ -157,12 +156,9 @@ export default function AddWardrobeItemScreen() {
   const [categoryModalVisible, setCategoryModalVisible] = useState<boolean>(false);
   const [categorySearch, setCategorySearch] = useState<string>('');
   
-  // Vision Analysis & Extended Attributes
-  const [aiAnalysis, setAiAnalysis] = useState<GarmentAnalysisResult | null>(null);
-  const [isAnalyzingAi, setIsAnalyzingAi] = useState(false);
-  const [userCorrections, setUserCorrections] = useState<UserCorrections | null>(null);
+  // User Description & Personal Notes
   const [description, setDescription] = useState<string>('');
-  const [isDescriptionUserEdited, setIsDescriptionUserEdited] = useState<boolean>(false);
+  const [userNotes, setUserNotes] = useState<string>('');
   const [pattern, setPattern] = useState<string>('Solid');
   const [customPattern, setCustomPattern] = useState<string>('');
   const [material, setMaterial] = useState<string>('Cotton');
@@ -174,7 +170,6 @@ export default function AddWardrobeItemScreen() {
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [moreDetailsOpen, setMoreDetailsOpen] = useState<boolean>(false);
   const [moreDetails, setMoreDetails] = useState<Record<string, string>>({});
-  const userEditedFieldsRef = useRef<Set<string>>(new Set());
 
   const [saving, setSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -311,66 +306,11 @@ export default function AddWardrobeItemScreen() {
     setRawPickedSize(null);
   };
 
-  const runAiAnalysis = async (targetUri: string) => {
-    setIsAnalyzingAi(true);
-    try {
-      const analysis = await fashionVisionEngine.analyzeGarment(targetUri, {
-        width: rawPickedSize?.width,
-        height: rawPickedSize?.height,
-      });
-      setAiAnalysis(analysis);
-
-      if (!userEditedFieldsRef.current.has('garmentType') && analysis.garmentType) {
-        setGarmentType(analysis.garmentType as GarmentType);
-      }
-      if (!userEditedFieldsRef.current.has('category') && analysis.category) {
-        setCategory(analysis.category);
-      }
-      if (!userEditedFieldsRef.current.has('subCategory') && analysis.subcategory) {
-        setSubCategory(analysis.subcategory);
-      }
-      if (!userEditedFieldsRef.current.has('pattern') && analysis.pattern) {
-        setPattern(analysis.pattern);
-      }
-      if (!userEditedFieldsRef.current.has('material') && analysis.material) {
-        setMaterial(analysis.material);
-      }
-      if (!userEditedFieldsRef.current.has('fit') && analysis.fit) {
-        setFit(analysis.fit);
-      }
-      if (!userEditedFieldsRef.current.has('occasions') && analysis.occasions && analysis.occasions.length > 0) {
-        setOccasions(analysis.occasions);
-      }
-      if (!userEditedFieldsRef.current.has('colors') && analysis.colors && analysis.colors.length > 0) {
-        setColorDetails(analysis.colors);
-        setSelectedColors(analysis.colors.map((c) => c.name));
-      }
-      if (!isDescriptionUserEdited && analysis.description) {
-        setDescription(analysis.description);
-      }
-      if (!userEditedFieldsRef.current.has('moreDetails') && analysis.moreDetails) {
-        setMoreDetails(analysis.moreDetails);
-      }
-
-      if (userEditedFieldsRef.current.size > 0 || isDescriptionUserEdited) {
-        showToast('AI updated details while keeping your changes.', 'success');
-      } else {
-        showToast('AI clothing details applied to the form.', 'success');
-      }
-    } catch (e) {
-      console.warn('AI analysis error, proceeding with manual entry:', e);
-      showToast('AI analysis could not complete. You can enter details manually.', 'info');
-    } finally {
-      setIsAnalyzingAi(false);
-    }
-  };
-
   const handleCropConfirm = async (croppedUri: string) => {
     setImageUri(croppedUri);
     setCropModalVisible(false);
     setRawPickedUri(null);
     setRawPickedSize(null);
-    runAiAnalysis(croppedUri);
   };
 
   // Bounds an upload/DB call so a dropped connection surfaces a clear,
@@ -519,70 +459,38 @@ export default function AddWardrobeItemScreen() {
 
       setStatusMessage('Saving details...');
 
-      // Compute user corrections if user modified any values that vision analysis populated
-      let finalUserCorrections: UserCorrections | null = userCorrections;
+      // User-authored attributes are authoritative
       const effectivePattern = pattern === 'Custom' && customPattern.trim() ? customPattern.trim() : pattern;
       const effectiveMaterial = material === 'Other' && customMaterial.trim() ? customMaterial.trim() : material;
-
-      if (aiAnalysis) {
-        const original: UserCorrections['original'] = {
-          garmentType: aiAnalysis.garmentType,
-          category: aiAnalysis.category,
-          subcategory: aiAnalysis.subcategory,
-          colors: aiAnalysis.colors.map((c) => c.name),
-          pattern: aiAnalysis.pattern,
-          material: aiAnalysis.material,
-          fit: aiAnalysis.fit,
-          occasions: aiAnalysis.occasions,
-        };
-        const corrected: UserCorrections['corrected'] = {
-          garmentType: garmentType || undefined,
-          category,
-          subcategory: subCategory.trim() || undefined,
-          colors: colorDetails.map((c) => c.name),
-          pattern: effectivePattern,
-          material: effectiveMaterial,
-          fit,
-          occasions,
-        };
-        const hasDifferences =
-          original.garmentType !== corrected.garmentType ||
-          original.category !== corrected.category ||
-          original.subcategory !== corrected.subcategory ||
-          original.pattern !== corrected.pattern ||
-          original.material !== corrected.material ||
-          original.fit !== corrected.fit ||
-          JSON.stringify(original.occasions) !== JSON.stringify(corrected.occasions) ||
-          JSON.stringify(original.colors) !== JSON.stringify(corrected.colors);
-
-        if (hasDifferences) {
-          finalUserCorrections = { original, corrected, correctedAt: new Date().toISOString() };
-        }
-      }
+      const effectiveCategory = category.trim() || (garmentType ? `${garmentType}s` : 'Wardrobe Item');
+      const effectiveSubCategory = subCategory.trim() || null;
+      const trimmedDescription = description.trim();
+      const trimmedNotes = userNotes.trim();
 
       // Insert wardrobe item row via wardrobeService with bounded timeout
       const result = await withTimeout(
         wardrobeService.addItem({
           userId,
-          category,
-          garmentType,
-          subCategory: subCategory.trim() || null,
+          category: effectiveCategory,
+          garmentType: garmentType || 'Top',
+          subCategory: effectiveSubCategory,
           imageUrl: publicUrl,
           colorTags: selectedColors,
           pattern: effectivePattern,
           material: effectiveMaterial,
-          fit,
+          fit: fit || null,
           occasions,
           colorDetails,
-          isCustomCategory: !CATEGORIES.includes(category),
+          isCustomCategory: !CATEGORIES.includes(effectiveCategory),
+          description: trimmedDescription || null,
+          userNotes: trimmedNotes || null,
           aiAttributes: {
-            ...(aiAnalysis || {}),
-            description: description.trim() || undefined,
+            description: trimmedDescription || undefined,
+            userNotes: trimmedNotes || undefined,
             moreDetails: Object.keys(moreDetails).length > 0 ? moreDetails : undefined,
             colorDetails,
           } as any,
-          aiConfidence: aiAnalysis?.confidence ?? null,
-          userCorrections: finalUserCorrections ? (finalUserCorrections as any) : null,
+          userCorrections: null,
         }),
         12000,
       );
@@ -606,7 +514,7 @@ export default function AddWardrobeItemScreen() {
       setColorDetails([]);
       setSubCategory('');
       setDescription('');
-      setIsDescriptionUserEdited(false);
+      setUserNotes('');
       setPattern('Solid');
       setCustomPattern('');
       setMaterial('Cotton');
@@ -616,9 +524,6 @@ export default function AddWardrobeItemScreen() {
       setCustomOccasion('');
       setMoreDetails({});
       setMoreDetailsOpen(false);
-      setAiAnalysis(null);
-      setUserCorrections(null);
-      userEditedFieldsRef.current.clear();
 
       // canGoBack() is not reliable here: after a page reload (the exact
       // recovery this flow suggests once upload retries exhaust), Expo
@@ -693,12 +598,6 @@ export default function AddWardrobeItemScreen() {
                   <Text style={[styles.processingText, { color: colors.tint }]}>Extracting Item...</Text>
                 </View>
               )}
-              {isAnalyzingAi && (
-                <View style={styles.processingOverlay}>
-                  <ActivityIndicator size="large" color="#E6C687" />
-                  <Text style={[styles.processingText, { color: '#E6C687' }]}>AI Analyzing Garment...</Text>
-                </View>
-              )}
               <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImageUri(null)}>
                 <IconSymbol name="trash.fill" size={20} color="#FF453A" />
               </TouchableOpacity>
@@ -716,61 +615,6 @@ export default function AddWardrobeItemScreen() {
             </View>
           )}
         </View>
-
-        {/* Vision Analysis Trigger & Status */}
-        {imageUri && (
-          <View style={styles.aiActionCard}>
-            <TouchableOpacity
-              style={[
-                styles.aiAnalyzeBtn,
-                { backgroundColor: isAnalyzingAi ? '#374151' : colors.tint },
-              ]}
-              onPress={() => {
-                const target = (removeBg && processedImageUri) ? processedImageUri : imageUri;
-                runAiAnalysis(target);
-              }}
-              disabled={isAnalyzingAi}
-            >
-              {isAnalyzingAi ? (
-                <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 8 }} />
-              ) : (
-                <IconSymbol name="sparkles" size={18} color="#FFF" style={{ marginRight: 8 }} />
-              )}
-              <Text style={styles.aiAnalyzeBtnText}>
-                {isAnalyzingAi
-                  ? 'Analyzing Clothing...'
-                  : aiAnalysis
-                  ? 'Analyze Again'
-                  : '✨ Analyze Clothing'}
-              </Text>
-            </TouchableOpacity>
-
-            {aiAnalysis && (
-              <View style={[styles.aiBadgeContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={styles.aiBadgeHeader}>
-                  <Text style={[styles.aiBadgeTitle, { color: colors.tint }]}>
-                    AI Clothing Details
-                  </Text>
-                  <View style={[styles.confidencePill, { backgroundColor: colors.tint }]}>
-                    <Text style={[styles.confidencePillText, { color: colors.onTint }]}>
-                      {aiAnalysis.confidence >= 0.85
-                        ? 'AI is confident'
-                        : aiAnalysis.confidence >= 0.65
-                        ? 'AI is fairly confident'
-                        : 'Needs your review'}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[styles.aiStatusText, { color: colors.text }]}>
-                  AI has analyzed this item
-                </Text>
-                <Text style={[styles.aiHintText, { color: colors.secondaryText }]}>
-                  Check the details below and feel free to change anything.
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
 
         {/* Form Controls */}
         <View style={styles.form}>
@@ -790,6 +634,52 @@ export default function AddWardrobeItemScreen() {
             />
           </View>
 
+          {/* Tell JeZy about this item */}
+          <View style={styles.formRow}>
+            <Text style={[styles.sectionHeading, { color: colors.text }]}>Tell JeZy about this item</Text>
+            <TextInput
+              keyboardAppearance={theme}
+              style={[
+                styles.input,
+                styles.largeTextArea,
+                { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }
+              ]}
+              placeholder="Example: Navy blue fit-and-flare midi dress with short sleeves, a bow-tie neckline, fitted waist, polyester fabric, suitable for work, dinner, church and semi-formal events."
+              placeholderTextColor={colors.secondaryText}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={4}
+              maxLength={2000}
+            />
+            <Text style={[styles.helperText, { color: colors.secondaryText }]}>
+              Describe the color, style, material, fit, details, and where you usually wear it.
+            </Text>
+          </View>
+
+          {/* Notes for JeZy (Personal Notes) */}
+          <View style={styles.formRow}>
+            <Text style={[styles.label, { color: colors.text }]}>Notes for JeZy (Optional)</Text>
+            <Text style={[styles.subLabel, { color: colors.secondaryText, marginBottom: 2 }]}>
+              Private notes just for you and your personal stylist (e.g. favorite pairings, weather habits, or memories).
+            </Text>
+            <TextInput
+              keyboardAppearance={theme}
+              style={[
+                styles.input,
+                styles.textArea,
+                { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }
+              ]}
+              placeholder="Example: I love wearing this with sneakers. / This was a gift. / I only wear this during rainy weather."
+              placeholderTextColor={colors.secondaryText}
+              value={userNotes}
+              onChangeText={setUserNotes}
+              multiline
+              numberOfLines={2}
+              maxLength={2000}
+            />
+          </View>
+
           {/* Garment Type -- basic bucket used for wardrobe insights/gap analysis */}
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Type</Text>
@@ -803,10 +693,7 @@ export default function AddWardrobeItemScreen() {
                       styles.chip,
                       { borderColor: colors.border, backgroundColor: isSelected ? colors.tint : colors.card }
                     ]}
-                    onPress={() => {
-                      setGarmentType(type);
-                      userEditedFieldsRef.current.add('garmentType');
-                    }}
+                    onPress={() => setGarmentType(type)}
                     accessibilityRole="button"
                     accessibilityState={{ selected: isSelected }}
                   >
@@ -842,10 +729,7 @@ export default function AddWardrobeItemScreen() {
                 placeholder="Custom category name..."
                 placeholderTextColor={colors.secondaryText}
                 value={category}
-                onChangeText={(text) => {
-                  setCategory(text);
-                  userEditedFieldsRef.current.add('category');
-                }}
+                onChangeText={setCategory}
                 autoFocus
               />
             )}
@@ -859,28 +743,7 @@ export default function AddWardrobeItemScreen() {
               placeholder="e.g. Graphic T-shirt, Dress Shoes, Skinny Jeans"
               placeholderTextColor={colors.secondaryText}
               value={subCategory}
-              onChangeText={(text) => {
-                setSubCategory(text);
-                userEditedFieldsRef.current.add('subCategory');
-              }}
-            />
-          </View>
-
-          {/* Description */}
-          <View style={styles.formRow}>
-            <Text style={[styles.label, { color: colors.text }]}>Description</Text>
-            <TextInput
-              keyboardAppearance={theme}
-              style={[styles.input, styles.textArea, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-              placeholder="Short description or your own notes..."
-              placeholderTextColor={colors.secondaryText}
-              value={description}
-              onChangeText={(text) => {
-                setDescription(text);
-                setIsDescriptionUserEdited(true);
-              }}
-              multiline
-              numberOfLines={3}
+              onChangeText={setSubCategory}
             />
           </View>
 
@@ -926,7 +789,6 @@ export default function AddWardrobeItemScreen() {
                         onPress={() => {
                           setColorDetails((prev) => prev.filter((_, i) => i !== index));
                           setSelectedColors((prev) => prev.filter((name) => name !== c.name));
-                          userEditedFieldsRef.current.add('colors');
                         }}
                         accessibilityLabel={`Remove color ${c.name}`}
                       >
@@ -962,7 +824,6 @@ export default function AddWardrobeItemScreen() {
                       }
                     ]}
                     onPress={() => {
-                      userEditedFieldsRef.current.add('colors');
                       if (isAlreadyActive) {
                         setColorDetails((prev) => prev.filter((c) => c.name.toLowerCase() !== col.name.toLowerCase()));
                         setSelectedColors((prev) => prev.filter((name) => name.toLowerCase() !== col.name.toLowerCase()));
@@ -1015,7 +876,6 @@ export default function AddWardrobeItemScreen() {
                     ]}
                     onPress={() => {
                       setPattern(p);
-                      userEditedFieldsRef.current.add('pattern');
                     }}
                   >
                     <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
@@ -1034,7 +894,6 @@ export default function AddWardrobeItemScreen() {
                 value={customPattern}
                 onChangeText={(text) => {
                   setCustomPattern(text);
-                  userEditedFieldsRef.current.add('pattern');
                 }}
               />
             )}
@@ -1055,7 +914,6 @@ export default function AddWardrobeItemScreen() {
                     ]}
                     onPress={() => {
                       setMaterial(m);
-                      userEditedFieldsRef.current.add('material');
                     }}
                   >
                     <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
@@ -1074,7 +932,6 @@ export default function AddWardrobeItemScreen() {
                 value={customMaterial}
                 onChangeText={(text) => {
                   setCustomMaterial(text);
-                  userEditedFieldsRef.current.add('material');
                 }}
               />
             )}
@@ -1100,7 +957,6 @@ export default function AddWardrobeItemScreen() {
                     ]}
                     onPress={() => {
                       setFit(f);
-                      userEditedFieldsRef.current.add('fit');
                     }}
                   >
                     <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
@@ -1129,7 +985,6 @@ export default function AddWardrobeItemScreen() {
                       setOccasions((prev) =>
                         prev.includes(occ) ? prev.filter((o) => o !== occ) : [...prev, occ]
                       );
-                      userEditedFieldsRef.current.add('occasions');
                     }}
                   >
                     <Text style={[styles.chipText, { color: isSelected ? colors.onTint : colors.text }]}>
@@ -1148,7 +1003,6 @@ export default function AddWardrobeItemScreen() {
                   ]}
                   onPress={() => {
                     setOccasions((prev) => prev.filter((o) => o !== customOcc));
-                    userEditedFieldsRef.current.add('occasions');
                   }}
                 >
                   <Text style={[styles.chipText, { color: colors.onTint }]}>
@@ -1175,7 +1029,6 @@ export default function AddWardrobeItemScreen() {
                   if (trimmed && !occasions.includes(trimmed)) {
                     setOccasions((prev) => [...prev, trimmed]);
                     setCustomOccasion('');
-                    userEditedFieldsRef.current.add('occasions');
                   }
                 }}
               >
@@ -1205,37 +1058,15 @@ export default function AddWardrobeItemScreen() {
               <View style={[styles.moreDetailsContainer, { borderColor: colors.border }]}>
                 {(garmentType === 'Top' || garmentType === 'Dress') && (
                   <>
-                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600' }]}>Sleeve Style</Text>
+                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600' }]}>Neckline / Collar</Text>
                     <View style={styles.chipWrapRow}>
-                      {['Short Sleeve', 'Long Sleeve', 'Sleeveless', '3/4 Sleeve', 'Cap Sleeve'].map((s) => {
-                        const sel = moreDetails.sleeveType === s;
-                        return (
-                          <TouchableOpacity
-                            key={s}
-                            style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, sleeveType: sel ? '' : s }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
-                          >
-                            <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{s}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Neckline</Text>
-                    <View style={styles.chipWrapRow}>
-                      {['Crew Neck', 'V-Neck', 'Collared', 'Scoop', 'Turtle Neck', 'Off-Shoulder'].map((n) => {
+                      {['Bow-tie / Ribbon', 'High Neck / Pussy-bow', 'Crew Neck', 'V-Neck', 'Collared', 'Scoop', 'Off-Shoulder', 'Square', 'Sweetheart'].map((n) => {
                         const sel = moreDetails.neckline === n;
                         return (
                           <TouchableOpacity
                             key={n}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, neckline: sel ? '' : n }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, neckline: sel ? '' : n }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{n}</Text>
                           </TouchableOpacity>
@@ -1243,20 +1074,69 @@ export default function AddWardrobeItemScreen() {
                       })}
                     </View>
 
+                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Sleeve Style</Text>
+                    <View style={styles.chipWrapRow}>
+                      {['Short Sleeve', 'Long Sleeve', 'Sleeveless', '3/4 Sleeve', 'Cap Sleeve', 'Puffed / Bell'].map((s) => {
+                        const sel = moreDetails.sleeveType === s;
+                        return (
+                          <TouchableOpacity
+                            key={s}
+                            style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, sleeveType: sel ? '' : s }))}
+                          >
+                            <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{s}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
                     <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Length</Text>
                     <View style={styles.chipWrapRow}>
-                      {['Cropped', 'Regular', 'Long', 'Midi', 'Maxi'].map((l) => {
+                      {['Mini', 'Knee-length', 'Midi', 'Maxi', 'Cropped', 'Regular'].map((l) => {
                         const sel = moreDetails.length === l;
                         return (
                           <TouchableOpacity
                             key={l}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, length: sel ? '' : l }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, length: sel ? '' : l }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{l}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {garmentType === 'Dress' && (
+                      <>
+                        <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Waist & Silhouette</Text>
+                        <View style={styles.chipWrapRow}>
+                          {['Fit-and-Flare / A-Line', 'Fitted Waist', 'Empire Waist', 'Shift / Relaxed', 'Wrap', 'Bodycon', 'Sheath'].map((w) => {
+                            const sel = moreDetails.silhouette === w;
+                            return (
+                              <TouchableOpacity
+                                key={w}
+                                style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
+                                onPress={() => setMoreDetails((prev) => ({ ...prev, silhouette: sel ? '' : w }))}
+                              >
+                                <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{w}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </>
+                    )}
+
+                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Closure</Text>
+                    <View style={styles.chipWrapRow}>
+                      {['Back Zipper', 'Side Zipper', 'Buttons', 'Pullover', 'Wrap Tie'].map((c) => {
+                        const sel = moreDetails.closure === c;
+                        return (
+                          <TouchableOpacity
+                            key={c}
+                            style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, closure: sel ? '' : c }))}
+                          >
+                            <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{c}</Text>
                           </TouchableOpacity>
                         );
                       })}
@@ -1268,18 +1148,31 @@ export default function AddWardrobeItemScreen() {
                   <>
                     <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600' }]}>Shoe Style</Text>
                     <View style={styles.chipWrapRow}>
-                      {['Dress Shoes', 'Loafer', 'Sneakers', 'Boots', 'Sandals', 'Heels'].map((s) => {
+                      {['Dress Shoes', 'Loafers', 'Sneakers', 'Boots', 'Sandals', 'Heels / Pumps', 'Flats'].map((s) => {
                         const sel = moreDetails.shoeStyle === s;
                         return (
                           <TouchableOpacity
                             key={s}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, shoeStyle: sel ? '' : s }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, shoeStyle: sel ? '' : s }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{s}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Heel Height</Text>
+                    <View style={styles.chipWrapRow}>
+                      {['Flat', 'Low Heel', 'Mid Heel', 'High Heel'].map((h) => {
+                        const sel = moreDetails.heelHeight === h;
+                        return (
+                          <TouchableOpacity
+                            key={h}
+                            style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, heelHeight: sel ? '' : h }))}
+                          >
+                            <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{h}</Text>
                           </TouchableOpacity>
                         );
                       })}
@@ -1293,10 +1186,7 @@ export default function AddWardrobeItemScreen() {
                           <TouchableOpacity
                             key={c}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, closure: sel ? '' : c }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, closure: sel ? '' : c }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{c}</Text>
                           </TouchableOpacity>
@@ -1306,16 +1196,13 @@ export default function AddWardrobeItemScreen() {
 
                     <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Finish</Text>
                     <View style={styles.chipWrapRow}>
-                      {['Smooth', 'Matte', 'Suede', 'Patent Gloss', 'Canvas'].map((f) => {
+                      {['Smooth', 'Matte', 'Suede', 'Patent Gloss', 'Canvas', 'Textured'].map((f) => {
                         const sel = moreDetails.finish === f;
                         return (
                           <TouchableOpacity
                             key={f}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, finish: sel ? '' : f }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, finish: sel ? '' : f }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{f}</Text>
                           </TouchableOpacity>
@@ -1335,10 +1222,7 @@ export default function AddWardrobeItemScreen() {
                           <TouchableOpacity
                             key={r}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, rise: sel ? '' : r }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, rise: sel ? '' : r }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{r}</Text>
                           </TouchableOpacity>
@@ -1348,16 +1232,13 @@ export default function AddWardrobeItemScreen() {
 
                     <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Leg Style</Text>
                     <View style={styles.chipWrapRow}>
-                      {['Straight', 'Tapered', 'Wide-leg', 'Skinny', 'Flare'].map((l) => {
+                      {['Straight', 'Tapered', 'Wide-leg', 'Skinny', 'Flared', 'Bootcut', 'Relaxed'].map((l) => {
                         const sel = moreDetails.legStyle === l;
                         return (
                           <TouchableOpacity
                             key={l}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, legStyle: sel ? '' : l }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, legStyle: sel ? '' : l }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{l}</Text>
                           </TouchableOpacity>
@@ -1373,10 +1254,7 @@ export default function AddWardrobeItemScreen() {
                           <TouchableOpacity
                             key={len}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, length: sel ? '' : len }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, length: sel ? '' : len }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{len}</Text>
                           </TouchableOpacity>
@@ -1388,18 +1266,15 @@ export default function AddWardrobeItemScreen() {
 
                 {garmentType === 'Outerwear' && (
                   <>
-                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600' }]}>Collar</Text>
+                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600' }]}>Collar & Lapel</Text>
                     <View style={styles.chipWrapRow}>
-                      {['Notch Lapel', 'Peak Lapel', 'Stand Collar', 'Hooded'].map((c) => {
+                      {['Notch Lapel', 'Peak Lapel', 'Stand Collar', 'Hooded', 'Shawl Collar'].map((c) => {
                         const sel = moreDetails.collar === c;
                         return (
                           <TouchableOpacity
                             key={c}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, collar: sel ? '' : c }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, collar: sel ? '' : c }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{c}</Text>
                           </TouchableOpacity>
@@ -1409,18 +1284,35 @@ export default function AddWardrobeItemScreen() {
 
                     <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600', marginTop: Spacing.sm }]}>Closure</Text>
                     <View style={styles.chipWrapRow}>
-                      {['Single-breasted', 'Double-breasted', 'Zipper', 'Button'].map((cl) => {
+                      {['Single-breasted', 'Double-breasted', 'Zipper', 'Button', 'Open Front'].map((cl) => {
                         const sel = moreDetails.closure === cl;
                         return (
                           <TouchableOpacity
                             key={cl}
                             style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
-                            onPress={() => {
-                              setMoreDetails((prev) => ({ ...prev, closure: sel ? '' : cl }));
-                              userEditedFieldsRef.current.add('moreDetails');
-                            }}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, closure: sel ? '' : cl }))}
                           >
                             <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{cl}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
+                {garmentType === 'Accessory' && (
+                  <>
+                    <Text style={[styles.subLabel, { color: colors.text, fontWeight: '600' }]}>Accessory Type</Text>
+                    <View style={styles.chipWrapRow}>
+                      {['Bag', 'Belt', 'Scarf', 'Hat', 'Jewelry', 'Sunglasses'].map((a) => {
+                        const sel = moreDetails.accessoryType === a;
+                        return (
+                          <TouchableOpacity
+                            key={a}
+                            style={[styles.chip, { borderColor: colors.border, backgroundColor: sel ? colors.tint : colors.card }]}
+                            onPress={() => setMoreDetails((prev) => ({ ...prev, accessoryType: sel ? '' : a }))}
+                          >
+                            <Text style={[styles.chipText, { color: sel ? colors.onTint : colors.text }]}>{a}</Text>
                           </TouchableOpacity>
                         );
                       })}
@@ -1434,9 +1326,9 @@ export default function AddWardrobeItemScreen() {
 
         {/* Action Button */}
         <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: colors.tint, opacity: imageUri && garmentType && !saving ? 1 : 0.6 }]}
+          style={[styles.saveButton, { backgroundColor: colors.tint, opacity: imageUri && !saving ? 1 : 0.6 }]}
           onPress={handleSave}
-          disabled={!imageUri || !garmentType || saving}
+          disabled={!imageUri || saving}
         >
           {saving ? (
             <View style={styles.loadingRow}>
@@ -1883,61 +1775,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  aiActionCard: {
-    marginHorizontal: Spacing.xl,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
-    alignItems: 'center',
-  },
-  aiAnalyzeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: Radius.pill,
-    width: '100%',
-    elevation: 3,
-  },
-  aiAnalyzeBtnText: {
-    color: '#FFFFFF',
+  sectionHeading: {
+    fontSize: 16,
     fontWeight: '700',
-    fontSize: 15,
-  },
-  aiBadgeContainer: {
-    width: '100%',
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    marginTop: Spacing.sm,
-  },
-  aiBadgeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 4,
   },
-  aiBadgeTitle: {
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  confidencePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
-  },
-  confidencePillText: {
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  aiStatusText: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  aiHintText: {
-    fontSize: 11,
-    fontStyle: 'italic',
+  helperText: {
+    fontSize: 12,
+    lineHeight: 16,
     marginTop: 4,
+  },
+  largeTextArea: {
+    height: 100,
+    paddingTop: 12,
+    paddingBottom: 12,
+    textAlignVertical: 'top',
   },
 });

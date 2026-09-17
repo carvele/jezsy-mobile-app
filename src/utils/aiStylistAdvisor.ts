@@ -273,9 +273,10 @@ export function gradeOutfit(
 
   const statementPiece = items.find((item) => {
     const matching = wardrobeLookup?.[item.wardrobe_item_id];
-    const pat = ((matching as any)?.pattern || '').toLowerCase();
-    const name = (item.name || '').toLowerCase();
+    const pat = (((matching as any)?.pattern || (matching as any)?.ai_attributes?.pattern) || '').toLowerCase();
+    const name = (item.name || matching?.sub_category || matching?.category || '').toLowerCase();
     const sub = (matching?.sub_category || '').toLowerCase();
+    const desc = (matching?.description || (matching as any)?.ai_attributes?.description || '').toLowerCase();
     const tags = matching?.color_tags || [];
     return (
       pat.includes('graphic') ||
@@ -284,6 +285,8 @@ export function gradeOutfit(
       pat.includes('plaid') ||
       name.includes('graphic') ||
       sub.includes('graphic') ||
+      desc.includes('graphic') ||
+      desc.includes('colorful') ||
       tags.length >= 3
     );
   });
@@ -383,6 +386,30 @@ export function gradeOutfit(
     whatWorks = 'High visual energy that shows personal confidence.';
     whatCouldBeBetter = 'Multiple saturated hues compete for the eye without a resting point.';
     stylistTip = 'Anchor with at least one neutral tone (black, cream, or navy) to let a single hero color shine.';
+  } else if (hasDress) {
+    const dressItem = dresses[0];
+    const matching = wardrobeLookup?.[dressItem.wardrobe_item_id];
+    const desc = (matching?.description || (matching as any)?.ai_attributes?.description || dressItem.name || '').toLowerCase();
+    const hasBowTie = desc.includes('bow-tie') || desc.includes('bow tie') || desc.includes('pussy-bow');
+    const hasFitAndFlare = desc.includes('fit-and-flare') || desc.includes('fit and flare') || desc.includes('a-line');
+    const hasFittedWaist = desc.includes('fitted waist') || desc.includes('cinched waist');
+
+    if (hasBowTie || hasFitAndFlare || hasFittedWaist) {
+      headline = 'Graceful & Tailored Dress';
+      verdict = 'A cohesive one-piece ensemble with tailored neckline and waist proportions.';
+      const highlights: string[] = [];
+      if (hasBowTie) highlights.push('the bow-tie neckline');
+      if (hasFitAndFlare || hasFittedWaist) highlights.push('fitted waist shaping');
+      whatWorks = `The dress creates an elegant vertical line, accented by ${highlights.join(' and ')}.`;
+      whatCouldBeBetter = hasShoes ? 'Ensure footwear matches the formality of your planned setting.' : 'Adding footwear will anchor the proportion and polish the finish.';
+      stylistTip = 'Keep accessories clean to let the neckline remain the hero focal point.';
+    } else if (overallScore >= 85) {
+      headline = 'Chic & Masterfully Balanced';
+      verdict = 'A cohesive ensemble with impeccable color chemistry and deliberate proportion.';
+      whatWorks = 'The dress creates a streamlined silhouette with natural vertical balance.';
+      whatCouldBeBetter = hasShoes ? 'Ensure accessories complement the garment tone.' : 'Pair with dedicated footwear to complete the look.';
+      stylistTip = 'Add a minimalist watch or delicate jewelry to finish the look.';
+    }
   } else if (overallScore >= 90) {
     headline = 'Chic & Masterfully Balanced';
     verdict = 'A cohesive ensemble with impeccable color chemistry and deliberate proportion. Ready to wear with confidence.';

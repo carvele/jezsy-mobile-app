@@ -7,6 +7,8 @@ export interface AddWardrobeItemInput {
   subCategory?: string | null;
   imageUrl: string;
   colorTags?: string[] | null;
+  description?: string | null;
+  userNotes?: string | null;
   pattern?: string | null;
   material?: string | null;
   fit?: string | null;
@@ -41,6 +43,8 @@ export interface WardrobeItemDto {
   last_worn_at: string | null;
   created_at: string;
   deleted: boolean | null;
+  description?: string | null;
+  user_notes?: string | null;
   pattern?: string | null;
   material?: string | null;
   fit?: string | null;

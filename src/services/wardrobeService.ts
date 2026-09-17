@@ -54,7 +54,7 @@ export async function getWardrobeItemsPage(
 
   const q = filters.search?.trim();
   if (q) {
-    query = query.or(`garment_type.ilike.%${q}%,category.ilike.%${q}%,sub_category.ilike.%${q}%`);
+    query = query.or(`garment_type.ilike.%${q}%,category.ilike.%${q}%,sub_category.ilike.%${q}%,description.ilike.%${q}%`);
   }
 
   query = query
@@ -152,6 +152,8 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
       color_tags: input.colorTags ?? null,
     };
 
+    if (input.description) insertPayload.description = input.description;
+    if (input.userNotes) insertPayload.user_notes = input.userNotes;
     if (input.pattern) insertPayload.pattern = input.pattern;
     if (input.material) insertPayload.material = input.material;
     if (input.fit) insertPayload.fit = input.fit;
@@ -163,7 +165,18 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
     if (input.seasons && input.seasons.length > 0) insertPayload.seasons = input.seasons;
     if (input.colorDetails && input.colorDetails.length > 0) insertPayload.color_details = input.colorDetails;
     if (input.isCustomCategory !== undefined) insertPayload.is_custom_category = input.isCustomCategory;
-    if (input.aiAttributes) insertPayload.ai_attributes = input.aiAttributes;
+    if (input.aiAttributes) {
+      insertPayload.ai_attributes = {
+        ...input.aiAttributes,
+        description: input.description ?? (input.aiAttributes as any).description,
+        userNotes: input.userNotes ?? (input.aiAttributes as any).userNotes,
+      };
+    } else if (input.description || input.userNotes) {
+      insertPayload.ai_attributes = {
+        description: input.description,
+        userNotes: input.userNotes,
+      };
+    }
     if (input.aiConfidence !== undefined) insertPayload.ai_confidence = input.aiConfidence;
     if (input.userCorrections) insertPayload.user_corrections = input.userCorrections;
     if (input.embedding) insertPayload.embedding = input.embedding;

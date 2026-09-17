@@ -101,6 +101,27 @@ function build(
     occasionBonus = Math.min(15, occasionBonus);
   }
 
+  const NEUTRALS = new Set(['black', 'white', 'charcoal', 'grey', 'gray', 'navy', 'beige', 'cream', 'brown', 'tan', 'camel', 'khaki']);
+  const statement = items.find((i) => {
+    const pat = (((i as any).pattern || (i as any).ai_attributes?.pattern) || '').toLowerCase();
+    const desc = (i.description || (i as any).ai_attributes?.description || '').toLowerCase();
+    const sub = (i.sub_category || '').toLowerCase();
+    const tags = i.color_tags || [];
+    return pat.includes('graphic') || pat.includes('floral') || pat.includes('plaid') || sub.includes('graphic') || desc.includes('graphic') || tags.length >= 3;
+  });
+  const hasNeutralOuter = items.some((i) => {
+    if (i.garment_type !== 'Outerwear') return false;
+    const name = (i.sub_category || i.category || '').toLowerCase();
+    const isBlazer = name.includes('blazer') || name.includes('jacket') || name.includes('coat');
+    const tags = (i.color_tags || []).map((c) => c.toLowerCase());
+    return isBlazer && (tags.length === 0 || tags.some((c) => NEUTRALS.has(c)));
+  });
+  const isStatementAnchored = !!statement && hasNeutralOuter;
+  let adjustedColorScore = match.score;
+  if (isStatementAnchored && (match.label === 'Clashing Colors' || adjustedColorScore < 75)) {
+    adjustedColorScore = 86;
+  }
+
   // 4. Weight Calculation
   const w = options?.profile?.preferenceWeights || {
     colorHarmony: 0.40,
@@ -109,7 +130,7 @@ function build(
   };
 
   const rawScore =
-    match.score * w.colorHarmony +
+    adjustedColorScore * w.colorHarmony +
     compScore * w.composition +
     personal.score * w.personalStyle +
     occasionBonus +

@@ -1,0 +1,5 @@
+-- Rollback: 20260917100000_wardrobe_description_and_notes.sql.rollback
+
+ALTER TABLE public.wardrobe_items
+  DROP COLUMN IF EXISTS user_notes,
+  DROP COLUMN IF EXISTS description;
