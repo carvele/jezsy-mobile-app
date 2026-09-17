@@ -168,7 +168,24 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
     if (input.userCorrections) insertPayload.user_corrections = input.userCorrections;
     if (input.embedding) insertPayload.embedding = input.embedding;
 
-    const { error } = await (supabase.from('wardrobe_items') as any).insert(insertPayload);
+    let { error } = await (supabase.from('wardrobe_items') as any).insert(insertPayload);
+
+    // Fallback: If newer columns (e.g. ai_attributes) are pending in schema cache or unapplied migration, retry with base columns
+    if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache') || error.message?.includes('column'))) {
+      const basePayload: Record<string, any> = {
+        user_id: input.userId,
+        category: input.category,
+        garment_type: input.garmentType,
+        sub_category: input.subCategory ?? null,
+        image_url: input.imageUrl,
+        color_tags: input.colorTags ?? null,
+      };
+      const retry = await (supabase.from('wardrobe_items') as any).insert(basePayload);
+      if (!retry.error) {
+        return domainOk(undefined);
+      }
+      error = retry.error;
+    }
 
     if (error) {
       throw error;
