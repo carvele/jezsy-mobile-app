@@ -214,53 +214,7 @@ export default function WelcomeScreen() {
           <Text style={styles.guestButtonText}>Continue Browsing</Text>
         </TouchableOpacity>
 
-        <View style={styles.termsRow}>
-          <Text style={styles.termsText}>By continuing, you agree to our </Text>
-          <TouchableOpacity
-            accessibilityRole="link"
-            accessibilityLabel="Terms of Service"
-            onPress={() => openLegalDocument('Terms of Service', TERMS_URL)}
-          >
-            <Text style={styles.termsLink}>Terms of Service</Text>
-          </TouchableOpacity>
-          <Text style={styles.termsText}> and </Text>
-          <TouchableOpacity
-            accessibilityRole="link"
-            accessibilityLabel="Privacy Policy"
-            onPress={() => openLegalDocument('Privacy Policy', PRIVACY_URL)}
-          >
-            <Text style={styles.termsLink}>Privacy Policy</Text>
-          </TouchableOpacity>
-        </View>
       </View>
-
-      {/* Internal Legal Modal */}
-      {legalDoc && (
-        <Modal transparent visible animationType="fade" onRequestClose={() => setLegalDoc(null)}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{legalDoc.label}</Text>
-                <TouchableOpacity onPress={() => setLegalDoc(null)} style={styles.closeBtn}>
-                  <Text style={styles.closeBtnText}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              {Platform.OS === 'web' ? (
-                /* @ts-ignore */
-                <iframe
-                  src={legalDoc.url}
-                  style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
-                />
-              ) : (
-                <WebView
-                  source={{ uri: legalDoc.url }}
-                  style={{ flex: 1, width: '100%', height: '100%' }}
-                />
-              )}
-            </View>
-          </View>
-        </Modal>
-      )}
     </View>
   );
 }
