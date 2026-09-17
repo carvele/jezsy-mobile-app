@@ -162,7 +162,7 @@ export default function HomeScreen() {
           if (reviewDiff !== 0) return reviewDiff;
           return (b.rating || 0) - (a.rating || 0);
         });
-        setTrendingProducts(byPopularity.slice(0, 6));
+        setTrendingProducts(byPopularity.slice(0, 8));
         setAllProducts(data);
         setLoading(false);
         return; // Don't hit network if we seeded from a valid cache
@@ -178,7 +178,7 @@ export default function HomeScreen() {
           .order('created_at', { ascending: false })
           .order('id', { ascending: true })
           .limit(20),
-        (supabase.rpc as any)('get_trending_products', { limit_count: 6 })
+        (supabase.rpc as any)('get_trending_products', { limit_count: 8 })
           .select(`*, ${CATEGORY_SELECT}`),
         supabase
           .from('categories')
