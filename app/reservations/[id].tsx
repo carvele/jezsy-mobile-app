@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, LayoutAnimation, Platform, UIManager, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
@@ -35,6 +35,8 @@ import { startReservationPayment, submitReservationBalanceReceipt } from '@/src/
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
 import { getReturnRequestWindowDays } from '@/src/services/settingsService';
+import { cancelCustomerReservation, getActiveRefundRequest } from '@/src/services/reservationService';
+import { ReturnRefundModal } from '@/src/components/reservations/ReturnRefundModal';
 import type { PaymentPurpose } from '@/src/utils/reservationPayment';
 
 if (
@@ -126,6 +128,9 @@ export default function ReservationDetailScreen() {
   const [balanceConfirmedReceiptReady, setBalanceConfirmedReceiptReady] = useState(false);
   const [uploadingBalanceReceipt, setUploadingBalanceReceipt] = useState(false);
   const [balanceReceiptUri, setBalanceReceiptUri] = useState<string | null>(null);
+  const [refundRequest, setRefundRequest] = useState<any>(null);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [cancellingReservation, setCancellingReservation] = useState(false);
 
   const fetchPaymentInstructions = useCallback(async () => {
     const { data, error } = await supabase
@@ -141,25 +146,27 @@ export default function ReservationDetailScreen() {
     if (!id) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('reservations').select('*').eq('id', id).single();
-      if (error) throw error;
-      setReservation(data);
+      const [resResult, itemsResult, refundReq] = await Promise.all([
+        supabase.from('reservations').select('*').eq('id', id).single(),
+        supabase
+          .from('reservation_items')
+          .select('*')
+          .eq('reservation_id', id)
+          .order('created_at', { ascending: true }),
+        getActiveRefundRequest(id),
+      ]);
 
-      // Lines live in reservation_items. Every reservation has at least one
-      // (older rows were backfilled), so an empty result means the fetch
-      // failed rather than the reservation genuinely having no items -- fall
-      // back to the denormalised parent columns instead of showing nothing.
-      const { data: itemRows, error: itemsError } = await supabase
-        .from('reservation_items')
-        .select('*')
-        .eq('reservation_id', id)
-        .order('created_at', { ascending: true });
-      if (itemsError) throw itemsError;
-      setItems(itemRows ?? []);
+      if (resResult.error) throw resResult.error;
+      setReservation(resResult.data);
+      setRefundRequest(refundReq);
+
+      if (itemsResult.error) throw itemsResult.error;
+      setItems(itemsResult.data ?? []);
     } catch (err) {
       console.error('Error fetching reservation:', err);
       setReservation(null);
       setItems([]);
+      setRefundRequest(null);
     } finally {
       setLoading(false);
     }
@@ -248,21 +255,38 @@ export default function ReservationDetailScreen() {
     }, [])
   );
 
-  const handleReturnRefundRequest = async () => {
-    const conv = await getOrCreateConversation();
-    if (!conv || !reservation) return;
-    const refId = reservation.display_id || reservation.id.substring(0, 8);
-    router.push({
-      pathname: '/messages/[conversationId]',
-      params: {
-        conversationId: conv.id,
-        ctxType: 'reservation',
-        ctxRef: reservation.id,
-        ctxLabel: `Reservation ${refId}${reservation.product_name ? ` - ${reservation.product_name}` : ''}`,
-        prefill: `I would like to request a return/refund for reservation #${refId}.`,
-      },
-    } as any);
+  const handleReturnRefundRequest = () => {
+    setShowRefundModal(true);
   };
+
+  const handleCancelReservation = useCallback(() => {
+    if (!reservation) return;
+    Alert.alert(
+      'Cancel Reservation',
+      'Are you sure you want to cancel this reservation? The held item will be released back into boutique inventory.',
+      [
+        { text: 'Keep Reservation', style: 'cancel' },
+        {
+          text: 'Cancel Reservation',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingReservation(true);
+            try {
+              const res = await cancelCustomerReservation(reservation.id);
+              if (res.ok) {
+                showToast('Reservation cancelled.', 'success');
+                await fetchReservation();
+              } else {
+                showToast(res.error.message || 'Could not cancel reservation.', 'error');
+              }
+            } finally {
+              setCancellingReservation(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [fetchReservation, reservation, showToast]);
 
   const handleAskAboutReservation = async () => {
     const conv = await getOrCreateConversation();
@@ -508,7 +532,10 @@ export default function ReservationDetailScreen() {
   const dateStr = reservation.date
     ? formatPHDate(reservation.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : 'N/A';
-  const displayState = getCustomerReservationDisplayState(reservation);
+  const displayState = getCustomerReservationDisplayState({
+    ...reservation,
+    refund_request_status: refundRequest?.status,
+  });
   const statusColor = getStatusColor(displayState.badgeColorType);
   // Raw arithmetic, not "what's still owed" -- see isBalanceSettled below.
   // Staff record collection via settle_reservation_balance at pickup, which
@@ -693,6 +720,7 @@ export default function ReservationDetailScreen() {
           </TouchableOpacity>
 
           {reservationState === 'completed' &&
+            (!refundRequest || refundRequest.status === 'rejected') &&
             isReturnEligible(
               { completed_at: (reservation as any).completed_at, date: reservation.date },
               returnWindowDays
@@ -713,6 +741,42 @@ export default function ReservationDetailScreen() {
               </TouchableOpacity>
             )}
         </View>
+
+        {refundRequest && ['submitted', 'under_review'].includes(refundRequest.status) && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.warning }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              <IconSymbol name="clock.arrow.circlepath" size={18} color={colors.warning} />
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                Return / Refund Request Under Review
+              </Text>
+            </View>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.xs }]}>
+              Reason: <Text style={{ fontWeight: '700', color: colors.text }}>{refundRequest.reason_category}</Text>
+            </Text>
+            {refundRequest.details ? (
+              <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.xs }]}>
+                &ldquo;{refundRequest.details}&rdquo;
+              </Text>
+            ) : null}
+            <Text style={[styles.rowText, { color: colors.secondaryText, fontSize: 12 }]}>
+              Submitted {formatPHDate(refundRequest.submitted_at || refundRequest.created_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}. Boutique staff are reviewing your request.
+            </Text>
+          </View>
+        )}
+
+        {(paymentState === 'refund required' || refundRequest?.status === 'approved') && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.error }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              <IconSymbol name="exclamationmark.circle" size={18} color={colors.error} />
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                Refund Approved
+              </Text>
+            </View>
+            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
+              Your return/refund request has been approved by boutique staff. Staff are preparing your refund disbursement.
+            </Text>
+          </View>
+        )}
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.sectionHeaderRow}>
@@ -880,6 +944,24 @@ export default function ReservationDetailScreen() {
                 <Text style={[styles.paySecondaryText, { color: colors.text }]}>
                   I&apos;ll pay by transfer
                 </Text>
+              </TouchableOpacity>
+            )}
+
+            {!showManualPayment && (
+              <TouchableOpacity
+                style={[styles.paySecondary, { borderColor: colors.border, marginTop: Spacing.sm }]}
+                onPress={handleCancelReservation}
+                disabled={cancellingReservation || payBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel reservation"
+              >
+                {cancellingReservation ? (
+                  <ActivityIndicator color={colors.secondaryText} />
+                ) : (
+                  <Text style={[styles.paySecondaryText, { color: colors.secondaryText }]}>
+                    Cancel Reservation
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
 
@@ -1346,6 +1428,15 @@ export default function ReservationDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      <ReturnRefundModal
+        visible={showRefundModal}
+        reservation={reservation}
+        onClose={() => setShowRefundModal(false)}
+        onSuccess={async () => {
+          await fetchReservation();
+        }}
+      />
     </SafeAreaView>
   );
 }

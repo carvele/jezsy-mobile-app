@@ -21,7 +21,7 @@ describe('getCustomerReservationDisplayState & getReservationCardActions regress
     expect(stateActive.showToPayAction).toBe(true);
 
     const actionsActive = getReservationCardActions(resActive);
-    expect(actionsActive).toEqual(['toPay']);
+    expect(actionsActive).toEqual(['toPay', 'cancelReservation']);
 
     // When countdown flag is false (e.g. paused / legacy)
     const resNoCountdown = {
@@ -33,6 +33,7 @@ describe('getCustomerReservationDisplayState & getReservationCardActions regress
     const stateNoCountdown = getCustomerReservationDisplayState(resNoCountdown);
     expect(stateNoCountdown.showCountdown).toBe(false);
     expect(stateNoCountdown.showToPayAction).toBe(true);
+    expect(getReservationCardActions(resNoCountdown)).toEqual(['toPay', 'cancelReservation']);
   });
 
   test('2. paid but still To Pay: displays Payment Received, hides countdown, and suppresses To Pay button', () => {
@@ -178,5 +179,84 @@ describe('getCustomerReservationDisplayState & getReservationCardActions regress
       'buyAgain',
       'rate',
     ]);
+
+    const resExpiredRated = {
+      ...resExpired,
+      reviewed: true,
+    };
+    expect(getReservationCardActions(resExpiredRated, { referenceTime: now })).toEqual([
+      'buyAgain',
+    ]);
+  });
+
+  test('8. Multi-item review resolution: Rate button stays visible as long as hasUnratedItems is true', () => {
+    const now = Date.now();
+    const recentDate = new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Partially rated multi-item order (1 of 2 rated -> hasUnratedItems: true)
+    const partiallyRatedOrder = {
+      status: 'Completed',
+      payment_status: 'Paid',
+      completed_at: recentDate,
+      hasUnratedItems: true,
+      isFullyRated: false,
+    };
+    expect(getReservationCardActions(partiallyRatedOrder, { referenceTime: now })).toEqual([
+      'returnRefund',
+      'rate',
+    ]);
+
+    // Fully rated multi-item order (2 of 2 rated -> hasUnratedItems: false, isFullyRated: true)
+    const fullyRatedOrder = {
+      status: 'Completed',
+      payment_status: 'Paid',
+      completed_at: recentDate,
+      hasUnratedItems: false,
+      isFullyRated: true,
+    };
+    expect(getReservationCardActions(fullyRatedOrder, { referenceTime: now })).toEqual([
+      'returnRefund',
+    ]);
+  });
+
+  test('9. Return/refund request operational states: display Under Review and viewRefund action', () => {
+    const resSubmitted = {
+      status: 'Completed',
+      payment_status: 'Paid',
+      refund_request_status: 'submitted',
+      hasUnratedItems: true,
+    };
+    const stateSubmitted = getCustomerReservationDisplayState(resSubmitted);
+    expect(stateSubmitted.label).toBe('Refund Under Review');
+    expect(stateSubmitted.bucket).toBe('returnRefund');
+    expect(stateSubmitted.badgeColorType).toBe('paymentUnderReview');
+    expect(getReservationCardActions(resSubmitted)).toEqual(['viewRefund', 'rate']);
+
+    const resSubmittedRated = {
+      ...resSubmitted,
+      hasUnratedItems: false,
+      isFullyRated: true,
+    };
+    expect(getReservationCardActions(resSubmittedRated)).toEqual(['viewRefund']);
+
+    // Admin approved refund request -> Refund in Progress / viewRefund
+    const resApproved = {
+      status: 'Completed',
+      payment_status: 'Refund Required',
+      refund_request_status: 'approved',
+    };
+    const stateApproved = getCustomerReservationDisplayState(resApproved);
+    expect(stateApproved.label).toBe('Refund in Progress');
+    expect(getReservationCardActions(resApproved)).toEqual(['viewRefund']);
+
+    // Fully refunded -> Refunded / buyAgain
+    const resRefunded = {
+      status: 'Completed',
+      payment_status: 'Refunded',
+      refund_request_status: 'refunded',
+    };
+    const stateRefunded = getCustomerReservationDisplayState(resRefunded);
+    expect(stateRefunded.label).toBe('Refunded');
+    expect(getReservationCardActions(resRefunded)).toEqual(['buyAgain']);
   });
 });
