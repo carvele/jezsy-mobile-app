@@ -708,8 +708,9 @@ const styles = StyleSheet.create({
   trendingGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-        gap: GRID_COLUMN_GAP,
-    paddingHorizontal: Spacing.xl,
+    gap: GRID_COLUMN_GAP,
+    paddingHorizontal: GRID_GUTTER,
+    justifyContent: 'flex-start',
   },
   sectionTitle: {
     ...Type.title,
