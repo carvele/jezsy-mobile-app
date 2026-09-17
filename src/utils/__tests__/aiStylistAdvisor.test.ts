@@ -95,7 +95,13 @@ describe('aiStylistAdvisor - Critical Context & Garment Compatibility Engine', (
     // 3. No fake praise / "Why this works" strictly omitted
     expect(critique.whatWorks).toBeUndefined();
     expect(critique.verdict.toLowerCase()).not.toContain('good for wedding');
+    expect(critique.verdict.toLowerCase()).not.toContain('solid combination');
+    expect(critique.verdict.toLowerCase()).not.toContain('balanced');
+    expect(critique.verdict.toLowerCase()).not.toContain('well-calibrated');
     expect(critique.headline.toLowerCase()).not.toContain('smart casual statement');
+    expect(critique.stylistsTake.toLowerCase()).not.toContain('solid combination');
+    expect(critique.stylistsTake.toLowerCase()).not.toContain('balanced');
+    expect(critique.stylistsTake.toLowerCase()).not.toContain('cohesive ensemble');
 
     // 4. Identifies casual/athletic mismatch
     expect(critique.whatCouldBeBetter?.toLowerCase()).toMatch(/athletic|running|casual|conflict/);
@@ -106,6 +112,110 @@ describe('aiStylistAdvisor - Critical Context & Garment Compatibility Engine', (
     // 6. Honest stylist take communicates the contradiction
     expect(critique.stylistsTake.toLowerCase()).toMatch(/blazer/);
     expect(critique.stylistsTake.toLowerCase()).toMatch(/running shorts|athletic/);
+  });
+
+  // PART 24 TESTS: Context-as-a-constraint tests
+  test('PART 24: Running Shorts + Running Shoes for Running context is activity-appropriate', () => {
+    const shorts = mockItem('1', 'Bottom', 'Running Shorts', {
+      category: 'Bottom',
+      sub_category: 'Running Shorts',
+      color: 'black',
+      where_worn_often: 'Running, gym',
+      description: 'Lightweight running shorts for exercise',
+    });
+    const shoes = mockItem('2', 'Shoes', 'Running Shoes', {
+      category: 'Shoes',
+      sub_category: 'Running Shoes',
+      color: 'blue',
+      where_worn_often: 'Running',
+    });
+    const lookup = {
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([shorts.canvasItem, shoes.canvasItem], lookup, { occasion: 'Running' });
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+    expect(critique.headline).toBe('Functional Running Gear');
+    expect(critique.verdict).toContain('Running');
+  });
+
+  test('PART 24: Running Shorts + Running Shoes for Casual day out is contextually evaluated, not automatically rejected', () => {
+    const shorts = mockItem('1', 'Bottom', 'Running Shorts', {
+      category: 'Bottom',
+      sub_category: 'Running Shorts',
+      color: 'black',
+      where_worn_often: 'Running, gym',
+    });
+    const shoes = mockItem('2', 'Shoes', 'Running Shoes', {
+      category: 'Shoes',
+      sub_category: 'Running Shoes',
+      color: 'black',
+    });
+    const lookup = {
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
+      [shoes.wardrobeItem.id]: shorts.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([shorts.canvasItem, shoes.canvasItem], lookup, { occasion: 'Casual day out' });
+    expect(critique.assessment).toBe('Could work with changes');
+    expect(critique.assessment).not.toBe('Not appropriate for this occasion');
+    expect(critique.whatsMissing?.toLowerCase()).toMatch(/top|t-shirt|hoodie/);
+  });
+
+  test('PART 24: Running Shorts + Running Shoes for Wedding produces strong contextual mismatch', () => {
+    const shorts = mockItem('1', 'Bottom', 'Running Shorts', {
+      category: 'Bottom',
+      sub_category: 'Running Shorts',
+      color: 'black',
+      where_worn_often: 'Running, gym',
+    });
+    const shoes = mockItem('2', 'Shoes', 'Running Shoes', {
+      category: 'Shoes',
+      sub_category: 'Running Shoes',
+      color: 'black',
+    });
+    const lookup = {
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([shorts.canvasItem, shoes.canvasItem], lookup, { occasion: 'Wedding' });
+    expect(critique.assessment).toBe('Not appropriate for this occasion');
+    expect(critique.whatWorks).toBeUndefined();
+    expect(critique.whatCouldBeBetter?.toLowerCase()).toMatch(/athletic|formal|trousers/);
+  });
+
+  test('PART 24: Tailored Shorts + Elevated Top + Loafers for Beach Wedding is NOT automatically rejected simply because shorts exist', () => {
+    const shorts = mockItem('1', 'Bottom', 'Tailored Linen Shorts', {
+      category: 'Bottom',
+      sub_category: 'Tailored Shorts',
+      color: 'beige',
+      where_worn_often: 'Resort, summer outings',
+      description: 'Linen tailored Bermuda shorts with pleat details',
+    });
+    const top = mockItem('2', 'Top', 'Linen Button-Down Shirt', {
+      category: 'Top',
+      sub_category: 'Button-Down',
+      color: 'white',
+      description: 'Crisp white breathable linen shirt',
+    });
+    const shoes = mockItem('3', 'Shoes', 'Suede Loafers', {
+      category: 'Shoes',
+      sub_category: 'Loafers',
+      color: 'tan',
+      description: 'Casual suede driving loafers',
+    });
+    const lookup = {
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
+      [top.wardrobeItem.id]: top.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([shorts.canvasItem, top.canvasItem, shoes.canvasItem], lookup, { occasion: 'Beach Wedding' });
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+    expect(critique.headline).toBe('Refined Resort Styling');
+    expect(critique.whatWorks).toBeDefined();
   });
 
   // TEST 2: Same outfit + Casual day out

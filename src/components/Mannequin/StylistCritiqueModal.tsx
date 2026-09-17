@@ -187,17 +187,6 @@ export function StylistCritiqueModal({
               ) : null}
             </View>
 
-            {/* STYLIST'S TAKE — Honest, direct assessment */}
-            <View style={[styles.takeCard, { backgroundColor: colors.tint + '0C', borderColor: colors.tint + '30' }]}>
-              <View style={styles.takeHeader}>
-                <IconSymbol name="bubble.left.and.bubble.right" size={13} color={colors.tint} />
-                <Text style={[styles.takeTitle, { color: colors.tint }]}>Stylist&apos;s Take</Text>
-              </View>
-              <Text style={[styles.takeText, { color: colors.text }]}>
-                &quot;{critique.stylistsTake || critique.verdict}&quot;
-              </Text>
-            </View>
-
             {/* Evaluated Color Palette Chips */}
             {critique.paletteColors && critique.paletteColors.length > 0 && (
               <View style={styles.section}>
@@ -256,6 +245,17 @@ export function StylistCritiqueModal({
                 <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatsMissing}</Text>
               </View>
             )}
+
+            {/* STYLIST'S TAKE — Honest, direct assessment */}
+            <View style={[styles.takeCard, { backgroundColor: colors.tint + '0C', borderColor: colors.tint + '30' }]}>
+              <View style={styles.takeHeader}>
+                <IconSymbol name="bubble.left.and.bubble.right" size={13} color={colors.tint} />
+                <Text style={[styles.takeTitle, { color: colors.tint }]}>Stylist&apos;s Take</Text>
+              </View>
+              <Text style={[styles.takeText, { color: colors.text }]}>
+                &quot;{critique.stylistsTake || critique.verdict}&quot;
+              </Text>
+            </View>
 
             {/* STYLIST TIPS — Actionable recommendations */}
             {critique.tips && critique.tips.length > 0 && (
