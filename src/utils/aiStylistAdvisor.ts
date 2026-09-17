@@ -1,12 +1,12 @@
 /**
  * aiStylistAdvisor.ts
- * Deterministic Fashion Stylist & Outfit Grader Engine for the Mannequin.
+ * JeZsy Stylist Engine - Outfit Compatibility Scorer.
  *
- * Evaluates garment combinations based on classical color theory (HSL hue distance,
- * saturation tension, neutral anchoring, metallic harmony) and garment-to-garment
- * composition rules (top+bottom, layering, footwear balance, duplicate slot detection).
+ * Evaluates an outfit on the mannequin canvas against the user selected occasion
+ * and context. Produces a 0-100 JeZsy Outfit Compatibility Score that reflects how
+ * well the actual items match the chosen occasion, not a universal fashion truth.
  *
- * Pure, deterministic, and 100% reproducible.
+ * Pure, deterministic, reproducible. No hardcoded outfit-specific scores.
  */
 
 import { evaluateColors, ColorMatchResult } from './colorMatcher';
@@ -15,21 +15,27 @@ import { OutfitExplanation } from './outfitExplainer';
 
 export type GradeLetter = 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D';
 
+export interface OutfitContext {
+  occasion: string;
+  additionalContext?: string;
+}
+
 export interface StylePillarBreakdown {
-  score: number; // 0 to 100
+  score: number;
   status: 'excellent' | 'good' | 'warning' | 'alert';
   title: string;
   feedback: string;
 }
 
 export interface StylistCritique {
-  score: number; // 0 to 100
+  score: number;
   grade: GradeLetter;
   headline: string;
   verdict: string;
   whatWorks?: string;
   whatCouldBeBetter?: string;
   stylistTip?: string;
+  whatsMissing?: string;
   pillars: {
     colorHarmony: StylePillarBreakdown;
     compositionAndLayers: StylePillarBreakdown;
@@ -61,198 +67,255 @@ const KNOWN_COLORS = [
   'charcoal', 'red', 'crimson', 'burgundy', 'maroon', 'wine', 'pink', 'rose', 'blush',
   'orange', 'rust', 'terracotta', 'yellow', 'mustard', 'gold', 'silver', 'green', 'olive',
   'sage', 'emerald', 'teal', 'purple', 'lavender', 'brown', 'tan', 'camel', 'khaki',
-  'ivory', 'neon green', 'neon pink', 'neon yellow', 'neon'
+  'ivory', 'neon green', 'neon pink', 'neon yellow', 'neon',
 ];
 
-/**
- * Extracts normalized color tags from canvas items, wardrobe lookups, or garment names.
- */
 export function extractColors(
   items: MannequinCanvasItem[],
   wardrobeLookup?: Record<string, WardrobeItem>
 ): string[] {
   const colors: string[] = [];
-
   for (const item of items) {
-    const matchingWardrobe = wardrobeLookup?.[item.wardrobe_item_id];
+    const w = wardrobeLookup?.[item.wardrobe_item_id];
     let found = false;
-
-    if (matchingWardrobe?.color_tags && matchingWardrobe.color_tags.length > 0) {
-      colors.push(...matchingWardrobe.color_tags);
+    if (w?.color_tags && w.color_tags.length > 0) {
+      colors.push(...w.color_tags);
       found = true;
-    } else if ((matchingWardrobe as any)?.color) {
-      colors.push((matchingWardrobe as any).color);
+    } else if ((w as any)?.color) {
+      colors.push((w as any).color);
       found = true;
     }
-
-    // Inspect item name, sub_category, category if not found
     if (!found) {
-      const textSources = [
-        item.name,
-        matchingWardrobe?.sub_category,
-        matchingWardrobe?.category,
-        (item as any).color,
+      const sources = [
+        item.name, w?.sub_category, w?.category,
+        w?.description, (w as any)?.ai_attributes?.description, (item as any).color,
       ].filter(Boolean).map((s) => String(s).toLowerCase());
-
-      for (const text of textSources) {
+      for (const text of sources) {
         for (const kc of KNOWN_COLORS) {
-          if (text.includes(kc)) {
-            colors.push(kc);
-            found = true;
-            break;
-          }
+          if (text.includes(kc)) { colors.push(kc); found = true; break; }
         }
+        if (found) break;
       }
     }
   }
-
   return Array.from(new Set(colors.filter(Boolean)));
 }
 
-/**
- * Grades the outfit styled on the mannequin canvas with honest, realistic critique.
- */
-export function gradeOutfit(
+const OCCASION_FORMALITY: Record<string, number> = {
+  'sports / gym': 0, 'beach': 0, 'outdoor': 1, 'everyday / casual': 1, 'travel': 1,
+  'school': 2, 'party': 2, 'date': 3, 'dinner': 3,
+  'work / office': 4, 'church': 4, 'interview': 5, 'wedding / formal event': 5,
+};
+
+function getOccasionFormality(occasion: string): number {
+  const key = occasion.toLowerCase().trim();
+  if (key in OCCASION_FORMALITY) return OCCASION_FORMALITY[key];
+  for (const [k, v] of Object.entries(OCCASION_FORMALITY)) {
+    if (key.includes(k) || k.includes(key)) return v;
+  }
+  return 2;
+}
+
+function inferOutfitFormality(
   items: MannequinCanvasItem[],
   wardrobeLookup?: Record<string, WardrobeItem>
+): number {
+  let sum = 0; let count = 0;
+  for (const item of items) {
+    const w = wardrobeLookup?.[item.wardrobe_item_id];
+    const t = (item.garment_type || '').toLowerCase();
+    const desc = [w?.description, (w as any)?.ai_attributes?.description, w?.sub_category, item.name]
+      .filter(Boolean).join(' ').toLowerCase();
+    const colorTags = (w?.color_tags || []).map((c) => c.toLowerCase());
+    let f = 2;
+    if (desc.match(/\b(gown|evening|cocktail|blazer|suit|tuxedo|formal|tailored|dress pants|trousers)\b/)) f = 5;
+    else if (desc.match(/\b(chino|button.?down|collared|loafer|oxford|heels?|midi dress|wrap dress)\b/)) f = 4;
+    else if (desc.match(/\b(jeans?|denim|polo|casual|sneaker|sweatshirt|hoodie)\b/)) f = 2;
+    else if (desc.match(/\b(running|gym|athletic|workout|sports?|jersey|training|shorts)\b/)) f = 0;
+    else if (desc.match(/\b(swimwear|bikini|beach|flip.?flop|sandal)\b/)) f = 0;
+    if (t.includes('shoe') || t.includes('heel') || t.includes('boot')) {
+      if (desc.match(/\b(sneaker|trainer|running|canvas)\b/)) f = Math.min(f, 2);
+      else if (desc.match(/\b(heel|pump|oxford|loafer|derby)\b/)) f = Math.max(f, 4);
+    }
+    if (colorTags.some((c) => c.includes('neon'))) f = Math.min(f, 1);
+    sum += f; count++;
+  }
+  return count > 0 ? sum / count : 2;
+}
+
+export function gradeOutfit(
+  items: MannequinCanvasItem[],
+  wardrobeLookup?: Record<string, WardrobeItem>,
+  context?: OutfitContext
 ): StylistCritique {
+  const occasion = context?.occasion ?? '';
+  const additionalContext = (context?.additionalContext ?? '').toLowerCase();
+
   if (!items || items.length === 0) {
     return {
-      score: 0,
-      grade: 'D',
+      score: 0, grade: 'D',
       headline: 'Mannequin is Empty',
-      verdict: 'Add at least one top, bottom, or dress to receive a fashion critique.',
+      verdict: "Add at least one garment to the mannequin, then tap Stylist to get JeZsy's evaluation.",
       pillars: {
-        colorHarmony: {
-          score: 0,
-          status: 'alert',
-          title: 'No Colors Detected',
-          feedback: 'Dress the mannequin to begin color harmony evaluation.',
-        },
-        compositionAndLayers: {
-          score: 0,
-          status: 'alert',
-          title: 'Incomplete Look',
-          feedback: 'No garments are currently on the canvas.',
-        },
+        colorHarmony: { score: 0, status: 'alert', title: 'No Colors Detected', feedback: 'Dress the mannequin to begin color evaluation.' },
+        compositionAndLayers: { score: 0, status: 'alert', title: 'No Garments', feedback: 'No garments are currently on the canvas.' },
       },
       tips: ['Tap any garment in the wardrobe drawer below to dress the mannequin.'],
-      vibe: 'Unstyled',
-      paletteColors: [],
+      vibe: 'Unstyled', paletteColors: [],
     };
   }
 
-  // 1. Classify garment items by specific structural roles
+  // Classify garment slots
   const baseTops: MannequinCanvasItem[] = [];
   const outers: MannequinCanvasItem[] = [];
   const bottoms: MannequinCanvasItem[] = [];
-  const dresses: MannequinCanvasItem[] = [];
+  const fullBodyItems: MannequinCanvasItem[] = [];
   const shoes: MannequinCanvasItem[] = [];
   const accessories: MannequinCanvasItem[] = [];
 
   for (const item of items) {
     const t = (item.garment_type || '').toLowerCase();
-    if (t.includes('outerwear') || t.includes('jacket') || t.includes('blazer') || t.includes('coat') || t.includes('cardigan')) {
-      outers.push(item);
-    } else if (t.includes('top') || t.includes('shirt') || t.includes('blouse') || t.includes('sweater') || t.includes('bra') || t.includes('tee')) {
-      baseTops.push(item);
-    } else if (t.includes('bottom') || t.includes('pant') || t.includes('jean') || t.includes('skirt') || t.includes('short') || t.includes('trouser')) {
-      bottoms.push(item);
-    } else if (t.includes('dress') || t.includes('jumpsuit') || t.includes('romper') || t.includes('gown') || t.includes('swimsuit')) {
-      dresses.push(item);
-    } else if (t.includes('shoe') || t.includes('heel') || t.includes('boot') || t.includes('sneaker') || t.includes('sandal')) {
-      shoes.push(item);
-    } else {
-      accessories.push(item);
-    }
+    const w = wardrobeLookup?.[item.wardrobe_item_id];
+    const desc = [w?.description, (w as any)?.ai_attributes?.description, w?.sub_category, item.name]
+      .filter(Boolean).join(' ').toLowerCase();
+
+    const isFullBody = t.includes('dress') || t.includes('jumpsuit') || t.includes('romper')
+      || t.includes('gown') || t.includes('swimsuit')
+      || desc.match(/\b(jumpsuit|romper|gown|overalls|one.?piece|swimsuit)\b/) !== null;
+
+    const isOuterwear = t.includes('outerwear') || t.includes('jacket') || t.includes('blazer')
+      || t.includes('coat') || t.includes('cardigan')
+      || desc.match(/\b(blazer|jacket|coat|cardigan|vest|windbreaker)\b/) !== null;
+
+    const isShoe = t.includes('shoe') || t.includes('heel') || t.includes('boot')
+      || t.includes('sneaker') || t.includes('sandal')
+      || desc.match(/\b(shoes?|sneakers?|heels?|boots?|loafers?|sandals?|pumps?|oxfords?|flats?)\b/) !== null;
+
+    const isBottom = !isFullBody && !isOuterwear && !isShoe && (
+      t.includes('bottom') || t.includes('pant') || t.includes('jean') || t.includes('skirt')
+      || t.includes('short') || t.includes('trouser')
+      || desc.match(/\b(pants?|jeans?|trousers?|skirt|shorts?|slacks)\b/) !== null
+    );
+
+    const isTop = !isFullBody && !isOuterwear && !isShoe && !isBottom && (
+      t.includes('top') || t.includes('shirt') || t.includes('blouse') || t.includes('sweater')
+      || t.includes('bra') || t.includes('tee') || t.includes('tank')
+      || desc.match(/\b(shirt|blouse|tee|polo|sweater|knitwear|crop.?top)\b/) !== null
+    );
+
+    if (isFullBody) fullBodyItems.push(item);
+    else if (isOuterwear) outers.push(item);
+    else if (isShoe) shoes.push(item);
+    else if (isBottom) bottoms.push(item);
+    else if (isTop) baseTops.push(item);
+    else accessories.push(item);
   }
 
-  const hasDress = dresses.length > 0;
+  const hasDressOrFullBody = fullBodyItems.length > 0;
   const hasTop = baseTops.length > 0;
   const hasBottom = bottoms.length > 0;
   const hasOuterwear = outers.length > 0;
   const hasShoes = shoes.length > 0;
   const hasAccessory = accessories.length > 0;
+  const hasBodyCoverage = hasDressOrFullBody || (hasTop && hasBottom) || (hasOuterwear && (hasTop || hasBottom));
 
-  // 2. Overcrowding & Duplicate Slot Checks (Brutal Honesty)
+  const occasionFormality = getOccasionFormality(occasion);
+  const outfitFormality = inferOutfitFormality(items, wardrobeLookup);
+  const isFormalOccasion = occasionFormality >= 4;
+  const isAthleticOccasion = occasion.toLowerCase().match(/\b(sport|gym|athletic)\b/) !== null;
+  const isBeachOccasion = occasion.toLowerCase().includes('beach');
+  const mentionsRain = additionalContext.match(/\b(rain|wet|umbrella|waterproof)\b/) !== null;
+  const mentionsWalking = additionalContext.match(/\b(walk|walking|lot of walking|standing)\b/) !== null;
+
+  const tips: string[] = [];
   let isOvercrowded = false;
+  let whatsMissing: string | undefined;
+
+  // Composition scoring
   let compScore = 85;
   let compTitle = 'Balanced Ensemble';
-  let compFeedback = 'Solid garment foundation with clear proportions.';
+  let compFeedback = 'Solid garment foundation.';
   let compStatus: StylePillarBreakdown['status'] = 'good';
-  const tips: string[] = [];
 
-  // Check 2A: Multiple competing base tops (e.g. 3 shirts/blouses simultaneously)
   if (baseTops.length > 1) {
     isOvercrowded = true;
-    const extraTops = baseTops.length - 1;
-    compScore -= extraTops * 25; // Heavily penalize multiple competing tops
+    compScore = Math.max(30, 85 - (baseTops.length - 1) * 25);
     compStatus = 'warning';
-    compTitle = `Overcrowded Canvas (${baseTops.length} Competing Tops)`;
-    compFeedback = `You currently have ${baseTops.length} separate tops on the mannequin. In realistic styling, commit to one base top (with an optional outerwear jacket) so the look doesn't feel cluttered.`;
-    tips.unshift(`Remove ${extraTops} extra top(s) to let one clear hero top lead the outfit.`);
-  }
-
-  // Check 2B: Multiple competing bottoms (e.g. 2 skirts or pants + skirt)
-  if (bottoms.length > 1) {
+    compTitle = `Overcrowded — ${baseTops.length} Competing Tops`;
+    compFeedback = `${baseTops.length} separate tops are on the mannequin at once. Choose one base top and optionally layer a jacket.`;
+    tips.unshift(`Remove ${baseTops.length - 1} extra top(s) so one hero top leads the look.`);
+  } else if (bottoms.length > 1) {
     isOvercrowded = true;
-    const extraBottoms = bottoms.length - 1;
-    compScore -= extraBottoms * 30;
+    compScore = Math.max(30, 85 - (bottoms.length - 1) * 30);
     compStatus = 'warning';
-    compTitle = `Conflicting Bottoms (${bottoms.length} Bottoms)`;
-    compFeedback = `Multiple separate bottoms are on the mannequin at once. Choose one pair of trousers or a single skirt.`;
-    tips.unshift('Choose either pants or a skirt, not both together.');
-  }
-
-  // Check 2C: Dress stacked with separate tops/bottoms
-  if (hasDress && (hasTop || hasBottom)) {
+    compTitle = `Conflicting Bottoms — ${bottoms.length} Bottoms`;
+    compFeedback = 'Multiple separate bottoms are on the mannequin. Choose one trouser or a single skirt.';
+    tips.unshift('Choose either pants or a skirt, not both at once.');
+  } else if (hasDressOrFullBody && (hasTop || hasBottom)) {
     isOvercrowded = true;
-    compScore -= 25;
+    compScore = Math.max(35, compScore - 25);
     compStatus = 'warning';
-    compTitle = 'Conflicting Dress & Separates';
-    compFeedback = 'A dress functions as a complete full-body piece. Stacking separate tops or bottoms creates volume conflicts unless styled as an outerwear jacket.';
-    tips.unshift('Remove separate tops/bottoms when wearing a dress (or layer a jacket over it).');
+    compTitle = 'Conflicting: Dress + Separates';
+    compFeedback = 'A dress or jumpsuit already covers the full body. Stacking separate tops or bottoms creates unnecessary volume.';
+    tips.unshift('Remove separate tops/bottoms when wearing a dress (layer a jacket over it instead).');
   }
 
-  // Check 2D: Single item on canvas
-  if (items.length === 1 && !hasDress) {
-    compScore = 50;
-    compStatus = 'warning';
-    compTitle = 'Incomplete Ensemble';
-    compFeedback = hasTop
-      ? 'Currently styled with only a top. Pair with trousers, a skirt, or shorts to complete the look.'
-      : 'Currently styled with only bottoms. Add a complementary top or blouse.';
-    tips.push(hasTop ? 'Add matching bottoms or trousers to complete the foundation.' : 'Add a top or blouse to finish the base look.');
-  } else if (!hasDress && (!hasTop || !hasBottom) && !hasOuterwear && !isOvercrowded) {
-    compScore = 55;
-    compStatus = 'warning';
-    compTitle = 'Missing Core Piece';
-    compFeedback = 'The outfit is missing either a top or bottom to form a wearable foundation.';
-    tips.push('Pair your separates together for a complete look.');
-  } else if (!isOvercrowded) {
-    // Normal complete ensemble
-    compScore = 90;
-    compStatus = 'good';
-
-    if (hasShoes) {
-      compScore += 5;
-      compTitle = 'Complete Head-to-Toe Look';
-      compFeedback = 'Excellent head-to-toe styling with dedicated footwear anchoring the silhouette.';
+  if (!isOvercrowded) {
+    if (hasDressOrFullBody) {
+      compScore = 92; compStatus = 'good';
+      compTitle = 'Complete One-Piece Ensemble';
+      compFeedback = 'A dress or jumpsuit provides full coverage as a standalone piece.';
+      if (hasShoes) {
+        compScore = Math.min(100, compScore + 5);
+        compTitle = 'Complete Head-to-Toe Look';
+        compFeedback += ' Footwear anchors the silhouette.';
+      } else if (isFormalOccasion) {
+        compScore -= 10;
+        compFeedback += ' Adding shoes would complete this for the selected occasion.';
+        tips.push('Add formal shoes to complete this look.');
+        whatsMissing = `Footwear — adding shoes would complete this look for the ${occasion} occasion.`;
+      } else {
+        compScore -= 5;
+        compFeedback += ' Footwear would anchor the proportion further.';
+      }
+    } else if (hasTop && hasBottom) {
+      compScore = 88; compStatus = 'good';
+      compTitle = 'Complete Separates';
+      compFeedback = 'A clear top and bottom form a solid foundation.';
+      if (hasShoes) {
+        compScore = Math.min(100, compScore + 7);
+        compTitle = 'Complete Head-to-Toe Look';
+        compFeedback = 'Head-to-toe styling with dedicated footwear.';
+      } else if (isFormalOccasion) {
+        compScore -= 12;
+        compFeedback += ` For a ${occasion}, shoes are an important part of the complete look.`;
+        tips.push('Add shoes to complete this look for the selected occasion.');
+        whatsMissing = `Footwear — adding shoes would complete this look for the ${occasion} occasion.`;
+      } else {
+        compScore -= 6;
+        compFeedback += ' Adding footwear would polish the final look.';
+        tips.push('Add shoes or heels to anchor the silhouette.');
+      }
+    } else if (hasTop || (hasOuterwear && !hasBottom)) {
+      compScore = 48; compStatus = 'warning';
+      compTitle = items.length === 1 ? 'Incomplete Ensemble' : 'Missing Lower-Body Piece';
+      compFeedback = 'A top is present but the outfit needs a lower-body piece to be wearable.';
+      tips.push('Add trousers, a skirt, or shorts to complete the foundation.');
+      whatsMissing = 'Bottom — the outfit has a top but no lower-body piece (trousers, skirt, or shorts).';
+    } else if (hasBottom) {
+      compScore = 45; compStatus = 'warning';
+      compTitle = 'Missing Top';
+      compFeedback = 'A bottom piece is present but the outfit needs a top to be complete.';
+      tips.push('Add a shirt, blouse, or top to complete the look.');
+      whatsMissing = 'Top — the outfit has a bottom piece but no upper-body garment.';
     } else {
-      compScore -= 8;
-      compFeedback = 'Solid base ensemble. Adding footwear will anchor the proportion and polish the finish.';
-      tips.push('Add shoes or heels to ground the full silhouette.');
+      compScore = 35; compStatus = 'alert';
+      compTitle = 'No Core Garments';
+      compFeedback = 'The mannequin only has accessories. Add a dress, top + bottom, or jumpsuit.';
+      whatsMissing = 'Core garments — add a dress, top + bottom, or jumpsuit to create a wearable outfit.';
     }
-
-    if (hasOuterwear) {
-      compScore += 5;
-      compFeedback += ' Layering with outerwear adds sophisticated depth and structure.';
-    }
-
-    if (hasAccessory) {
-      compScore += 3;
-      compFeedback += ' An accessory adds a refined accent.';
-    }
+    if (hasOuterwear && hasBodyCoverage) { compScore = Math.min(100, compScore + 4); compFeedback += ' Layering with outerwear adds depth and structure.'; }
+    if (hasAccessory) { compScore = Math.min(100, compScore + 2); compFeedback += ' An accessory adds a refined finishing touch.'; }
   }
 
   compScore = Math.max(15, Math.min(100, compScore));
@@ -261,203 +324,224 @@ export function gradeOutfit(
   else if (compScore >= 60) compStatus = 'warning';
   else compStatus = 'alert';
 
-  // 3. Evaluate Color Harmony Pillar with Complete Outfit Context
+  // Color harmony
   const paletteColors = extractColors(items, wardrobeLookup);
   const colorEval: ColorMatchResult = evaluateColors(paletteColors);
-
-  // Check for intentional statement piece with neutral grounding:
-  // e.g. a colorful or graphic top/dress anchored by a blazer/jacket, neutral bottoms, or clean sneakers
-  const NEUTRAL_COLORS = new Set([
-    'black', 'white', 'charcoal', 'grey', 'gray', 'navy', 'beige', 'cream', 'brown', 'tan', 'camel', 'khaki'
-  ]);
+  const NEUTRAL_COLORS = new Set(['black', 'white', 'charcoal', 'grey', 'gray', 'navy', 'beige', 'cream', 'brown', 'tan', 'camel', 'khaki']);
 
   const statementPiece = items.find((item) => {
-    const matching = wardrobeLookup?.[item.wardrobe_item_id];
-    const pat = (((matching as any)?.pattern || (matching as any)?.ai_attributes?.pattern) || '').toLowerCase();
-    const name = (item.name || matching?.sub_category || matching?.category || '').toLowerCase();
-    const sub = (matching?.sub_category || '').toLowerCase();
-    const desc = (matching?.description || (matching as any)?.ai_attributes?.description || '').toLowerCase();
-    const tags = matching?.color_tags || [];
-    return (
-      pat.includes('graphic') ||
-      pat.includes('multicolor') ||
-      pat.includes('floral') ||
-      pat.includes('plaid') ||
-      name.includes('graphic') ||
-      sub.includes('graphic') ||
-      desc.includes('graphic') ||
-      desc.includes('colorful') ||
-      tags.length >= 3
-    );
+    const w = wardrobeLookup?.[item.wardrobe_item_id];
+    const pat = (((w as any)?.pattern || (w as any)?.ai_attributes?.pattern) || '').toLowerCase();
+    const desc = [w?.description, (w as any)?.ai_attributes?.description, item.name, w?.sub_category].filter(Boolean).join(' ').toLowerCase();
+    return pat.includes('graphic') || pat.includes('multicolor') || pat.includes('floral') || pat.includes('plaid')
+      || desc.includes('graphic') || desc.includes('colorful') || (w?.color_tags || []).length >= 3;
   });
 
   const hasNeutralBlazerOrOuter = outers.some((o) => {
-    const matching = wardrobeLookup?.[o.wardrobe_item_id];
-    const name = (o.name || matching?.sub_category || matching?.category || '').toLowerCase();
-    const colorsOfOuter = (matching?.color_tags || []).map((c) => c.toLowerCase());
-    const isBlazer = name.includes('blazer') || name.includes('jacket') || name.includes('coat');
-    const isNeutralColor = colorsOfOuter.length === 0 || colorsOfOuter.some((c) => NEUTRAL_COLORS.has(c)) || !colorsOfOuter.some((c) => !NEUTRAL_COLORS.has(c));
-    return isBlazer && isNeutralColor;
+    const w = wardrobeLookup?.[o.wardrobe_item_id];
+    const name = (o.name || w?.sub_category || w?.category || '').toLowerCase();
+    const cols = (w?.color_tags || []).map((c) => c.toLowerCase());
+    return (name.includes('blazer') || name.includes('jacket') || name.includes('coat'))
+      && (cols.length === 0 || cols.some((c) => NEUTRAL_COLORS.has(c)));
   });
 
-  const hasSneakersOrCasualShoes = shoes.some((s) => {
-    const matching = wardrobeLookup?.[s.wardrobe_item_id];
-    const name = (s.name || matching?.sub_category || matching?.category || '').toLowerCase();
-    return name.includes('sneaker') || name.includes('shoe') || name.includes('flat') || name.includes('loafer');
+  const hasCasualShoes = shoes.some((s) => {
+    const w = wardrobeLookup?.[s.wardrobe_item_id];
+    const name = (s.name || w?.sub_category || w?.category || '').toLowerCase();
+    return name.includes('sneaker') || name.includes('flat') || name.includes('loafer');
   });
 
-  const isStatementWithNeutralAnchor = !!statementPiece && (hasNeutralBlazerOrOuter || (hasSneakersOrCasualShoes && (bottoms.length > 0 || dresses.length > 0)));
+  const isStatementWithNeutralAnchor = !!statementPiece && (hasNeutralBlazerOrOuter || (hasCasualShoes && hasBodyCoverage));
 
   let colorScore = colorEval.score;
   let colorTitle = colorEval.label;
   let colorFeedback = colorEval.feedback;
 
-  // Holistic reasoning: If a multi-colored graphic piece is framed by neutral outerwear or clean footwear,
-  // do not penalize it as random clashing. Recognize the intentional statement + neutral anchor pairing!
   if (isStatementWithNeutralAnchor && (colorEval.label === 'Clashing Colors' || colorScore < 75)) {
-    colorScore = 86;
+    colorScore = 84;
     colorTitle = 'Balanced Accent Colors' as any;
-    colorFeedback = 'Your colorful statement piece provides energy and focal contrast, while the neutral blazer and footwear provide structure and balance.';
+    colorFeedback = 'Your colorful statement piece provides energy and focal contrast while neutral items ground the look.';
   }
 
-  let colorStatus: StylePillarBreakdown['status'] = 'good';
-  if (colorScore >= 88) colorStatus = 'excellent';
-  else if (colorScore >= 75) colorStatus = 'good';
-  else if (colorScore >= 60) colorStatus = 'warning';
-  else colorStatus = 'alert';
-
-  const colorPillar: StylePillarBreakdown = {
-    score: colorScore,
-    status: colorStatus,
-    title: colorTitle,
-    feedback: colorFeedback,
-  };
-
+  let colorStatus: StylePillarBreakdown['status'] = colorScore >= 88 ? 'excellent' : colorScore >= 75 ? 'good' : colorScore >= 60 ? 'warning' : 'alert';
   if (colorEval.label === 'Clashing Colors' && !isStatementWithNeutralAnchor) {
-    tips.unshift('Try swapping one high-saturation piece for a neutral tone (cream, navy, or charcoal) to let one hero color lead.');
-  } else if (paletteColors.length === 1 && !['black', 'white', 'gray', 'grey'].includes(paletteColors[0].toLowerCase())) {
-    tips.push(`Introduce a quiet neutral anchor to give the bold ${paletteColors[0]} hue breathing room.`);
+    tips.unshift('Try swapping one high-saturation piece for a neutral tone (cream, navy, or charcoal).');
   }
 
-  // 4. Compute Overall Score & Grade
-  // Incomplete looks cap the max score so an unstyled top can't receive an A
-  const rawWeightedScore = (colorScore * 0.45) + (compScore * 0.55);
-  let maxCap = 100;
-  if (isOvercrowded) maxCap = 68;
-  else if (items.length === 1 && !hasDress) maxCap = 65;
+  // Occasion fit
+  const formalityGap = Math.abs(outfitFormality - occasionFormality);
+  let occasionScore = Math.round(Math.max(0, Math.min(100, 100 - formalityGap * 12)));
+  let occasionTitle = occasion ? `Matched to ${occasion}` : 'General Styling';
+  let occasionFeedback = '';
 
-  const overallScore = Math.max(15, Math.min(maxCap, Math.round(rawWeightedScore)));
+  if (!occasion) {
+    occasionScore = 80;
+    occasionFeedback = 'No occasion specified. Score reflects general styling quality.';
+  } else if (formalityGap === 0) {
+    occasionScore = 95;
+    occasionFeedback = `This outfit is well-calibrated for ${occasion}.`;
+  } else if (outfitFormality > occasionFormality + 1) {
+    occasionScore = Math.max(55, occasionScore);
+    occasionTitle = `Slightly Overdressed for ${occasion}`;
+    occasionFeedback = `The outfit reads more formal than ${occasion} typically requires. Consider more relaxed pieces.`;
+  } else if (outfitFormality < occasionFormality - 1) {
+    occasionScore = Math.max(45, occasionScore);
+    occasionTitle = `Under-dressed for ${occasion}`;
+    occasionFeedback = formalityGap >= 2
+      ? `The outfit may read too casually for ${occasion}. Adding a more formal layer or footwear would elevate it.`
+      : `The outfit is close but a small step up — like cleaner footwear — would bridge the gap for ${occasion}.`;
+    tips.push(`Add a more formal piece (blazer, dress shoes) to better match the ${occasion} context.`);
+  } else {
+    occasionScore = Math.max(70, occasionScore);
+    occasionFeedback = `The outfit is mostly appropriate for ${occasion} with minor adjustments possible.`;
+  }
+
+  if (mentionsRain) {
+    const hasRainCoat = outers.some((o) => {
+      const desc = [wardrobeLookup?.[o.wardrobe_item_id]?.description, o.name].filter(Boolean).join(' ').toLowerCase();
+      return desc.match(/\b(rain|waterproof|trench|windbreaker|mac)\b/) !== null;
+    });
+    if (!hasRainCoat) tips.push('Context mentions rain — consider adding a waterproof jacket or trench coat.');
+  }
+
+  if (mentionsWalking) {
+    const hasHighHeels = shoes.some((s) => {
+      const desc = [wardrobeLookup?.[s.wardrobe_item_id]?.description, s.name].filter(Boolean).join(' ').toLowerCase();
+      return desc.match(/\b(high heel|stiletto|pump)\b/) !== null;
+    });
+    if (hasHighHeels) tips.push('Context mentions a lot of walking — high heels may be uncomfortable for extended periods.');
+  }
+
+  const occasionStatus: StylePillarBreakdown['status'] = occasionScore >= 85 ? 'excellent' : occasionScore >= 70 ? 'good' : occasionScore >= 55 ? 'warning' : 'alert';
+  const occasionPillar: StylePillarBreakdown = { score: occasionScore, status: occasionStatus, title: occasionTitle, feedback: occasionFeedback };
+
+  // Overall score
+  const isBodyIncomplete = !hasDressOrFullBody && !(hasTop && hasBottom) && !hasOuterwear;
+  const rawScore = (colorScore * 0.45) + (compScore * 0.35) + (occasionScore * 0.20);
+  let maxCap = 100;
+  if (isOvercrowded) maxCap = 65;
+  else if (isBodyIncomplete) maxCap = 58;
+  else if (!hasShoes && isFormalOccasion) maxCap = 85;
+
+  const overallScore = Math.max(10, Math.min(maxCap, Math.round(rawScore)));
   const grade = scoreToGrade(overallScore);
 
-  // 5. Generate Headline, Verdict, and Structured Sections (WHAT WORKS, WHAT COULD BE BETTER, STYLIST'S TIP)
+  const occasionLabel = occasion || 'this occasion';
   let headline = 'Refined & Harmonious';
   let verdict = 'This combination strikes a tasteful balance of color and structure.';
-  let whatWorks = 'The pieces complement each other in tone and proportion.';
-  let whatCouldBeBetter = 'Ensure hem lengths and footwear balance comfortably.';
-  let stylistTip = 'Keep accessories clean to maintain a cohesive look.';
+  let whatWorks: string | undefined = 'The pieces complement each other in tone and proportion.';
+  let whatCouldBeBetter: string | undefined;
+  let stylistTip = 'Keep accessories minimal to maintain a cohesive look.';
 
-  if (isStatementWithNeutralAnchor && hasNeutralBlazerOrOuter) {
-    headline = 'Smart Casual Statement Look';
-    verdict = 'A modern high-low pairing where tailored structure frames a bold expressive focal point.';
-    whatWorks = 'Your blazer gives structure to the colorful shirt, while the sneakers keep the outfit relaxed.';
-    whatCouldBeBetter = 'The shirt already has several bright colors, so keeping the remaining pieces simple can help it stay the main focus.';
-    stylistTip = 'Let one piece stand out and use the other pieces to support it.';
-  } else if (isOvercrowded && baseTops.length > 1) {
+  if (isOvercrowded && baseTops.length > 1) {
     headline = 'Overcrowded Top Half';
-    verdict = `You have ${baseTops.length} competing tops floating on the mannequin. Choose one primary top and layer an outerwear jacket over it to create a clean, wearable silhouette.`;
-    whatWorks = 'The garments feature stylish individual cuts.';
-    whatCouldBeBetter = 'Multiple tops worn at once create unnecessary bulk and compete for attention.';
-    stylistTip = 'Commit to one hero top and use outerwear if you want a layered feel.';
+    verdict = `You have ${baseTops.length} competing tops on the mannequin. Choose one hero top and optionally layer a jacket.`;
+    whatWorks = 'The individual pieces each have strong style potential.';
+    whatCouldBeBetter = 'Multiple tops at once create unnecessary bulk and compete for attention.';
+    stylistTip = 'Commit to one hero top and use outerwear if you want a layered look.';
   } else if (isOvercrowded) {
-    headline = 'Cluttered Combination';
-    verdict = 'Too many competing garments are stacked on the mannequin. Simplify the layers so each piece has room to shine.';
-    whatWorks = 'The wardrobe pieces show great personality and variety.';
-    whatCouldBeBetter = 'Garment boundaries overlap, making the silhouette feel heavy.';
-    stylistTip = 'Simplify to one top, one bottom (or a dress), and one outerwear layer.';
-  } else if (items.length === 1 && !hasDress) {
-    headline = 'Incomplete Ensemble';
-    verdict = 'A great starting piece that needs matching separates to form a complete outfit.';
-    whatWorks = 'The individual garment is a versatile wardrobe staple.';
-    whatCouldBeBetter = 'The look is currently missing separates to create a functional outfit.';
-    stylistTip = hasTop ? 'Pair with trousers or a skirt to complete the foundation.' : 'Add a top or blouse to finish the base look.';
+    headline = 'Too Many Competing Garments';
+    verdict = 'Simplify the layers so each piece has room to make its statement.';
+    whatWorks = 'Individual pieces show great variety.';
+    whatCouldBeBetter = 'Garment boundaries overlap, making the silhouette feel cluttered.';
+    stylistTip = 'Aim for: one top (or dress), one bottom, and one outerwear layer maximum.';
+  } else if (isBodyIncomplete) {
+    headline = 'Not Ready for a Full Evaluation';
+    verdict = `The outfit is missing core pieces needed to properly evaluate it for ${occasionLabel}.`;
+    whatWorks = undefined;
+    whatCouldBeBetter = whatsMissing ?? 'Add the missing core garments to get a meaningful compatibility score.';
+    stylistTip = hasTop ? 'Pair your top with matching bottoms to create a wearable foundation.' : 'Add a top or dress to get started.';
+  } else if (isStatementWithNeutralAnchor && hasNeutralBlazerOrOuter) {
+    headline = 'Smart Casual Statement Look';
+    verdict = `A modern high-low pairing where tailored structure frames a bold focal point. Well-matched for ${occasionLabel}.`;
+    whatWorks = 'The blazer gives structure to the colorful piece while neutral tones keep it grounded.';
+    whatCouldBeBetter = `The statement piece has strong colors — keep remaining accessories simple for ${occasionLabel}.`;
+    stylistTip = 'Let one item stand out and use the others to frame it.';
   } else if (colorEval.label === 'Clashing Colors') {
     headline = 'Bold & High Contrast';
-    verdict = 'An adventurous, high-energy pairing, but the competing saturation creates visual tension. Grounding one piece will instantly elevate it.';
+    verdict = `An adventurous pairing with high visual energy. Grounding one piece with a neutral would elevate it for ${occasionLabel}.`;
     whatWorks = 'High visual energy that shows personal confidence.';
-    whatCouldBeBetter = 'Multiple saturated hues compete for the eye without a resting point.';
-    stylistTip = 'Anchor with at least one neutral tone (black, cream, or navy) to let a single hero color shine.';
-  } else if (hasDress) {
-    const dressItem = dresses[0];
-    const matching = wardrobeLookup?.[dressItem.wardrobe_item_id];
-    const desc = (matching?.description || (matching as any)?.ai_attributes?.description || dressItem.name || '').toLowerCase();
-    const hasBowTie = desc.includes('bow-tie') || desc.includes('bow tie') || desc.includes('pussy-bow');
-    const hasFitAndFlare = desc.includes('fit-and-flare') || desc.includes('fit and flare') || desc.includes('a-line');
-    const hasFittedWaist = desc.includes('fitted waist') || desc.includes('cinched waist');
-
-    if (hasBowTie || hasFitAndFlare || hasFittedWaist) {
-      headline = 'Graceful & Tailored Dress';
-      verdict = 'A cohesive one-piece ensemble with tailored neckline and waist proportions.';
+    whatCouldBeBetter = 'Multiple saturated hues compete for the eye — a neutral anchor would balance it.';
+    stylistTip = 'Replace one bold piece with a neutral (black, cream, or navy) to let a single color lead.';
+  } else if (hasDressOrFullBody) {
+    const dressW = wardrobeLookup?.[fullBodyItems[0].wardrobe_item_id];
+    const dressDesc = [dressW?.description, (dressW as any)?.ai_attributes?.description, fullBodyItems[0].name].filter(Boolean).join(' ').toLowerCase();
+    const hasBowTie = dressDesc.match(/\b(bow.?tie|pussy.?bow|bow neckline)\b/) !== null;
+    const hasFitAndFlare = dressDesc.match(/\b(fit.?and.?flare|a.?line)\b/) !== null;
+    const hasFitted = dressDesc.match(/\b(fitted waist|cinched)\b/) !== null;
+    if (hasBowTie || hasFitAndFlare || hasFitted) {
+      headline = 'Graceful & Tailored';
+      verdict = `A polished one-piece ensemble with deliberate neckline and waist proportions, well-suited for ${occasionLabel}.`;
       const highlights: string[] = [];
       if (hasBowTie) highlights.push('the bow-tie neckline');
-      if (hasFitAndFlare || hasFittedWaist) highlights.push('fitted waist shaping');
-      whatWorks = `The dress creates an elegant vertical line, accented by ${highlights.join(' and ')}.`;
-      whatCouldBeBetter = hasShoes ? 'Ensure footwear matches the formality of your planned setting.' : 'Adding footwear will anchor the proportion and polish the finish.';
-      stylistTip = 'Keep accessories clean to let the neckline remain the hero focal point.';
-    } else if (overallScore >= 85) {
-      headline = 'Chic & Masterfully Balanced';
-      verdict = 'A cohesive ensemble with impeccable color chemistry and deliberate proportion.';
-      whatWorks = 'The dress creates a streamlined silhouette with natural vertical balance.';
-      whatCouldBeBetter = hasShoes ? 'Ensure accessories complement the garment tone.' : 'Pair with dedicated footwear to complete the look.';
-      stylistTip = 'Add a minimalist watch or delicate jewelry to finish the look.';
+      if (hasFitAndFlare || hasFitted) highlights.push('the fitted waist shaping');
+      whatWorks = `The dress creates an elegant vertical line${highlights.length > 0 ? `, accented by ${highlights.join(' and ')}` : ''}.`;
+      whatCouldBeBetter = hasShoes ? `Ensure footwear matches the formality of ${occasionLabel}.` : 'Adding footwear would anchor the proportion and polish the finish.';
+      stylistTip = 'Keep accessories clean to let the neckline remain the focal point.';
+    } else if (overallScore >= 82) {
+      headline = 'Chic & Cohesive';
+      verdict = `A well-composed outfit with good color chemistry, suited for ${occasionLabel}.`;
+      whatWorks = 'The outfit creates a clean, streamlined silhouette.';
+      whatCouldBeBetter = hasShoes ? 'Ensure accessories complement the garment tone.' : 'Add footwear to complete the look.';
+      stylistTip = 'A minimalist necklace or earrings would finish the look elegantly.';
+    } else {
+      headline = 'Solid Foundation';
+      verdict = `A good base look that can be better calibrated for ${occasionLabel} with small adjustments.`;
+      whatWorks = 'The silhouette is clean and versatile.';
+      whatCouldBeBetter = occasionFeedback || 'Refine the footwear or accessory choices for the occasion.';
+      stylistTip = hasShoes ? 'The look is solid — small accessory touches will elevate it.' : 'Add shoes to anchor the look.';
     }
-  } else if (overallScore >= 90) {
-    headline = 'Chic & Masterfully Balanced';
-    verdict = 'A cohesive ensemble with impeccable color chemistry and deliberate proportion. Ready to wear with confidence.';
-    whatWorks = 'Flawless synergy between silhouettes and color tones.';
-    whatCouldBeBetter = 'Nothing critical to adjust—the look is exceptionally well-styled.';
+  } else if (overallScore >= 88) {
+    headline = 'Masterfully Balanced';
+    verdict = `A cohesive outfit with excellent color chemistry and deliberate proportions, well-matched for ${occasionLabel}.`;
+    whatWorks = 'Flawless synergy between garment silhouettes and color tones.';
+    whatCouldBeBetter = 'Nothing critical — the look is exceptionally well-styled.';
     stylistTip = 'Add a minimalist watch or delicate jewelry to finish the look.';
-  } else if (overallScore >= 80) {
+  } else if (overallScore >= 78) {
     headline = 'Polished & Versatile';
-    verdict = 'A well-composed outfit that feels intentional and effortless. Clean lines and great synergy.';
-    whatWorks = 'Balanced proportions with harmonious, easy-to-wear tones.';
-    whatCouldBeBetter = 'A small accent piece can add an extra layer of visual interest.';
-    stylistTip = 'Choose footwear that matches the formality of your planned setting.';
+    verdict = `A well-composed outfit that feels intentional and easy, good for ${occasionLabel}.`;
+    whatWorks = 'Balanced proportions and harmonious tones.';
+    whatCouldBeBetter = occasionFeedback || 'A small accent piece can add an extra layer of interest.';
+    stylistTip = `Choose footwear that matches the formality of ${occasionLabel}.`;
+  } else if (overallScore >= 65) {
+    headline = 'Good Start';
+    verdict = `The pieces have potential but need some refinement to fully match ${occasionLabel}.`;
+    whatWorks = 'Good individual pieces with styling potential.';
+    whatCouldBeBetter = occasionFeedback || 'Adjust the formality or colors for a more cohesive result.';
+    stylistTip = 'Focus on one area — color, formality, or completeness — to lift the score.';
+  } else {
+    headline = 'Needs Work';
+    verdict = `The outfit has some challenges for ${occasionLabel}. Let JeZsy help identify what to adjust.`;
+    whatWorks = undefined;
+    whatCouldBeBetter = whatsMissing ?? occasionFeedback ?? 'Review the garment combination and occasion match.';
+    stylistTip = 'Start with the structural gaps, then refine the colors.';
   }
 
-  // 6. Deduce Style Vibe
   let vibe = 'Modern Casual';
   if (isStatementWithNeutralAnchor) vibe = 'Smart-Casual Statement';
   else if (isOvercrowded) vibe = 'Layering Experiment';
-  else if (hasOuterwear && (outers.some((o) => (o.name || '').toLowerCase().includes('blazer')))) vibe = 'Smart Tailored';
-  else if (hasDress) vibe = 'Effortless Elegance';
-  else if (colorEval.label === 'Clashing Colors') vibe = 'Avant-Garde Streetwear';
-  else if (colorEval.label === 'Perfect Harmony' && paletteColors.some((c) => ['cream', 'black', 'charcoal', 'navy'].includes(c.toLowerCase()))) vibe = 'Quiet Luxury Minimalist';
-  else if (baseTops.some((t) => (t.garment_type || '').toLowerCase().includes('bra') || (t.name || '').toLowerCase().includes('activewear'))) vibe = 'Athleisure Chic';
+  else if (isAthleticOccasion) vibe = 'Athleisure';
+  else if (isBeachOccasion) vibe = 'Beach Ready';
+  else if (hasOuterwear && outers.some((o) => (o.name || '').toLowerCase().includes('blazer'))) vibe = 'Smart Tailored';
+  else if (hasDressOrFullBody) vibe = 'Effortless Elegance';
+  else if (colorEval.label === 'Clashing Colors') vibe = 'Avant-Garde';
+  else if (colorEval.label === 'Perfect Harmony' && paletteColors.some((c) => ['cream', 'black', 'charcoal', 'navy'].includes(c.toLowerCase()))) vibe = 'Quiet Luxury';
+  else if (isFormalOccasion) vibe = 'Formal & Polished';
 
   if (tips.length === 0) {
-    tips.push('The silhouette and colors are well-balanced. Style with minimalist jewelry for the final touch.');
+    tips.push('The silhouette and colors are well-balanced. Style with minimalist jewelry for the finishing touch.');
   }
 
   return {
-    score: overallScore,
-    grade,
-    headline,
-    verdict,
-    whatWorks,
-    whatCouldBeBetter,
-    stylistTip,
+    score: overallScore, grade, headline, verdict,
+    whatWorks: whatWorks || undefined,
+    whatCouldBeBetter: whatCouldBeBetter || undefined,
+    stylistTip, whatsMissing,
     pillars: {
-      colorHarmony: colorPillar,
-      compositionAndLayers: {
-        score: compScore,
-        status: compStatus,
-        title: compTitle,
-        feedback: compFeedback,
-      },
+      colorHarmony: { score: colorScore, status: colorStatus, title: colorTitle, feedback: colorFeedback },
+      compositionAndLayers: { score: compScore, status: compStatus, title: compTitle, feedback: compFeedback },
+      occasionFit: occasion ? occasionPillar : undefined,
     },
-    tips: tips.slice(0, 3),
-    vibe,
-    paletteColors,
-    isOvercrowded,
+    tips: tips.slice(0, 3), vibe, paletteColors, isOvercrowded,
   };
 }

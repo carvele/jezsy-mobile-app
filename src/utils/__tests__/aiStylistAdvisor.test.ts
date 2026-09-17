@@ -170,4 +170,61 @@ describe('aiStylistAdvisor - Deterministic Outfit Grader', () => {
     expect(critique.verdict).toContain('competing tops');
     expect(critique.tips[0]).toContain('extra top');
   });
+
+  // Test 11: One-piece dress is complete without separate top and bottom
+  test('recognizes dress as complete one-piece outfit without separate top or bottom', () => {
+    const dress = mockItem('1', 'Dress', 'Navy Bow-Tie Midi Dress', 'navy');
+    dress.wardrobeItem.description = 'Navy blue fit-and-flare midi dress with short sleeves and bow-tie neckline';
+    const shoes = mockItem('2', 'Shoes', 'Black Pumps', 'black');
+    const lookup = {
+      [dress.wardrobeItem.id]: dress.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([dress.canvasItem, shoes.canvasItem], lookup, {
+      occasion: 'Dinner',
+    });
+
+    expect(critique.score).toBeGreaterThanOrEqual(80);
+    expect(['A+', 'A', 'A-', 'B+']).toContain(critique.grade);
+    expect(critique.pillars.compositionAndLayers.title).toBe('Complete Head-to-Toe Look');
+    expect(critique.whatsMissing).toBeUndefined();
+    expect(critique.pillars.occasionFit).toBeDefined();
+    expect(['good', 'excellent']).toContain(critique.pillars.occasionFit?.status);
+  });
+
+  // Test 12: Generates whatsMissing for incomplete outfit
+  test('populates whatsMissing when lower-body piece is missing', () => {
+    const top = mockItem('1', 'Top', 'Silk Blouse', 'cream');
+    const lookup = { [top.wardrobeItem.id]: top.wardrobeItem };
+
+    const critique = gradeOutfit([top.canvasItem], lookup, { occasion: 'Work / Office' });
+    expect(critique.whatsMissing).toBeDefined();
+    expect(critique.whatsMissing).toContain('Bottom');
+    expect(critique.score).toBeLessThanOrEqual(60);
+  });
+
+  // Test 13: Occasion context affects scoring for athletic outfit
+  test('evaluates athletic outfit well for Gym occasion', () => {
+    const sportsBra = mockItem('1', 'Top', 'Sports Bra', 'black');
+    sportsBra.wardrobeItem.sub_category = 'Sports Bra';
+    const leggings = mockItem('2', 'Bottom', 'Running Leggings', 'black');
+    leggings.wardrobeItem.sub_category = 'Leggings';
+    const sneakers = mockItem('3', 'Shoes', 'Running Shoes', 'white');
+    const lookup = {
+      [sportsBra.wardrobeItem.id]: sportsBra.wardrobeItem,
+      [leggings.wardrobeItem.id]: leggings.wardrobeItem,
+      [sneakers.wardrobeItem.id]: sneakers.wardrobeItem,
+    };
+
+    const critique = gradeOutfit(
+      [sportsBra.canvasItem, leggings.canvasItem, sneakers.canvasItem],
+      lookup,
+      { occasion: 'Sports / Gym' }
+    );
+
+    expect(critique.pillars.occasionFit).toBeDefined();
+    expect(critique.pillars.occasionFit?.score).toBeGreaterThanOrEqual(80);
+    expect(critique.vibe).toBe('Athleisure');
+  });
 });

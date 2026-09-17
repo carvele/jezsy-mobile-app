@@ -18,11 +18,12 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 interface Props {
   visible: boolean;
   critique: StylistCritique;
+  occasion?: string;
   onClose: () => void;
   onSaveLook?: () => void;
 }
 
-export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }: Props) {
+export function StylistCritiqueModal({ visible, critique, occasion, onClose, onSaveLook }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
 
@@ -67,7 +68,7 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
             <View style={styles.headerTitleWrap}>
               <View style={[styles.headerBadge, { backgroundColor: colors.tint + '18' }]}>
                 <IconSymbol name="sparkles" size={12} color={colors.tint} />
-                <Text style={[styles.headerBadgeText, { color: colors.tint }]}>AI Stylist Critique</Text>
+                <Text style={[styles.headerBadgeText, { color: colors.tint }]}>JeZsy Stylist</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -110,6 +111,16 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
                   </View>
                 </View>
               </View>
+
+              {/* Occasion Badge */}
+              {occasion && (
+                <View style={styles.occasionBadgeRow}>
+                  <View style={[styles.occasionBadge, { backgroundColor: colors.tint + '15', borderColor: colors.tint + '40' }]}>
+                    <IconSymbol name="pin.fill" size={11} color={colors.tint} />
+                    <Text style={[styles.occasionBadgeText, { color: colors.tint }]}>{occasion}</Text>
+                  </View>
+                </View>
+              )}
 
               {/* Progress meter */}
               <View style={[styles.meterTrack, { backgroundColor: colors.surface }]}>
@@ -168,23 +179,36 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
                   </View>
                 )}
 
-                {critique.whatCouldBeBetter && (
-                  <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(217,119,6,0.3)', marginTop: Spacing.sm }]}>
-                    <View style={styles.insightHeader}>
-                      <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(217,119,6,0.15)' }]}>
-                        <IconSymbol name="exclamationmark.triangle.fill" size={13} color="#D97706" />
-                      </View>
-                      <Text style={[styles.insightTitle, { color: '#D97706' }]}>WHAT COULD BE BETTER</Text>
-                    </View>
-                    <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatCouldBeBetter}</Text>
+            {/* WHAT'S MISSING — only shown when outfit is incomplete */}
+            {critique.whatsMissing && (
+              <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(239,68,68,0.3)' }]}>
+                <View style={styles.insightHeader}>
+                  <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
+                    <IconSymbol name="exclamationmark.circle" size={13} color="#DC2626" />
                   </View>
-                )}
+                  <Text style={[styles.insightTitle, { color: '#DC2626' }]}>WHAT&apos;S MISSING</Text>
+                </View>
+                <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatsMissing}</Text>
+              </View>
+            )}
+
+            {critique.whatCouldBeBetter && (
+              <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(217,119,6,0.3)', marginTop: Spacing.sm }]}>
+                <View style={styles.insightHeader}>
+                  <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(217,119,6,0.15)' }]}>
+                    <IconSymbol name="exclamationmark.triangle.fill" size={13} color="#D97706" />
+                  </View>
+                  <Text style={[styles.insightTitle, { color: '#D97706' }]}>WHAT COULD BE BETTER</Text>
+                </View>
+                <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatCouldBeBetter}</Text>
+              </View>
+            )}
 
                 {critique.stylistTip && (
                   <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: colors.tint + '40', marginTop: Spacing.sm }]}>
                     <View style={styles.insightHeader}>
                       <View style={[styles.insightIconBadge, { backgroundColor: colors.tint + '18' }]}>
-                        <IconSymbol name="lightbulb" size={13} color={colors.tint} />
+                        <IconSymbol name="sparkles" size={13} color={colors.tint} />
                       </View>
                       <Text style={[styles.insightTitle, { color: colors.tint }]}>STYLIST&apos;S TIP</Text>
                     </View>
@@ -261,11 +285,11 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
               <View style={styles.disclaimerHeader}>
                 <IconSymbol name="info.circle.fill" size={12} color={colors.secondaryText} />
                 <Text style={[styles.disclaimerTitle, { color: colors.secondaryText }]}>
-                  Stylist Guidance Disclaimer
+                  About JeZsy&apos;s Score
                 </Text>
               </View>
               <Text style={[styles.disclaimerText, { color: colors.secondaryText }]}>
-                Fashion critiques and grades are algorithmic styling recommendations based on classical color harmony geometry and garment composition rules. Personal style and creative expression are subjective.
+                JeZsy&apos;s outfit compatibility score reflects how well this outfit matches your selected occasion based on styling criteria, color coordination, and outfit completeness. Personal style is subjective.
               </Text>
             </View>
           </ScrollView>
@@ -406,6 +430,22 @@ const styles = StyleSheet.create({
   vibeText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  occasionBadgeRow: {
+    flexDirection: 'row',
+  },
+  occasionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  occasionBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   meterTrack: {
     height: 6,
