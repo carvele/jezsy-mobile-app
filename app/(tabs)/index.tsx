@@ -249,18 +249,17 @@ export default function HomeScreen() {
     fetchProducts(false);
   }, [fetchProducts]);
 
-  // Lands on a clone (extended index 0 or featuredProducts.length + 1) and
+  // Lands on a clone (extended index 0 or >= featuredProducts.length + 1) and
   // instantly, unanimatedly repositions onto the identical real card at the
   // opposite end -- since the clone and its real counterpart render
-  // pixel-identical, the jump is imperceptible and the loop reads seamless.
+  // pixel-identical with matching peeking neighbors, the jump is imperceptible.
   const settleHeroLoop = useCallback((extendedIdx: number) => {
     if (featuredProducts.length <= 1) return;
     const step = heroCardWidth + HERO_CARD_GAP;
-    const lastExtendedIdx = featuredProducts.length + 1;
-    if (extendedIdx === 0) {
+    if (extendedIdx <= 0) {
       heroScrollRef.current?.scrollTo({ x: featuredProducts.length * step, animated: false });
       heroExtendedIndexRef.current = featuredProducts.length;
-    } else if (extendedIdx === lastExtendedIdx) {
+    } else if (extendedIdx >= featuredProducts.length + 1) {
       heroScrollRef.current?.scrollTo({ x: step, animated: false });
       heroExtendedIndexRef.current = 1;
     } else {
@@ -268,36 +267,35 @@ export default function HomeScreen() {
     }
   }, [featuredProducts.length, heroCardWidth]);
 
-  // Auto-advances the hero every 4s, pausing while a finger is on it so it
-  // never fights a manual swipe or moves content out from under a mid-read
-  // tap.
-  //
-  // Previously hand-rolled a JS-thread Animated.timing loop that called
-  // scrollTo(..., false) once per animation frame, on the theory that
-  // native scrollTo(animated: true) was the jittery one. That was wrong,
-  // and made things worse: each of those ~60 per-second imperative scrollTo
-  // calls is a discrete native scroll command, not a continuous motion, so
-  // under any JS-thread contention it reads as the carousel jumping/
-  // re-rendering rather than sliding, and the pagination dots (driven off
-  // the same choppy onScroll events) drift out of sync with it too.
-  //
-  // The actual fix is smaller: trust the native animated scroll, and let
-  // the onMomentumScrollEnd handler below -- which already exists and
-  // already calls settleHeroLoop correctly -- be the ONLY place that
-  // decides when to settle the loop. It fires after any scroll completes,
-  // whether from this auto-advance or a manual swipe, so there's no
-  // guessed timing and no race between an unfinished animation and an
-  // instant loop-snap landing mid-flight.
+  // Auto-advances the hero every 4s, pausing while a finger is on it.
+  // When advancing to the clone of product 1, waits for the native smooth
+  // slide (400ms) to come to rest, then imperceptibly snaps to real card 1.
   useEffect(() => {
     if (featuredProducts.length <= 1) return;
     const step = heroCardWidth + HERO_CARD_GAP;
+    let settleTimeout: ReturnType<typeof setTimeout> | null = null;
+
     const timer = setInterval(() => {
       if (heroInteractingRef.current) return;
       const nextExtended = heroExtendedIndexRef.current + 1;
       heroExtendedIndexRef.current = nextExtended;
       heroScrollRef.current?.scrollTo({ x: nextExtended * step, animated: true });
+
+      if (nextExtended >= featuredProducts.length + 1) {
+        if (settleTimeout) clearTimeout(settleTimeout);
+        settleTimeout = setTimeout(() => {
+          if (!heroInteractingRef.current) {
+            heroScrollRef.current?.scrollTo({ x: step, animated: false });
+            heroExtendedIndexRef.current = 1;
+          }
+        }, 450);
+      }
     }, 4000);
-    return () => clearInterval(timer);
+
+    return () => {
+      clearInterval(timer);
+      if (settleTimeout) clearTimeout(settleTimeout);
+    };
   }, [featuredProducts.length, heroCardWidth]);
 
   const onRefresh = useCallback(() => {
@@ -313,13 +311,18 @@ export default function HomeScreen() {
     );
   }
 
-  // Clone of the last card in front and the first card behind so a swipe
-  // past either edge lands on real-looking content instead of a hard stop;
-  // the boundary-snap on the ScrollView then silently re-centers onto the
-  // matching real card once the clone settles into view.
+  // Clone the last card before index 1 and the first TWO cards after index N.
+  // The second clone ensures that when card 1's clone is in focus, card 2's clone
+  // peeks on the right edge, matching real card 1's layout pixel-for-pixel so
+  // loop settlement never pops or jitters.
   const heroLoops = featuredProducts.length > 1;
   const loopedHeroProducts = heroLoops
-    ? [featuredProducts[featuredProducts.length - 1], ...featuredProducts, featuredProducts[0]]
+    ? [
+        featuredProducts[featuredProducts.length - 1],
+        ...featuredProducts,
+        featuredProducts[0],
+        featuredProducts[1 % featuredProducts.length],
+      ]
     : featuredProducts;
 
   return (
@@ -345,23 +348,27 @@ export default function HomeScreen() {
           />
         )}
 
-        {/* 1. Featured Carousel. Auto-advances (see the effect above) but
-            pauses the instant a finger touches it, so it never fights a
-            manual swipe or shifts content out from under a mid-read tap.
-            Scales the same way from 1 card (no dots, nothing to advance to)
-            up to HERO_MAX_CARDS. */}
+        {/* 1. Featured Carousel */}
         {featuredProducts.length > 0 && (
           <View style={styles.editorialSection}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Featured Collection</Text>
             <Animated.ScrollView
               ref={heroScrollRef}
               horizontal
-              showsHorizontalScrollIndicator={Platform.OS === 'web'}
+              showsHorizontalScrollIndicator={false}
               snapToInterval={heroCardWidth + HERO_CARD_GAP}
               decelerationRate="fast"
               contentContainerStyle={styles.heroCarouselContent}
               contentOffset={heroLoops ? { x: heroCardWidth + HERO_CARD_GAP, y: 0 } : undefined}
               onScrollBeginDrag={() => { heroInteractingRef.current = true; }}
+              onScrollEndDrag={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                const velocity = e.nativeEvent.velocity?.x ?? 0;
+                if (Math.abs(velocity) < 0.1) {
+                  heroInteractingRef.current = false;
+                  const step = heroCardWidth + HERO_CARD_GAP;
+                  settleHeroLoop(Math.round(e.nativeEvent.contentOffset.x / step));
+                }
+              }}
               onMomentumScrollEnd={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
                 heroInteractingRef.current = false;
                 const step = heroCardWidth + HERO_CARD_GAP;
