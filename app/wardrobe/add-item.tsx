@@ -13,6 +13,7 @@ import {
   Dimensions,
   Platform,
   KeyboardAvoidingView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -132,9 +133,20 @@ export default function AddWardrobeItemScreen() {
     try {
       let result;
       if (useCamera) {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        const { status, canAskAgain } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Camera permission is required to take photos of your clothes.');
+          if (!canAskAgain) {
+            Alert.alert(
+              'Camera Access Blocked',
+              'Camera permission has been blocked for JezSy. Please enable camera access in your device Settings to take photos of your clothes.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => Linking.openSettings() },
+              ]
+            );
+          } else {
+            Alert.alert('Permission needed', 'Camera permission is required to take photos of your clothes.');
+          }
           return;
         }
         result = await ImagePicker.launchCameraAsync({
@@ -143,9 +155,20 @@ export default function AddWardrobeItemScreen() {
           quality: 0.8,
         });
       } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        const { status, canAskAgain } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Gallery permission is required to select photos of your clothes.');
+          if (!canAskAgain) {
+            Alert.alert(
+              'Photo Library Access Blocked',
+              'Photo library permission has been blocked for JezSy. Please enable photo access in your device Settings to select photos of your clothes.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => Linking.openSettings() },
+              ]
+            );
+          } else {
+            Alert.alert('Permission needed', 'Gallery permission is required to select photos of your clothes.');
+          }
           return;
         }
         result = await ImagePicker.launchImageLibraryAsync({

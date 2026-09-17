@@ -40,6 +40,7 @@ import { WebPoseTracker } from '@/src/utils/webPoseDetection';
 import { PoseLandmarkFilter } from '@/src/utils/oneEuroFilter';
 import type { PoseFrame } from '@/src/types/pose';
 import { GarmentRenderer, type GarmentRendererRef } from '@/src/components/AR/GarmentRenderer';
+import { HardwarePermissionState } from '@/src/components/HardwarePermissionState';
 import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 type Product = Database['public']['Tables']['products']['Row'];
@@ -348,6 +349,7 @@ export default function ARTryOnScreen() {
   }, []);
 
   const { hasPermission, requestPermission } = useCameraPermission();
+  const [hasRequestedPermission, setHasRequestedPermission] = useState(false);
   const device = useCameraDevice('front');
   // Phase 3: an explicit format so fieldOfView/videoWidth/videoHeight below are
   // guaranteed to describe what's actually active, not vision-camera's own
@@ -934,20 +936,58 @@ export default function ARTryOnScreen() {
     );
   }
 
+  if (mode === '2d' && Platform.OS !== 'web' && device == null) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <HardwarePermissionState
+            status="hardware_unavailable"
+            featureName="AR Try-On"
+          />
+          <TouchableOpacity
+            style={[styles.fallbackBtn, { backgroundColor: colors.tint, marginTop: Spacing.xl }]}
+            onPress={() => setMode('3d')}
+            accessibilityRole="button"
+            accessibilityLabel="Switch to 3D View"
+          >
+            <Text style={{ color: colors.onTint, fontWeight: '700' }}>Switch to 3D View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleBack} style={{ marginTop: Spacing.lg }} accessibilityRole="button" accessibilityLabel="Go back">
+            <Text style={{ color: colors.secondaryText }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (mode === '2d' && Platform.OS !== 'web' && !hasPermission) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <Text style={{ color: colors.text }}>We need your permission to show the camera</Text>
-        <TouchableOpacity onPress={requestPermission} style={{ marginTop: Spacing.xl }}>
-          <Text style={{ color: colors.tint }}>Grant Permission</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setMode('3d')} style={{ marginTop: Spacing.xl }}>
-          <Text style={{ color: colors.tint }}>Switch to 3D View</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleBack} style={{ marginTop: Spacing.xl }}>
-          <Text style={{ color: colors.text }}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <HardwarePermissionState
+            status={hasRequestedPermission ? 'permanently_denied' : 'denied_can_ask_again'}
+            featureName="AR Try-On"
+            onRequestPermission={async () => {
+              setHasRequestedPermission(true);
+              await requestPermission();
+            }}
+            onOpenSettings={() => {
+              Linking.openSettings().catch((err) => console.warn('Could not open settings', err));
+            }}
+          />
+          <TouchableOpacity
+            style={[styles.fallbackBtn, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, marginTop: Spacing.md }]}
+            onPress={() => setMode('3d')}
+            accessibilityRole="button"
+            accessibilityLabel="Switch to 3D View"
+          >
+            <Text style={{ color: colors.text, fontWeight: '600' }}>Switch to 3D View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleBack} style={{ marginTop: Spacing.lg }} accessibilityRole="button" accessibilityLabel="Go back">
+            <Text style={{ color: colors.secondaryText }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -1627,5 +1667,13 @@ const styles = StyleSheet.create({
     color: '#FDE68A',
     fontSize: 9,
     fontWeight: '800',
+  },
+  fallbackBtn: {
+    height: 48,
+    paddingHorizontal: Spacing.xxl,
+    borderRadius: Radius.pill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 160,
   },
 });

@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,9 @@ import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { useGridCardWidth, GRID_COLUMN_GAP } from '@/src/utils/layout';
 import { ProductCard } from '@/src/components/ProductCard';
+import { BrandEmptyState } from '@/src/components/BrandEmptyState';
+import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { ErrorRetryState } from '@/src/components/ErrorRetryState';
 import { getWishlistPage, WishlistProduct as Product } from '@/src/services/wishlistService';
 
 export default function WishlistScreen() {
@@ -24,31 +28,49 @@ export default function WishlistScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const { user } = useAuth();
-  const { columns } = useGridCardWidth();
+  const { cardWidth, columns } = useGridCardWidth();
 
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const fetchWishlistProducts = useCallback(async () => {
+  const fetchWishlistProducts = useCallback(async (isRefresh = false) => {
     if (!user?.id) {
       setItems([]);
       setLoading(false);
+      setLoadError(null);
       return;
     }
-    setLoading(true);
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const res = await getWishlistPage(user.id, 0, 30);
       setItems(res.items);
       setOffset(res.nextOffset);
       setHasMore(res.hasMore);
+      setLoadError(null);
     } catch (err) {
       console.error('Error fetching wishlist products:', err);
-      showToast('Unable to load wishlist. Try again.', 'error');
+      setItems((prev) => {
+        if (prev.length === 0) {
+          setLoadError('Unable to load your wishlist. Please check your connection and try again.');
+        } else {
+          showToast('Unable to refresh wishlist.', 'error');
+        }
+        return prev;
+      });
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      setIsRetrying(false);
     }
   }, [user?.id, showToast]);
 
@@ -75,6 +97,13 @@ export default function WishlistScreen() {
     fetchWishlistProducts();
   }, [fetchWishlistProducts]);
 
+  const handleRetry = useCallback(() => {
+    setIsRetrying(true);
+    setLoading(true);
+    setLoadError(null);
+    fetchWishlistProducts(false);
+  }, [fetchWishlistProducts]);
+
   const renderItem = useCallback(({ item }: { item: Product }) => (
     <ProductCard product={item} variant="grid" />
   ), []);
@@ -95,24 +124,30 @@ export default function WishlistScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.tint} />
+      {loading && !refreshing && items.length === 0 ? (
+        <View style={{ paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: GRID_COLUMN_GAP }}>
+          <SkeletonList count={6}>
+            <ProductCardSkeleton width={typeof cardWidth === 'number' ? cardWidth : 160} />
+          </SkeletonList>
+        </View>
+      ) : loadError && items.length === 0 ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <ErrorRetryState
+            title="Unable to load wishlist"
+            message={loadError}
+            onRetry={handleRetry}
+            isRetrying={isRetrying}
+          />
         </View>
       ) : items.length === 0 ? (
-        <View style={styles.center}>
-          <IconSymbol name="heart" size={56} color={colors.icon} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>Your wishlist is empty</Text>
-          <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-            Browse the catalog and save items you love.
-          </Text>
-          <TouchableOpacity
-            style={[styles.browseBtn, { backgroundColor: colors.tint }]}
-            onPress={() => router.push('/(tabs)/explore')}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.browseBtnText, { color: colors.onTint }]}>Explore Catalog</Text>
-          </TouchableOpacity>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <BrandEmptyState
+            icon="heart"
+            title="Your wishlist is empty"
+            message="Browse the catalog and save items you love."
+            actionLabel="Explore Catalog"
+            onAction={() => router.push('/(tabs)/explore')}
+          />
         </View>
       ) : (
         <FlatList
@@ -130,6 +165,13 @@ export default function WishlistScreen() {
           showsVerticalScrollIndicator={false}
           onEndReached={loadMoreWishlist}
           onEndReachedThreshold={0.4}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchWishlistProducts(true)}
+              tintColor={colors.tint}
+            />
+          }
           ListFooterComponent={
             loadingMore ? (
               <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />

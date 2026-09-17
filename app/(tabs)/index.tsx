@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   Animated,
   useWindowDimensions,
   Pressable,
@@ -32,6 +31,8 @@ import { CategoryCard } from '@/src/components/CategoryCard';
 import { GRID_GUTTER, GRID_COLUMN_GAP } from '@/src/utils/layout';
 import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
+import { Skeleton, ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { ErrorRetryState } from '@/src/components/ErrorRetryState';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 import { StyleGallery } from '@/components/StyleGallery';
 import { useWishlist } from '@/src/context/WishlistContext';
@@ -72,6 +73,8 @@ export default function HomeScreen() {
   const [topCategories, setTopCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   // heroIndex is the dot/real-product index (0..featuredProducts.length-1).
   // heroExtendedIndex tracks position within the looped array, which has a
   // clone of the last card prepended and a clone of the first appended --
@@ -217,15 +220,21 @@ export default function HomeScreen() {
         const affinity = await getCategoryAffinity();
         setTopCategories(sortByAffinity(categoriesRes.data, affinity));
       }
+      setLoadError(null);
     } catch (err) {
-      // Left silent, a failed load rendered as an empty catalog rather than a
-      // visible failure -- indistinguishable from the store genuinely having
-      // nothing yet.
       console.error(err);
-      showToast('Could not load the latest products. Pull down to refresh.', 'error');
+      setAllProducts((prev) => {
+        if (prev.length === 0) {
+          setLoadError('Could not load the catalog. Please check your connection and try again.');
+        } else {
+          showToast('Could not load the latest products. Pull down to refresh.', 'error');
+        }
+        return prev;
+      });
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setIsRetrying(false);
     }
   }, [showToast]);
 
@@ -303,11 +312,62 @@ export default function HomeScreen() {
     fetchProducts();
   }, [fetchProducts]);
 
-  if (loading && !refreshing) {
+  const handleRetry = useCallback(() => {
+    setIsRetrying(true);
+    setLoading(true);
+    setLoadError(null);
+    fetchProducts(false);
+  }, [fetchProducts]);
+
+  if (loading && !refreshing && allProducts.length === 0) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.tint} />
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={styles.header}>
+          <Text style={[styles.brandLogo, { color: colors.text }]}>JezSy</Text>
+        </View>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
+        >
+          <View style={styles.editorialSection}>
+            <View style={{ paddingHorizontal: Spacing.xl, marginBottom: Spacing.lg }}>
+              <Skeleton width={180} height={22} />
+            </View>
+            <View style={{ paddingLeft: Spacing.xl, flexDirection: 'row', gap: HERO_CARD_GAP }}>
+              <Skeleton width={heroCardWidth} height={heroCardWidth * 1.3} radius={Radius.sm} />
+              <Skeleton width={heroCardWidth} height={heroCardWidth * 1.3} radius={Radius.sm} />
+            </View>
+          </View>
+          <View style={styles.sectionContainer}>
+            <View style={{ paddingHorizontal: Spacing.xl, marginBottom: Spacing.lg }}>
+              <Skeleton width={140} height={22} />
+            </View>
+            <View style={styles.trendingGrid}>
+              <SkeletonList count={4}>
+                <ProductCardSkeleton width={(screenWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP) / 2} />
+              </SkeletonList>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError && allProducts.length === 0) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={styles.header}>
+          <Text style={[styles.brandLogo, { color: colors.text }]}>JezSy</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <ErrorRetryState
+            title="Unable to load catalog"
+            message={loadError}
+            onRetry={handleRetry}
+            isRetrying={isRetrying}
+          />
+        </View>
+      </SafeAreaView>
     );
   }
 

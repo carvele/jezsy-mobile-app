@@ -20,6 +20,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ConsentModal } from "@/src/components/ConsentModal";
+import { HardwarePermissionState } from "@/src/components/HardwarePermissionState";
 import { TiltGuide } from "@/src/components/TiltGuide";
 import { PoseLandmarkOverlay } from "@/src/components/PoseLandmarkOverlay";
 import { BodyAlignmentGuide } from "@/src/components/BodyAlignmentGuide";
@@ -93,6 +94,7 @@ export default function BodyScanScreen() {
   // angle -- was previously one spoken sentence over a live camera.
   const [prepDone, setPrepDone] = useState(false);
   const { hasPermission, requestPermission } = useCameraPermission();
+  const [hasRequestedPermission, setHasRequestedPermission] = useState(false);
   const device = useCameraDevice("front");
 
   const openPrivacyPolicy = useCallback(async () => {
@@ -654,37 +656,33 @@ export default function BodyScanScreen() {
   }
 
   if (!hasPermission) {
-    // Without the native camera/pose modules, permission can never be
-    // granted -- requestPermission stub always resolves false -- so this
-    // must offer the same manual escape as the no-device/model-error cards
-    // below, or the flow is a dead end.
-    if (!NATIVE_VISION_AVAILABLE) {
-      return (
-        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
-          <View style={styles.centerCard}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Scan Unavailable</Text>
-            <Text style={[styles.cardBody, { color: colors.secondaryText }]}>
-              The body scan camera is unavailable on this device. You can enter your measurements manually instead.
-            </Text>
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.tint }]}
-              onPress={() => router.replace({ pathname: "/profile/measurements", params: { height, weight, gender } })}
-            >
-              <Text style={styles.actionText}>Enter Manually</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      );
-    }
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
-        <View style={styles.centerCard}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Camera Access Required</Text>
-          <Text style={[styles.cardBody, { color: colors.secondaryText }]}>
-            We need camera access to perform the body scan and calculate your measurements.
-          </Text>
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.tint }]} onPress={requestPermission}>
-            <Text style={styles.actionText}>Grant Permission</Text>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <HardwarePermissionState
+            status={
+              !NATIVE_VISION_AVAILABLE
+                ? 'hardware_unavailable'
+                : hasRequestedPermission
+                ? 'permanently_denied'
+                : 'denied_can_ask_again'
+            }
+            featureName="Body Scan"
+            onRequestPermission={async () => {
+              setHasRequestedPermission(true);
+              await requestPermission();
+            }}
+            onOpenSettings={() => {
+              Linking.openSettings().catch((err) => console.warn('Could not open settings', err));
+            }}
+          />
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, marginTop: Spacing.lg }]}
+            onPress={() => router.replace({ pathname: "/profile/measurements", params: { height, weight, gender } })}
+            accessibilityRole="button"
+            accessibilityLabel="Enter measurements manually"
+          >
+            <Text style={[styles.actionText, { color: colors.text }]}>Enter Manually</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -701,14 +699,16 @@ export default function BodyScanScreen() {
   if (device == null) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
-        <View style={styles.centerCard}>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>No Front Camera</Text>
-          <Text style={[styles.cardBody, { color: colors.secondaryText }]}>
-            This device does not expose a front-facing camera for the body scan.
-          </Text>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <HardwarePermissionState
+            status="hardware_unavailable"
+            featureName="Body Scan"
+          />
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: colors.tint }]}
+            style={[styles.actionButton, { backgroundColor: colors.tint, marginTop: Spacing.xl }]}
             onPress={() => router.replace({ pathname: "/profile/measurements", params: { height, weight, gender } })}
+            accessibilityRole="button"
+            accessibilityLabel="Enter measurements manually"
           >
             <Text style={styles.actionText}>Enter Manually</Text>
           </TouchableOpacity>
