@@ -1,13 +1,20 @@
-import { gradeOutfit } from '../aiStylistAdvisor';
+import { gradeOutfit, extractColors } from '../aiStylistAdvisor';
 import { MannequinCanvasItem } from '../mannequinConfig';
-import { UserStyleProfileDto } from '../../types/dto/styleProfile';
 import { DEFAULT_STYLE_PROFILE, updateProfileFromFeedback } from '../personalStyleEngine';
 
 function mockItem(
   id: string,
   garment_type: string,
   name: string,
-  color?: string
+  options?: {
+    color?: string;
+    color_tags?: string[];
+    category?: string;
+    sub_category?: string;
+    where_worn_often?: string;
+    description?: string;
+    user_notes?: string;
+  }
 ): { canvasItem: MannequinCanvasItem; wardrobeItem: any } {
   return {
     canvasItem: {
@@ -25,298 +32,443 @@ function mockItem(
     wardrobeItem: {
       id: `w_${id}`,
       garment_type,
-      color: color || '',
-      color_tags: color ? [color] : [],
+      category: options?.category || garment_type,
+      sub_category: options?.sub_category || '',
+      color: options?.color || '',
+      color_tags: options?.color_tags || (options?.color ? [options.color] : []),
       name,
+      where_worn_often: options?.where_worn_often || '',
+      description: options?.description || '',
+      user_notes: options?.user_notes || '',
     },
   };
 }
 
-describe('aiStylistAdvisor - Deterministic Outfit Grader', () => {
-  // Test 1: Empty Canvas
-  test('returns 0 score and Grade D for empty canvas', () => {
-    const critique = gradeOutfit([]);
-    expect(critique.score).toBe(0);
-    expect(critique.grade).toBe('D');
-    expect(critique.headline).toBe('Mannequin is Empty');
-    expect(critique.pillars.compositionAndLayers.status).toBe('alert');
-  });
+describe('aiStylistAdvisor - Critical Context & Garment Compatibility Engine', () => {
+  // =========================================================================
+  // Part 34: 12 REQUIRED REGRESSION TESTS
+  // =========================================================================
 
-  // Test 2: Single-item incomplete outfit (e.g. Top only)
-  test('flags single top as incomplete with capped score and guidance', () => {
-    const top = mockItem('1', 'Top', 'Linen Blouse', 'white');
-    const lookup = { [top.wardrobeItem.id]: top.wardrobeItem };
-
-    const critique = gradeOutfit([top.canvasItem], lookup);
-    expect(critique.score).toBeLessThanOrEqual(65);
-    expect(critique.pillars.compositionAndLayers.title).toBe('Incomplete Ensemble');
-    expect(critique.tips.some((t) => t.includes('bottoms') || t.includes('trousers'))).toBe(true);
-  });
-
-  // Test 3: Missing shoes penalty (Top + Bottom without shoes)
-  test('flags missing shoes and prompts user to add footwear', () => {
-    const top = mockItem('1', 'Top', 'Cream Blouse', 'cream');
-    const bottom = mockItem('2', 'Bottom', 'Navy Trousers', 'navy');
-    const lookup = {
-      [top.wardrobeItem.id]: top.wardrobeItem,
-      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([top.canvasItem, bottom.canvasItem], lookup);
-    expect(critique.tips.some((t) => t.toLowerCase().includes('shoes') || t.toLowerCase().includes('footwear'))).toBe(true);
-    expect(critique.pillars.compositionAndLayers.feedback).toContain('footwear');
-  });
-
-  // Test 4: All-neutral combination (Cream top + Charcoal trousers + Black shoes)
-  test('awards Grade A for an all-neutral tailored palette', () => {
-    const top = mockItem('1', 'Top', 'Cream Knit Top', 'cream');
-    const bottom = mockItem('2', 'Bottom', 'Charcoal Trousers', 'charcoal');
-    const shoes = mockItem('3', 'Shoes', 'Black Leather Loafers', 'black');
-    const lookup = {
-      [top.wardrobeItem.id]: top.wardrobeItem,
-      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
-      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([top.canvasItem, bottom.canvasItem, shoes.canvasItem], lookup);
-    expect(critique.score).toBeGreaterThanOrEqual(90);
-    expect(['A+', 'A', 'A-']).toContain(critique.grade);
-    expect(critique.pillars.colorHarmony.title).toBe('Perfect Harmony');
-  });
-
-  // Test 5: Monochromatic palette (Sky blue top + Navy pants + Blue shoes)
-  test('awards high score for monochromatic harmony', () => {
-    const top = mockItem('1', 'Top', 'Light Blue Shirt', '#87CEEB'); // H ~197
-    const bottom = mockItem('2', 'Bottom', 'Navy Trousers', '#1E3A5F'); // H ~214 (gap < 20)
-    const shoes = mockItem('3', 'Shoes', 'Cobalt Sneakers', '#0047AB');
-    const lookup = {
-      [top.wardrobeItem.id]: top.wardrobeItem,
-      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
-      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([top.canvasItem, bottom.canvasItem, shoes.canvasItem], lookup);
-    expect(critique.score).toBeGreaterThanOrEqual(85);
-    expect(critique.pillars.colorHarmony.score).toBeGreaterThanOrEqual(88);
-  });
-
-  // Test 6: Clashing saturated colors (Orange top + Neon green bottom)
-  test('penalizes clashing saturated colors and provides constructive anchor advice', () => {
-    const top = mockItem('1', 'Top', 'Vibrant Orange Top', '#EA580C'); // Orange
-    const bottom = mockItem('2', 'Bottom', 'Neon Green Skirt', '#39FF14'); // Neon green (discordant hue gap ~80)
-    const shoes = mockItem('3', 'Shoes', 'Yellow Shoes', 'yellow');
-    const lookup = {
-      [top.wardrobeItem.id]: top.wardrobeItem,
-      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
-      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([top.canvasItem, bottom.canvasItem, shoes.canvasItem], lookup);
-    expect(critique.pillars.colorHarmony.title).toBe('Clashing Colors');
-    expect(critique.score).toBeLessThan(75);
-    expect(critique.tips[0]).toContain('neutral');
-  });
-
-  // Test 7: Competing metallics (Gold accessory + Silver jewelry)
-  test('penalizes competing metallics (Gold + Silver)', () => {
-    const top = mockItem('1', 'Top', 'Black Dress', 'black');
-    const acc1 = mockItem('2', 'Accessory', 'Gold Belt', 'gold');
-    const acc2 = mockItem('3', 'Accessory', 'Silver Necklace', 'silver');
-    const shoes = mockItem('4', 'Shoes', 'Black Heels', 'black');
-    const lookup = {
-      [top.wardrobeItem.id]: top.wardrobeItem,
-      [acc1.wardrobeItem.id]: acc1.wardrobeItem,
-      [acc2.wardrobeItem.id]: acc2.wardrobeItem,
-      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([top.canvasItem, acc1.canvasItem, acc2.canvasItem, shoes.canvasItem], lookup);
-    expect(critique.pillars.colorHarmony.title).toBe('Clashing Colors');
-    expect(critique.pillars.colorHarmony.feedback).toContain('splits the eye');
-  });
-
-  // Test 8: Complementary harmony (Navy + Mustard/Orange)
-  test('recognizes complementary color harmony', () => {
-    const top = mockItem('1', 'Top', 'Mustard Sweater', 'mustard');
-    const bottom = mockItem('2', 'Bottom', 'Navy Pants', 'navy');
-    const shoes = mockItem('3', 'Shoes', 'Brown Boots', 'brown');
-    const lookup = {
-      [top.wardrobeItem.id]: top.wardrobeItem,
-      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
-      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([top.canvasItem, bottom.canvasItem, shoes.canvasItem], lookup);
-    expect(critique.score).toBeGreaterThanOrEqual(80);
-    expect(['A+', 'A', 'A-', 'B+']).toContain(critique.grade);
-  });
-
-  // Test 10: Overcrowded canvas with 3 tops simultaneously (user scenario)
-  test('flags 3 competing tops on the mannequin as overcrowded and severely docks score', () => {
-    const top1 = mockItem('1', 'Top', 'Black Tee', 'black');
-    const top2 = mockItem('2', 'Top', 'Navy Blouse', 'navy');
-    const top3 = mockItem('3', 'Top', 'Burgundy Longsleeve', 'burgundy');
-    const bottom = mockItem('4', 'Bottom', 'Black Skirt', 'black');
-    const lookup = {
-      [top1.wardrobeItem.id]: top1.wardrobeItem,
-      [top2.wardrobeItem.id]: top2.wardrobeItem,
-      [top3.wardrobeItem.id]: top3.wardrobeItem,
-      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([top1.canvasItem, top2.canvasItem, top3.canvasItem, bottom.canvasItem], lookup);
-    expect(critique.isOvercrowded).toBe(true);
-    expect(critique.score).toBeLessThanOrEqual(68);
-    expect(['C+', 'C', 'C-', 'D']).toContain(critique.grade);
-    expect(critique.headline).toBe('Overcrowded Top Half');
-    expect(critique.verdict).toContain('competing tops');
-    expect(critique.tips[0]).toContain('extra top');
-  });
-
-  // Test 11: One-piece dress is complete without separate top and bottom
-  test('recognizes dress as complete one-piece outfit without separate top or bottom', () => {
-    const dress = mockItem('1', 'Dress', 'Navy Bow-Tie Midi Dress', 'navy');
-    dress.wardrobeItem.description = 'Navy blue fit-and-flare midi dress with short sleeves and bow-tie neckline';
-    const shoes = mockItem('2', 'Shoes', 'Black Pumps', 'black');
-    const lookup = {
-      [dress.wardrobeItem.id]: dress.wardrobeItem,
-      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([dress.canvasItem, shoes.canvasItem], lookup, {
-      occasion: 'Dinner',
+  // TEST 1: Blazer + Running Shorts + Sneakers + no top + Wedding
+  test('TEST 1: Blazer + running shorts + sneakers + no top for Wedding is NOT approved, identifies mismatch and missing base top, has NO numeric or letter grade', () => {
+    const blazer = mockItem('1', 'Outerwear', 'Tailored Navy Blazer', {
+      category: 'Outerwear',
+      sub_category: 'Blazer',
+      color: 'navy',
+      description: 'Structured wool blend tailored blazer',
+    });
+    const shorts = mockItem('2', 'Bottom', 'Running Shorts', {
+      category: 'Bottom',
+      sub_category: 'Running Shorts',
+      color: 'black',
+      where_worn_often: 'Running, gym',
+      description: 'Lightweight shorts for exercise and marathon training',
+    });
+    const sneakers = mockItem('3', 'Shoes', 'Athletic Running Sneakers', {
+      category: 'Shoes',
+      sub_category: 'Running Shoes',
+      color: 'white',
+      where_worn_often: 'Gym, running track',
+      description: 'Cushioned athletic sneakers for running',
     });
 
-    expect(critique.score).toBeGreaterThanOrEqual(80);
-    expect(['A+', 'A', 'A-', 'B+']).toContain(critique.grade);
-    expect(critique.pillars.compositionAndLayers.title).toBe('Complete Head-to-Toe Look');
-    expect(critique.whatsMissing).toBeUndefined();
-    expect(critique.pillars.occasionFit).toBeDefined();
-    expect(['good', 'excellent']).toContain(critique.pillars.occasionFit?.status);
-  });
-
-  // Test 12: Generates whatsMissing for incomplete outfit
-  test('populates whatsMissing when lower-body piece is missing', () => {
-    const top = mockItem('1', 'Top', 'Silk Blouse', 'cream');
-    const lookup = { [top.wardrobeItem.id]: top.wardrobeItem };
-
-    const critique = gradeOutfit([top.canvasItem], lookup, { occasion: 'Work / Office' });
-    expect(critique.whatsMissing).toBeDefined();
-    expect(critique.whatsMissing).toContain('Bottom');
-    expect(critique.score).toBeLessThanOrEqual(60);
-  });
-
-  // Test 13: Occasion context affects scoring for athletic outfit
-  test('evaluates athletic outfit well for Gym occasion', () => {
-    const sportsBra = mockItem('1', 'Top', 'Sports Bra', 'black');
-    sportsBra.wardrobeItem.sub_category = 'Sports Bra';
-    const leggings = mockItem('2', 'Bottom', 'Running Leggings', 'black');
-    leggings.wardrobeItem.sub_category = 'Leggings';
-    const sneakers = mockItem('3', 'Shoes', 'Running Shoes', 'white');
     const lookup = {
-      [sportsBra.wardrobeItem.id]: sportsBra.wardrobeItem,
-      [leggings.wardrobeItem.id]: leggings.wardrobeItem,
+      [blazer.wardrobeItem.id]: blazer.wardrobeItem,
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
       [sneakers.wardrobeItem.id]: sneakers.wardrobeItem,
     };
 
     const critique = gradeOutfit(
-      [sportsBra.canvasItem, leggings.canvasItem, sneakers.canvasItem],
+      [blazer.canvasItem, shorts.canvasItem, sneakers.canvasItem],
       lookup,
-      { occasion: 'Sports / Gym' }
+      { occasion: 'Wedding' }
     );
 
-    expect(critique.pillars.occasionFit).toBeDefined();
-    expect(critique.pillars.occasionFit?.score).toBeGreaterThanOrEqual(80);
-    expect(critique.vibe).toBe('Athleisure');
+    // 1. Assessment must NOT be "Appropriate for this occasion"
+    expect(critique.assessment).not.toBe('Appropriate for this occasion');
+    expect(critique.assessment).toBe('Not appropriate for this occasion');
+
+    // 2. NO user-facing numeric score or letter grade
+    expect((critique as any).score).toBeUndefined();
+    expect((critique as any).grade).toBeUndefined();
+
+    // 3. No fake praise / "Why this works" strictly omitted
+    expect(critique.whatWorks).toBeUndefined();
+    expect(critique.verdict.toLowerCase()).not.toContain('good for wedding');
+    expect(critique.headline.toLowerCase()).not.toContain('smart casual statement');
+
+    // 4. Identifies casual/athletic mismatch
+    expect(critique.whatCouldBeBetter?.toLowerCase()).toMatch(/athletic|running|casual|conflict/);
+
+    // 5. Identifies missing upper-body base layer
+    expect(critique.whatsMissing?.toLowerCase()).toMatch(/upper-body base layer|base layer|shirt|blouse|underneath/);
+
+    // 6. Honest stylist take communicates the contradiction
+    expect(critique.stylistsTake.toLowerCase()).toMatch(/blazer/);
+    expect(critique.stylistsTake.toLowerCase()).toMatch(/running shorts|athletic/);
   });
 
-  // Test 5: One dress on mannequin evaluated for Wedding - not classified as missing top and bottom
-  test('TEST 5: single dress on mannequin evaluated for Wedding is recognized as complete one-piece, not missing top and bottom', () => {
-    const dress = mockItem('d1', 'Dress', 'Navy Maxi Dress', 'navy');
-    dress.wardrobeItem.description = 'Long fitted dress with short sleeves, bow detail around the neck and fitted waist.';
-    dress.wardrobeItem.where_worn_often = 'Church, dinner and work';
-    const lookup = { [dress.wardrobeItem.id]: dress.wardrobeItem };
+  // TEST 2: Same outfit + Casual day out
+  test('TEST 2: Same outfit for Casual day out recognizes contextual difference but notes missing inner top', () => {
+    const blazer = mockItem('1', 'Outerwear', 'Tailored Navy Blazer', {
+      category: 'Outerwear',
+      sub_category: 'Blazer',
+      color: 'navy',
+    });
+    const shorts = mockItem('2', 'Bottom', 'Running Shorts', {
+      category: 'Bottom',
+      sub_category: 'Running Shorts',
+      color: 'black',
+      where_worn_often: 'Running, gym',
+    });
+    const sneakers = mockItem('3', 'Shoes', 'Athletic Running Sneakers', {
+      category: 'Shoes',
+      sub_category: 'Running Shoes',
+      color: 'white',
+    });
 
-    const critique = gradeOutfit([dress.canvasItem], lookup, { occasion: 'Wedding' });
-
-    // Must NOT say missing top and bottom
-    expect(critique.pillars.compositionAndLayers.title).toBe('Complete One-Piece Ensemble');
-    expect(critique.whatsMissing).not.toContain('top');
-    expect(critique.whatsMissing).not.toContain('bottom');
-    // Footwear may be identified as missing for formal wedding
-    expect(critique.whatsMissing?.toLowerCase()).toContain('footwear');
-  });
-
-  // Test 6: Top + Bottom without shoes evaluated for Wedding - identifies footwear needed
-  test('TEST 6: Top + Bottom without shoes evaluated for Wedding identifies that footwear is needed', () => {
-    const top = mockItem('t1', 'Top', 'White Dress Shirt', 'white');
-    const bottom = mockItem('b1', 'Bottom', 'Charcoal Trousers', 'charcoal');
     const lookup = {
-      [top.wardrobeItem.id]: top.wardrobeItem,
-      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
-    };
-
-    const critique = gradeOutfit([top.canvasItem, bottom.canvasItem], lookup, { occasion: 'Wedding' });
-    expect(critique.whatsMissing?.toLowerCase()).toContain('footwear');
-    expect(critique.tips.some((t) => t.toLowerCase().includes('shoes'))).toBe(true);
-  });
-
-  // Test 7: Evaluate SAME outfit twice for Casual vs Wedding - scores dynamically change
-  test('TEST 7: evaluates the SAME outfit dynamically based on occasion context', () => {
-    const shirt = mockItem('c1', 'Top', 'Graphic T-Shirt', 'black');
-    shirt.wardrobeItem.description = 'Casual cotton graphic t-shirt';
-    const jeans = mockItem('c2', 'Bottom', 'Denim Jeans', 'blue');
-    const sneakers = mockItem('c3', 'Shoes', 'White Sneakers', 'white');
-    sneakers.wardrobeItem.where_worn_often = 'Casual and everyday';
-    const lookup = {
-      [shirt.wardrobeItem.id]: shirt.wardrobeItem,
-      [jeans.wardrobeItem.id]: jeans.wardrobeItem,
+      [blazer.wardrobeItem.id]: blazer.wardrobeItem,
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
       [sneakers.wardrobeItem.id]: sneakers.wardrobeItem,
     };
 
-    const casualCritique = gradeOutfit([shirt.canvasItem, jeans.canvasItem, sneakers.canvasItem], lookup, {
-      occasion: 'Casual day',
-    });
+    const critique = gradeOutfit(
+      [blazer.canvasItem, shorts.canvasItem, sneakers.canvasItem],
+      lookup,
+      { occasion: 'Casual day out' }
+    );
 
-    const weddingCritique = gradeOutfit([shirt.canvasItem, jeans.canvasItem, sneakers.canvasItem], lookup, {
-      occasion: 'Wedding',
-    });
-
-    // Evaluation must be occasion-aware and dynamic, not a fixed hardcoded score
-    expect(casualCritique.score).toBeGreaterThan(weddingCritique.score);
-    expect(casualCritique.pillars.occasionFit?.score).toBeGreaterThan(weddingCritique.pillars.occasionFit?.score || 0);
-    expect(weddingCritique.verdict.toLowerCase()).toContain('wedding');
+    // Recognizes high-low streetwear potential with changes
+    expect(critique.assessment).toBe('Could work with changes');
+    expect(critique.whatWorks).toBeDefined();
+    expect(critique.whatWorks?.toLowerCase()).toMatch(/high-low|contrast|structure/);
+    // Still identifies missing inner top
+    expect(critique.whatsMissing?.toLowerCase()).toMatch(/base layer|top|tee/);
   });
 
-  // Test 8: Personal feedback isolation per user
-  test('TEST 8: personal feedback influences future evaluations isolated per user', () => {
-    const dress = mockItem('d1', 'Dress', 'Emerald Satin Dress', 'emerald');
-    const shoes = mockItem('s1', 'Shoes', 'Gold Heels', 'gold');
+  // TEST 3: Dress + shoes + Wedding
+  test('TEST 3: Dress + shoes for Wedding recognizes complete one-piece foundation without claiming missing top/bottom', () => {
+    const dress = mockItem('1', 'Dress', 'Floral Silk Midi Dress', {
+      category: 'Dress',
+      sub_category: 'Midi Dress',
+      color: 'navy',
+      description: 'Silk midi dress with floral embroidery, elegant waistline',
+    });
+    const shoes = mockItem('2', 'Shoes', 'Leather Block Heels', {
+      category: 'Shoes',
+      sub_category: 'Heels',
+      color: 'nude',
+      description: 'Comfortable formal block heel pumps',
+    });
+
     const lookup = {
       [dress.wardrobeItem.id]: dress.wardrobeItem,
       [shoes.wardrobeItem.id]: shoes.wardrobeItem,
     };
 
-    // User A likes emerald and gold
-    let userAProfile: UserStyleProfileDto = {
-      userId: 'user-a',
-      ...DEFAULT_STYLE_PROFILE,
+    const critique = gradeOutfit(
+      [dress.canvasItem, shoes.canvasItem],
+      lookup,
+      { occasion: 'Wedding' }
+    );
+
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+    // Must NOT say missing top or bottom
+    expect(critique.whatsMissing).toBeUndefined();
+    expect(critique.whatCouldBeBetter || '').not.toMatch(/missing top|missing bottom/i);
+    expect(critique.whatWorks).toBeDefined();
+  });
+
+  // TEST 4: Jumpsuit + shoes + Wedding
+  test('TEST 4: Jumpsuit + shoes for Wedding treats jumpsuit as complete one-piece garment', () => {
+    const jumpsuit = mockItem('1', 'Dress', 'Tailored Black Jumpsuit', {
+      category: 'Dress',
+      sub_category: 'Jumpsuit',
+      color: 'black',
+      description: 'Wide-leg formal crepe jumpsuit with tailored waist',
+    });
+    const shoes = mockItem('2', 'Shoes', 'Strappy Evening Heels', {
+      category: 'Shoes',
+      sub_category: 'Heels',
+      color: 'black',
+    });
+
+    const lookup = {
+      [jumpsuit.wardrobeItem.id]: jumpsuit.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
     };
-    userAProfile = updateProfileFromFeedback(userAProfile, 'liked', [dress.wardrobeItem, shoes.wardrobeItem], 'Dinner');
 
-    // User B dislikes / passed on emerald
-    let userBProfile: UserStyleProfileDto = {
-      userId: 'user-b',
-      ...DEFAULT_STYLE_PROFILE,
+    const critique = gradeOutfit(
+      [jumpsuit.canvasItem, shoes.canvasItem],
+      lookup,
+      { occasion: 'Wedding' }
+    );
+
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+    expect(critique.whatsMissing).toBeUndefined();
+    expect(critique.whatCouldBeBetter || '').not.toMatch(/missing top|missing bottom/i);
+  });
+
+  // TEST 5: Color "navy blue, white"
+  test('TEST 5: Multi-color user entry "navy blue, white" preserves BOTH distinct colors without collapsing', () => {
+    const item = mockItem('1', 'Top', 'Striped Sailor Tee', {
+      color: 'navy blue, white',
+    });
+    const lookup = { [item.wardrobeItem.id]: item.wardrobeItem };
+
+    const colors = extractColors([item.canvasItem], lookup);
+    expect(colors).toContain('navy blue');
+    expect(colors).toContain('white');
+    expect(colors.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // TEST 6: Where worn often "Running and gym"
+  test('TEST 6: Where worn often "Running and gym" contributes strong athletic orientation evidence', () => {
+    const shorts = mockItem('1', 'Bottom', 'Workout Shorts', {
+      where_worn_often: 'Running and gym',
+      category: 'Bottom',
+    });
+    const top = mockItem('2', 'Top', 'White T-Shirt', {
+      color: 'white',
+    });
+
+    const lookup = {
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
+      [top.wardrobeItem.id]: top.wardrobeItem,
     };
-    userBProfile = updateProfileFromFeedback(userBProfile, 'passed', [dress.wardrobeItem, shoes.wardrobeItem], 'Dinner');
 
-    const critiqueA = gradeOutfit([dress.canvasItem, shoes.canvasItem], lookup, { occasion: 'Dinner' }, userAProfile);
-    const critiqueB = gradeOutfit([dress.canvasItem, shoes.canvasItem], lookup, { occasion: 'Dinner' }, userBProfile);
+    const critique = gradeOutfit(
+      [shorts.canvasItem, top.canvasItem],
+      lookup,
+      { occasion: 'Wedding' }
+    );
 
-    // User A should have higher personalization satisfaction than User B
-    expect(critiqueA.pillars.personalPreference).toBeDefined();
-    expect(critiqueB.pillars.personalPreference).toBeDefined();
-    expect(critiqueA.pillars.personalPreference!.score).toBeGreaterThanOrEqual(critiqueB.pillars.personalPreference!.score);
+    // Athletic evidence from where_worn_often creates contradiction with Wedding
+    expect(critique.assessment).toBe('Not appropriate for this occasion');
+    expect(critique.whatCouldBeBetter?.toLowerCase()).toMatch(/athletic|casual|wedding/);
+  });
+
+  // TEST 7: Detailed description reaches Stylist
+  test('TEST 7: User enters detailed description which reaches Stylist and affects reasoning', () => {
+    const top = mockItem('1', 'Top', 'Technical Running Top', {
+      description: 'High-visibility fluorescent neon running jersey engineered for marathon training and extreme exercise',
+      category: 'Top',
+    });
+    const bottom = mockItem('2', 'Bottom', 'Track Pants', {
+      description: 'Compression sweatpants for gym workout sessions',
+      category: 'Bottom',
+    });
+
+    const lookup = {
+      [top.wardrobeItem.id]: top.wardrobeItem,
+      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
+    };
+
+    const critique = gradeOutfit(
+      [top.canvasItem, bottom.canvasItem],
+      lookup,
+      { occasion: 'Black tie wedding' }
+    );
+
+    expect(critique.assessment).toBe('Not appropriate for this occasion');
+    expect(critique.whatCouldBeBetter?.toLowerCase()).toMatch(/athletic|casual|formal/);
+  });
+
+  // TEST 8: Empty description does not trigger hallucinations
+  test('TEST 8: User leaves description empty; Stylist does not fabricate attributes', () => {
+    const top = mockItem('1', 'Top', 'Cotton Shirt', {
+      description: '',
+      color: 'white',
+    });
+    const bottom = mockItem('2', 'Bottom', 'Chino Pants', {
+      description: '',
+      color: 'navy',
+    });
+
+    const lookup = {
+      [top.wardrobeItem.id]: top.wardrobeItem,
+      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
+    };
+
+    const critique = gradeOutfit(
+      [top.canvasItem, bottom.canvasItem],
+      lookup,
+      { occasion: 'Dinner' }
+    );
+
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+    // Does not hallucinate non-existent descriptions
+    expect(critique.stylistsTake).not.toContain('undefined');
+    expect(critique.stylistsTake).not.toContain('null');
+  });
+
+  // TEST 9: ML unavailable fallback
+  test('TEST 9: ML unavailable causes no crash and continues using structured wardrobe metadata', () => {
+    const dress = mockItem('1', 'Dress', 'Cocktail Dress', {
+      color: 'emerald',
+      description: 'Emerald green silk cocktail dress',
+    });
+    const heels = mockItem('2', 'Shoes', 'Satin Heels', {
+      color: 'black',
+      category: 'Shoes',
+      sub_category: 'Heels',
+    });
+    const lookup = {
+      [dress.wardrobeItem.id]: dress.wardrobeItem,
+      [heels.wardrobeItem.id]: heels.wardrobeItem,
+    };
+
+    // Evaluating without ML or when ML returns null
+    const critique = gradeOutfit([dress.canvasItem, heels.canvasItem], lookup, { occasion: 'Cocktail party' });
+
+    expect(critique).toBeDefined();
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+    expect(critique.headline).toBeDefined();
+    expect(critique.stylistsTake).toBeDefined();
+    // Confirms no raw errors or stack traces are exposed
+    expect(critique.verdict).not.toContain('Error');
+    expect(critique.verdict).not.toContain('stack');
+  });
+
+  // TEST 10: Stale or deleted wardrobe item ID
+  test('TEST 10: Stale or deleted wardrobe ID handled gracefully without crash or invented items', () => {
+    const staleCanvasItem: MannequinCanvasItem = {
+      id: 'stale_1',
+      wardrobe_item_id: 'non_existent_uuid',
+      image_url: '',
+      name: 'Old Item',
+      garment_type: 'Top',
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotation: 0,
+      zIndex: 1,
+    };
+
+    // lookup has no entry for non_existent_uuid
+    const critique = gradeOutfit([staleCanvasItem], {}, { occasion: 'Casual day out' });
+
+    expect(critique).toBeDefined();
+    expect(critique.assessment).toBe('Incomplete outfit');
+    expect(critique.whatsMissing).toBeDefined();
+  });
+
+  // TEST 11: Empty mannequin
+  test('TEST 11: Empty mannequin handled gracefully with Incomplete outfit and no fake praise', () => {
+    const critique = gradeOutfit([]);
+
+    expect(critique.assessment).toBe('Incomplete outfit');
+    expect(critique.headline).toBe('Mannequin is Empty');
+    expect(critique.whatWorks).toBeUndefined();
+    expect(critique.tips.length).toBeGreaterThan(0);
+  });
+
+  // TEST 12: No suitable wardrobe replacement available
+  test('TEST 12: When user owns no suitable formal replacement, Stylist explicitly says so and never invents one', () => {
+    const blazer = mockItem('1', 'Outerwear', 'Navy Blazer', {
+      sub_category: 'Blazer',
+      category: 'Outerwear',
+    });
+    const shorts = mockItem('2', 'Bottom', 'Running Shorts', {
+      where_worn_often: 'gym, running',
+      sub_category: 'Running Shorts',
+      category: 'Bottom',
+    });
+    const sneakers = mockItem('3', 'Shoes', 'Running Sneakers', {
+      where_worn_often: 'gym, running',
+      sub_category: 'Running Shoes',
+      category: 'Shoes',
+    });
+
+    // Wardrobe only contains athletic shorts and sneakers (no trousers, no dress shoes)
+    const lookup = {
+      [blazer.wardrobeItem.id]: blazer.wardrobeItem,
+      [shorts.wardrobeItem.id]: shorts.wardrobeItem,
+      [sneakers.wardrobeItem.id]: sneakers.wardrobeItem,
+    };
+
+    const critique = gradeOutfit(
+      [blazer.canvasItem, shorts.canvasItem, sneakers.canvasItem],
+      lookup,
+      { occasion: 'Wedding' }
+    );
+
+    expect(critique.whatsMissing).toContain('JeZsy could not find a suitable formal alternative in your current wardrobe');
+    expect(critique.tips.some((t) => t.includes('could not find a suitable formal alternative') || t.includes('does not contain an obvious formal bottom'))).toBe(true);
+  });
+
+  // =========================================================================
+  // ADDITIONAL REGRESSION & INTEGRATION TESTS
+  // =========================================================================
+
+  test('CONFIRMATION: score and grade are removed completely from all critique returns', () => {
+    const top = mockItem('1', 'Top', 'White Blouse', { color: 'white' });
+    const bottom = mockItem('2', 'Bottom', 'Navy Trousers', { color: 'navy' });
+    const shoes = mockItem('3', 'Shoes', 'Black Loafers', { color: 'black' });
+    const lookup = {
+      [top.wardrobeItem.id]: top.wardrobeItem,
+      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([top.canvasItem, bottom.canvasItem, shoes.canvasItem], lookup, { occasion: 'Office' });
+
+    expect(critique.assessment).toBe('Appropriate for this occasion');
+    expect((critique as any).score).toBeUndefined();
+    expect((critique as any).grade).toBeUndefined();
+  });
+
+  test('Overcrowded mannequin flags too many competing tops with Incomplete outfit', () => {
+    const top1 = mockItem('1', 'Top', 'White Tee');
+    const top2 = mockItem('2', 'Top', 'Blue Blouse');
+    const bottom = mockItem('3', 'Bottom', 'Jeans');
+    const lookup = {
+      [top1.wardrobeItem.id]: top1.wardrobeItem,
+      [top2.wardrobeItem.id]: top2.wardrobeItem,
+      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
+    };
+
+    const critique = gradeOutfit([top1.canvasItem, top2.canvasItem, bottom.canvasItem], lookup);
+    expect(critique.assessment).toBe('Incomplete outfit');
+    expect(critique.headline).toBe('Too Many Competing Garments');
+    expect(critique.isOvercrowded).toBe(true);
+  });
+
+  test('Rain and walking additional context generates appropriate styling advisories', () => {
+    const top = mockItem('1', 'Top', 'Blouse');
+    const bottom = mockItem('2', 'Bottom', 'Trousers');
+    const shoes = mockItem('3', 'Shoes', 'High Heel Pumps', {
+      description: '4 inch stiletto high heels',
+    });
+    const lookup = {
+      [top.wardrobeItem.id]: top.wardrobeItem,
+      [bottom.wardrobeItem.id]: bottom.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
+    };
+
+    const critique = gradeOutfit(
+      [top.canvasItem, bottom.canvasItem, shoes.canvasItem],
+      lookup,
+      { occasion: 'Dinner', additionalContext: 'It will rain and I will be walking a lot' }
+    );
+
+    expect(critique.tips.some((t) => t.toLowerCase().includes('rain') || t.toLowerCase().includes('umbrella'))).toBe(true);
+    expect(critique.tips.some((t) => t.toLowerCase().includes('walking') || t.toLowerCase().includes('high heels'))).toBe(true);
+  });
+
+  test('Personal style engine feedback updates profile cleanly', () => {
+    const top = mockItem('1', 'Top', 'Silk Camisole', { color: 'black' });
+    const bottom = mockItem('2', 'Bottom', 'Tailored Pants', { color: 'black' });
+
+    const updated = updateProfileFromFeedback(
+      { ...DEFAULT_STYLE_PROFILE, userId: 'user_1' },
+      'liked',
+      [top.wardrobeItem, bottom.wardrobeItem],
+      'Dinner'
+    );
+
+    expect(updated.feedbackCount).toBe(1);
+    expect(updated.preferredColors).toContain('black');
   });
 });

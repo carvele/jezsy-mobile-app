@@ -87,7 +87,7 @@ export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
                 <TextInput
                   keyboardAppearance={theme}
                   style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }]}
-                  placeholder="Example: Wedding"
+                  placeholder="Example: Work, wedding, school, date night, casual day out..."
                   placeholderTextColor={colors.secondaryText}
                   value={occasion}
                   onChangeText={setOccasion}
