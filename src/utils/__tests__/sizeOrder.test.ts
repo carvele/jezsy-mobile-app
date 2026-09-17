@@ -1,4 +1,10 @@
 import { normalizeSizes, validateSizingMode, compareSizes } from '../sizeOrder';
+import {
+  resolveSizingProfile,
+  formatFootwearDisplay,
+  classifySizeState,
+} from '../sizingProfiles';
+import sizingFixtures from './fixtures/sizingFixtures.json';
 
 describe('Canonical Apparel Size Normalization & Ordering', () => {
   test('reorders scrambled standard sizes: S, M, L, XL, XS -> XS, S, M, L, XL', () => {
@@ -54,5 +60,58 @@ describe('Canonical Apparel Size Normalization & Ordering', () => {
     expect(compareSizes('XL', 'S')).toBeGreaterThan(0);
     expect(compareSizes('M', 'M')).toBe(0);
     expect(compareSizes('One Size', 'L')).toBeLessThan(0);
+  });
+});
+
+describe('Shared Parity Contract Fixtures (Mobile)', () => {
+  test('satisfies all taxonomy resolution fixtures', () => {
+    sizingFixtures.taxonomyResolution.forEach(({ category, subCategory, productName, expectedProfile }) => {
+      const actual = resolveSizingProfile(category, subCategory, productName);
+      expect(actual).toBe(expectedProfile);
+    });
+  });
+
+  test('satisfies all size ordering fixtures (composite, footwear, belts, hats)', () => {
+    sizingFixtures.sizeOrdering.forEach(({ input, expected }) => {
+      const actual = normalizeSizes(input);
+      expect(actual).toEqual(expected);
+    });
+  });
+
+  test('satisfies all sizing classification fixtures (three-state resolution)', () => {
+    sizingFixtures.sizingClassification.forEach(({ sizes, variants, expected }) => {
+      const actual = classifySizeState(sizes as any, variants as any);
+      expect(actual.state).toBe(expected.state);
+      expect(actual.canonicalToken).toBe(expected.canonicalToken);
+      expect(actual.hideSelector).toBe(expected.hideSelector);
+    });
+  });
+
+  test('satisfies all footwear formatting fixtures (reference-only helper, bare number handling)', () => {
+    sizingFixtures.footwearFormatting.forEach(({ size, category, expected }) => {
+      const actual = formatFootwearDisplay(size, category);
+      expect(actual.displayLabel).toBe(expected.displayLabel);
+      expect(actual.approxHelper).toBe(expected.approxHelper);
+      expect(actual.canonicalKey).toBe(expected.canonicalKey);
+    });
+  });
+
+  test('disambiguates US Women vs US Men sizes', () => {
+    expect('US W 8').not.toEqual('US M 8');
+    const sorted = normalizeSizes(['US M 8', 'US W 8']);
+    expect(sorted).toContain('US W 8');
+    expect(sorted).toContain('US M 8');
+  });
+
+  test('preserves exact raw legacy token for OS in classifySizeState', () => {
+    const res = classifySizeState(['OS']);
+    expect(res.canonicalToken).toBe('OS');
+    expect(res.state).toBe('TRUE_ONE_SIZE');
+  });
+
+  test('refuses to manufacture One Size from empty sizes array', () => {
+    const res = classifySizeState([]);
+    expect(res.state).toBe('UNAVAILABLE');
+    expect(res.canonicalToken).toBeNull();
   });
 });

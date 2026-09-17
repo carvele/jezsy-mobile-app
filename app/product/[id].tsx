@@ -45,6 +45,7 @@ import { SizeChartModal } from "@/src/components/SizeChartModal";
 import { ImageViewerModal } from "@/src/components/ImageViewerModal";
 import { useToast } from '@/src/context/ToastContext';
 import { normalizeSizes } from "@/src/utils/sizeOrder";
+import { classifySizeState, formatFootwearDisplay } from "@/src/utils/sizingProfiles";
 import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 import { SoftAuthModal } from '@/src/components/SoftAuthModal';
 import { AuthAction } from '@/src/utils/authReturnTarget';
@@ -175,7 +176,10 @@ export default function ProductDetailScreen() {
 
             const canonicalColor = data.base_color?.trim() || (data.color ? data.color.split(",")[0].trim() : null);
             setSelectedColor(canonicalColor);
-            if (data.sizes && data.sizes.length === 1 && data.sizes[0]) {
+            const initialSizeClass = classifySizeState(data.sizes, invRes.data || []);
+            if (initialSizeClass.state === 'TRUE_ONE_SIZE' && initialSizeClass.canonicalToken) {
+              setSelectedSize(initialSizeClass.canonicalToken);
+            } else if (initialSizeClass.state === 'MULTI_SIZE' && data.sizes && data.sizes.length === 1 && data.sizes[0]) {
               setSelectedSize((prev) => prev || data.sizes![0]);
             }
 
@@ -229,7 +233,15 @@ export default function ProductDetailScreen() {
     emitTourEvent('product_detail');
   }, []);
 
-  const effectiveNotifySize = selectedSize || (product?.sizes && product.sizes.length === 1 ? product.sizes[0] : (product?.sizes && product.sizes.length > 0 ? null : 'OS'));
+  const sizingClassification = useMemo(() => {
+    return classifySizeState(product?.sizes, inventory);
+  }, [product?.sizes, inventory]);
+
+  const isOneSize = sizingClassification.state === 'TRUE_ONE_SIZE';
+  const isMultiSize = sizingClassification.state === 'MULTI_SIZE';
+  const isSizingUnavailable = sizingClassification.state === 'UNAVAILABLE';
+
+  const effectiveNotifySize = selectedSize || (isOneSize ? sizingClassification.canonicalToken : null);
 
   useEffect(() => {
     const checkNotifyRequest = async () => {
@@ -466,7 +478,7 @@ export default function ProductDetailScreen() {
 
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
   // tracked and out of stock.
-  const needsSize = !!(product.sizes && product.sizes.length > 0);
+  const needsSize = isMultiSize;
   const needsColor = !!product.color;
   const isProductOutOfStock = product.stock !== null && product.stock !== undefined && product.stock <= 0;
   const selectedStock = selectedSize
@@ -475,7 +487,7 @@ export default function ProductDetailScreen() {
   const selectedSizeOutOfStock = (selectedStock !== null && selectedStock <= 0) || (isProductOutOfStock && (!needsSize || !!selectedSize));
   const hasRequiredSelection =
     (!needsSize || !!selectedSize) && (!needsColor || !!selectedColor);
-  const canPurchase = hasRequiredSelection && !selectedSizeOutOfStock && !isProductOutOfStock;
+  const canPurchase = !isSizingUnavailable && hasRequiredSelection && !selectedSizeOutOfStock && !isProductOutOfStock;
   const sizeChart = (product.measurements as ProductMeasurements | null) || null;
   const hasSizeChart = !!sizeChart && (product.sizes || []).some(s => sizeChart[s]);
   const maxQuantity = 10;
@@ -706,7 +718,7 @@ export default function ProductDetailScreen() {
           )}
 
           {/* Size Selection */}
-          {product.sizes && product.sizes.length > 0 && (
+          {isMultiSize && (
             <View style={styles.section} accessibilityRole="radiogroup" accessibilityLabel="Size options">
               <View style={styles.sizeHeader}>
                 <View style={styles.sizeTitleRow}>
@@ -722,9 +734,6 @@ export default function ProductDetailScreen() {
                       <Text style={[styles.recText, { color: colors.tint }]}>Recommended: {recommendedSize.toUpperCase()}</Text>
                     </View>
                   )}
-                  {/* Size recommendation needs saved body measurements, and there was
-                      previously no hint that this feature existed at all -- a user
-                      without measurements just saw nothing and assumed it was broken. */}
                   {!recommendedSize && hasSizeChart && user?.id && (
                     <TouchableOpacity
                       onPress={() => router.push('/profile/measurements')}
@@ -753,11 +762,12 @@ export default function ProductDetailScreen() {
 
               {/* Size Buttons */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionsList}>
-                {normalizeSizes(product.sizes).map((s, index) => {
+                {normalizeSizes(sizingClassification.displaySizes).map((s, index) => {
                   const isSelected = selectedSize === s;
                   const isRecommended = recommendedSize === s;
                   const stock = getStockInfo(s, selectedColor || undefined);
                   const isOutOfStock = stock !== null && stock <= 0;
+                  const { displayLabel, approxHelper } = formatFootwearDisplay(s, product.category || '');
                   
                   return (
                     <View key={index} style={{ alignItems: 'center' }}>
@@ -771,12 +781,17 @@ export default function ProductDetailScreen() {
                         ]}
                         onPress={() => { tapLight(); setSelectedSize(s); }}
                         accessibilityRole="radio"
-                        accessibilityLabel={`Select size ${s}${isRecommended ? ' (Recommended)' : ''}${isOutOfStock ? ' (Out of stock)' : ''}`}
-                        accessibilityHint={isOutOfStock ? `Size ${s} is out of stock. Select to get notified when available.` : `Selects ${s} as the size option`}
+                        accessibilityLabel={`Select size ${displayLabel}${isRecommended ? ' (Recommended)' : ''}${isOutOfStock ? ' (Out of stock)' : ''}`}
+                        accessibilityHint={isOutOfStock ? `Size ${displayLabel} is out of stock. Select to get notified when available.` : `Selects ${displayLabel} as the size option`}
                         accessibilityState={{ selected: isSelected }}
                       >
-                        <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }, isOutOfStock && { textDecorationLine: 'line-through' }]}>{s}</Text>
+                        <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }, isOutOfStock && { textDecorationLine: 'line-through' }]}>{displayLabel}</Text>
                       </TouchableOpacity>
+                      {!!approxHelper && !isOutOfStock && (
+                        <Text style={[Type.caption, { color: colors.secondaryText, marginTop: 2, fontSize: 10, textAlign: 'center' }]}>
+                          {approxHelper}
+                        </Text>
+                      )}
                       {isRecommended && !isOutOfStock && (
                         <Text style={[Type.caption, { color: colors.tint, marginTop: Spacing.xs, fontWeight: '700' }]}>Best fit ✨</Text>
                       )}
@@ -790,6 +805,15 @@ export default function ProductDetailScreen() {
                   );
                 })}
               </ScrollView>
+            </View>
+          )}
+
+          {isSizingUnavailable && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Size</Text>
+              <Text style={[Type.caption, { color: colors.secondaryText }]}>
+                Sizing configuration is currently unavailable for this item.
+              </Text>
             </View>
           )}
 
