@@ -2121,8 +2121,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+        alignItems: 'center',
     borderWidth: 1,
   },
   searchBarWrapper: {
@@ -2156,8 +2155,7 @@ const styles = StyleSheet.create({
   cartBtn: {
     marginLeft: Spacing.md,
     position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
+        alignItems: 'center',
     padding: Spacing.xs,
   },
   cartBadge: {
@@ -2167,8 +2165,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
+        alignItems: 'center',
     paddingHorizontal: Spacing.xs,
   },
   cartBadgeText: {
@@ -2209,8 +2206,7 @@ const styles = StyleSheet.create({
   shopAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
+        gap: Spacing.sm,
     height: 52,
     borderRadius: 26,
     marginTop: Spacing.lg,
@@ -2226,8 +2222,7 @@ const styles = StyleSheet.create({
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: GRID_COLUMN_GAP,
+        gap: GRID_COLUMN_GAP,
   },
   suggestionsContainer: {
     paddingHorizontal: Spacing.lg,
@@ -2286,8 +2281,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: Radius.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
+        alignItems: 'center',
   },
   badgeText: {
     fontSize: 12,
@@ -2598,8 +2592,7 @@ const styles = StyleSheet.create({
   footerButton: {
     height: 50,
     borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
+        alignItems: 'center',
   },
   footerApplyButtonText: {
     fontSize: 15,
@@ -2639,14 +2632,12 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
+        paddingVertical: 60,
     paddingHorizontal: Spacing.xl,
   },
   errorContainerSmall: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
+        paddingVertical: 24,
     gap: Spacing.sm,
   },
   errorIconCircle: {
@@ -2654,8 +2645,7 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.md,
+        marginBottom: Spacing.md,
   },
   errorTitle: {
     fontSize: 18,
