@@ -33,6 +33,15 @@ export interface CapsuleItemInput {
   wardrobeItemId: string;
 }
 
+export interface UpdateWardrobeItemInput {
+  category?: string;
+  subCategory?: string | null;
+  color?: string | null;
+  whereWornOften?: string | null;
+  description?: string | null;
+  userNotes?: string | null;
+}
+
 export interface WardrobeItemDto {
   id: string;
   user_id: string | null;

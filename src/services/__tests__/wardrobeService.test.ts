@@ -1,5 +1,6 @@
 import {
   addItem,
+  updateItem,
   addCapsuleItem,
   removeCapsuleItem,
   deleteCapsule,
@@ -71,6 +72,159 @@ describe('wardrobeService', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('42501');
       }
+      expect(captureSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateItem', () => {
+    it('successfully updates color and re-tokenizes color_tags while preserving rawColor and unrelated metadata', async () => {
+      const existingItem = {
+        id: 'item-1',
+        user_id: 'user-1',
+        category: 'Clothing',
+        sub_category: 'Activewear / Shorts',
+        garment_type: 'Bottom',
+        color_tags: ['Black'],
+        description: 'Running shorts',
+        user_notes: 'Bought for gym',
+        ai_attributes: {
+          rawColor: 'Black',
+          whereWornOften: 'Gym, running',
+          description: 'Running shorts',
+          userNotes: 'Bought for gym',
+          visualEmbedding: [0.12, 0.45],
+        },
+      };
+
+      const updatedRecord = {
+        ...existingItem,
+        color_tags: ['Navy Blue', 'White'],
+        ai_attributes: {
+          ...existingItem.ai_attributes,
+          rawColor: 'Navy Blue, White',
+        },
+      };
+
+      const mockSelectChain: any = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValueOnce({ data: existingItem, error: null }),
+        update: jest.fn().mockReturnThis(),
+      };
+      mockSelectChain.update.mockReturnValue(mockSelectChain);
+      mockSelectChain.single.mockResolvedValueOnce({ data: updatedRecord, error: null });
+
+      (supabase.from as jest.Mock).mockReturnValue(mockSelectChain);
+
+      const result = await updateItem('item-1', 'user-1', {
+        color: 'Navy Blue, White',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(mockSelectChain.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            color_tags: ['Navy Blue', 'White'],
+            ai_attributes: expect.objectContaining({
+              rawColor: 'Navy Blue, White',
+              visualEmbedding: [0.12, 0.45],
+            }),
+          })
+        );
+      }
+    });
+
+    it('recalculates garment_type from Bottom to Top when subcategory changes to Formal Blouse', async () => {
+      const existingItem = {
+        id: 'item-1',
+        user_id: 'user-1',
+        category: 'Clothing',
+        sub_category: 'Activewear / Shorts',
+        garment_type: 'Bottom',
+        description: 'Running shorts',
+      };
+
+      const mockChain: any = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValueOnce({ data: existingItem, error: null }),
+        update: jest.fn().mockReturnThis(),
+      };
+      mockChain.update.mockReturnValue(mockChain);
+      mockChain.single.mockResolvedValueOnce({
+        data: { ...existingItem, sub_category: 'Formal Blouse', garment_type: 'Top' },
+        error: null,
+      });
+
+      (supabase.from as jest.Mock).mockReturnValue(mockChain);
+
+      const result = await updateItem('item-1', 'user-1', {
+        subCategory: 'Formal Blouse',
+        description: 'White silk blouse',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockChain.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          garment_type: 'Top',
+          sub_category: 'Formal Blouse',
+          description: 'White silk blouse',
+        })
+      );
+    });
+
+    it('recalculates garment_type from Top to Bottom when subcategory changes to Running Shorts', async () => {
+      const existingItem = {
+        id: 'item-2',
+        user_id: 'user-1',
+        category: 'Clothing',
+        sub_category: 'Blouse',
+        garment_type: 'Top',
+        description: 'White blouse',
+      };
+
+      const mockChain: any = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValueOnce({ data: existingItem, error: null }),
+        update: jest.fn().mockReturnThis(),
+      };
+      mockChain.update.mockReturnValue(mockChain);
+      mockChain.single.mockResolvedValueOnce({
+        data: { ...existingItem, sub_category: 'Running Shorts', garment_type: 'Bottom' },
+        error: null,
+      });
+
+      (supabase.from as jest.Mock).mockReturnValue(mockChain);
+
+      const result = await updateItem('item-2', 'user-1', {
+        subCategory: 'Running Shorts',
+        description: 'Black running shorts',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockChain.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          garment_type: 'Bottom',
+          sub_category: 'Running Shorts',
+          description: 'Black running shorts',
+        })
+      );
+    });
+
+    it('rejects update when item is not found or unauthorized', async () => {
+      const mockChain: any = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValueOnce({ data: null, error: { message: 'Row not found', code: 'PGRST116' } }),
+      };
+      (supabase.from as jest.Mock).mockReturnValue(mockChain);
+
+      const result = await updateItem('item-foreign', 'user-1', {
+        category: 'Shoes',
+      });
+
+      expect(result.ok).toBe(false);
       expect(captureSpy).toHaveBeenCalled();
     });
   });

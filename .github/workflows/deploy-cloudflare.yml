@@ -37,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: Export Expo Web Bundle
-        run: npx expo export --platform web
+        run: npm run build:web
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL || 'https://wufcmtndotfvxvvxkamv.supabase.co' }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_Rp3GlfKEaGdFiRF7m5wOKg_gWB7qjYe' }}
