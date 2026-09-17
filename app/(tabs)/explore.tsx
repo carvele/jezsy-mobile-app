@@ -2116,7 +2116,8 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-        alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
   },
   searchBarWrapper: {
@@ -2150,7 +2151,8 @@ const styles = StyleSheet.create({
   cartBtn: {
     marginLeft: Spacing.md,
     position: 'relative',
-        alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: Spacing.xs,
   },
   cartBadge: {
@@ -2160,7 +2162,8 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-        alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: Spacing.xs,
   },
   cartBadgeText: {
@@ -2201,7 +2204,8 @@ const styles = StyleSheet.create({
   shopAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-        gap: Spacing.sm,
+    justifyContent: 'center',
+    gap: Spacing.sm,
     height: 52,
     borderRadius: 26,
     marginTop: Spacing.lg,
@@ -2277,7 +2281,8 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: Radius.sm,
-        alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   badgeText: {
     fontSize: 12,
@@ -2588,7 +2593,8 @@ const styles = StyleSheet.create({
   footerButton: {
     height: 50,
     borderRadius: 25,
-        alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   footerApplyButtonText: {
     fontSize: 15,
@@ -2628,12 +2634,14 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     alignItems: 'center',
-        paddingVertical: 60,
+    justifyContent: 'center',
+    paddingVertical: 60,
     paddingHorizontal: Spacing.xl,
   },
   errorContainerSmall: {
     alignItems: 'center',
-        paddingVertical: 24,
+    justifyContent: 'center',
+    paddingVertical: 24,
     gap: Spacing.sm,
   },
   errorIconCircle: {
@@ -2641,7 +2649,8 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
     alignItems: 'center',
-        marginBottom: Spacing.md,
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
   },
   errorTitle: {
     fontSize: 18,
