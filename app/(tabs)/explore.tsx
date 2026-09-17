@@ -1071,7 +1071,7 @@ export default function ExploreScreen() {
             accessibilityRole="button"
             accessibilityLabel="Show all products"
           >
-            <Text style={[styles.categoryChipText, { color: showAllProducts ? colors.onTint : colors.text }]}>All</Text>
+            <Text style={[styles.categoryChipText, { color: showAllProducts ? colors.onTint : colors.text }]}>All Categories</Text>
           </TouchableOpacity>
           {topCategories.map((cat) => {
             const isActive = !showAllProducts && selectedCategory === cat.name;

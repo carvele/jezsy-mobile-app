@@ -88,7 +88,8 @@ async function getClipPipeline(): Promise<any> {
   if (clipPipelinePromise) return clipPipelinePromise;
   clipPipelinePromise = (async () => {
     try {
-      const { pipeline, env } = await import('@xenova/transformers');
+      // @ts-ignore
+      const { pipeline, env } = await import('@xenova/transformers'); // eslint-disable-line import/no-unresolved
       env.allowLocalModels = false;
       env.useBrowserCache = true;
       return await pipeline('zero-shot-image-classification', 'Xenova/clip-vit-base-patch32', {

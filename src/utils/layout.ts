@@ -52,7 +52,9 @@ export function useGridCardWidth(): { cardWidth: DimensionValue; columns: number
   // can only leave slack, never overflow) mathematically guarantees columns
   // fit regardless of gap/gutter values.
   const contentWidth = effectiveWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP * (columns - 1);
-  const cardWidth: DimensionValue = Math.floor(contentWidth / columns);
+  // Subtract 1px to provide slack for Android's Yoga layout engine, which
+  // often wraps exact-fit flex items due to floating point inaccuracies.
+  const cardWidth: DimensionValue = Math.floor(contentWidth / columns) - 1;
 
   return { cardWidth, columns };
 }

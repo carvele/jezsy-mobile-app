@@ -353,6 +353,7 @@ export default function HomeScreen() {
             up to HERO_MAX_CARDS. */}
         {featuredProducts.length > 0 && (
           <View style={styles.editorialSection}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Featured Collection</Text>
             <Animated.ScrollView
               ref={heroScrollRef}
               horizontal
