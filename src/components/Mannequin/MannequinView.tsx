@@ -4,6 +4,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   FlatList,
   Modal,
@@ -211,9 +212,28 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
     setIsDrawerMinimized((prev) => !prev);
   }, []);
 
-  // Handle adding an item to the canvas with auto background removal
+  // Remove from canvas
+  const handleRemoveFromCanvas = useCallback((id: string) => {
+    setCanvasItems((prev) => prev.filter((item) => item.id !== id));
+    setSelectedItemId((current) => (current === id ? null : current));
+  }, []);
+
+  // Handle adding or selecting/toggling an item on the canvas with auto background removal
   const handleAddItemToCanvas = useCallback(
     async (wardrobeItem: WardrobeItem) => {
+      // If item is already on canvas, select it (or toggle off if already selected)
+      const existing = canvasItems.find((i) => i.wardrobe_item_id === wardrobeItem.id);
+      if (existing) {
+        if (selectedItemId === existing.id) {
+          handleRemoveFromCanvas(existing.id);
+          showToast(`Removed ${existing.name} from mannequin`, 'info');
+        } else {
+          setSelectedItemId(existing.id);
+          showToast(`Selected ${existing.name}`, 'info');
+        }
+        return;
+      }
+
       let finalImageUrl = wardrobeItem.image_url || '';
 
       // On web, attempt client-side background removal
@@ -234,6 +254,9 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       // `prev` rather than the closed-over canvasItems snapshot.
       const baseItem = createMannequinItem(itemWithProcessedImg, 0);
       setCanvasItems((prev) => {
+        if (prev.some((i) => i.wardrobe_item_id === wardrobeItem.id)) {
+          return prev;
+        }
         const maxZ = prev.reduce((max, i) => Math.max(max, i.zIndex), 0);
         const placedItem = { ...baseItem, zIndex: Math.max(baseItem.zIndex, maxZ + 1) };
         return [...prev, placedItem];
@@ -241,7 +264,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       setSelectedItemId(baseItem.id);
       showToast(`Added ${baseItem.name} to mannequin`, 'info');
     },
-    [showToast]
+    [canvasItems, selectedItemId, handleRemoveFromCanvas, showToast]
   );
 
   // Handle transform updates from gesture interactions
@@ -273,12 +296,6 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
         return { ...item, rotation: (item.rotation + deltaDeg) % 360 };
       })
     );
-  }, []);
-
-  // Remove from canvas
-  const handleRemoveFromCanvas = useCallback((id: string) => {
-    setCanvasItems((prev) => prev.filter((item) => item.id !== id));
-    setSelectedItemId((current) => (current === id ? null : current));
   }, []);
 
   // Bring forward
@@ -646,88 +663,109 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
         </View>
       </View>
 
-      {/* ── Size & Layer Controls (when item selected) ── */}
-      {selectedItemId && activeSelectedItem && (
-        <View style={[styles.layerToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.controlGroup}>
-            <Text style={[styles.controlLabel, { color: colors.secondaryText }]}>Size:</Text>
-            <TouchableOpacity
-              style={[styles.controlBtn, { backgroundColor: colors.tint }]}
-              onPress={() => handleScaleChange(selectedItemId, 0.10)}
-              accessibilityLabel="Enlarge"
-            >
-              <Text style={[styles.controlBtnText, { color: colors.onTint }]}>+</Text>
-            </TouchableOpacity>
-            <Text style={[styles.scaleValue, { color: colors.text }]}>
-              {Math.round(activeSelectedItem.scale * 100)}%
+      {/* ── Size & Layer Controls (Fixed geometry bar) ── */}
+      <View style={styles.toolbarSlot}>
+        {selectedItemId && activeSelectedItem ? (
+          <View style={[styles.layerToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.controlGroup}>
+              <Text style={[styles.controlLabel, { color: colors.secondaryText }]}>Size:</Text>
+              <TouchableOpacity
+                style={[styles.controlBtn, { backgroundColor: colors.tint }]}
+                onPress={() => handleScaleChange(selectedItemId, 0.10)}
+                accessibilityLabel="Enlarge"
+              >
+                <Text style={[styles.controlBtnText, { color: colors.onTint }]}>+</Text>
+              </TouchableOpacity>
+              <Text style={[styles.scaleValue, { color: colors.text }]}>
+                {Math.round(activeSelectedItem.scale * 100)}%
+              </Text>
+              <TouchableOpacity
+                style={[styles.controlBtn, { backgroundColor: colors.tint }]}
+                onPress={() => handleScaleChange(selectedItemId, -0.10)}
+                accessibilityLabel="Shrink"
+              >
+                <Text style={[styles.controlBtnText, { color: colors.onTint }]}>−</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.controlGroup}>
+              {/* Rotate */}
+              <TouchableOpacity
+                style={[styles.layerBtn, { backgroundColor: colors.surface }]}
+                onPress={() => handleRotateChange(selectedItemId, 15)}
+                accessibilityLabel="Rotate"
+              >
+                <IconSymbol name="arrow.clockwise" size={12} color={colors.text} />
+              </TouchableOpacity>
+
+              {/* Layer order */}
+              <TouchableOpacity
+                style={[styles.layerBtn, { backgroundColor: colors.surface }]}
+                onPress={() => handleBringForward(selectedItemId)}
+                accessibilityLabel="Bring forward"
+              >
+                <IconSymbol name="arrow.up" size={11} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.layerBtn, { backgroundColor: colors.surface }]}
+                onPress={() => handleSendBackward(selectedItemId)}
+                accessibilityLabel="Send back"
+              >
+                <IconSymbol name="arrow.down" size={11} color={colors.text} />
+              </TouchableOpacity>
+
+              {/* Remove */}
+              <TouchableOpacity
+                style={[styles.layerBtn, { backgroundColor: 'rgba(239,68,68,0.12)' }]}
+                onPress={() => handleRemoveFromCanvas(selectedItemId)}
+                accessibilityLabel="Remove"
+              >
+                <IconSymbol name="xmark" size={11} color="#EF4444" />
+              </TouchableOpacity>
+
+              {/* Done / Deselect */}
+              <TouchableOpacity
+                style={[styles.doneBtn, { backgroundColor: colors.tint }]}
+                onPress={() => setSelectedItemId(null)}
+                accessibilityLabel="Done styling"
+              >
+                <IconSymbol name="checkmark" size={10} color={colors.onTint} />
+                <Text style={[styles.doneBtnText, { color: colors.onTint }]}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.toolbarEmptyPrompt, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <IconSymbol
+              name={canvasItems.length === 0 ? 'tshirt' : 'hand.tap'}
+              size={12}
+              color={colors.secondaryText}
+            />
+            <Text style={[styles.toolbarEmptyPromptText, { color: colors.secondaryText }]}>
+              {canvasItems.length === 0
+                ? 'Select garments below to dress the mannequin'
+                : 'Tap a garment on the mannequin to resize or layer'}
             </Text>
-            <TouchableOpacity
-              style={[styles.controlBtn, { backgroundColor: colors.tint }]}
-              onPress={() => handleScaleChange(selectedItemId, -0.10)}
-              accessibilityLabel="Shrink"
-            >
-              <Text style={[styles.controlBtnText, { color: colors.onTint }]}>−</Text>
-            </TouchableOpacity>
           </View>
-
-          <View style={styles.controlGroup}>
-            {/* Rotate */}
-            <TouchableOpacity
-              style={[styles.layerBtn, { backgroundColor: colors.surface }]}
-              onPress={() => handleRotateChange(selectedItemId, 15)}
-              accessibilityLabel="Rotate"
-            >
-              <IconSymbol name="arrow.clockwise" size={12} color={colors.text} />
-            </TouchableOpacity>
-
-            {/* Layer order */}
-            <TouchableOpacity
-              style={[styles.layerBtn, { backgroundColor: colors.surface }]}
-              onPress={() => handleBringForward(selectedItemId)}
-              accessibilityLabel="Bring forward"
-            >
-              <IconSymbol name="arrow.up" size={11} color={colors.text} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.layerBtn, { backgroundColor: colors.surface }]}
-              onPress={() => handleSendBackward(selectedItemId)}
-              accessibilityLabel="Send back"
-            >
-              <IconSymbol name="arrow.down" size={11} color={colors.text} />
-            </TouchableOpacity>
-
-            {/* Remove */}
-            <TouchableOpacity
-              style={[styles.layerBtn, { backgroundColor: 'rgba(239,68,68,0.12)' }]}
-              onPress={() => handleRemoveFromCanvas(selectedItemId)}
-              accessibilityLabel="Remove"
-            >
-              <IconSymbol name="xmark" size={11} color="#EF4444" />
-            </TouchableOpacity>
-
-            {/* Done / Deselect */}
-            <TouchableOpacity
-              style={[styles.doneBtn, { backgroundColor: colors.tint }]}
-              onPress={() => setSelectedItemId(null)}
-              accessibilityLabel="Done styling"
-            >
-              <IconSymbol name="checkmark" size={10} color={colors.onTint} />
-              <Text style={[styles.doneBtnText, { color: colors.onTint }]}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+        )}
+      </View>
 
       {/* ── Mannequin Canvas ── */}
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={() => setSelectedItemId(null)}
+      <View
         style={[styles.canvasOuter, { borderColor: colors.border, backgroundColor: canvasBgColor }]}
       >
         <View
           ref={canvasRef}
           style={[styles.canvasStage, { width: CANVAS_WIDTH, height: canvasHeight }]}
         >
+          {/* Backdrop pressable: deselects garment when tapping empty canvas space */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setSelectedItemId(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Deselect garment"
+          />
+
           {/* Dress-form silhouette (Classic or Custom Proportioned) */}
           <MannequinSilhouette
             color={isDark ? '#C9B99A' : '#D4C5B0'}
@@ -762,7 +800,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
             </Text>
           </View>
         )}
-      </TouchableOpacity>
+      </View>
 
       {/* ── Collapsible Wardrobe Drawer ── */}
       <View style={styles.drawerSection}>
@@ -1223,15 +1261,35 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  /* ── Layer / Size Controls ── */
+  /* ── Layer / Size Controls (Fixed geometry bar) ── */
+  toolbarSlot: {
+    height: 40,
+    marginHorizontal: Spacing.lg,
+    marginBottom: 6,
+    justifyContent: 'center',
+  },
+  toolbarEmptyPrompt: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  toolbarEmptyPromptText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
   layerToolbar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: Spacing.lg,
-    marginBottom: 6,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: Radius.md,
     borderWidth: 1,
   },
