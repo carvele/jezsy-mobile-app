@@ -31,23 +31,9 @@ import { ImageCropModal } from '@/src/components/ImageCropModal';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 import { isOnline } from '@/src/services/offlineSync';
 import { fashionMlService } from '@/src/services/fashionMlService';
+import { inferSystemBucket } from '@/src/utils/garmentSemanticClassifier';
 
 const { width } = Dimensions.get('window');
-
-/**
- * Infers core garment bucket for backward-compatible system features
- * (e.g. mannequin z-index slotting and gap analysis) without restricting user categories.
- */
-function inferGarmentBucket(category: string, subCategory: string, description: string): string {
-  const combined = `${category} ${subCategory} ${description}`.toLowerCase();
-  if (combined.match(/\b(dress|gown|jumpsuit|romper|one.?piece|swimsuit)\b/)) return 'Dress';
-  if (combined.match(/\b(jacket|blazer|coat|cardigan|outerwear|vest|hoodie|windbreaker)\b/)) return 'Outerwear';
-  if (combined.match(/\b(shoe|sneaker|heel|boot|loafer|sandal|pump|footwear|flat)\b/)) return 'Shoes';
-  if (combined.match(/\b(pant|trouser|jean|skirt|short|bottom|slack|legging)\b/)) return 'Bottom';
-  if (combined.match(/\b(bag|purse|clutch|tote|belt|hat|cap|jewelry|necklace|earring|bracelet|accessory|scarf)\b/)) return 'Accessory';
-  if (combined.match(/\b(shirt|top|blouse|tee|sweater|tank|bra|polo|knitwear)\b/)) return 'Top';
-  return 'Top';
-}
 
 export default function AddWardrobeItemScreen() {
   const { showToast } = useToast();
@@ -328,7 +314,7 @@ export default function AddWardrobeItemScreen() {
 
       // Infer bucket for system compat without altering user's text
       const effectiveCategory = trimmedCategory || 'Clothing';
-      const inferredBucket = inferGarmentBucket(effectiveCategory, trimmedSub, trimmedDesc);
+      const inferredBucket = inferSystemBucket(effectiveCategory, trimmedSub, trimmedDesc);
 
       // Parse color tags from text for filtering while preserving exact user text
       const parsedColorTags = trimmedColor
