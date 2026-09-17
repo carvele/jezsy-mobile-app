@@ -21,7 +21,9 @@ export interface GarmentAnalysisResult {
   silhouette?: string;
   occasions: string[];
   seasons: string[];
+  description?: string;
   confidence: number;
+  moreDetails?: Record<string, string>;
   modelMetadata: {
     name: string;
     version: string;

@@ -70,7 +70,7 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.container}>
-          <Text style={styles.title}>Customize Color</Text>
+          <Text style={styles.title}>Add Another Color</Text>
 
           {/* Color Preview & HEX */}
           <View style={styles.previewRow}>
@@ -81,7 +81,7 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
                 style={styles.input}
                 value={name}
                 onChangeText={setName}
-                placeholder="e.g. Navy Blue"
+                placeholder="e.g. Navy Blue, Charcoal"
                 placeholderTextColor="#666"
               />
               <Text style={[styles.label, { marginTop: 8 }]}>HEX Code</Text>
@@ -99,14 +99,18 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
           {/* Role Selection */}
           <Text style={styles.sectionLabel}>Color Role</Text>
           <View style={styles.roleRow}>
-            {(['dominant', 'secondary', 'accent'] as ColorRole[]).map((r) => (
+            {[
+              { id: 'dominant', label: 'Main color' },
+              { id: 'secondary', label: 'Other color' },
+              { id: 'accent', label: 'Accent color' },
+            ].map((item) => (
               <TouchableOpacity
-                key={r}
-                style={[styles.roleChip, role === r && styles.roleChipActive]}
-                onPress={() => setRole(r)}
+                key={item.id}
+                style={[styles.roleChip, role === item.id && styles.roleChipActive]}
+                onPress={() => setRole(item.id as ColorRole)}
               >
-                <Text style={[styles.roleText, role === r && styles.roleTextActive]}>
-                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                <Text style={[styles.roleText, role === item.id && styles.roleTextActive]}>
+                  {item.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -134,7 +138,7 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.saveBtn} onPress={handleConfirm}>
-              <Text style={styles.saveText}>Save Color</Text>
+              <Text style={styles.saveText}>Add Color</Text>
             </TouchableOpacity>
           </View>
         </View>

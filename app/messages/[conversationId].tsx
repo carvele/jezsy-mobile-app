@@ -220,56 +220,63 @@ export default function ChatScreen() {
 
     fetchMessages();
 
-    const messageSubscription = supabase
-      .channel(`messages:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`
-        },
-        (payload: any) => {
-          setMessages(prev => {
-            if (prev.find(m => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
-          });
-          if (payload.new.sender_id !== session?.user.id) {
-            markDelivered(conversationId);
-            markAsRead(conversationId);
+    let messageSubscription: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      messageSubscription = supabase
+        .channel(`messages:${conversationId}:${Date.now()}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages',
+            filter: `conversation_id=eq.${conversationId}`
+          },
+          (payload: any) => {
+            setMessages(prev => {
+              if (prev.find(m => m.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
+            if (payload.new.sender_id !== session?.user.id) {
+              markDelivered(conversationId);
+              markAsRead(conversationId);
+            }
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`
-        },
-        (payload: any) => {
-          setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`
-        },
-        (payload: any) => {
-          setMessages(prev => prev.filter(m => m.id !== payload.old.id));
-        }
-      )
-      .subscribe();
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'messages',
+            filter: `conversation_id=eq.${conversationId}`
+          },
+          (payload: any) => {
+            setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'messages',
+            filter: `conversation_id=eq.${conversationId}`
+          },
+          (payload: any) => {
+            setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn('Failed to subscribe to conversation messages:', err);
+    }
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(messageSubscription);
+      if (messageSubscription) {
+        supabase.removeChannel(messageSubscription);
+      }
     };
   }, [conversationId, markAsRead, markDelivered, session?.user.id, reconnectTick]);
 

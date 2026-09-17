@@ -212,17 +212,24 @@ export default function ReservationDetailScreen() {
       fetchPaymentInstructions();
       if (!id) return;
 
-      const channel = supabase
-        .channel(`reservation-detail:${id}`)
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'reservations', filter: `id=eq.${id}` },
-          (payload) => setReservation(payload.new as Reservation),
-        )
-        .subscribe();
+      let channel: ReturnType<typeof supabase.channel> | null = null;
+      try {
+        channel = supabase
+          .channel(`reservation-detail:${id}:${Date.now()}`)
+          .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'reservations', filter: `id=eq.${id}` },
+            (payload) => setReservation(payload.new as Reservation),
+          )
+          .subscribe();
+      } catch (err) {
+        console.warn('Failed to subscribe to reservation channel:', err);
+      }
 
       return () => {
-        supabase.removeChannel(channel);
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
       };
     }, [fetchReservation, fetchPaymentInstructions, id]),
   );

@@ -162,19 +162,27 @@ export default function ExploreScreen() {
   useEffect(() => {
     fetchCategories();
 
-    const channel = supabase
-      .channel('categories_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'categories' },
-        () => {
-          fetchCategories();
-        }
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      const channelName = `categories_realtime_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'categories' },
+          () => {
+            fetchCategories();
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn('Failed to subscribe to categories_realtime:', err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [fetchCategories]);
 

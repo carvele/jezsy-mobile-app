@@ -27,6 +27,9 @@ export interface StylistCritique {
   grade: GradeLetter;
   headline: string;
   verdict: string;
+  whatWorks?: string;
+  whatCouldBeBetter?: string;
+  stylistTip?: string;
   pillars: {
     colorHarmony: StylePillarBreakdown;
     compositionAndLayers: StylePillarBreakdown;
@@ -258,13 +261,63 @@ export function gradeOutfit(
   else if (compScore >= 60) compStatus = 'warning';
   else compStatus = 'alert';
 
-  // 3. Evaluate Color Harmony Pillar
+  // 3. Evaluate Color Harmony Pillar with Complete Outfit Context
   const paletteColors = extractColors(items, wardrobeLookup);
   const colorEval: ColorMatchResult = evaluateColors(paletteColors);
 
-  let colorScore = colorEval.score;
-  let colorStatus: StylePillarBreakdown['status'] = 'good';
+  // Check for intentional statement piece with neutral grounding:
+  // e.g. a colorful or graphic top/dress anchored by a blazer/jacket, neutral bottoms, or clean sneakers
+  const NEUTRAL_COLORS = new Set([
+    'black', 'white', 'charcoal', 'grey', 'gray', 'navy', 'beige', 'cream', 'brown', 'tan', 'camel', 'khaki'
+  ]);
 
+  const statementPiece = items.find((item) => {
+    const matching = wardrobeLookup?.[item.wardrobe_item_id];
+    const pat = ((matching as any)?.pattern || '').toLowerCase();
+    const name = (item.name || '').toLowerCase();
+    const sub = (matching?.sub_category || '').toLowerCase();
+    const tags = matching?.color_tags || [];
+    return (
+      pat.includes('graphic') ||
+      pat.includes('multicolor') ||
+      pat.includes('floral') ||
+      pat.includes('plaid') ||
+      name.includes('graphic') ||
+      sub.includes('graphic') ||
+      tags.length >= 3
+    );
+  });
+
+  const hasNeutralBlazerOrOuter = outers.some((o) => {
+    const matching = wardrobeLookup?.[o.wardrobe_item_id];
+    const name = (o.name || matching?.sub_category || matching?.category || '').toLowerCase();
+    const colorsOfOuter = (matching?.color_tags || []).map((c) => c.toLowerCase());
+    const isBlazer = name.includes('blazer') || name.includes('jacket') || name.includes('coat');
+    const isNeutralColor = colorsOfOuter.length === 0 || colorsOfOuter.some((c) => NEUTRAL_COLORS.has(c)) || !colorsOfOuter.some((c) => !NEUTRAL_COLORS.has(c));
+    return isBlazer && isNeutralColor;
+  });
+
+  const hasSneakersOrCasualShoes = shoes.some((s) => {
+    const matching = wardrobeLookup?.[s.wardrobe_item_id];
+    const name = (s.name || matching?.sub_category || matching?.category || '').toLowerCase();
+    return name.includes('sneaker') || name.includes('shoe') || name.includes('flat') || name.includes('loafer');
+  });
+
+  const isStatementWithNeutralAnchor = !!statementPiece && (hasNeutralBlazerOrOuter || (hasSneakersOrCasualShoes && (bottoms.length > 0 || dresses.length > 0)));
+
+  let colorScore = colorEval.score;
+  let colorTitle = colorEval.label;
+  let colorFeedback = colorEval.feedback;
+
+  // Holistic reasoning: If a multi-colored graphic piece is framed by neutral outerwear or clean footwear,
+  // do not penalize it as random clashing. Recognize the intentional statement + neutral anchor pairing!
+  if (isStatementWithNeutralAnchor && (colorEval.label === 'Clashing Colors' || colorScore < 75)) {
+    colorScore = 86;
+    colorTitle = 'Balanced Accent Colors' as any;
+    colorFeedback = 'Your colorful statement piece provides energy and focal contrast, while the neutral blazer and footwear provide structure and balance.';
+  }
+
+  let colorStatus: StylePillarBreakdown['status'] = 'good';
   if (colorScore >= 88) colorStatus = 'excellent';
   else if (colorScore >= 75) colorStatus = 'good';
   else if (colorScore >= 60) colorStatus = 'warning';
@@ -273,11 +326,11 @@ export function gradeOutfit(
   const colorPillar: StylePillarBreakdown = {
     score: colorScore,
     status: colorStatus,
-    title: colorEval.label,
-    feedback: colorEval.feedback,
+    title: colorTitle,
+    feedback: colorFeedback,
   };
 
-  if (colorEval.label === 'Clashing Colors') {
+  if (colorEval.label === 'Clashing Colors' && !isStatementWithNeutralAnchor) {
     tips.unshift('Try swapping one high-saturation piece for a neutral tone (cream, navy, or charcoal) to let one hero color lead.');
   } else if (paletteColors.length === 1 && !['black', 'white', 'gray', 'grey'].includes(paletteColors[0].toLowerCase())) {
     tips.push(`Introduce a quiet neutral anchor to give the bold ${paletteColors[0]} hue breathing room.`);
@@ -287,42 +340,67 @@ export function gradeOutfit(
   // Incomplete looks cap the max score so an unstyled top can't receive an A
   const rawWeightedScore = (colorScore * 0.45) + (compScore * 0.55);
   let maxCap = 100;
-  if (isOvercrowded) maxCap = 68; // Overcrowded canvas cannot get above C+
+  if (isOvercrowded) maxCap = 68;
   else if (items.length === 1 && !hasDress) maxCap = 65;
 
   const overallScore = Math.max(15, Math.min(maxCap, Math.round(rawWeightedScore)));
   const grade = scoreToGrade(overallScore);
 
-  // 5. Generate Headline & Verdict
+  // 5. Generate Headline, Verdict, and Structured Sections (WHAT WORKS, WHAT COULD BE BETTER, STYLIST'S TIP)
   let headline = 'Refined & Harmonious';
   let verdict = 'This combination strikes a tasteful balance of color and structure.';
+  let whatWorks = 'The pieces complement each other in tone and proportion.';
+  let whatCouldBeBetter = 'Ensure hem lengths and footwear balance comfortably.';
+  let stylistTip = 'Keep accessories clean to maintain a cohesive look.';
 
-  if (isOvercrowded && baseTops.length > 1) {
+  if (isStatementWithNeutralAnchor && hasNeutralBlazerOrOuter) {
+    headline = 'Smart Casual Statement Look';
+    verdict = 'A modern high-low pairing where tailored structure frames a bold expressive focal point.';
+    whatWorks = 'Your blazer gives structure to the colorful shirt, while the sneakers keep the outfit relaxed.';
+    whatCouldBeBetter = 'The shirt already has several bright colors, so keeping the remaining pieces simple can help it stay the main focus.';
+    stylistTip = 'Let one piece stand out and use the other pieces to support it.';
+  } else if (isOvercrowded && baseTops.length > 1) {
     headline = 'Overcrowded Top Half';
     verdict = `You have ${baseTops.length} competing tops floating on the mannequin. Choose one primary top and layer an outerwear jacket over it to create a clean, wearable silhouette.`;
+    whatWorks = 'The garments feature stylish individual cuts.';
+    whatCouldBeBetter = 'Multiple tops worn at once create unnecessary bulk and compete for attention.';
+    stylistTip = 'Commit to one hero top and use outerwear if you want a layered feel.';
   } else if (isOvercrowded) {
     headline = 'Cluttered Combination';
     verdict = 'Too many competing garments are stacked on the mannequin. Simplify the layers so each piece has room to shine.';
+    whatWorks = 'The wardrobe pieces show great personality and variety.';
+    whatCouldBeBetter = 'Garment boundaries overlap, making the silhouette feel heavy.';
+    stylistTip = 'Simplify to one top, one bottom (or a dress), and one outerwear layer.';
+  } else if (items.length === 1 && !hasDress) {
+    headline = 'Incomplete Ensemble';
+    verdict = 'A great starting piece that needs matching separates to form a complete outfit.';
+    whatWorks = 'The individual garment is a versatile wardrobe staple.';
+    whatCouldBeBetter = 'The look is currently missing separates to create a functional outfit.';
+    stylistTip = hasTop ? 'Pair with trousers or a skirt to complete the foundation.' : 'Add a top or blouse to finish the base look.';
   } else if (colorEval.label === 'Clashing Colors') {
     headline = 'Bold & High Contrast';
     verdict = 'An adventurous, high-energy pairing, but the competing saturation creates visual tension. Grounding one piece will instantly elevate it.';
-  } else if (overallScore >= 92) {
+    whatWorks = 'High visual energy that shows personal confidence.';
+    whatCouldBeBetter = 'Multiple saturated hues compete for the eye without a resting point.';
+    stylistTip = 'Anchor with at least one neutral tone (black, cream, or navy) to let a single hero color shine.';
+  } else if (overallScore >= 90) {
     headline = 'Chic & Masterfully Balanced';
     verdict = 'A cohesive ensemble with impeccable color chemistry and deliberate proportion. Ready to wear with confidence.';
+    whatWorks = 'Flawless synergy between silhouettes and color tones.';
+    whatCouldBeBetter = 'Nothing critical to adjust—the look is exceptionally well-styled.';
+    stylistTip = 'Add a minimalist watch or delicate jewelry to finish the look.';
   } else if (overallScore >= 80) {
     headline = 'Polished & Versatile';
     verdict = 'A well-composed outfit that feels intentional and effortless. Clean lines and great synergy.';
-  } else if (overallScore >= 65) {
-    headline = 'Casual & Expressive';
-    verdict = 'A relaxed, easygoing combination. A minor tweak to layering or accessories will pull the look together.';
-  } else {
-    headline = 'Needs Harmonizing';
-    verdict = 'The pieces are competing for focus. Focus on a single statement piece and build neutral structure around it.';
+    whatWorks = 'Balanced proportions with harmonious, easy-to-wear tones.';
+    whatCouldBeBetter = 'A small accent piece can add an extra layer of visual interest.';
+    stylistTip = 'Choose footwear that matches the formality of your planned setting.';
   }
 
   // 6. Deduce Style Vibe
   let vibe = 'Modern Casual';
-  if (isOvercrowded) vibe = 'Layering Experiment';
+  if (isStatementWithNeutralAnchor) vibe = 'Smart-Casual Statement';
+  else if (isOvercrowded) vibe = 'Layering Experiment';
   else if (hasOuterwear && (outers.some((o) => (o.name || '').toLowerCase().includes('blazer')))) vibe = 'Smart Tailored';
   else if (hasDress) vibe = 'Effortless Elegance';
   else if (colorEval.label === 'Clashing Colors') vibe = 'Avant-Garde Streetwear';
@@ -338,6 +416,9 @@ export function gradeOutfit(
     grade,
     headline,
     verdict,
+    whatWorks,
+    whatCouldBeBetter,
+    stylistTip,
     pillars: {
       colorHarmony: colorPillar,
       compositionAndLayers: {

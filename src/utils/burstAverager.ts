@@ -14,8 +14,13 @@
 import type { BodyRatios, WorldLandmark, PoseOrientation } from './poseDetector';
 import { computeMeasurements, type EstimatedMeasurements, type Gender, type MeasurementInput } from './measurementCalculator';
 
-// Number of valid frames to collect before completing the burst
-const TARGET_FRAMES = 5;
+// Number of valid frames to collect before completing the burst. Kept one
+// frame above MIN_FRAMES on purpose: rejectOutlierFrames() only filters when
+// the surviving set would still be >= MIN_FRAMES, so this margin is what lets
+// it reject a single swaying/jittery frame and still filter -- dropping to
+// MIN_FRAMES itself would zero that margin and disable outlier rejection on
+// any burst with even one rejected frame.
+const TARGET_FRAMES = 4;
 const MIN_FRAMES = 3; // Accept if we can't get TARGET_FRAMES
 
 // A frame is accepted into the burst only if it clears this pose-confidence

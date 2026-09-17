@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform, useWindowDimensions, AppState } from 'react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { WebView } from 'react-native-webview';
 import { Camera, useCameraDevice, useCameraFormat, useCameraPermission, usePoseDetection, RunningMode, Delegate } from '@/src/utils/nativeVision';
 import * as Speech from 'expo-speech';
@@ -1083,13 +1084,14 @@ export default function ARTryOnScreen() {
   `;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: '#000000' }]} edges={['top']}>
+      <StatusBar style="light" />
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
-          <IconSymbol name="chevron.left" size={24} color={colors.text} />
+          <IconSymbol name="chevron.left" size={24} color="#FFF" />
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>AR Try-On</Text>
+          <Text style={[styles.headerTitle, { color: '#FFF' }]}>AR Try-On</Text>
           {isDemoRig && (
             <View style={{ backgroundColor: '#FFCC00', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
               <Text style={{ color: 'black', fontSize: 10, fontWeight: 'bold' }}>⚠️ Demo rig</Text>
@@ -1204,6 +1206,7 @@ export default function ARTryOnScreen() {
               fps={targetFps}
               isActive={cameraActive && !cameraError && !replayActive}
               pixelFormat="rgb"
+              resizeMode="cover"
               frameProcessor={poseDetection.frameProcessor}
               onLayout={poseDetection.cameraViewLayoutChangeHandler}
               onOutputOrientationChanged={poseDetection.cameraOrientationChangedHandler}
@@ -1372,6 +1375,7 @@ export default function ARTryOnScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000000',
   },
   arLoadErrorBanner: {
     position: 'absolute',
@@ -1449,6 +1453,8 @@ const styles = StyleSheet.create({
   webviewContainer: {
     flex: 1,
     position: 'relative',
+    backgroundColor: '#000000',
+    overflow: 'hidden',
   },
   webview: {
     flex: 1,
@@ -1480,6 +1486,7 @@ const styles = StyleSheet.create({
   },
   camera: {
     flex: 1,
+    backgroundColor: '#000000',
   },
   overlayContainer: {
     position: 'absolute',

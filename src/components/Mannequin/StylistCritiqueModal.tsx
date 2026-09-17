@@ -126,7 +126,7 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
             <View style={[styles.verdictCard, { backgroundColor: colors.tint + '0C', borderColor: colors.tint + '30' }]}>
               <View style={styles.verdictHeader}>
                 <IconSymbol name="bubble.left.and.bubble.right" size={13} color={colors.tint} />
-                <Text style={[styles.verdictTitle, { color: colors.tint }]}>Stylist&apos;s Verdict</Text>
+                <Text style={[styles.verdictTitle, { color: colors.tint }]}>Stylist&apos;s Take</Text>
               </View>
               <Text style={[styles.verdictText, { color: colors.text }]}>
                 &quot;{critique.verdict}&quot;
@@ -136,7 +136,7 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
             {/* Evaluated Color Palette Chips */}
             {critique.paletteColors.length > 0 && (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Detected Palette</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Colors in This Outfit</Text>
                 <View style={styles.paletteRow}>
                   {critique.paletteColors.map((colorName, idx) => (
                     <View
@@ -153,12 +153,53 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
               </View>
             )}
 
-            {/* Pillar 1: Color Chemistry */}
+            {/* Structured Insights: What Works, What Could Be Better, Stylist's Tip */}
+            {(critique.whatWorks || critique.whatCouldBeBetter || critique.stylistTip) && (
+              <View style={styles.section}>
+                {critique.whatWorks && (
+                  <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(34,197,94,0.3)' }]}>
+                    <View style={styles.insightHeader}>
+                      <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(34,197,94,0.15)' }]}>
+                        <IconSymbol name="checkmark.circle.fill" size={13} color="#16A34A" />
+                      </View>
+                      <Text style={[styles.insightTitle, { color: '#16A34A' }]}>WHAT WORKS</Text>
+                    </View>
+                    <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatWorks}</Text>
+                  </View>
+                )}
+
+                {critique.whatCouldBeBetter && (
+                  <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: 'rgba(217,119,6,0.3)', marginTop: Spacing.sm }]}>
+                    <View style={styles.insightHeader}>
+                      <View style={[styles.insightIconBadge, { backgroundColor: 'rgba(217,119,6,0.15)' }]}>
+                        <IconSymbol name="exclamationmark.triangle.fill" size={13} color="#D97706" />
+                      </View>
+                      <Text style={[styles.insightTitle, { color: '#D97706' }]}>WHAT COULD BE BETTER</Text>
+                    </View>
+                    <Text style={[styles.insightBody, { color: colors.text }]}>{critique.whatCouldBeBetter}</Text>
+                  </View>
+                )}
+
+                {critique.stylistTip && (
+                  <View style={[styles.insightCard, { backgroundColor: colors.card, borderColor: colors.tint + '40', marginTop: Spacing.sm }]}>
+                    <View style={styles.insightHeader}>
+                      <View style={[styles.insightIconBadge, { backgroundColor: colors.tint + '18' }]}>
+                        <IconSymbol name="lightbulb" size={13} color={colors.tint} />
+                      </View>
+                      <Text style={[styles.insightTitle, { color: colors.tint }]}>STYLIST&apos;S TIP</Text>
+                    </View>
+                    <Text style={[styles.insightBody, { color: colors.text }]}>{critique.stylistTip}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Pillar 1: Colors */}
             <View style={[styles.pillarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.pillarHeader}>
                 <View style={styles.pillarTitleRow}>
                   <IconSymbol name="paintpalette.fill" size={14} color={colors.tint} />
-                  <Text style={[styles.pillarTitle, { color: colors.text }]}>Color Chemistry</Text>
+                  <Text style={[styles.pillarTitle, { color: colors.text }]}>Colors</Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: colorPillarBadge.bg }]}>
                   <Text style={[styles.statusBadgeText, { color: colorPillarBadge.color }]}>
@@ -174,12 +215,12 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
               </Text>
             </View>
 
-            {/* Pillar 2: Composition & Layering */}
+            {/* Pillar 2: What works together */}
             <View style={[styles.pillarCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.pillarHeader}>
                 <View style={styles.pillarTitleRow}>
                   <IconSymbol name="tshirt.fill" size={14} color={colors.tint} />
-                  <Text style={[styles.pillarTitle, { color: colors.text }]}>Composition & Layers</Text>
+                  <Text style={[styles.pillarTitle, { color: colors.text }]}>What works together</Text>
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: compPillarBadge.bg }]}>
                   <Text style={[styles.statusBadgeText, { color: compPillarBadge.color }]}>
@@ -198,7 +239,7 @@ export function StylistCritiqueModal({ visible, critique, onClose, onSaveLook }:
             {/* Stylist Pro-Tips */}
             {critique.tips.length > 0 && (
               <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Stylist&apos;s Pro-Tips</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>More Styling Tips</Text>
                 <View style={styles.tipsList}>
                   {critique.tips.map((tip, idx) => (
                     <View
@@ -552,5 +593,34 @@ const styles = StyleSheet.create({
   disclaimerText: {
     fontSize: 11,
     lineHeight: 16,
+  },
+  /* Structured Insight Cards */
+  insightCard: {
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: 6,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  insightIconBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  insightTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  insightBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
   },
 });

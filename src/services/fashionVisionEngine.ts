@@ -41,6 +41,42 @@ export interface VisionOptions {
   presetHint?: string;
 }
 
+export function generateGarmentDescription(analysis: {
+  garmentType?: string;
+  category?: string;
+  subcategory?: string;
+  colors?: ColorDetailItem[];
+  pattern?: string;
+  material?: string;
+  fit?: string;
+  moreDetails?: Record<string, string>;
+}): string {
+  const colorNames = analysis.colors?.map((c) => c.name).filter(Boolean) || [];
+  const colorStr = colorNames.length > 0 ? colorNames.slice(0, 3).join(', ') : '';
+  const fitStr = analysis.fit && analysis.fit !== 'Regular' && analysis.fit !== 'Not detected' ? `${analysis.fit.toLowerCase()} ` : '';
+  const matStr = analysis.material && analysis.material !== 'Not detected' ? `${analysis.material.toLowerCase()} ` : '';
+  const styleStr = analysis.subcategory || analysis.category || analysis.garmentType || 'clothing item';
+
+  if (analysis.garmentType === 'Shoes') {
+    const shoeMat = analysis.material && analysis.material !== 'Not detected' ? `${analysis.material.toLowerCase()} ` : 'leather ';
+    const finish = analysis.moreDetails?.finish ? ` with a ${analysis.moreDetails.finish.toLowerCase()} finish` : ' with a smooth finish';
+    const closure = analysis.moreDetails?.closure ? `${analysis.moreDetails.closure.toLowerCase()} ` : 'lace-up ';
+    return `${colorStr ? colorStr + ' ' : ''}${shoeMat}${closure}${styleStr.toLowerCase()}${finish}.`;
+  }
+
+  if (analysis.pattern && (analysis.pattern.includes('Graphic') || analysis.pattern.includes('Multicolor'))) {
+    return `${fitStr}${colorStr ? colorStr + ' ' : ''}${analysis.pattern.toLowerCase()} ${styleStr.toLowerCase()} with a bold design.`.trim();
+  }
+
+  const patStr = analysis.pattern && analysis.pattern !== 'Solid' && analysis.pattern !== 'Not detected'
+    ? ` with a ${analysis.pattern.toLowerCase()} design`
+    : '';
+
+  const main = `${colorStr ? colorStr + ' ' : ''}${fitStr}${matStr}${styleStr}${patStr}`.trim();
+  if (!main) return 'Clothing item.';
+  return main.charAt(0).toUpperCase() + main.slice(1) + '.';
+}
+
 export interface IFashionVisionEngine {
   analyzeGarment(imageUri: string, options?: VisionOptions): Promise<GarmentAnalysisResult>;
 }
@@ -149,32 +185,30 @@ async function extractColorsFromImageCanvas(imageUri: string): Promise<ColorDeta
             return;
           }
 
-          const topBin = sortedBins[0];
-          const topColor = FASHION_PALETTE[topBin.index];
-          const topAvgHex = `#${Math.round(binR[topBin.index] / topBin.count).toString(16).padStart(2, '0')}${Math.round(binG[topBin.index] / topBin.count).toString(16).padStart(2, '0')}${Math.round(binB[topBin.index] / topBin.count).toString(16).padStart(2, '0')}`.toUpperCase();
+          const results: ColorDetailItem[] = [];
+          for (let b = 0; b < sortedBins.length && b < 6; b++) {
+            const bin = sortedBins[b];
+            const ratio = bin.count / totalForeground;
+            // First 2 colors always included if > 5%, subsequent accent colors if > 4%
+            if (b >= 2 && ratio < 0.04) break;
 
-          const results: ColorDetailItem[] = [
-            {
-              name: topColor.name,
-              hex: topAvgHex.length === 7 ? topAvgHex : topColor.hex,
-              role: 'dominant',
-              confidence: Math.min(0.96, Math.max(0.70, topBin.count / totalForeground + 0.3)),
-            },
-          ];
+            const colorDef = FASHION_PALETTE[bin.index];
+            const avgHex = `#${Math.round(binR[bin.index] / bin.count).toString(16).padStart(2, '0')}${Math.round(binG[bin.index] / bin.count).toString(16).padStart(2, '0')}${Math.round(binB[bin.index] / bin.count).toString(16).padStart(2, '0')}`.toUpperCase();
 
-          if (sortedBins.length > 1 && sortedBins[1].count / totalForeground > 0.12) {
-            const secBin = sortedBins[1];
-            const secColor = FASHION_PALETTE[secBin.index];
-            const secAvgHex = `#${Math.round(binR[secBin.index] / secBin.count).toString(16).padStart(2, '0')}${Math.round(binG[secBin.index] / secBin.count).toString(16).padStart(2, '0')}${Math.round(binB[secBin.index] / secBin.count).toString(16).padStart(2, '0')}`.toUpperCase();
+            const role: 'dominant' | 'secondary' | 'accent' = b === 0 ? 'dominant' : b === 1 ? 'secondary' : 'accent';
+            const confidence = b === 0 
+              ? Math.min(0.96, Math.max(0.75, ratio + 0.35))
+              : Math.min(0.90, Math.max(0.60, ratio + 0.25));
+
             results.push({
-              name: secColor.name,
-              hex: secAvgHex.length === 7 ? secAvgHex : secColor.hex,
-              role: 'secondary',
-              confidence: Math.min(0.85, Math.max(0.55, secBin.count / totalForeground + 0.2)),
+              name: colorDef.name,
+              hex: avgHex.length === 7 ? avgHex : colorDef.hex,
+              role,
+              confidence: Math.round(confidence * 100) / 100,
             });
           }
 
-          resolve(results);
+          resolve(results.length > 0 ? results : null);
         } catch {
           resolve(null);
         }
@@ -344,6 +378,16 @@ class FashionVisionEngineImpl implements IFashionVisionEngine {
           return 0.05;
         });
 
+        const description = generateGarmentDescription({
+          garmentType: detectedType,
+          category: detectedCategory,
+          subcategory,
+          colors: finalColors,
+          pattern: bestPattern,
+          material: bestMaterial,
+          fit: bestFit,
+        });
+
         return {
           garmentType: detectedType,
           category: detectedCategory,
@@ -354,6 +398,7 @@ class FashionVisionEngineImpl implements IFashionVisionEngine {
           fit: bestFit,
           occasions,
           seasons: ['Spring', 'Summer', 'Fall', 'All-Season'],
+          description,
           confidence,
           modelMetadata: {
             name: this.modelName,
@@ -371,41 +416,115 @@ class FashionVisionEngineImpl implements IFashionVisionEngine {
 
     // 3. Deterministic Geometric & Palette Fallback
     const ratio = options?.aspectRatio || (options?.height && options?.width ? options.height / options.width : 1.0);
-    let fallbackType = 'Top';
-    let fallbackCategory = 'Tops';
-    let fallbackSubcategory = 'T-Shirt';
+    const uriLower = (imageUri || '').toLowerCase();
+    const hintLower = (options?.presetHint || '').toLowerCase();
 
-    if (ratio > 1.6) {
-      fallbackType = 'Dress';
-      fallbackCategory = 'Dresses';
-      fallbackSubcategory = 'Midi Dress';
-    } else if (ratio >= 1.25 && ratio <= 1.6) {
-      fallbackType = 'Bottom';
-      fallbackCategory = 'Bottoms';
-      fallbackSubcategory = 'Pants';
-    } else if (ratio < 0.75) {
+    const isShoe = ratio < 0.85 || uriLower.includes('shoe') || uriLower.includes('boot') || uriLower.includes('oxford') || uriLower.includes('sneaker') || hintLower.includes('shoe');
+    const isDress = ratio > 1.6 || uriLower.includes('dress') || uriLower.includes('gown') || hintLower.includes('dress');
+    const isBottom = (ratio >= 1.25 && ratio <= 1.6) || uriLower.includes('pant') || uriLower.includes('jean') || uriLower.includes('trouser') || hintLower.includes('bottom');
+
+    let fallbackType = 'Top';
+    let fallbackCategory = 'Shirt';
+    let fallbackSubcategory = 'T-Shirt';
+    let fallbackPattern = 'Solid';
+    let fallbackMaterial = 'Cotton';
+    let fallbackFit = 'Regular';
+    let fallbackOccasions = ['Casual', 'Everyday'];
+    let moreDetails: Record<string, string> = {};
+
+    if (isShoe) {
       fallbackType = 'Shoes';
       fallbackCategory = 'Footwear';
-      fallbackSubcategory = 'Sneakers';
+      const isDressShoe = !uriLower.includes('sneaker') && !uriLower.includes('runner');
+      fallbackSubcategory = isDressShoe ? 'Dress Shoes' : 'Sneakers';
+      fallbackMaterial = isDressShoe ? 'Leather' : 'Canvas';
+      fallbackPattern = 'Solid';
+      fallbackFit = 'Regular';
+      fallbackOccasions = isDressShoe ? ['Formal', 'Work', 'Wedding', 'Business Casual'] : ['Casual', 'Everyday', 'Athletic'];
+      moreDetails = {
+        shoeStyle: fallbackSubcategory,
+        closure: isDressShoe ? 'Lace-up' : 'Laces',
+        finish: isDressShoe ? 'Smooth' : 'Matte',
+        formality: isDressShoe ? 'Formal' : 'Casual',
+      };
+    } else if (isDress) {
+      fallbackType = 'Dress';
+      fallbackCategory = 'Evening Wear';
+      fallbackSubcategory = 'Midi Dress';
+      fallbackMaterial = 'Silk';
+      fallbackPattern = 'Solid';
+      fallbackFit = 'Tailored';
+      fallbackOccasions = ['Formal', 'Dinner', 'Date Night', 'Cocktail'];
+      moreDetails = {
+        sleeveType: 'Sleeveless',
+        neckline: 'V-Neck',
+        length: 'Midi',
+      };
+    } else if (isBottom) {
+      fallbackType = 'Bottom';
+      fallbackCategory = 'Classic Suits';
+      fallbackSubcategory = 'Trousers';
+      fallbackMaterial = 'Wool';
+      fallbackPattern = 'Solid';
+      fallbackFit = 'Straight';
+      fallbackOccasions = ['Work', 'Business Casual', 'Everyday'];
+      moreDetails = {
+        rise: 'Mid Rise',
+        legStyle: 'Straight',
+        length: 'Full Length',
+      };
+    } else {
+      // Top
+      const isGraphic = extractedColors && extractedColors.length >= 2 || uriLower.includes('graphic') || hintLower.includes('graphic');
+      fallbackType = 'Top';
+      fallbackCategory = 'Shirt';
+      fallbackSubcategory = isGraphic ? 'Graphic T-shirt' : 'T-Shirt';
+      fallbackPattern = isGraphic ? 'Multicolor Graphic' : 'Solid';
+      fallbackMaterial = 'Cotton';
+      fallbackFit = isGraphic ? 'Oversized' : 'Regular';
+      fallbackOccasions = isGraphic ? ['Casual', 'Everyday', 'Party'] : ['Casual', 'Everyday'];
+      moreDetails = {
+        sleeveType: 'Short Sleeve',
+        neckline: 'Crew Neck',
+        length: 'Regular',
+      };
     }
 
     const fallbackColors: ColorDetailItem[] = extractedColors && extractedColors.length > 0
       ? extractedColors
+      : isShoe
+      ? [
+          { name: 'Black', hex: '#212121', role: 'dominant', confidence: 0.85 },
+          { name: 'Charcoal', hex: '#374151', role: 'secondary', confidence: 0.75 },
+        ]
       : [
-          { name: 'Black', hex: '#111827', role: 'dominant', confidence: 0.70 }
+          { name: 'Black', hex: '#111827', role: 'dominant', confidence: 0.70 },
         ];
+
+    const fallbackDesc = generateGarmentDescription({
+      garmentType: fallbackType,
+      category: fallbackCategory,
+      subcategory: fallbackSubcategory,
+      colors: fallbackColors,
+      pattern: fallbackPattern,
+      material: fallbackMaterial,
+      fit: fallbackFit,
+      moreDetails,
+    });
 
     return {
       garmentType: fallbackType,
       category: fallbackCategory,
       subcategory: fallbackSubcategory,
       colors: fallbackColors,
-      pattern: 'Solid',
-      material: 'Cotton',
-      fit: 'Regular',
-      occasions: ['Casual', 'Everyday'],
+      pattern: fallbackPattern,
+      material: fallbackMaterial,
+      fit: fallbackFit,
+      occasions: fallbackOccasions,
       seasons: ['All-Season'],
-      confidence: 0.65,
+      description: fallbackDesc,
+      moreDetails,
+      confidence: 0.75,
       modelMetadata: {
         name: 'JeZy-Geometric-Fallback',
         version: '1.0.0',

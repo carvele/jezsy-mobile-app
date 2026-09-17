@@ -79,24 +79,31 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     refreshConversations();
 
     // Realtime subscription for conversation updates, scoped strictly to the current user's conversation
-    const subscription = supabase
-      .channel(`user-conversations:${session.user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conversations',
-          filter: `customer_id=eq.${session.user.id}`,
-        },
-        () => {
-          refreshConversations();
-        }
-      )
-      .subscribe();
+    let subscription: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      subscription = supabase
+        .channel(`user-conversations:${session.user.id}:${Date.now()}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'conversations',
+            filter: `customer_id=eq.${session.user.id}`,
+          },
+          () => {
+            refreshConversations();
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn('Failed to subscribe to user conversations:', err);
+    }
 
     return () => {
-      supabase.removeChannel(subscription);
+      if (subscription) {
+        supabase.removeChannel(subscription);
+      }
     };
   }, [session?.user.id, refreshConversations]);
 
