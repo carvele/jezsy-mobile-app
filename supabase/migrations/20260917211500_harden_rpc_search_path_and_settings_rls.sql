@@ -1,0 +1,562 @@
+-- Migration: 20260917211500_harden_rpc_search_path_and_settings_rls
+-- Description:
+-- 1. Tightens public.settings RLS with allowlisted keys for authenticated customers and anon.
+-- 2. Hardens 5 financial/return RPCs with SECURITY DEFINER SET search_path = '' and schema-qualified references.
+-- 3. Establishes return-window configuration parity between DB and client across 'returnRequestWindow' and 'commerce.return_request_window_days'.
+
+-- ============================================================================
+-- 1. Allowlisted Settings RLS
+-- ============================================================================
+DROP POLICY IF EXISTS "Admin and owner can view settings" ON public.settings;
+DROP POLICY IF EXISTS "Authenticated users can view operational settings" ON public.settings;
+DROP POLICY IF EXISTS "Public can view store info" ON public.settings;
+DROP POLICY IF EXISTS "Public can view settings" ON public.settings;
+
+-- Admin and Owner retain full read access to all settings keys
+CREATE POLICY "Admin and owner can view settings"
+  ON public.settings FOR SELECT
+  TO authenticated
+  USING (public.is_admin_or_owner());
+
+-- Authenticated customers can strictly view designated operational store settings
+CREATE POLICY "Authenticated users can view operational settings"
+  ON public.settings FOR SELECT
+  TO authenticated
+  USING (
+    key IN (
+      'paymentInstructions',
+      'reservationPaymentWindow',
+      'returnRequestWindow',
+      'commerce.return_request_window_days',
+      'storeInfo'
+    )
+  );
+
+-- Anonymous visitors can strictly view general public storefront information
+CREATE POLICY "Public can view store info"
+  ON public.settings FOR SELECT
+  TO anon
+  USING (key = 'storeInfo');
+
+-- ============================================================================
+-- 2. Return-Window Parity & Helper Hardening: is_reservation_return_eligible
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.is_reservation_return_eligible(_reservation_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_res public.reservations%rowtype;
+  v_window_days integer := 7;
+  v_anchor timestamptz;
+BEGIN
+  SELECT * INTO v_res FROM public.reservations WHERE id = _reservation_id;
+  IF NOT FOUND THEN RETURN false; END IF;
+
+  IF pg_catalog.lower(pg_catalog.trim(pg_catalog.coalesce(v_res.status, ''))) <> 'completed' THEN
+    RETURN false;
+  END IF;
+
+  BEGIN
+    SELECT pg_catalog.coalesce(
+      (value->>'days')::integer,
+      (CASE WHEN pg_catalog.jsonb_typeof(value) = 'number' THEN (value)::text::integer ELSE NULL END)
+    ) INTO v_window_days
+    FROM public.settings
+    WHERE key IN ('returnRequestWindow', 'commerce.return_request_window_days')
+    ORDER BY CASE WHEN key = 'returnRequestWindow' THEN 1 ELSE 2 END
+    LIMIT 1;
+
+    IF v_window_days IS NULL OR v_window_days <= 0 THEN
+      v_window_days := 7;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_window_days := 7;
+  END;
+
+  v_anchor := pg_catalog.coalesce(v_res.completed_at, v_res.date::timestamptz);
+  IF v_anchor IS NULL THEN RETURN false; END IF;
+
+  RETURN (pg_catalog.now() - v_anchor) <= (v_window_days || ' days')::interval;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.is_reservation_return_eligible(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_reservation_return_eligible(uuid) TO authenticated, anon;
+
+-- ============================================================================
+-- 3. Hardened RPC: cancel_customer_reservation
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.cancel_customer_reservation(
+  _reservation_id uuid,
+  _reason text DEFAULT 'Cancelled by customer'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_res public.reservations%rowtype;
+  v_status text;
+  v_pstatus text;
+BEGIN
+  IF v_actor IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res FROM public.reservations WHERE id = _reservation_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found.' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF v_res.customer_id <> v_actor THEN
+    RAISE EXCEPTION 'You do not own this reservation.' USING ERRCODE = '42501';
+  END IF;
+
+  v_status := pg_catalog.lower(pg_catalog.trim(pg_catalog.coalesce(v_res.status, '')));
+  v_pstatus := pg_catalog.lower(pg_catalog.trim(pg_catalog.coalesce(v_res.payment_status, '')));
+
+  -- Idempotency check: if already cancelled, return success
+  IF v_status = 'cancelled' THEN
+    RETURN pg_catalog.jsonb_build_object('success', true, 'already_cancelled', true);
+  END IF;
+
+  IF v_status NOT IN ('to pay', 'confirmed') THEN
+    RAISE EXCEPTION 'Only reservations awaiting payment can be cancelled.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_pstatus IN ('paid', 'deposit paid', 'partially paid', 'submitted', 'processing', 'refund required', 'refunded') THEN
+    RAISE EXCEPTION 'A reservation with payment activity cannot be cancelled directly.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.payments p
+    WHERE p.reservation_id = _reservation_id
+      AND pg_catalog.lower(pg_catalog.trim(pg_catalog.coalesce(p.status, ''))) IN ('paid', 'processing')
+  ) THEN
+    RAISE EXCEPTION 'Payment in progress; cannot cancel.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  UPDATE public.reservations
+  SET status = 'Cancelled',
+      cancellation_reason = pg_catalog.coalesce(pg_catalog.nullif(pg_catalog.trim(_reason), ''), 'Cancelled by customer'),
+      updated_at = pg_catalog.now()
+  WHERE id = _reservation_id;
+
+  RETURN pg_catalog.jsonb_build_object('success', true, 'reservation_id', _reservation_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.cancel_customer_reservation(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cancel_customer_reservation(uuid, text) TO authenticated;
+
+-- ============================================================================
+-- 4. Hardened RPC: request_customer_refund
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.request_customer_refund(
+  _reservation_id uuid,
+  _reason_category text,
+  _details text DEFAULT NULL,
+  _photo_path text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_res public.reservations%rowtype;
+  v_req public.return_refund_requests%rowtype;
+  v_trimmed_reason text := pg_catalog.trim(pg_catalog.coalesce(_reason_category, ''));
+  v_display text;
+BEGIN
+  IF v_actor IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.' USING ERRCODE = '42501';
+  END IF;
+
+  IF v_trimmed_reason = '' THEN
+    RAISE EXCEPTION 'Reason category is required.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT * INTO v_res FROM public.reservations WHERE id = _reservation_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found.' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF v_res.customer_id <> v_actor THEN
+    RAISE EXCEPTION 'You do not own this reservation.' USING ERRCODE = '42501';
+  END IF;
+
+  IF pg_catalog.lower(pg_catalog.trim(pg_catalog.coalesce(v_res.status, ''))) <> 'completed' THEN
+    RAISE EXCEPTION 'Only completed reservations can request a return or refund.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NOT public.is_reservation_return_eligible(_reservation_id) THEN
+    RAISE EXCEPTION 'The return request window for this reservation has expired.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.return_refund_requests
+    WHERE reservation_id = _reservation_id
+      AND status IN ('submitted', 'under_review', 'approved')
+  ) THEN
+    RAISE EXCEPTION 'An active return or refund request already exists for this reservation.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  INSERT INTO public.return_refund_requests (
+    reservation_id,
+    customer_id,
+    reason_category,
+    details,
+    photo_path,
+    status
+  )
+  VALUES (
+    _reservation_id,
+    v_actor,
+    v_trimmed_reason,
+    pg_catalog.nullif(pg_catalog.trim(_details), ''),
+    pg_catalog.nullif(pg_catalog.trim(_photo_path), ''),
+    'submitted'
+  )
+  RETURNING * INTO v_req;
+
+  v_display := pg_catalog.coalesce(v_res.display_id, pg_catalog.substr(_reservation_id::text, 1, 8));
+
+  INSERT INTO public.admin_notifications (title, message, type)
+  VALUES (
+    'New return/refund request',
+    'Customer requested return/refund for reservation #' || v_display || '.',
+    'ReturnRequest'
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'success', true,
+    'request_id', v_req.id,
+    'status', v_req.status,
+    'submitted_at', v_req.submitted_at
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.request_customer_refund(uuid, text, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.request_customer_refund(uuid, text, text, text) TO authenticated;
+
+-- ============================================================================
+-- 5. Hardened RPC: review_return_refund_request
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.review_return_refund_request(
+  _request_id uuid,
+  _decision text,
+  _notes text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_req public.return_refund_requests%rowtype;
+  v_res public.reservations%rowtype;
+  v_normalized_decision text := pg_catalog.lower(pg_catalog.trim(pg_catalog.coalesce(_decision, '')));
+  v_prev_status text;
+  v_new_status text;
+BEGIN
+  IF v_actor IS NULL OR NOT public.is_staff_or_admin() THEN
+    RAISE EXCEPTION 'Staff or admin authorization required.' USING ERRCODE = '42501';
+  END IF;
+
+  IF v_normalized_decision NOT IN ('approve', 'reject', 'under_review') THEN
+    RAISE EXCEPTION 'Invalid decision. Must be approve, reject, or under_review.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Lock the request row
+  SELECT * INTO v_req FROM public.return_refund_requests WHERE id = _request_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Request not found.' USING ERRCODE = 'P0002';
+  END IF;
+
+  v_prev_status := v_req.status;
+
+  -- Terminal status guards
+  IF v_prev_status = 'approved' THEN
+    RAISE EXCEPTION 'Request has already been approved.' USING ERRCODE = 'check_violation';
+  ELSIF v_prev_status = 'rejected' THEN
+    RAISE EXCEPTION 'Request has already been rejected.' USING ERRCODE = 'check_violation';
+  ELSIF v_prev_status = 'refunded' THEN
+    RAISE EXCEPTION 'Request has already been refunded.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_prev_status = 'under_review' AND v_normalized_decision = 'under_review' THEN
+    RAISE EXCEPTION 'Request is already under review.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Lock associated reservation row
+  SELECT * INTO v_res FROM public.reservations WHERE id = v_req.reservation_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Associated reservation not found.' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF v_normalized_decision = 'approve' THEN
+    IF pg_catalog.lower(pg_catalog.trim(pg_catalog.coalesce(v_res.status, ''))) <> 'completed' THEN
+      RAISE EXCEPTION 'Return requests can only be approved for completed reservations.' USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- Explicitly lock qualifying paid payment rows first (no aggregate coupling)
+    PERFORM 1
+    FROM public.payments
+    WHERE reservation_id = v_req.reservation_id
+      AND status = 'paid'
+      AND refund_disbursed_at IS NULL
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Cannot approve return: no settled paid payments found for this reservation.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+
+    v_new_status := 'approved';
+
+    UPDATE public.return_refund_requests
+    SET status = 'approved',
+        reviewed_at = pg_catalog.now(),
+        reviewed_by = v_actor,
+        resolution_notes = pg_catalog.nullif(pg_catalog.trim(_notes), ''),
+        updated_at = pg_catalog.now()
+    WHERE id = _request_id;
+
+    -- Update reservation financial state
+    UPDATE public.reservations
+    SET payment_status = 'Refund Required',
+        updated_at = pg_catalog.now()
+    WHERE id = v_req.reservation_id;
+
+    -- Atomically flag qualifying paid payments for refund
+    UPDATE public.payments
+    SET requires_refund = true,
+        refund_required_at = pg_catalog.coalesce(refund_required_at, pg_catalog.now()),
+        updated_at = pg_catalog.now()
+    WHERE reservation_id = v_req.reservation_id
+      AND status = 'paid'
+      AND refund_disbursed_at IS NULL;
+
+  ELSIF v_normalized_decision = 'reject' THEN
+    IF pg_catalog.trim(pg_catalog.coalesce(_notes, '')) = '' THEN
+      RAISE EXCEPTION 'A rejection reason is required for the customer.' USING ERRCODE = 'check_violation';
+    END IF;
+
+    v_new_status := 'rejected';
+
+    UPDATE public.return_refund_requests
+    SET status = 'rejected',
+        reviewed_at = pg_catalog.now(),
+        reviewed_by = v_actor,
+        resolution_notes = pg_catalog.trim(_notes),
+        updated_at = pg_catalog.now()
+    WHERE id = _request_id;
+
+  ELSIF v_normalized_decision = 'under_review' THEN
+    v_new_status := 'under_review';
+
+    UPDATE public.return_refund_requests
+    SET status = 'under_review',
+        under_review_at = pg_catalog.coalesce(under_review_at, pg_catalog.now()),
+        under_review_by = pg_catalog.coalesce(under_review_by, v_actor),
+        resolution_notes = pg_catalog.nullif(pg_catalog.trim(_notes), ''),
+        updated_at = pg_catalog.now()
+    WHERE id = _request_id;
+  END IF;
+
+  -- Structured audit log
+  INSERT INTO public.logs (
+    user_id, action, target_type, target_id, details
+  ) VALUES (
+    v_actor,
+    CASE 
+      WHEN v_normalized_decision = 'approve' THEN 'Approved return/refund request'
+      WHEN v_normalized_decision = 'reject' THEN 'Rejected return/refund request'
+      ELSE 'Marked return/refund request under review'
+    END,
+    'reservation',
+    v_req.reservation_id::text,
+    pg_catalog.jsonb_build_object(
+      'request_id',              _request_id,
+      'reservation_id',          v_req.reservation_id,
+      'display_id',              v_res.display_id,
+      'previous_request_status', v_prev_status,
+      'new_request_status',      v_new_status,
+      'decision',                v_normalized_decision,
+      'notes',                   _notes
+    )
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'success', true,
+    'request_id', _request_id,
+    'decision', v_normalized_decision
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.review_return_refund_request(uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.review_return_refund_request(uuid, text, text) TO authenticated;
+
+-- ============================================================================
+-- 6. Hardened RPC: mark_reservation_refund_disbursed
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.mark_reservation_refund_disbursed(
+  _reservation_id       uuid,
+  _disbursement_method  text,
+  _reference_number     text,
+  _notes                text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_actor_id       uuid;
+  v_reservation    public.reservations%rowtype;
+  v_total_centavos bigint := 0;
+BEGIN
+  -- Authorization: admin or owner only.
+  v_actor_id := auth.uid();
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT public.is_admin_or_owner() THEN
+    RAISE EXCEPTION 'Refund disbursement requires admin or owner authorization.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- Input validation
+  IF _disbursement_method IS NULL OR pg_catalog.trim(_disbursement_method) = '' THEN
+    RAISE EXCEPTION 'Disbursement method is required.' USING ERRCODE = 'check_violation';
+  END IF;
+  IF _reference_number IS NULL OR pg_catalog.trim(_reference_number) = '' THEN
+    RAISE EXCEPTION 'Reference number is required.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Lock reservation row first
+  SELECT * INTO v_reservation
+  FROM public.reservations
+  WHERE id = _reservation_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found.' USING ERRCODE = 'P0002';
+  END IF;
+
+  -- Dual Lifecycle Support:
+  -- If Completed, strictly requires an approved return_refund_request.
+  -- Otherwise, requires Cancelled.
+  IF pg_catalog.lower(pg_catalog.coalesce(v_reservation.status, '')) = 'completed' THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.return_refund_requests
+      WHERE reservation_id = _reservation_id
+        AND status = 'approved'
+    ) THEN
+      RAISE EXCEPTION 'Refund disbursement for a completed reservation requires an approved return/refund request.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+  ELSIF pg_catalog.lower(pg_catalog.coalesce(v_reservation.status, '')) <> 'cancelled' THEN
+    RAISE EXCEPTION 'Refund disbursement only applies to cancelled reservations or approved returns.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Lock qualifying payment rows first (no aggregate coupling)
+  PERFORM 1
+  FROM public.payments
+  WHERE reservation_id = _reservation_id
+    AND status = 'paid'
+    AND pg_catalog.coalesce(requires_refund, false) = true
+  FOR UPDATE;
+
+  -- Idempotency: if already fully refunded and no payment rows require refund, return gracefully
+  IF pg_catalog.lower(pg_catalog.coalesce(v_reservation.payment_status, '')) = 'refunded'
+    AND NOT FOUND
+  THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'reservation_id',          _reservation_id,
+      'status',                  'already_refunded',
+      'total_refunded_centavos', 0
+    );
+  END IF;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No unrefunded payment rows found for this reservation.'
+      USING ERRCODE = 'P0002';
+  END IF;
+
+  -- Calculate total amount across locked rows
+  SELECT pg_catalog.coalesce(pg_catalog.sum(amount_centavos), 0)
+  INTO v_total_centavos
+  FROM public.payments
+  WHERE reservation_id = _reservation_id
+    AND status = 'paid'
+    AND pg_catalog.coalesce(requires_refund, false) = true;
+
+  -- Mutate payment rows: mark disbursed
+  UPDATE public.payments
+  SET
+    requires_refund             = false,
+    refund_required_at          = NULL,
+    refund_disbursed_at         = pg_catalog.now(),
+    refund_disbursement_method  = pg_catalog.trim(_disbursement_method),
+    refund_reference_number     = pg_catalog.trim(_reference_number),
+    refund_disbursed_by         = v_actor_id,
+    metadata                    = pg_catalog.coalesce(metadata, '{}'::jsonb)
+      || pg_catalog.jsonb_build_object('refund_notes', _notes)
+  WHERE reservation_id = _reservation_id
+    AND status = 'paid'
+    AND pg_catalog.coalesce(requires_refund, false) = true;
+
+  -- Update reservation financial status
+  UPDATE public.reservations
+  SET
+    payment_status = 'Refunded',
+    updated_at     = pg_catalog.now()
+  WHERE id = _reservation_id;
+
+  -- Atomically close any associated approved return_refund_request as 'refunded'
+  UPDATE public.return_refund_requests
+  SET
+    status     = 'refunded',
+    updated_at = pg_catalog.now()
+  WHERE reservation_id = _reservation_id
+    AND status = 'approved';
+
+  -- Audit event
+  INSERT INTO public.logs (
+    user_id, action, target_type, target_id, details
+  ) VALUES (
+    v_actor_id,
+    'Disbursed reservation refund',
+    'reservation',
+    _reservation_id::text,
+    pg_catalog.jsonb_build_object(
+      'display_id',            v_reservation.display_id,
+      'total_refunded_pesos',  pg_catalog.round(v_total_centavos::numeric / 100, 2),
+      'disbursement_method',   pg_catalog.trim(_disbursement_method),
+      'reference_number',      pg_catalog.trim(_reference_number),
+      'notes',                 _notes
+    )
+  );
+
+  RETURN pg_catalog.jsonb_build_object(
+    'reservation_id',          _reservation_id,
+    'status',                  'refunded',
+    'total_refunded_centavos', v_total_centavos
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.mark_reservation_refund_disbursed(uuid, text, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.mark_reservation_refund_disbursed(uuid, text, text, text) TO authenticated;
