@@ -1,4 +1,5 @@
 import { Image } from "expo-image";
+import { Asset } from "expo-asset";
 import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { tapLight, notifySuccess } from '@/src/utils/haptics';
@@ -15,7 +16,6 @@ import {
   View,
   Dimensions,
   FlatList,
-  Image as RNImage,
   Share,
 } from "react-native";
 
@@ -101,6 +101,16 @@ const getColorDot = (name: string): string => {
     if (clean.includes(key)) return hex;
   }
   return '#cbd5e1';
+};
+
+const PLACEHOLDER_ASSET = require("@/assets/images/partial-react-logo.png");
+
+const getPlaceholderImageUri = (): string => {
+  try {
+    const asset = Asset.fromModule(PLACEHOLDER_ASSET);
+    if (asset?.uri) return asset.uri;
+  } catch {}
+  return "";
 };
 
 export default function ProductDetailScreen() {
@@ -488,7 +498,8 @@ export default function ProductDetailScreen() {
     if (product?.image_url) {
       return [product.image_url];
     }
-    return [RNImage.resolveAssetSource(require("@/assets/images/partial-react-logo.png")).uri];
+    const placeholderUri = getPlaceholderImageUri();
+    return placeholderUri ? [placeholderUri] : [""];
   }, [activeColorway, product?.images, product?.image_url]);
 
   const getStockInfo = (size?: string | null, color?: string | null): number | null => {
@@ -589,12 +600,18 @@ export default function ProductDetailScreen() {
             renderItem={({ item, index }) => (
               <TouchableOpacity
                 activeOpacity={1}
-                onPress={() => setViewerUri(item)}
+                onPress={() => {
+                  if (item) setViewerUri(item);
+                }}
                 accessibilityRole="button"
-                accessibilityLabel={`${product.name}, image ${index + 1} of ${imageGallery.length}`}
+                accessibilityLabel={`${product?.name || 'Product'}, image ${index + 1} of ${imageGallery.length}`}
                 accessibilityHint="Opens a zoomable full-screen view of this product image"
               >
-                <Image source={{ uri: item }} style={{ width, height: IMAGE_GALLERY_HEIGHT }} contentFit="cover" />
+                <Image
+                  source={item ? { uri: item } : PLACEHOLDER_ASSET}
+                  style={{ width, height: IMAGE_GALLERY_HEIGHT }}
+                  contentFit="cover"
+                />
               </TouchableOpacity>
             )}
             keyExtractor={(item, index) => index.toString()}
