@@ -350,7 +350,7 @@ export async function cancelCustomerReservation(
   reason = 'Cancelled by customer'
 ): Promise<DomainResult<{ reservation_id: string; already_cancelled?: boolean }>> {
   try {
-    const { data, error } = await (supabase.rpc as any)('cancel_customer_reservation', {
+    const { data, error } = await supabase.rpc('cancel_customer_reservation', {
       _reservation_id: reservationId,
       _reason: reason,
     });
@@ -401,11 +401,11 @@ export async function requestCustomerRefund(
   photoPath?: string
 ): Promise<DomainResult<{ request_id: string; status: string; submitted_at?: string }>> {
   try {
-    const { data, error } = await (supabase.rpc as any)('request_customer_refund', {
+    const { data, error } = await supabase.rpc('request_customer_refund', {
       _reservation_id: reservationId,
       _reason_category: reasonCategory,
-      _details: details || null,
-      _photo_path: photoPath || null,
+      _details: details || undefined,
+      _photo_path: photoPath || undefined,
     });
     if (error) {
       const domainError = new DomainError({
@@ -451,7 +451,7 @@ export async function requestCustomerRefund(
 export async function getActiveRefundRequest(reservationId: string) {
   try {
     const { data, error } = await supabase
-      .from('return_refund_requests' as any)
+      .from('return_refund_requests')
       .select('*')
       .eq('reservation_id', reservationId)
       .order('created_at', { ascending: false })
