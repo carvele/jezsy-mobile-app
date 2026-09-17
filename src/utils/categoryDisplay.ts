@@ -76,5 +76,5 @@ export const getMainCategoryName = (product: WithCategoryEmbed): string | null =
  * Display label matching the previous `sub_category || category || fallback`
  * convention used across product cards, search results, and wishlist rows.
  */
-export const getCategoryLabel = (product: WithCategoryEmbed, fallback = 'Item'): string =>
-  getSubCategoryName(product) ?? getMainCategoryName(product) ?? fallback;
+export const getCategoryLabel = (product: WithCategoryEmbed & { sub_category?: string | null, category?: string | null }, fallback = 'Item'): string =>
+  getSubCategoryName(product) ?? product.sub_category ?? getMainCategoryName(product) ?? product.category ?? fallback;

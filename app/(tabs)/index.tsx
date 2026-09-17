@@ -4,6 +4,7 @@ import {
   View,
   Text,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
@@ -46,6 +47,7 @@ import {
   isSystemTourComplete,
   TourProgressSnapshot,
 } from '@/src/features/systemTour/tourProgress';
+import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -64,6 +66,7 @@ const HERO_CARD_GAP = Spacing.md;
 const HERO_MAX_CARDS = 8;
 
 export default function HomeScreen() {
+  const bottomInset = useSharedBottomInset();
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
@@ -327,7 +330,7 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
         }
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
         nestedScrollEnabled
       >
         {/* Top Header */}
@@ -576,11 +579,14 @@ export default function HomeScreen() {
               message="New pieces are on their way. Check back soon."
             />
           ) : (
-            <View style={styles.gridContainer}>
-              {trendingProducts.map((item) => (
-                <ProductCard key={item.id} product={item} variant="grid" />
-              ))}
-            </View>
+            <FlatList
+              data={trendingProducts}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: Spacing.lg, gap: Spacing.md }}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => <ProductCard product={item} variant="rail" />}
+            />
           )}
         </View>
 
@@ -601,11 +607,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scrollContent: {
-    // Clears the floating tab bar, whose offset now follows the bottom
-    // safe-area inset and so is taller on three-button navigation.
-    paddingBottom: 120,
-  },
+  scrollContent: {},
   header: {
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,

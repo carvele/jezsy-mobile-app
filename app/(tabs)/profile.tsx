@@ -15,8 +15,10 @@ import { statusBucket } from '@/src/utils/reservationStatus';
 import { getMyUnratedItems } from '@/src/services/reservationService';
 import { SystemTourModal } from '@/src/features/systemTour/SystemTourModal';
 import { useMessages } from '@/src/context/MessagesContext';
+import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 
 export default function ProfileScreen() {
+  const bottomInset = useSharedBottomInset();
   const { showToast } = useToast();
   const { user, profile, signOut } = useAuth();
   const { getOrCreateConversation } = useMessages();
@@ -128,7 +130,7 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}>
           <View style={styles.header}>
             <Text style={[styles.headerTitle, { color: colors.tint }]}>Profile</Text>
           </View>
@@ -256,7 +258,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}>
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.tint }]}>Profile</Text>
         </View>
@@ -496,7 +498,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.xl,
-    paddingBottom: 120,
   },
   header: {
     marginBottom: Spacing.xxl,
