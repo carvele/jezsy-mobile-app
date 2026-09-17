@@ -606,16 +606,14 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+        alignItems: 'center',
   },
   scrollContent: {},
   header: {
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+        alignItems: 'center',
   },
   brandLogo: {
     ...Type.headline,
@@ -681,8 +679,7 @@ const styles = StyleSheet.create({
   },
   heroDots: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.xs,
+        gap: Spacing.xs,
     marginTop: Spacing.lg,
   },
   heroDot: {
@@ -701,8 +698,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
+        alignItems: 'center',
   },
 
   // Edits Section
@@ -712,8 +708,7 @@ const styles = StyleSheet.create({
   trendingGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: GRID_COLUMN_GAP,
+        gap: GRID_COLUMN_GAP,
     paddingHorizontal: Spacing.xl,
   },
   sectionTitle: {
@@ -753,7 +748,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     // Feeds gridCardWidth via GRID_GUTTER, same as Explore's grid.
     paddingHorizontal: GRID_GUTTER,
-    justifyContent: 'center',
-    gap: GRID_COLUMN_GAP,
+        gap: GRID_COLUMN_GAP,
   },
 });
