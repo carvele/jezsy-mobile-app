@@ -6,19 +6,16 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
-import { useWishlist } from '@/src/context/WishlistContext';
 import { useToast } from '@/src/context/ToastContext';
-import { getCategoryLabel } from '@/src/utils/categoryDisplay';
 import { useGridCardWidth, GRID_COLUMN_GAP } from '@/src/utils/layout';
+import { ProductCard } from '@/src/components/ProductCard';
 import { getWishlistPage, WishlistProduct as Product } from '@/src/services/wishlistService';
 
 export default function WishlistScreen() {
@@ -27,8 +24,7 @@ export default function WishlistScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const { user } = useAuth();
-  const { toggleWishlist } = useWishlist();
-  const { cardWidth, columns } = useGridCardWidth();
+  const { columns } = useGridCardWidth();
 
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,53 +76,8 @@ export default function WishlistScreen() {
   }, [fetchWishlistProducts]);
 
   const renderItem = useCallback(({ item }: { item: Product }) => (
-    <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card, width: cardWidth }]}
-      onPress={() => router.push(`/product/${item.id}`)}
-      activeOpacity={0.85}
-      accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
-      accessibilityLabel={`${item.name}, ₱${(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}${item.on_sale ? ', on sale' : ''}`}
-      accessibilityHint="Opens product details"
-    >
-      <View style={styles.imageWrapper}>
-        <Image
-          source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-          style={styles.image}
-          contentFit="cover"
-        />
-        {/* Remove from wishlist */}
-        <TouchableOpacity
-          style={styles.heartBtn}
-          onPress={() => {
-            toggleWishlist(item.id);
-            setItems((prev) => prev.filter((p) => p.id !== item.id));
-          }}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${item.name} from wishlist`}
-          accessibilityHint="Removes this item from your saved wishlist"
-        >
-          <IconSymbol name="heart.fill" size={20} color={colors.blush} />
-        </TouchableOpacity>
-        {item.on_sale && (
-          <View style={[styles.saleBadge, { backgroundColor: colors.notification }]}>
-            <Text style={styles.saleBadgeText}>SALE</Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.info}>
-        <Text style={[styles.category, { color: colors.secondaryText }]} numberOfLines={1}>
-          {getCategoryLabel(item, 'ITEM').toUpperCase()}
-        </Text>
-        <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={[styles.price, { color: item.on_sale ? colors.notification : colors.text }]}>
-          ₱{(item.on_sale && item.sale_price ? item.sale_price : item.price || 0).toLocaleString()}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  ), [colors, cardWidth, router, toggleWishlist]);
+    <ProductCard product={item} variant="grid" />
+  ), []);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
