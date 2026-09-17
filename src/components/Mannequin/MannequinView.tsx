@@ -31,6 +31,7 @@ import {
   MannequinCanvasItem as CanvasItemType,
   WardrobeItem,
   createMannequinItem,
+  addMannequinItemSafely,
 } from '@/src/utils/mannequinConfig';
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
@@ -218,19 +219,14 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
     setSelectedItemId((current) => (current === id ? null : current));
   }, []);
 
-  // Handle adding or selecting/toggling an item on the canvas with auto background removal
+  // Handle adding or selecting an item on the canvas with auto background removal
   const handleAddItemToCanvas = useCallback(
     async (wardrobeItem: WardrobeItem) => {
-      // If item is already on canvas, select it (or toggle off if already selected)
+      // If item is already on canvas, select it idempotently (no accidental removal)
       const existing = canvasItems.find((i) => i.wardrobe_item_id === wardrobeItem.id);
       if (existing) {
-        if (selectedItemId === existing.id) {
-          handleRemoveFromCanvas(existing.id);
-          showToast(`Removed ${existing.name} from mannequin`, 'info');
-        } else {
-          setSelectedItemId(existing.id);
-          showToast(`Selected ${existing.name}`, 'info');
-        }
+        setSelectedItemId(existing.id);
+        showToast(`Selected ${existing.name}`, 'info');
         return;
       }
 
@@ -253,18 +249,11 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       // z-index, so that part is resolved from the functional updater's
       // `prev` rather than the closed-over canvasItems snapshot.
       const baseItem = createMannequinItem(itemWithProcessedImg, 0);
-      setCanvasItems((prev) => {
-        if (prev.some((i) => i.wardrobe_item_id === wardrobeItem.id)) {
-          return prev;
-        }
-        const maxZ = prev.reduce((max, i) => Math.max(max, i.zIndex), 0);
-        const placedItem = { ...baseItem, zIndex: Math.max(baseItem.zIndex, maxZ + 1) };
-        return [...prev, placedItem];
-      });
+      setCanvasItems((prev) => addMannequinItemSafely(prev, baseItem));
       setSelectedItemId(baseItem.id);
       showToast(`Added ${baseItem.name} to mannequin`, 'info');
     },
-    [canvasItems, selectedItemId, handleRemoveFromCanvas, showToast]
+    [canvasItems, showToast]
   );
 
   // Handle transform updates from gesture interactions
@@ -668,15 +657,15 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
         {selectedItemId && activeSelectedItem ? (
           <View style={[styles.layerToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.controlGroup}>
-              <Text style={[styles.controlLabel, { color: colors.secondaryText }]}>Size:</Text>
+              <Text maxFontSizeMultiplier={1.2} style={[styles.controlLabel, { color: colors.secondaryText }]}>Size:</Text>
               <TouchableOpacity
                 style={[styles.controlBtn, { backgroundColor: colors.tint }]}
                 onPress={() => handleScaleChange(selectedItemId, 0.10)}
                 accessibilityLabel="Enlarge"
               >
-                <Text style={[styles.controlBtnText, { color: colors.onTint }]}>+</Text>
+                <Text maxFontSizeMultiplier={1.2} style={[styles.controlBtnText, { color: colors.onTint }]}>+</Text>
               </TouchableOpacity>
-              <Text style={[styles.scaleValue, { color: colors.text }]}>
+              <Text maxFontSizeMultiplier={1.2} style={[styles.scaleValue, { color: colors.text }]}>
                 {Math.round(activeSelectedItem.scale * 100)}%
               </Text>
               <TouchableOpacity
@@ -684,7 +673,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                 onPress={() => handleScaleChange(selectedItemId, -0.10)}
                 accessibilityLabel="Shrink"
               >
-                <Text style={[styles.controlBtnText, { color: colors.onTint }]}>−</Text>
+                <Text maxFontSizeMultiplier={1.2} style={[styles.controlBtnText, { color: colors.onTint }]}>−</Text>
               </TouchableOpacity>
             </View>
 
@@ -730,7 +719,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                 accessibilityLabel="Done styling"
               >
                 <IconSymbol name="checkmark" size={10} color={colors.onTint} />
-                <Text style={[styles.doneBtnText, { color: colors.onTint }]}>Done</Text>
+                <Text maxFontSizeMultiplier={1.2} style={[styles.doneBtnText, { color: colors.onTint }]}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -741,7 +730,12 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               size={12}
               color={colors.secondaryText}
             />
-            <Text style={[styles.toolbarEmptyPromptText, { color: colors.secondaryText }]}>
+            <Text
+              maxFontSizeMultiplier={1.2}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[styles.toolbarEmptyPromptText, { color: colors.secondaryText }]}
+            >
               {canvasItems.length === 0
                 ? 'Select garments below to dress the mannequin'
                 : 'Tap a garment on the mannequin to resize or layer'}
@@ -1263,7 +1257,7 @@ const styles = StyleSheet.create({
 
   /* ── Layer / Size Controls (Fixed geometry bar) ── */
   toolbarSlot: {
-    height: 40,
+    height: 44,
     marginHorizontal: Spacing.lg,
     marginBottom: 6,
     justifyContent: 'center',
@@ -1289,7 +1283,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: Radius.md,
     borderWidth: 1,
   },

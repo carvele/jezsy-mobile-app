@@ -100,3 +100,21 @@ export function createMannequinItem(
     zIndex: Math.max(defaults.zIndex, currentMaxZIndex + 1),
   };
 }
+
+/**
+ * Adds a new mannequin item to the canvas while strictly guaranteeing the invariant:
+ * at most one canvas layer per wardrobe_item_id. If an item for the same wardrobe
+ * item already exists, the current list is returned unchanged.
+ */
+export function addMannequinItemSafely(
+  currentItems: MannequinCanvasItem[],
+  newItem: MannequinCanvasItem
+): MannequinCanvasItem[] {
+  if (currentItems.some((i) => i.wardrobe_item_id === newItem.wardrobe_item_id)) {
+    return currentItems;
+  }
+  const maxZ = currentItems.reduce((max, i) => Math.max(max, i.zIndex), 0);
+  const placedItem = { ...newItem, zIndex: Math.max(newItem.zIndex, maxZ + 1) };
+  return [...currentItems, placedItem];
+}
+
