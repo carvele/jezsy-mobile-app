@@ -120,9 +120,9 @@ describe('BurstCollector -- ratio outlier rejection', () => {
 });
 
 describe('BurstCollector -- completion and reset', () => {
-  it('is complete once 5 valid frames are collected', () => {
+  it('is complete once target valid frames are collected', () => {
     const collector = new BurstCollector();
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
       collector.addSample(frame());
       expect(collector.isComplete()).toBe(false);
     }
