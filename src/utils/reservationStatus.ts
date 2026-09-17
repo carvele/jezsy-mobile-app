@@ -141,11 +141,172 @@ export const formatPaymentDeadline = (
   return { label: `${hours}h left`, urgent: remaining < HOUR_MS };
 };
 
+export type CustomerDisplayBucket =
+  | 'toPay'
+  | 'paymentUnderReview'
+  | 'paymentReceived'
+  | 'preparing'
+  | 'ready'
+  | 'completed'
+  | 'returnRefund'
+  | 'cancelled';
+
+export type CustomerBadgeColorType =
+  | 'toPay'
+  | 'paymentUnderReview'
+  | 'paymentReceived'
+  | 'preparing'
+  | 'ready'
+  | 'completed'
+  | 'cancelled';
+
+export interface CustomerReservationDisplayInput {
+  status: string | null;
+  payment_status?: string | null;
+  countdown?: boolean | null;
+  payment_due_at?: string | null;
+}
+
+export interface CustomerReservationDisplayState {
+  label: string;
+  bucket: CustomerDisplayBucket;
+  filterBucket: Exclude<StatusFilter, 'all' | 'returnRefund'>;
+  badgeColorType: CustomerBadgeColorType;
+  showCountdown: boolean;
+  showToPayAction: boolean;
+}
+
+/**
+ * Canonical customer-facing presentation helper.
+ *
+ * Reconciles status, payment_status, and countdown so customer presentations
+ * never show contradictory UI (e.g. "To pay" or a ticking payment deadline
+ * on a reservation that has already settled or is under review).
+ *
+ * Priority order fails safely:
+ * 1. Cancelled / Refunded / Refund Required
+ * 2. Completed
+ * 3. Preparing / Ready / To Pickup
+ * 4. Paid while backend status still To Pay -> 'Payment Received'
+ * 5. Receipt submitted / under review -> 'Payment Under Review'
+ * 6. Genuine unpaid To Pay -> 'To pay'
+ */
+export function getCustomerReservationDisplayState(
+  reservation: CustomerReservationDisplayInput
+): CustomerReservationDisplayState {
+  const rawStatus = (reservation.status || '').trim().toLowerCase();
+  const paymentStatus = (reservation.payment_status || '').trim().toLowerCase();
+  const countdown = reservation.countdown;
+  const bucket = statusBucket(reservation.status);
+
+  // 1. Cancelled / Refunded / Refund Required
+  if (paymentStatus === 'refund required') {
+    return {
+      label: 'Refund in Progress',
+      bucket: 'returnRefund',
+      filterBucket: 'cancelled',
+      badgeColorType: 'cancelled',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+  if (paymentStatus === 'refunded') {
+    return {
+      label: 'Refunded',
+      bucket: 'returnRefund',
+      filterBucket: 'cancelled',
+      badgeColorType: 'cancelled',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+  if (bucket === 'cancelled' || rawStatus === 'cancelled') {
+    return {
+      label: 'Cancelled',
+      bucket: 'cancelled',
+      filterBucket: 'cancelled',
+      badgeColorType: 'cancelled',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+
+  // 2. Completed
+  if (bucket === 'completed' || rawStatus === 'completed') {
+    return {
+      label: 'Completed',
+      bucket: 'completed',
+      filterBucket: 'completed',
+      badgeColorType: 'completed',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+
+  // 3. Preparing / Ready / To Pickup
+  if (bucket === 'ready') {
+    return {
+      label: 'Ready to collect',
+      bucket: 'ready',
+      filterBucket: 'ready',
+      badgeColorType: 'ready',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+  if (bucket === 'preparing') {
+    return {
+      label: 'Preparing your item',
+      bucket: 'preparing',
+      filterBucket: 'preparing',
+      badgeColorType: 'preparing',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+
+  // 4. Paid while backend status still To Pay
+  if (bucket === 'toPay' && ['paid', 'deposit paid', 'partially paid'].includes(paymentStatus)) {
+    return {
+      label: 'Payment Received',
+      bucket: 'paymentReceived',
+      filterBucket: 'toPay',
+      badgeColorType: 'paymentReceived',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+
+  // 5. Receipt submitted / under review
+  if (bucket === 'toPay' && ['submitted', 'processing'].includes(paymentStatus)) {
+    return {
+      label: 'Payment Under Review',
+      bucket: 'paymentUnderReview',
+      filterBucket: 'toPay',
+      badgeColorType: 'paymentUnderReview',
+      showCountdown: countdown === true && Boolean(reservation.payment_due_at),
+      showToPayAction: false,
+    };
+  }
+
+  // 6. Genuine unpaid To Pay
+  return {
+    label: 'To pay',
+    bucket: 'toPay',
+    filterBucket: 'toPay',
+    badgeColorType: 'toPay',
+    showCountdown: countdown !== false && Boolean(reservation.payment_due_at),
+    showToPayAction: true,
+  };
+}
+
 export type ReservationCardAction = 'toPay' | 'returnRefund' | 'rate' | 'buyAgain' | 'viewRefund';
 
 export interface ReservationActionInput {
   status: string | null;
   payment_status?: string | null;
+  countdown?: boolean | null;
+  payment_due_at?: string | null;
   completed_at?: string | null;
   date?: string | null;
   reviewed?: boolean;
@@ -177,7 +338,7 @@ export function isReturnEligible(
  *
  * Rules:
  * - Active awaiting payment -> ['toPay']
- * - Active (preparing/ready) -> []
+ * - Active holds in progress (paid, under review, preparing, ready) -> []
  * - Completed + within return window + not rated -> ['returnRefund', 'rate']
  * - Completed + within return window + already rated -> ['returnRefund']
  * - Completed + return window expired + not rated -> ['buyAgain', 'rate']
@@ -190,7 +351,7 @@ export function getReservationCardActions(
   reservation: ReservationActionInput,
   options: { windowDays?: number; referenceTime?: number } = {}
 ): ReservationCardAction[] {
-  const bucket = statusBucket(reservation.status);
+  const displayState = getCustomerReservationDisplayState(reservation);
   const paymentStatus = (reservation.payment_status || '').toLowerCase().trim();
 
   // Return/refund request pending review
@@ -203,16 +364,24 @@ export function getReservationCardActions(
     return ['buyAgain'];
   }
 
-  // Active holds
-  if (bucket === 'toPay') {
+  // Active holds awaiting payment
+  if (displayState.showToPayAction) {
     return ['toPay'];
   }
-  if (bucket === 'preparing' || bucket === 'ready') {
+
+  // Active holds in progress (paid, under review, preparing, ready)
+  if (
+    displayState.bucket === 'toPay' ||
+    displayState.bucket === 'paymentUnderReview' ||
+    displayState.bucket === 'paymentReceived' ||
+    displayState.bucket === 'preparing' ||
+    displayState.bucket === 'ready'
+  ) {
     return [];
   }
 
   // Completed reservation
-  if (bucket === 'completed') {
+  if (displayState.bucket === 'completed' || statusBucket(reservation.status) === 'completed') {
     const eligible = isReturnEligible(
       { completed_at: reservation.completed_at, date: reservation.date },
       options.windowDays ?? 7,

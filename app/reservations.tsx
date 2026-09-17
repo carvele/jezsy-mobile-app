@@ -14,10 +14,11 @@ import {
   STATUS_FILTERS,
   type StatusFilter,
   statusBucket,
-  statusLabel,
   filterLabel,
   formatPaymentDeadline,
   getReservationCardActions,
+  getCustomerReservationDisplayState,
+  type CustomerBadgeColorType,
 } from '@/src/utils/reservationStatus';
 import {
   getMyReservationsPage,
@@ -116,13 +117,16 @@ export default function ReservationsScreen() {
     }
   }, [session?.user, offset, activeFilter, loadingMore, hasMore, loading]);
 
-  const getStatusColor = (status: string | null) => {
-    switch (statusBucket(status)) {
+  const getStatusColor = (colorType: CustomerBadgeColorType | string | null) => {
+    switch (colorType) {
       case 'toPay': return colors.notification;
+      case 'paymentUnderReview': return colors.warning;
+      case 'paymentReceived': return colors.success;
       case 'preparing': return colors.info;
       case 'ready': return colors.info;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
+      default: return colors.secondaryText;
     }
   };
 
@@ -152,23 +156,23 @@ export default function ReservationsScreen() {
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {
     const dateStr = item.date ? formatPHDate(item.date) : 'N/A';
-    // Only the payment window has a deadline worth flagging -- once it's
-    // paid or past that stage, payment_due_at is a stale leftover value.
-    const deadline = statusBucket(item.status) === 'toPay'
+    const displayState = getCustomerReservationDisplayState(item);
+    const deadline = displayState.showCountdown
       ? formatPaymentDeadline(item.payment_due_at)
       : null;
     const hasRefundPending =
-      statusBucket(item.status) === 'cancelled' &&
+      (displayState.bucket === 'cancelled' || statusBucket(item.status) === 'cancelled') &&
       item.payment_status?.toLowerCase() === 'refund required';
 
     const cardActions = getReservationCardActions(item, { windowDays: returnWindowDays });
+    const badgeColor = getStatusColor(displayState.badgeColorType);
 
     return (
       <TouchableOpacity
         style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}
         accessible={true}
         accessibilityRole="button"
-        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${statusLabel(item.status)}${hasRefundPending ? ', refund in progress' : ''}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
+        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${displayState.label}${hasRefundPending ? ', refund in progress' : ''}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
         accessibilityHint="View reservation details"
         onPress={() => router.push(`/reservations/${item.id}` as any)}
       >
@@ -187,8 +191,8 @@ export default function ReservationsScreen() {
                 <Text style={[styles.deadlineText, { color: colors.error }]}>REFUND IN PROGRESS</Text>
               </View>
             )}
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20', borderColor: getStatusColor(item.status) }]}>
-              <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{statusLabel(item.status)}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: badgeColor + '20', borderColor: badgeColor }]}>
+              <Text style={[styles.statusText, { color: badgeColor }]}>{displayState.label}</Text>
             </View>
           </View>
         </View>

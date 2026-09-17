@@ -7,7 +7,13 @@ import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
-import { statusBucket, statusLabel, isAwaitingPayment, canReschedule, isReturnEligible } from '@/src/utils/reservationStatus';
+import {
+  statusBucket,
+  canReschedule,
+  isReturnEligible,
+  getCustomerReservationDisplayState,
+  type CustomerBadgeColorType,
+} from '@/src/utils/reservationStatus';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import {
@@ -467,13 +473,16 @@ export default function ReservationDetailScreen() {
     }
   };
 
-  const getStatusColor = (status: string | null) => {
-    switch (statusBucket(status)) {
+  const getStatusColor = (colorType: CustomerBadgeColorType | string | null) => {
+    switch (colorType) {
       case 'toPay': return colors.notification;
+      case 'paymentUnderReview': return colors.warning;
+      case 'paymentReceived': return colors.success;
       case 'preparing': return colors.info;
       case 'ready': return colors.info;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
+      default: return colors.secondaryText;
     }
   };
 
@@ -499,7 +508,8 @@ export default function ReservationDetailScreen() {
   const dateStr = reservation.date
     ? formatPHDate(reservation.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : 'N/A';
-  const statusColor = getStatusColor(reservation.status);
+  const displayState = getCustomerReservationDisplayState(reservation);
+  const statusColor = getStatusColor(displayState.badgeColorType);
   // Raw arithmetic, not "what's still owed" -- see isBalanceSettled below.
   // Staff record collection via settle_reservation_balance at pickup, which
   // this screen never checked: the row showed "Balance Due at Pickup: ₱X"
@@ -522,11 +532,9 @@ export default function ReservationDetailScreen() {
 
   const paymentState = (reservation.payment_status || 'Pending').toLowerCase();
   const reservationState = statusBucket(reservation.status);
-  // New reservations enter the payment window immediately. Pending remains
-  // readable only for legacy rows created before automatic holds.
-  const awaitingPayment = isAwaitingPayment(reservation.status) && paymentState === 'pending';
-  const receiptUnderReview = paymentState === 'submitted';
-  const timeLeft = reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
+  const awaitingPayment = Boolean(displayState.showToPayAction);
+  const receiptUnderReview = paymentState === 'submitted' || displayState.badgeColorType === 'paymentUnderReview';
+  const timeLeft = displayState.showCountdown && reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
   const initialPaymentPurpose: PaymentPurpose =
     (reservation.payment_type || '').toLowerCase() === 'full' ? 'full_payment' : 'initial_deposit';
   const canUpgradeToFullPayment = initialPaymentPurpose === 'initial_deposit' && rawBalanceDue > 0;
@@ -581,7 +589,7 @@ export default function ReservationDetailScreen() {
             {reservation.display_id || reservation.id.substring(0, 8)}
           </Text>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
-            <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel(reservation.status)}</Text>
+            <Text style={[styles.statusText, { color: statusColor }]}>{displayState.label}</Text>
           </View>
         </View>
 
