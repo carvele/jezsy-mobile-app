@@ -42,14 +42,17 @@ export function useGridCardWidth(): { cardWidth: DimensionValue; columns: number
 
   // Phones get 2 cols, small tablets 3, large tablets/web 4+
   const columns = effectiveWidth > 1200 ? 5 : effectiveWidth > 900 ? 4 : effectiveWidth > 600 ? 3 : 2;
-  
-  // Use percentage widths to mathematically guarantee the flex items fit without wrapping.
-  // This completely bypasses useWindowDimensions() bugs, scrollbar widths, and hydration mismatches.
-  let cardWidth: DimensionValue;
-  if (columns === 5) cardWidth = '18%';
-  else if (columns === 4) cardWidth = '23%';
-  else if (columns === 3) cardWidth = '31%';
-  else cardWidth = '47%'; // 2 columns (47% + 47% + gap easily fits in 100%)
-  
+
+  // Hand-picked percentages (e.g. '47%' for 2 columns) don't actually leave
+  // room for GRID_COLUMN_GAP: 2 * 47% = 94% of the content box, plus a fixed
+  // 20px gap, comes out to just over 100% on a real 375px phone width --
+  // enough to trip flexWrap and collapse the grid to a single column. Percent
+  // widths and a fixed-pixel gap don't compose the way "leaves easily fits"
+  // implies. Computing an exact pixel width instead (floored, so rounding
+  // can only leave slack, never overflow) mathematically guarantees columns
+  // fit regardless of gap/gutter values.
+  const contentWidth = effectiveWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP * (columns - 1);
+  const cardWidth: DimensionValue = Math.floor(contentWidth / columns);
+
   return { cardWidth, columns };
 }
