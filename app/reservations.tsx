@@ -429,7 +429,7 @@ export default function ReservationsScreen() {
           <IconSymbol name="calendar.badge.exclamationmark" size={64} color={colors.border} />
           <Text style={[styles.emptyText, { color: colors.text }]}>No reservations yet</Text>
           <Text style={[styles.emptySubtext, { color: colors.secondaryText }]}>
-            Your upcoming fitting appointments will appear here.
+            Your store pickup reservations and orders will appear here.
           </Text>
           <TouchableOpacity
             style={[styles.exploreButton, { backgroundColor: colors.tint }]}

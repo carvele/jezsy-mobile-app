@@ -548,6 +548,7 @@ function InitialLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="legal/terms" />
         <Stack.Screen name="legal/privacy" />
+        <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />
       </Stack>
       {/* Branded loading overlay: covers the Stack during cold bootstrap until routeSettled is confirmed */}
       {!routeSettled && (
