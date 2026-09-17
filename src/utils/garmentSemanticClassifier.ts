@@ -26,6 +26,23 @@ export type GarmentFamily =
 
 export type EvidenceSource = 'user' | 'visual' | 'ml' | 'inferred';
 
+export type ThermalLevel = 'heavyWarmth' | 'moderateWarmth' | 'lightWarmth' | 'unknown';
+export type CoverageLevel = 'full' | 'moderate' | 'minimal' | 'unknown';
+export type FunctionalRole =
+  | 'athleticPerformance'
+  | 'formalTailored'
+  | 'smartCasual'
+  | 'casualEveryday'
+  | 'swimwear'
+  | 'lounge'
+  | 'protective'
+  | 'unknown';
+
+export interface PersonalUsageSignal {
+  activities: string[];
+  rawText: string;
+}
+
 export interface GarmentEvidence {
   tokens: string[];
   family: GarmentFamily;
@@ -35,6 +52,10 @@ export interface GarmentEvidence {
   activity: string[];
   material: string[];
   colors: string[];
+  thermal: ThermalLevel;
+  coverage: CoverageLevel;
+  functionalRole: FunctionalRole;
+  personalUsage: PersonalUsageSignal;
   source: EvidenceSource;
 }
 
@@ -46,6 +67,10 @@ export interface NormalizedGarment {
   activity: string[];
   material: string[];
   colors: string[];
+  thermal: ThermalLevel;
+  coverage: CoverageLevel;
+  functionalRole: FunctionalRole;
+  personalUsage: PersonalUsageSignal;
   /** Bucket for mannequin placement (Top/Bottom/Dress/Outerwear/Shoes/Accessory) */
   systemBucket: string;
   evidence: GarmentEvidence;
@@ -185,7 +210,7 @@ const ACCESSORY_PATTERNS: RegExp[] = [
 // SIGNAL TABLES
 // ============================================================================
 
-const STYLE_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
+const STYLE_SIGNALS: { pattern: RegExp; label: string }[] = [
   { pattern: /\bactivewear\b/i,    label: 'Activewear' },
   { pattern: /\bathletic\b/i,      label: 'Activewear' },
   { pattern: /\bformal\b/i,        label: 'Formal' },
@@ -201,7 +226,7 @@ const STYLE_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\bcocktail\b/i,      label: 'Cocktail' },
 ];
 
-const ACTIVITY_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
+const ACTIVITY_SIGNALS: { pattern: RegExp; label: string }[] = [
   { pattern: /\brunning\b/i,   label: 'Running' },
   { pattern: /\bjogging\b/i,   label: 'Running' },
   { pattern: /\bmarathon\b/i,  label: 'Running' },
@@ -209,6 +234,8 @@ const ACTIVITY_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\bworkout\b/i,   label: 'Workout' },
   { pattern: /\bfitness\b/i,   label: 'Fitness' },
   { pattern: /\btraining\b/i,  label: 'Training' },
+  { pattern: /\bexercis(?:ing|e)?\b/i, label: 'Exercise' },
+  { pattern: /\bwalking\b/i,   label: 'Walking' },
   { pattern: /\bsport\b/i,     label: 'Sports' },
   { pattern: /\bswimming\b/i,  label: 'Swimming' },
   { pattern: /\bswim\b/i,      label: 'Swimming' },
@@ -218,7 +245,7 @@ const ACTIVITY_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /\bcycling\b/i,   label: 'Cycling' },
 ];
 
-const MATERIAL_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
+const MATERIAL_SIGNALS: { pattern: RegExp; label: string }[] = [
   { pattern: /\bdenim\b/i,       label: 'Denim' },
   { pattern: /\bribbed.?knit\b/i,label: 'Ribbed Knit' },
   { pattern: /\bknit\b/i,        label: 'Knit' },
@@ -307,7 +334,126 @@ export function extractGarmentEvidence(
     ? color.split(/[,/&]|\band\b/i).map((c) => c.trim()).filter((c) => c.length > 0)
     : [];
 
-  return { tokens, family, type, subtype, style, activity, material, colors, source: 'user' };
+  const thermal = inferThermalLevel(family, subtype, material, combined);
+  const coverage = inferCoverageLevel(family, subtype, combined);
+  const functionalRole = inferFunctionalRole(family, subtype, style, activity, combined);
+  const personalUsage = extractPersonalUsage(whereWornOften, userNotes, uniq);
+
+  return {
+    tokens,
+    family,
+    type,
+    subtype,
+    style,
+    activity,
+    material,
+    colors,
+    thermal,
+    coverage,
+    functionalRole,
+    personalUsage,
+    source: 'user',
+  };
+}
+
+function inferThermalLevel(
+  family: GarmentFamily,
+  subtype: string | null,
+  material: string[],
+  combined: string
+): ThermalLevel {
+  const hasKnit = material.some((m) => ['Knit', 'Ribbed Knit', 'Wool', 'Cashmere'].includes(m));
+  const hasHeavyOuter = /\b(wool|down|puffer|parka|heavy|winter|fleece|shearling|turtleneck|sweater|cardigan|coat)\b/i.test(combined);
+  if (hasKnit || hasHeavyOuter) return 'heavyWarmth';
+
+  const isLight =
+    /\b(shorts?|running shorts|swim|bikini|crop|tank|sleeveless|mini skirt|micro mini|sandals?|slides?|flip.?flops?)\b/i.test(combined) ||
+    (subtype !== null && /\b(Shorts|Mini Skirt|Micro Mini Skirt|Tank|Crop)\b/i.test(subtype));
+  if (isLight) return 'lightWarmth';
+
+  if (family === 'Top' || family === 'Bottom' || family === 'Outerwear' || family === 'Dress') {
+    return 'moderateWarmth';
+  }
+  return 'unknown';
+}
+
+function inferCoverageLevel(
+  family: GarmentFamily,
+  subtype: string | null,
+  combined: string
+): CoverageLevel {
+  const isMinimal =
+    /\b(shorts?|running shorts|bikini|swimsuit|crop top|tank top|sleeveless|mini skirt|micro mini|sandals?|bare.?legs?)\b/i.test(combined) ||
+    (subtype !== null && /\b(Shorts|Mini Skirt|Micro Mini Skirt|Crop Top|Tank Top)\b/i.test(subtype));
+  if (isMinimal) return 'minimal';
+
+  const isFull =
+    /\b(pants?|jeans?|trousers?|slacks|maxi dress|maxi skirt|long coat|parka|trench coat)\b/i.test(combined) ||
+    (subtype !== null && /\b(Jeans|Pants|Trousers|Slacks|Maxi Dress|Maxi Skirt|Coat|Trench Coat)\b/i.test(subtype));
+  if (isFull) return 'full';
+
+  if (family === 'Dress' || family === 'Top' || family === 'Outerwear' || family === 'Bottom') {
+    return 'moderate';
+  }
+  return 'unknown';
+}
+
+function inferFunctionalRole(
+  family: GarmentFamily,
+  subtype: string | null,
+  style: string[],
+  activity: string[],
+  combined: string
+): FunctionalRole {
+  if (
+    activity.some((a) => ['Running', 'Gym', 'Workout', 'Fitness', 'Training', 'Sports', 'Exercise'].includes(a)) ||
+    style.includes('Activewear') ||
+    /\b(athletic|running|exercise|gym|workout|compression|nike|adidas|under armour|lululemon|marathon|track pants?|activewear|dri.?fit|dry.?fit)\b/i.test(combined) ||
+    (subtype !== null && /\b(Running Shorts|Athletic Shorts|Gym Shorts|Cycling Shorts|Compression Shorts|Running Shoes)\b/i.test(subtype))
+  ) {
+    return 'athleticPerformance';
+  }
+
+  if (activity.includes('Swimming') || /\b(swimsuit|bikini|swim trunks?|boardshorts?|rash guard|swimwear)\b/i.test(combined)) {
+    return 'swimwear';
+  }
+
+  if (style.includes('Formal') || /\b(blazer|tuxedo|suit|gown|evening dress|cocktail dress|dress pants|tailored|stiletto|pumps?|oxfords?)\b/i.test(combined)) {
+    return 'formalTailored';
+  }
+
+  if (style.includes('Smart Casual') || /\b(chinos|loafers?|button-down|blouse|cardigan|midi dress|pencil skirt)\b/i.test(combined)) {
+    return 'smartCasual';
+  }
+
+  if (/\b(raincoat|waterproof|windbreaker|parka|trench coat)\b/i.test(combined)) {
+    return 'protective';
+  }
+
+  if (/\b(pajamas?|robe|loungewear|sweatpants?|slippers?)\b/i.test(combined)) {
+    return 'lounge';
+  }
+
+  if (family !== 'Unknown') {
+    return 'casualEveryday';
+  }
+
+  return 'unknown';
+}
+
+function extractPersonalUsage(
+  whereWornOften: string,
+  userNotes: string | undefined,
+  uniq: <T>(arr: T[]) => T[]
+): PersonalUsageSignal {
+  const text = [whereWornOften, userNotes ?? ''].filter(Boolean).join(' ');
+  const activities = uniq(
+    ACTIVITY_SIGNALS.filter((s) => s.pattern.test(text)).map((s) => s.label)
+  );
+  return {
+    activities,
+    rawText: text.trim(),
+  };
 }
 
 const FAMILY_TO_BUCKET: Record<GarmentFamily, string> = {
@@ -345,6 +491,10 @@ export function normalizeGarment(
     activity: evidence.activity,
     material: evidence.material,
     colors: evidence.colors,
+    thermal: evidence.thermal,
+    coverage: evidence.coverage,
+    functionalRole: evidence.functionalRole,
+    personalUsage: evidence.personalUsage,
     systemBucket: FAMILY_TO_BUCKET[evidence.family],
     evidence,
   };
