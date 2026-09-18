@@ -47,9 +47,10 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
   };
 
   const handleCancel = () => {
-    if (loading) return;
-    setOccasion('');
-    setAdditionalContext('');
+    if (!loading) {
+      setOccasion('');
+      setAdditionalContext('');
+    }
     onCancel();
   };
 
@@ -126,9 +127,8 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
             {/* Actions */}
             <SafeAreaView edges={['bottom']} style={[styles.actions, { borderTopColor: colors.border, backgroundColor: colors.card }]}>
               <TouchableOpacity
-                style={[styles.cancelBtn, { borderColor: colors.border, opacity: loading ? 0.5 : 1 }]}
+                style={[styles.cancelBtn, { borderColor: colors.border }]}
                 onPress={handleCancel}
-                disabled={loading}
               >
                 <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
@@ -142,7 +142,7 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
                 {loading ? (
                   <>
                     <ActivityIndicator size="small" color={colors.onTint} />
-                    <Text style={[styles.checkBtnText, { color: colors.onTint }]}>Analyzing your outfit…</Text>
+                    <Text style={[styles.checkBtnText, { color: colors.onTint }]}>Analyzing… can take up to a minute</Text>
                   </>
                 ) : (
                   <>

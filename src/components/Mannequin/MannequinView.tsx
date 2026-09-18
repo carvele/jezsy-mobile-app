@@ -1042,7 +1042,11 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
             }
           }
         }}
-        onCancel={() => setOutfitContextVisible(false)}
+        onCancel={() => {
+          currentStylistRequestIdRef.current++;
+          setStylistLoading(false);
+          setOutfitContextVisible(false);
+        }}
       />
 
       {/* JeZsy Stylist Critique Modal */}

@@ -6,11 +6,12 @@ const jsonResponse = (req: Request, body: unknown, status = 200) =>
     headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   });
 
-// Free-tier LLM providers can stall far longer than a user will wait; bail out fast so
-// the client falls back to the deterministic engine instead of hanging. Kept comfortably
-// under the client's own 15s hard cutoff (src/services/aiStylistProvider.ts) so a response
-// that does complete in time has a chance to reach the client before it gives up.
-const LLM_TIMEOUT_MS = 12_000;
+// Free-tier LLM providers can stall far longer than a user will wait; bail out before the
+// platform's own resource-limit kill so we can at least return a clean fallback response
+// instead of a hard crash. Kept comfortably under the client's own 90s hard cutoff
+// (src/services/aiStylistProvider.ts) so a response that does complete in time can still
+// reach the client before it gives up.
+const LLM_TIMEOUT_MS = 80_000;
 
 class LlmTimeoutError extends Error {
   constructor() {
