@@ -118,6 +118,72 @@ export function analyzeFit(
   return zones;
 }
 
+// --- Overall fit summary (heatmap-style) ---------------------------------
+// analyzeFit already returns a precise per-zone verdict; this collapses
+// those zones into the single overall label a fit-heatmap header needs,
+// picking the most extreme zone rather than averaging so a tight bust on an
+// otherwise-relaxed top is never hidden by the other zones.
+export type OverallFitVerdict = 'tight' | 'fitted' | 'loose';
+
+export interface OverallFitSummary {
+  verdict: OverallFitVerdict;
+  label: string;
+  tightestZone: FitZone;
+}
+
+const FIT_SEVERITY: Record<FitVerdict, number> = {
+  too_tight: 2,
+  snug: 1,
+  fitted: 0,
+  relaxed: 1,
+  roomy: 2,
+};
+
+const OVERALL_LABELS: Record<FitVerdict, string> = {
+  too_tight: 'Runs tight',
+  snug: 'Fitted, form-hugging',
+  fitted: 'True to size',
+  relaxed: 'Comfortably relaxed',
+  roomy: 'Runs loose',
+};
+
+/** Collapses per-zone verdicts into one overall label for a fit heatmap. */
+export function summarizeOverallFit(zones: FitZone[]): OverallFitSummary | null {
+  if (!zones || zones.length === 0) return null;
+
+  let worst = zones[0];
+  for (const z of zones) {
+    if (FIT_SEVERITY[z.verdict] > FIT_SEVERITY[worst.verdict]) worst = z;
+  }
+
+  const verdict: OverallFitVerdict =
+    worst.verdict === 'too_tight' || worst.verdict === 'snug' ? 'tight' :
+    worst.verdict === 'roomy' || worst.verdict === 'relaxed' ? 'loose' :
+    'fitted';
+
+  return { verdict, label: OVERALL_LABELS[worst.verdict], tightestZone: worst };
+}
+
+// --- Sizing fit-category taxonomy ------------------------------------------
+// A fixed taxonomy for the free-text `category` strings recommendSize
+// already parses via ad-hoc substring checks; centralizes that logic in one
+// lookup so new categories are added once instead of at every call site.
+// Named distinctly from types/garment.ts's GarmentCategory (the AR-ingestion
+// contract enum: shirt/dress/jacket/pants/skirt) -- that type drives asset
+// calibration, this one drives measurement weighting, and they intentionally
+// group categories differently; reusing the name would silently invite the
+// wrong one being imported.
+export type SizeFitCategory = 'top' | 'bottom' | 'dress' | 'outerwear' | 'unknown';
+
+export function classifySizeFitCategory(category?: string | null): SizeFitCategory {
+  const cat = (category || '').toLowerCase();
+  if (cat.includes('blazer') || cat.includes('jacket') || cat.includes('outerwear')) return 'outerwear';
+  if (cat.includes('dress') || cat.includes('jumpsuit') || cat.includes('romper') || cat.includes('gown')) return 'dress';
+  if (cat.includes('bottom') || cat.includes('pant') || cat.includes('jean') || cat.includes('skirt') || cat.includes('short') || cat.includes('trouser')) return 'bottom';
+  if (cat.includes('top') || cat.includes('shirt') || cat.includes('bra') || cat.includes('activewear')) return 'top';
+  return 'unknown';
+}
+
 // --- Length fit signal (roadmap Phase 3) ---------------------------------
 // Feedback only: does not affect garment scale, which stays uniform (see
 // ar-system-contract.md's fit-model boundary -- "this garment worn on this
