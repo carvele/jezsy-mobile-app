@@ -3870,15 +3870,20 @@ export type Database = {
         }
         Returns: Json
       }
-      review_reservation_receipt: {
-        Args: {
-          _approve: boolean
-          _reason_code?: string
-          _reservation_id: string
-          _staff_note?: string
-        }
-        Returns: Json
-      }
+      review_reservation_receipt:
+        | {
+            Args: { _approve: boolean; _reservation_id: string }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _approve: boolean
+              _reason_code?: string
+              _reservation_id: string
+              _staff_note?: string
+            }
+            Returns: Json
+          }
       review_return_refund_request: {
         Args: { _decision: string; _notes?: string; _request_id: string }
         Returns: Json
@@ -4290,3 +4295,4 @@ export const Constants = {
     },
   },
 } as const
+
