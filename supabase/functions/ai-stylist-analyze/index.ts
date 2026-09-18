@@ -6,6 +6,20 @@ const jsonResponse = (req: Request, body: unknown, status = 200) =>
     headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   });
 
+// Free-tier LLM providers can stall far longer than a user will wait; bail out fast
+// so the client falls back to the deterministic engine instead of hanging.
+const LLM_TIMEOUT_MS = 20_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 interface StylistEvidencePacket {
   request: {
     analysisId: string;
@@ -144,22 +158,26 @@ Produce a structured JSON critique with this exact schema:
       providerName = 'gemini';
       modelName = 'gemini-1.5-flash';
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: `${SYSTEM_PROMPT}\n\n${promptContent}` }],
+      const response = await fetchWithTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${SYSTEM_PROMPT}\n\n${promptContent}` }],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: 'application/json',
             },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: 'application/json',
-          },
-        }),
-      });
+          }),
+        },
+        LLM_TIMEOUT_MS
+      );
 
       if (!response.ok) {
         const errText = await response.text();
@@ -182,22 +200,26 @@ Produce a structured JSON critique with this exact schema:
         : 'https://openrouter.ai/api/v1/chat/completions';
       const key = openaiApiKey || openrouterApiKey;
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${key}`,
+      const response = await fetchWithTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: promptContent },
+            ],
+            temperature: 0.2,
+            response_format: { type: 'json_object' },
+          }),
         },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: promptContent },
-          ],
-          temperature: 0.2,
-          response_format: { type: 'json_object' },
-        }),
-      });
+        LLM_TIMEOUT_MS
+      );
 
       if (!response.ok) {
         const errText = await response.text();
@@ -231,6 +253,14 @@ Produce a structured JSON critique with this exact schema:
       analysisId: packet.request.analysisId,
     });
   } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.error('[ai-stylist-analyze] LLM request timed out after', LLM_TIMEOUT_MS, 'ms');
+      return jsonResponse(req, {
+        success: false,
+        fallbackRequired: true,
+        reason: 'LLM_TIMEOUT',
+      });
+    }
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error('[ai-stylist-analyze] Unexpected server error:', errorMsg);
     return jsonResponse(req, {

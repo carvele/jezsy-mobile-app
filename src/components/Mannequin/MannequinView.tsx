@@ -181,6 +181,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   // Stylist Critique Modal State — triggered by user via OutfitContextModal, not auto-scored
   const [stylistModalVisible, setStylistModalVisible] = useState(false);
   const [outfitContextVisible, setOutfitContextVisible] = useState(false);
+  const [stylistLoading, setStylistLoading] = useState(false);
   const [activeCritique, setActiveCritique] = useState<StylistCritique | null>(null);
   const [activeStylistContext, setActiveStylistContext] = useState<OutfitContext | null>(null);
   const [userFeedback, setUserFeedback] = useState<'liked' | 'passed' | 'worn' | null>(null);
@@ -1009,29 +1010,37 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       {/* JeZsy Stylist — context modal (appears before scoring) */}
       <OutfitContextModal
         visible={outfitContextVisible}
+        loading={stylistLoading}
         onConfirm={async (ctx) => {
           const requestId = ++currentStylistRequestIdRef.current;
-          setOutfitContextVisible(false);
+          setStylistLoading(true);
           setActiveCritique(null);
           setUserFeedback(null);
-          let profile = null;
-          if (session?.user?.id) {
-            try {
-              profile = await styleProfileService.getProfile(session.user.id);
-            } catch {
-              // fallback gracefully
+          try {
+            let profile = null;
+            if (session?.user?.id) {
+              try {
+                profile = await styleProfileService.getProfile(session.user.id);
+              } catch {
+                // fallback gracefully
+              }
+            }
+            if (requestId !== currentStylistRequestIdRef.current) {
+              return;
+            }
+            const critique = await gradeOutfitWithAI(canvasItems, wardrobeLookup, ctx, profile);
+            if (requestId !== currentStylistRequestIdRef.current) {
+              return;
+            }
+            setActiveCritique(critique);
+            setActiveStylistContext(ctx);
+            setOutfitContextVisible(false);
+            setStylistModalVisible(true);
+          } finally {
+            if (requestId === currentStylistRequestIdRef.current) {
+              setStylistLoading(false);
             }
           }
-          if (requestId !== currentStylistRequestIdRef.current) {
-            return;
-          }
-          const critique = await gradeOutfitWithAI(canvasItems, wardrobeLookup, ctx, profile);
-          if (requestId !== currentStylistRequestIdRef.current) {
-            return;
-          }
-          setActiveCritique(critique);
-          setActiveStylistContext(ctx);
-          setStylistModalVisible(true);
         }}
         onCancel={() => setOutfitContextVisible(false)}
       />

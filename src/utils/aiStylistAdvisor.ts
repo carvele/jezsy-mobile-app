@@ -1918,7 +1918,7 @@ export function gradeOutfit(
       headline = 'Thermal & Occasion Conflict';
       verdict = `The athletic running shorts create both a thermal and occasion mismatch for a cold night date.`;
 
-      const conflictShorts = garmentProfiles.find(
+      const conflictShorts = structure.bottoms.find(
         (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
       );
       const personalNote = conflictShorts?.personalUsage?.rawText
@@ -1987,7 +1987,7 @@ export function gradeOutfit(
       const hasFlatsOrNonRunningShoes = structure.shoes.some(
         (s) => !s.styleSignals.athletic && !/\b(running shoes?|trainers?|sneakers?)\b/i.test(s.combinedText)
       );
-      const runningShorts = garmentProfiles.find(
+      const runningShorts = structure.bottoms.find(
         (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
       );
       const userPersonalizationNote = runningShorts?.personalUsage?.rawText
@@ -2164,7 +2164,7 @@ export function gradeOutfit(
       const hasFlatsOrNonRunningShoes = structure.shoes.some(
         (s) => !s.styleSignals.athletic && !/\b(running shoes?|trainers?|sneakers?)\b/i.test(s.combinedText)
       );
-      const runningShorts = garmentProfiles.find(
+      const runningShorts = structure.bottoms.find(
         (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
       );
       const userPersonalizationNote = runningShorts?.personalUsage?.rawText
@@ -2238,7 +2238,7 @@ export function gradeOutfit(
       const topName = topG?.identity.name || 'top';
       const botName = botG?.identity.name || 'bottom';
 
-      const conflictShorts = garmentProfiles.find(
+      const conflictShorts = structure.bottoms.find(
         (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
       );
       const isIndoorVenue = isIndoorOverride || /indoor/i.test(`${rawOccasion} ${rawAdditionalContext}`);
