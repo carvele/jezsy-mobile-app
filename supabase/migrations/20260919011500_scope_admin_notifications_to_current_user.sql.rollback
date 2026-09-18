@@ -1,0 +1,55 @@
+-- Rollback for 20260919011500_scope_admin_notifications_to_current_user.sql
+
+-- 1. Restore previous view definition (without security_invoker and without user_id filter)
+CREATE OR REPLACE VIEW public.admin_user_notifications_view AS
+SELECT 
+    r.id,
+    r.notification_id,
+    r.user_id,
+    n.title,
+    n.message,
+    n.type,
+    n.event_key,
+    n.actor_id,
+    n.entity_type,
+    n.entity_id,
+    n.data,
+    n.priority,
+    r.is_read,
+    r.is_dismissed,
+    n.created_at
+FROM public.admin_notifications n
+JOIN public.admin_notification_receipts r ON n.id = r.notification_id
+WHERE r.is_dismissed = false;
+
+GRANT SELECT ON public.admin_user_notifications_view TO authenticated;
+
+-- 2. Drop functions
+DROP FUNCTION IF EXISTS public.mark_admin_notifications_read(UUID[]);
+DROP FUNCTION IF EXISTS public.dismiss_admin_notifications(UUID[]);
+
+-- 3. Restore previous mark_admin_notifications_read (returning void)
+CREATE OR REPLACE FUNCTION public.mark_admin_notifications_read(p_receipt_ids UUID[])
+RETURNS void
+LANGUAGE sql SECURITY DEFINER SET search_path = ''
+AS $$
+    UPDATE public.admin_notification_receipts
+    SET is_read = true
+    WHERE id = ANY(p_receipt_ids)
+      AND user_id = auth.uid();
+$$;
+
+GRANT EXECUTE ON FUNCTION public.mark_admin_notifications_read(UUID[]) TO authenticated;
+
+-- 4. Restore previous dismiss_admin_notifications (returning void)
+CREATE OR REPLACE FUNCTION public.dismiss_admin_notifications(p_receipt_ids UUID[])
+RETURNS void
+LANGUAGE sql SECURITY DEFINER SET search_path = ''
+AS $$
+    UPDATE public.admin_notification_receipts
+    SET is_dismissed = true
+    WHERE id = ANY(p_receipt_ids)
+      AND user_id = auth.uid();
+$$;
+
+GRANT EXECUTE ON FUNCTION public.dismiss_admin_notifications(UUID[]) TO authenticated;
