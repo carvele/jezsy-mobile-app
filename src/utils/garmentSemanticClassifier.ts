@@ -43,6 +43,11 @@ export interface PersonalUsageSignal {
   rawText: string;
 }
 
+export interface GarmentConflict {
+  hasConflict: boolean;
+  message: string | null;
+}
+
 export interface GarmentEvidence {
   tokens: string[];
   family: GarmentFamily;
@@ -57,6 +62,7 @@ export interface GarmentEvidence {
   functionalRole: FunctionalRole;
   personalUsage: PersonalUsageSignal;
   source: EvidenceSource;
+  conflict?: GarmentConflict;
 }
 
 export interface NormalizedGarment {
@@ -74,6 +80,7 @@ export interface NormalizedGarment {
   /** Bucket for mannequin placement (Top/Bottom/Dress/Outerwear/Shoes/Accessory) */
   systemBucket: string;
   evidence: GarmentEvidence;
+  conflict?: GarmentConflict;
 }
 
 // ============================================================================
@@ -186,6 +193,9 @@ const TOP_SUBTYPES: SubtypeRow[] = [
   { pattern: /\btees?\b/i,                          type: 'T-Shirt',  subtype: null },
   { pattern: /\bbutton.?downs?\b/i,                 type: 'Shirt',    subtype: 'Button-Down Shirt' },
   { pattern: /\bbutton.?up\b/i,                     type: 'Shirt',    subtype: 'Button-Up Shirt' },
+  { pattern: /\bhenleys?\b/i,                       type: 'Henley',   subtype: null },
+  { pattern: /\bhoodies?\b/i,                       type: 'Hoodie',   subtype: null },
+  { pattern: /\bsweatshirts?\b/i,                   type: 'Sweatshirt', subtype: null },
   { pattern: /\bbodysuits?\b/i,                     type: 'Bodysuit', subtype: null },
   { pattern: /\bcamisoles?\b/i,                     type: 'Camisole', subtype: null },
   { pattern: /\bpolos?\b/i,                         type: 'Polo',     subtype: null },
@@ -270,8 +280,30 @@ const MATERIAL_SIGNALS: { pattern: RegExp; label: string }[] = [
 // CORE FUNCTIONS
 // ============================================================================
 
+export function inferFamilyFromCategory(cat: string): GarmentFamily {
+  const c = cat.trim().toLowerCase();
+  if (!c) return 'Unknown';
+  if (/\b(tops?|shirts?|blouses?|upperwear)\b/i.test(c)) return 'Top';
+  if (/\b(bottoms?|pants?|trousers?|shorts?|skirts?|jeans?|lowerwear)\b/i.test(c)) return 'Bottom';
+  if (/\b(dresses?|one.?pieces?|jumpsuits?|rompers?|gowns?)\b/i.test(c)) return 'Dress';
+  if (/\b(outerwears?|coats?|jackets?|blazers?)\b/i.test(c)) return 'Outerwear';
+  if (/\b(shoes?|footwear|sneakers?|boots?|heels?|sandals?|flats?)\b/i.test(c)) return 'Footwear';
+  if (/\b(accessories|accessory|bags?|purses?|belts?|hats?|jewelr(?:y|ies))\b/i.test(c)) return 'Accessory';
+  return 'Unknown';
+}
+
+function matchSubtypeInTable(text: string, table: SubtypeRow[]): { type: string; subtype: string | null } | null {
+  for (const row of table) {
+    if (row.pattern.test(text)) {
+      return { type: row.type, subtype: row.subtype };
+    }
+  }
+  return null;
+}
+
 /**
  * Extracts structured semantic evidence from user-entered garment fields.
+ * Follows strict authoritative priority: Category -> Sub Category -> Description.
  * Preserves all original user text — only extracts parallel evidence.
  */
 export function extractGarmentEvidence(
@@ -291,34 +323,101 @@ export function extractGarmentEvidence(
   let family: GarmentFamily = 'Unknown';
   let type: string | null = null;
   let subtype: string | null = null;
+  let conflict: GarmentConflict = { hasConflict: false, message: null };
 
-  // Priority: Dress > Outerwear > Footwear > Bottom > Accessory > Top
-  // Outerwear before Top: cardigan/hoodie would otherwise match Top first
-  // Bottom before Top: shorts/skirts must not fall through
-  function tryMatch(table: SubtypeRow[], fam: GarmentFamily): boolean {
-    for (const row of table) {
-      if (row.pattern.test(combined)) {
-        family = fam;
-        type = row.type;
-        subtype = row.subtype;
-        return true;
-      }
+  const catFamily = inferFamilyFromCategory(category);
+  const subText = subCategory.trim();
+  const descText = description.trim();
+
+  // Helper to match across subcategory or description for a given family
+  const checkSubAndDesc = (text: string) => {
+    // 1. Dress
+    const dressMatch = matchSubtypeInTable(text, DRESS_SUBTYPES);
+    if (dressMatch) return { fam: 'Dress' as GarmentFamily, ...dressMatch };
+
+    // 2. Outerwear (except when category explicitly says Tops and item is a topwear sweater/hoodie)
+    const outMatch = matchSubtypeInTable(text, OUTERWEAR_SUBTYPES);
+    if (outMatch) return { fam: 'Outerwear' as GarmentFamily, ...outMatch };
+
+    // 3. Footwear
+    const footMatch = matchSubtypeInTable(text, FOOTWEAR_SUBTYPES);
+    if (footMatch) return { fam: 'Footwear' as GarmentFamily, ...footMatch };
+
+    // 4. Bottom
+    const botMatch = matchSubtypeInTable(text, BOTTOM_SUBTYPES);
+    if (botMatch) return { fam: 'Bottom' as GarmentFamily, ...botMatch };
+
+    // 5. Accessory
+    if (ACCESSORY_PATTERNS.some((p) => p.test(text))) {
+      return { fam: 'Accessory' as GarmentFamily, type: 'Accessory', subtype: null };
     }
-    return false;
+
+    // 6. Top
+    const topMatch = matchSubtypeInTable(text, TOP_SUBTYPES);
+    if (topMatch) return { fam: 'Top' as GarmentFamily, ...topMatch };
+
+    return null;
+  };
+
+  // 1. Check Subcategory
+  const subMatch = subText ? checkSubAndDesc(subText) : null;
+
+  if (catFamily !== 'Unknown') {
+    if (subMatch) {
+      // Special case: Category = Tops with Hoodie / Cardigan / Vest
+      if (catFamily === 'Top' && (subMatch.fam === 'Outerwear' || subMatch.fam === 'Top')) {
+        family = 'Top';
+        type = subMatch.type;
+        subtype = subMatch.subtype;
+      } else if (catFamily === subMatch.fam) {
+        family = catFamily;
+        type = subMatch.type;
+        subtype = subMatch.subtype;
+      } else {
+        // Conflict! e.g. Category = Tops, Sub Category = Running Shorts (Bottom)
+        // Sub Category is the concrete garment item, so it takes precedence for semantics
+        family = subMatch.fam;
+        type = subMatch.type;
+        subtype = subMatch.subtype;
+        conflict = {
+          hasConflict: true,
+          message: `Category is ${category.trim()} but Sub Category indicates ${subMatch.fam} (${subText})`,
+        };
+      }
+    } else {
+      // Sub Category doesn't match any specific subtype; Category is authoritative
+      family = catFamily;
+      type = subText || catFamily;
+      subtype = null;
+    }
+  } else if (subMatch) {
+    // Category is generic ('Clothing' or ''), Sub Category is authoritative
+    family = subMatch.fam;
+    type = subMatch.type;
+    subtype = subMatch.subtype;
+  } else if (descText) {
+    // Both Category and Sub Category are generic; evaluate Description
+    const descMatch = checkSubAndDesc(descText);
+    if (descMatch) {
+      family = descMatch.fam;
+      type = descMatch.type;
+      subtype = descMatch.subtype;
+    }
   }
 
-  tryMatch(DRESS_SUBTYPES, 'Dress') ||
-  tryMatch(OUTERWEAR_SUBTYPES, 'Outerwear') ||
-  tryMatch(FOOTWEAR_SUBTYPES, 'Footwear') ||
-  tryMatch(BOTTOM_SUBTYPES, 'Bottom') ||
-  (() => {
-    for (const pat of ACCESSORY_PATTERNS) {
-      if (pat.test(combined)) { family = 'Accessory'; type = 'Accessory'; return true; }
+  // Refine subtype from description if subcategory only gave a generic type without subtype
+  if (family !== 'Unknown' && !subtype && descText) {
+    const descMatch = checkSubAndDesc(descText);
+    if (descMatch && descMatch.fam === family && descMatch.subtype) {
+      subtype = descMatch.subtype;
+      if (descMatch.type) type = descMatch.type;
     }
-    return false;
-  })() ||
-  tryMatch(TOP_SUBTYPES, 'Top');
-  // If still Unknown — correct; do not invent a family
+  }
+
+  // Fallback: If family is known but type is null, use family
+  if (family !== 'Unknown' && !type) {
+    type = family === 'Footwear' ? 'Shoes' : family;
+  }
 
   const uniq = <T>(arr: T[]): T[] => [...new Set(arr)];
 
@@ -354,6 +453,7 @@ export function extractGarmentEvidence(
     functionalRole,
     personalUsage,
     source: 'user',
+    conflict,
   };
 }
 
@@ -498,6 +598,7 @@ export function normalizeGarment(
     personalUsage: evidence.personalUsage,
     systemBucket: FAMILY_TO_BUCKET[evidence.family],
     evidence,
+    conflict: evidence.conflict,
   };
 }
 
@@ -508,15 +609,18 @@ export function normalizeGarment(
 export function inferSystemBucket(
   category: string,
   subCategory: string,
-  description: string
+  description: string,
+  color?: string,
+  whereWornOften?: string,
+  userNotes?: string
 ): string {
-  return normalizeGarment(category, subCategory, '', '', description).systemBucket;
+  return normalizeGarment(category, subCategory, color || '', whereWornOften || '', description, userNotes).systemBucket;
 }
 
 /**
- * Resolves the effective system bucket for an item, healing legacy items
- * that were saved with the naive fallback ('Top') when evidence shows
- * they are Bottom, Outerwear, Shoes, Dress, or Accessory.
+ * Resolves the effective system bucket for an item.
+ * User-entered category, subcategory, and description are strictly authoritative.
+ * Legacy garment_type in the database is only a fallback when current metadata is uninformative.
  */
 export function resolveEffectiveGarmentBucket(item: {
   garment_type?: string | null;
@@ -526,22 +630,46 @@ export function resolveEffectiveGarmentBucket(item: {
   color_tags?: string[] | null;
   where_worn_often?: string | null;
   user_notes?: string | null;
+  occasions?: string[] | null;
+  ai_attributes?: any;
 }): string {
-  const colorStr = item.color_tags && item.color_tags.length > 0 ? item.color_tags.join(', ') : '';
+  const colorStr =
+    (item as any)?.ai_attributes?.rawColor ||
+    (item.color_tags && item.color_tags.length > 0 ? item.color_tags.join(', ') : '');
+  const whereWornStr =
+    (item as any)?.ai_attributes?.whereWornOften ||
+    (Array.isArray((item as any)?.occasions) && (item as any).occasions.length > 0
+      ? (item as any).occasions.join(', ')
+      : '') ||
+    item.where_worn_often ||
+    '';
+  const descStr = item.description || (item as any)?.ai_attributes?.description || '';
+  const notesStr = item.user_notes || (item as any)?.ai_attributes?.userNotes || '';
+
   const norm = normalizeGarment(
     item.category || '',
     item.sub_category || '',
     colorStr,
-    item.where_worn_often || '',
-    item.description || '',
-    item.user_notes || ''
+    whereWornStr,
+    descStr,
+    notesStr
   );
+
+  // Current user-entered data is authoritative! If a valid family was derived, return its systemBucket.
   if (norm.family !== 'Unknown') {
-    if (!item.garment_type || item.garment_type === 'Top') {
-      return norm.systemBucket;
-    }
+    return norm.systemBucket;
   }
-  return item.garment_type || norm.systemBucket || 'Top';
+
+  // Legacy garment_type ONLY as a fallback when current user metadata is insufficient
+  if (item.garment_type && item.garment_type.trim() && item.garment_type !== 'Unknown') {
+    const trimmed = item.garment_type.trim();
+    const match = ['Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'].find(
+      (b) => b.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (match) return match;
+  }
+
+  return norm.systemBucket || 'Top';
 }
 
 
