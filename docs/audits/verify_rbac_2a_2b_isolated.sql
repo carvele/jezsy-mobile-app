@@ -1,8 +1,10 @@
 -- ============================================================================
+-- [HISTORICAL / SUPERSEDED]
 -- RBAC 2A -> 2B Isolated PostgreSQL End-to-End Verification Test Harness
--- ============================================================================
--- Tests the complete schema, backfill, capability resolution, writer cutover,
--- Owner quorum invariants, compensation behavior, and rollback.
+-- STATUS: ARCHIVED / UNAPPLIED.
+-- The underlying migrations (161500 / 162000) were never applied to production
+-- and have been superseded by the canonical Single-Owner AAL1 IAM operating model.
+-- This harness is preserved for historical audit reference only.
 -- ============================================================================
 
 \set ON_ERROR_STOP on
