@@ -88,7 +88,9 @@ export function StylistCritiqueModal({
             <View style={styles.headerTitleWrap}>
               <View style={[styles.headerBadge, { backgroundColor: colors.tint + '18' }]}>
                 <IconSymbol name="sparkles" size={13} color={colors.tint} />
-                <Text style={[styles.headerBadgeText, { color: colors.tint }]}>JeZsy Stylist</Text>
+                <Text style={[styles.headerBadgeText, { color: colors.tint }]}>
+                  {critique.analysisMode === 'hybridLLM' ? 'JeZsy AI Stylist' : 'JeZsy Stylist'}
+                </Text>
               </View>
             </View>
             <TouchableOpacity
@@ -149,6 +151,11 @@ export function StylistCritiqueModal({
                 <Text style={{ fontSize: 11, color: colors.secondaryText }}>
                   Context Hash: {critique.contextHash} | Outfit Hash: {critique.outfitHash}
                 </Text>
+                {critique.mannequinItems && critique.mannequinItems.length > 0 ? (
+                  <Text style={{ fontSize: 10, color: colors.text, marginTop: 2 }} numberOfLines={2}>
+                    Items: {critique.mannequinItems.map((i) => `${i.name || i.garment_type}`).join(' + ')}
+                  </Text>
+                ) : null}
                 {critique.fallbackReason ? (
                   <Text style={{ fontSize: 10, color: colors.secondaryText, fontStyle: 'italic', marginTop: 2 }}>
                     Fallback note: {critique.fallbackReason}

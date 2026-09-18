@@ -112,6 +112,13 @@ export function validateAIResponse(
     }
   }
 
+  // Wedding / formal check
+  if (/wedding|matrimony|nuptial|gala|black.?tie/i.test(fullContextText)) {
+    if (!/wedding|formal|dress.?code|ceremony|elevat|tailor/i.test(fullResponseText)) {
+      return { valid: false, reason: 'Response failed to address wedding / formal context' };
+    }
+  }
+
   const sanitized: StructuredAIResponse = {
     assessment: res.assessment,
     headline: res.headline,

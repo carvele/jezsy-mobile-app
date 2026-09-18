@@ -23,13 +23,30 @@ const ALLOWED_ORIGINS: string[] = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
   .map((s) => s.trim())
   .filter(Boolean);
 
+const KNOWN_ALLOWED_ORIGIN_PATTERNS = [
+  /^https:\/\/(?:[a-z0-9-]+\.)?pages\.dev$/,
+  /^https:\/\/(?:www\.)?jezsy\.com$/,
+  /^http:\/\/localhost(?::\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(?::\d+)?$/,
+];
+
+export function isAllowedOrigin(origin: string | null): origin is string {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin)) return true;
+  return KNOWN_ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+}
+
 export function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') ?? '';
-  const allowOrigin = ALLOWED_ORIGINS.includes('*')
-    ? '*'
-    : ALLOWED_ORIGINS.includes(origin)
-    ? origin
-    : (ALLOWED_ORIGINS[0] ?? '');
+  let allowOrigin = '';
+
+  if (isAllowedOrigin(origin)) {
+    allowOrigin = origin;
+  } else if (ALLOWED_ORIGINS.includes('*')) {
+    allowOrigin = '*';
+  } else {
+    allowOrigin = ALLOWED_ORIGINS[0] ?? '';
+  }
 
   return {
     'Access-Control-Allow-Origin': allowOrigin,
@@ -45,9 +62,4 @@ export function handleCors(req: Request): Response | null {
     return new Response('ok', { status: 200, headers: corsHeaders(req) });
   }
   return null;
-}
-
-/** True if `origin` is one of the explicitly configured web origins (not the '*' fallback). */
-export function isAllowedOrigin(origin: string | null): origin is string {
-  return !!origin && ALLOWED_ORIGINS.includes(origin);
 }
