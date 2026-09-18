@@ -473,13 +473,23 @@ export default function ProductDetailScreen() {
   const canPurchase = !isSizingUnavailable && hasRequiredSelection && !selectedSizeOutOfStock && !isProductOutOfStock;
   const sizeChart = (product.measurements as ProductMeasurements | null) || null;
   const hasSizeChart = !!sizeChart && (product.sizes || []).some(s => sizeChart[s]);
-  // 10 is just a sane upper bound for the stepper UI -- selectedStock (the
-  // real per-size/colour inventory count) is the actual cap. Capping only at
-  // 10 let a customer request more units than existed: with 1 in stock, the
-  // "+" button still climbed to 10, and create_reservation_multi has no
-  // stock check of its own, so the reservation would have been accepted for
-  // 9 units that don't exist.
-  const maxQuantity = selectedStock !== null ? Math.max(Math.min(10, selectedStock), 0) : 10;
+  // getStockInfo only ever returns 0/1 for a tracked variant (is_available's
+  // boolean, not a real count -- see the comment above getStockInfo), so it
+  // can gate "is there any stock" but can't size the stepper. The real
+  // per-variant count is deliberately not exposed to customers. Cap
+  // conservatively instead: 1 when this variant is flagged low stock (real
+  // per-variant signal, ≤3 available), otherwise product.stock (the
+  // product-wide total, which IS customer-visible, unlike per-variant
+  // counts) as a generous but still real upper bound. Either way,
+  // create_reservation_multi is the actual backstop against overselling --
+  // this only shapes the UI.
+  const isLowStockSelected = !!selectedSize && !!getStockLabel(selectedSize, selectedColor || undefined);
+  const maxQuantity =
+    selectedStock !== null && selectedStock <= 0
+      ? 0
+      : isLowStockSelected
+        ? 1
+        : Math.max(1, Math.min(10, product.stock ?? 10));
   const effectiveQuantity = Math.min(Math.max(quantity, 1), Math.max(maxQuantity, 1));
 
   return (
@@ -756,6 +766,7 @@ export default function ProductDetailScreen() {
                   const isRecommended = recommendedSize === s;
                   const stock = getStockInfo(s, selectedColor || undefined);
                   const isOutOfStock = stock !== null && stock <= 0;
+                  const stockLabel = getStockLabel(s, selectedColor || undefined);
                   const { displayLabel, approxHelper } = formatFootwearDisplay(s, product.category || '');
                   
                   return (
@@ -784,8 +795,8 @@ export default function ProductDetailScreen() {
                       {isRecommended && !isOutOfStock && (
                         <Text style={[Type.caption, { color: colors.tint, marginTop: Spacing.xs, fontWeight: '700' }]}>Best fit ✨</Text>
                       )}
-                      {stock !== null && stock > 0 && stock <= 5 && !isRecommended && (
-                        <Text style={[Type.caption, { color: colors.warning, marginTop: Spacing.xs }]}>Only {stock} left</Text>
+                      {!!stockLabel && !isRecommended && (
+                        <Text style={[Type.caption, { color: colors.warning, marginTop: Spacing.xs }]}>{stockLabel}</Text>
                       )}
                       {isOutOfStock && (
                         <Text style={[Type.caption, { color: colors.secondaryText, marginTop: Spacing.xs }]}>Out of stock</Text>
@@ -832,8 +843,8 @@ export default function ProductDetailScreen() {
                 >
                   <IconSymbol name="plus" size={16} color={colors.text} />
                 </TouchableOpacity>
-                {selectedStock !== null && (
-                  <Text style={[styles.quantityHint, { color: colors.secondaryText }]}>{selectedStock} available</Text>
+                {isLowStockSelected && (
+                  <Text style={[styles.quantityHint, { color: colors.warning }]}>Low stock</Text>
                 )}
               </View>
             </View>
