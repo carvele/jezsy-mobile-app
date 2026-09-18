@@ -960,6 +960,7 @@ export default function ProductDetailScreen() {
                   effectiveQuantity,
                   selectedSize || undefined,
                   selectedColor || undefined,
+                  selectedStock !== null ? selectedStock : undefined,
                 );
                 notifySuccess();
                 announceAddedToBag();

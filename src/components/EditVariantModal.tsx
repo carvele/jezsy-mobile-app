@@ -53,10 +53,21 @@ export function EditVariantModal({ visible, product, currentSize, currentColor, 
     );
   };
 
+  // Real per-variant remaining count, sourced from product_variants.available
+  // (same source as the product detail screen). Falls back to the boolean
+  // is_available (as 0/1) if a row predates the migration.
+  const getStockCount = (s?: string, c?: string): number | null => {
+    const v = getVariant(s, c);
+    if (!v) return null;
+    const count = (v as any).available;
+    return typeof count === 'number' ? count : (v.is_available ? 1 : 0);
+  };
+
   const handleSave = () => {
     const v = getVariant(size, color);
     const variantId = v?.id || `${product.id}:${size ?? ''}:${color ?? ''}`;
-    onSave(variantId, size, color);
+    const stock = getStockCount(size, color);
+    onSave(variantId, size, color, stock !== null ? stock : undefined);
     onClose();
   };
 
@@ -109,24 +120,31 @@ export function EditVariantModal({ visible, product, currentSize, currentColor, 
                     const isSelected = size === s;
                     const matchingVariant = getVariant(s, color);
                     const isSoldOut = matchingVariant !== undefined && !matchingVariant.is_available;
+                    const stock = getStockCount(s, color);
                     return (
-                      <TouchableOpacity
-                        key={s}
-                        style={[
-                          styles.optionButton,
-                          { borderColor: isSelected ? colors.tint : colors.border },
-                          isSelected && { backgroundColor: colors.card },
-                          isSoldOut && styles.optionDisabled,
-                        ]}
-                        onPress={() => !isSoldOut && setSize(s)}
-                        disabled={isSoldOut}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Select size ${s}`}
-                        accessibilityHint={isSoldOut ? `Size ${s} is out of stock` : undefined}
-                        accessibilityState={{ selected: isSelected, disabled: isSoldOut }}
-                      >
-                        <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{s}</Text>
-                      </TouchableOpacity>
+                      <View key={s} style={styles.optionWrap}>
+                        <TouchableOpacity
+                          style={[
+                            styles.optionButton,
+                            { borderColor: isSelected ? colors.tint : colors.border },
+                            isSelected && { backgroundColor: colors.card },
+                            isSoldOut && styles.optionDisabled,
+                          ]}
+                          onPress={() => !isSoldOut && setSize(s)}
+                          disabled={isSoldOut}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Select size ${s}`}
+                          accessibilityHint={isSoldOut ? `Size ${s} is out of stock` : undefined}
+                          accessibilityState={{ selected: isSelected, disabled: isSoldOut }}
+                        >
+                          <Text style={[styles.optionText, { color: isSelected ? colors.tint : colors.text }]}>{s}</Text>
+                        </TouchableOpacity>
+                        {isSoldOut ? (
+                          <Text style={[styles.stockHint, { color: colors.secondaryText }]}>Out of stock</Text>
+                        ) : stock !== null && stock > 0 && stock <= 5 ? (
+                          <Text style={[styles.stockHint, { color: colors.warning }]}>Only {stock} left</Text>
+                        ) : null}
+                      </View>
                     );
                   })}
                 </View>
@@ -194,9 +212,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.md,
   },
+  optionWrap: { alignItems: 'center' },
   optionButton: { paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: 20, borderWidth: 1 },
   optionDisabled: { opacity: 0.4 },
   optionText: { ...Type.bodyStrong },
+  stockHint: { ...Type.caption, marginTop: Spacing.xs, fontSize: 11 },
   saveBtn: {
     height: 52,
     borderRadius: 14,
