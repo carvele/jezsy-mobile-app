@@ -21,6 +21,7 @@ import { UserStyleProfileDto } from '../types/dto/styleProfile';
 import { computePersonalAffinity } from './personalStyleEngine';
 import {
   normalizeGarment,
+  resolveEffectiveGarmentBucket,
   ThermalLevel,
   CoverageLevel,
   FunctionalRole,
@@ -780,66 +781,37 @@ export function buildGarmentSemanticProfile(
   const personalUsage = normalized.personalUsage;
   const subtype = normalized.subtype;
 
-  // Detect Functional Structure
-  const t = (item.garment_type || '').toLowerCase();
-  const isOnePiece =
-    t.includes('dress') ||
-    t.includes('jumpsuit') ||
-    t.includes('romper') ||
-    t.includes('gown') ||
-    t.includes('swimsuit') ||
-    /\b(dress|jumpsuit|romper|gown|overalls|one.?piece|swimsuit|bikini|monokini)\b/i.test(combinedText);
+  // Detect Functional Structure using authoritative semantic classification
+  let garmentFamily: GarmentSemanticProfile['garmentStructure']['garmentFamily'];
+  if (normalized.family === 'Dress') {
+    garmentFamily = 'onePiece';
+  } else if (normalized.family === 'Outerwear') {
+    garmentFamily = 'outerwear';
+  } else if (normalized.family === 'Footwear') {
+    garmentFamily = 'footwear';
+  } else if (normalized.family === 'Bottom') {
+    garmentFamily = 'lowerBody';
+  } else if (normalized.family === 'Accessory') {
+    garmentFamily = 'accessory';
+  } else if (normalized.family === 'Top') {
+    garmentFamily = 'upperBody';
+  } else {
+    // Fallback if semantic family is Unknown
+    const effectiveBucket = resolveEffectiveGarmentBucket(item);
+    if (effectiveBucket === 'Bottom') garmentFamily = 'lowerBody';
+    else if (effectiveBucket === 'Dress') garmentFamily = 'onePiece';
+    else if (effectiveBucket === 'Outerwear') garmentFamily = 'outerwear';
+    else if (effectiveBucket === 'Shoes') garmentFamily = 'footwear';
+    else if (effectiveBucket === 'Accessory') garmentFamily = 'accessory';
+    else garmentFamily = 'upperBody';
+  }
 
-  const isOuterwear =
-    t.includes('outerwear') ||
-    t.includes('jacket') ||
-    t.includes('blazer') ||
-    t.includes('coat') ||
-    t.includes('cardigan') ||
-    /\b(blazer|jacket|coat|cardigan|vest|windbreaker|trench|parka)\b/i.test(combinedText);
-
-  const isFootwear =
-    t.includes('shoe') ||
-    t.includes('heel') ||
-    t.includes('boot') ||
-    t.includes('sneaker') ||
-    t.includes('sandal') ||
-    /\b(shoes?|sneakers?|heels?|boots?|loafers?|sandals?|pumps?|oxfords?|flats?|mary jane)\b/i.test(combinedText);
-
-  const isLowerBody =
-    !isOnePiece &&
-    !isOuterwear &&
-    !isFootwear &&
-    (t.includes('bottom') ||
-      t.includes('pant') ||
-      t.includes('jean') ||
-      t.includes('skirt') ||
-      t.includes('short') ||
-      t.includes('trouser') ||
-      /\b(pants?|jeans?|trousers?|skirt|shorts?|slacks|leggings?)\b/i.test(combinedText));
-
-  const isUpperBody =
-    !isOnePiece &&
-    !isOuterwear &&
-    !isFootwear &&
-    !isLowerBody &&
-    (t.includes('top') ||
-      t.includes('shirt') ||
-      t.includes('blouse') ||
-      t.includes('sweater') ||
-      t.includes('bra') ||
-      t.includes('tee') ||
-      t.includes('tank') ||
-      /\b(shirt|blouse|tee|polo|sweater|knitwear|tank|crop.?top|turtleneck)\b/i.test(combinedText));
-
-  const isAccessory = !isOnePiece && !isOuterwear && !isFootwear && !isLowerBody && !isUpperBody;
-
-  let garmentFamily: GarmentSemanticProfile['garmentStructure']['garmentFamily'] = 'upperBody';
-  if (isOnePiece) garmentFamily = 'onePiece';
-  else if (isOuterwear) garmentFamily = 'outerwear';
-  else if (isFootwear) garmentFamily = 'footwear';
-  else if (isLowerBody) garmentFamily = 'lowerBody';
-  else if (isAccessory) garmentFamily = 'accessory';
+  const isOnePiece = garmentFamily === 'onePiece';
+  const isOuterwear = garmentFamily === 'outerwear';
+  const isFootwear = garmentFamily === 'footwear';
+  const isLowerBody = garmentFamily === 'lowerBody';
+  const isUpperBody = garmentFamily === 'upperBody';
+  const isAccessory = garmentFamily === 'accessory';
 
   // Detect Materials
   const materialSignals: GarmentMaterial[] = [];

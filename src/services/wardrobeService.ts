@@ -70,10 +70,10 @@ export async function getWardrobeItemsPage(
   const hasMore = raw.length > limit;
   const items = raw.slice(0, limit);
 
-  // Self-heal legacy items where garment_type was set to 'Top' but evidence proves otherwise
+  // Self-heal legacy items where garment_type does not match authoritative semantic evidence
   for (const item of items) {
     const effective = resolveEffectiveGarmentBucket(item);
-    if (effective !== item.garment_type && (item.garment_type === 'Top' || !item.garment_type)) {
+    if (effective !== item.garment_type) {
       item.garment_type = effective;
       supabase
         .from('wardrobe_items')
@@ -456,10 +456,7 @@ export async function updateItem(
     const effectiveDesc = input.description !== undefined ? (input.description?.trim() || null) : existingRecord.description;
     const effectiveNotes = input.userNotes !== undefined ? (input.userNotes?.trim() || null) : existingRecord.user_notes;
 
-    // 3. Recompute canonical system bucket using canonical classifier
-    const newBucket = inferSystemBucket(effectiveCategory, effectiveSub || '', effectiveDesc || '');
-
-    // 4. Recompute color tags and raw color string
+    // 3. Recompute color tags and raw color string
     let effectiveColorTags = existingRecord.color_tags;
     let rawColorStr = existingRecord.ai_attributes?.rawColor ?? null;
 
@@ -477,7 +474,7 @@ export async function updateItem(
       }
     }
 
-    // 5. Recompute occasions and whereWornOften
+    // 4. Recompute occasions and whereWornOften
     let effectiveOccasions = existingRecord.occasions ?? null;
     let rawWhereWornStr = existingRecord.ai_attributes?.whereWornOften ?? null;
 
@@ -494,6 +491,16 @@ export async function updateItem(
         effectiveOccasions = null;
       }
     }
+
+    // 5. Recompute canonical system bucket using canonical classifier with full metadata
+    const newBucket = inferSystemBucket(
+      effectiveCategory,
+      effectiveSub || '',
+      effectiveDesc || '',
+      rawColorStr || '',
+      rawWhereWornStr || '',
+      effectiveNotes || ''
+    );
 
     // 6. Deep merge ai_attributes: preserve all unrelated keys (visual ML, confidence, etc.)
     const updatedAiAttributes: Record<string, any> = {

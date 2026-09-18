@@ -166,7 +166,7 @@ describe('aiStylistAdvisor - Critical Context & Garment Compatibility Engine', (
     });
     const lookup = {
       [shorts.wardrobeItem.id]: shorts.wardrobeItem,
-      [shoes.wardrobeItem.id]: shorts.wardrobeItem,
+      [shoes.wardrobeItem.id]: shoes.wardrobeItem,
     };
 
     const critique = gradeOutfit([shorts.canvasItem, shoes.canvasItem], lookup, { occasion: 'Casual day out' });
