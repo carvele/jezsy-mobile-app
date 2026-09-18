@@ -105,10 +105,15 @@ export function analyzeFit(
     });
   };
 
-  classify('Bust', user.bust, garment.bust, { snug: 2, fitted: 6, relaxed: 10 });
-  classify('Waist', user.waist, garment.waist, { snug: 2, fitted: 6, relaxed: 12 });
-  classify('Hips', user.hips, garment.hips, { snug: 2, fitted: 7, relaxed: 14 });
-  classify('Shoulders', user.shoulderWidth, garment.shoulderWidth, { snug: 1, fitted: 4, relaxed: 8 });
+  const gBust = garment.bust ?? (garment as any).Bust ?? (garment as any).chest ?? (garment as any).Chest;
+  const gWaist = garment.waist ?? (garment as any).Waist;
+  const gHips = garment.hips ?? (garment as any).Hips ?? (garment as any).hip ?? (garment as any).Hip;
+  const gShoulder = garment.shoulderWidth ?? (garment as any).shoulder_width ?? (garment as any).ShoulderWidth ?? (garment as any).shoulder ?? (garment as any).Shoulder;
+
+  classify('Bust', user.bust, gBust, { snug: 2, fitted: 6, relaxed: 10 });
+  classify('Waist', user.waist, gWaist, { snug: 2, fitted: 6, relaxed: 12 });
+  classify('Hips', user.hips, gHips, { snug: 2, fitted: 7, relaxed: 14 });
+  classify('Shoulders', user.shoulderWidth, gShoulder, { snug: 1, fitted: 4, relaxed: 8 });
 
   return zones;
 }
@@ -242,11 +247,11 @@ export function recommendSize(
     let totalWeight = 0;
     let strictlyTooSmall = false;
 
-    const gBust = toNumeric(metrics.bust);
-    const gWaist = toNumeric(metrics.waist);
-    const gHips = toNumeric(metrics.hips);
-    const gInseam = toNumeric(metrics.inseam);
-    const gShoulder = toNumeric((metrics as any).shoulderWidth);
+    const gBust = toNumeric(metrics.bust ?? (metrics as any).Bust ?? (metrics as any).chest ?? (metrics as any).Chest);
+    const gWaist = toNumeric(metrics.waist ?? (metrics as any).Waist);
+    const gHips = toNumeric(metrics.hips ?? (metrics as any).Hips ?? (metrics as any).hip ?? (metrics as any).Hip);
+    const gInseam = toNumeric(metrics.inseam ?? (metrics as any).Inseam);
+    const gShoulder = toNumeric((metrics as any).shoulderWidth ?? (metrics as any).shoulder_width ?? (metrics as any).ShoulderWidth ?? (metrics as any).shoulder ?? (metrics as any).Shoulder);
 
     // 1. Bust matching
     if (uBust !== null && gBust !== null) {
