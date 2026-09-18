@@ -2998,48 +2998,60 @@ export type Database = {
       }
       wardrobe_items: {
         Row: {
+          ai_attributes: Json | null
           category: string | null
           color_tags: string[] | null
           created_at: string
           deleted: boolean | null
           description: string | null
+          embedding: Json | null
           garment_type: string | null
           id: string
           image_url: string | null
           last_worn_at: string | null
+          occasions: string[] | null
           product_id: string | null
+          seasons: string[] | null
           sub_category: string | null
           user_id: string | null
           user_notes: string | null
           wear_count: number
         }
         Insert: {
+          ai_attributes?: Json | null
           category?: string | null
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
           description?: string | null
+          embedding?: Json | null
           garment_type?: string | null
           id?: string
           image_url?: string | null
           last_worn_at?: string | null
+          occasions?: string[] | null
           product_id?: string | null
+          seasons?: string[] | null
           sub_category?: string | null
           user_id?: string | null
           user_notes?: string | null
           wear_count?: number
         }
         Update: {
+          ai_attributes?: Json | null
           category?: string | null
           color_tags?: string[] | null
           created_at?: string
           deleted?: boolean | null
           description?: string | null
+          embedding?: Json | null
           garment_type?: string | null
           id?: string
           image_url?: string | null
           last_worn_at?: string | null
+          occasions?: string[] | null
           product_id?: string | null
+          seasons?: string[] | null
           sub_category?: string | null
           user_id?: string | null
           user_notes?: string | null
@@ -3137,6 +3149,7 @@ export type Database = {
       }
       product_variants: {
         Row: {
+          available: number | null
           color: string | null
           hex_color: string | null
           id: string | null
@@ -3617,16 +3630,20 @@ export type Database = {
       increment_wear_count: {
         Args: { p_item_id: string }
         Returns: {
+          ai_attributes: Json | null
           category: string | null
           color_tags: string[] | null
           created_at: string
           deleted: boolean | null
           description: string | null
+          embedding: Json | null
           garment_type: string | null
           id: string
           image_url: string | null
           last_worn_at: string | null
+          occasions: string[] | null
           product_id: string | null
+          seasons: string[] | null
           sub_category: string | null
           user_id: string | null
           user_notes: string | null

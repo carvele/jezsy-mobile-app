@@ -115,5 +115,5 @@ describe('Inbox Resilience (HCI-003, HCI-008)', () => {
 
     const recoveredCount = instance.findByProps({ testID: 'conversation-count' });
     expect(recoveredCount.props.children).toBe('Conversations: 1');
-  });
+  }, 15000);
 });

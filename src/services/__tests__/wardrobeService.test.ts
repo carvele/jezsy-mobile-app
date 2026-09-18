@@ -55,6 +55,77 @@ describe('wardrobeService', () => {
       expect(captureSpy).not.toHaveBeenCalled();
     });
 
+    it('successfully executes rich insert preserving color, whereWornOften, description, userNotes, occasions, and ai_attributes', async () => {
+      const mockQuery: any = {
+        insert: jest.fn().mockResolvedValue({ error: null }),
+      };
+      (supabase.from as jest.Mock).mockReturnValue(mockQuery);
+
+      const result = await addItem({
+        userId: 'user-1',
+        category: 'Clothing',
+        garmentType: 'Bottom',
+        subCategory: 'Activewear / Shorts',
+        imageUrl: 'https://example.com/shorts.jpg',
+        color: 'Black, White',
+        whereWornOften: 'Running and exercising',
+        description: 'Black 2-in-1 athletic running shorts (Nike)',
+        userNotes: 'I love wearing this when exercising and running.',
+        occasions: ['Running', 'exercising'],
+        seasons: ['All Season'],
+        embedding: [0.11, 0.22, 0.33],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockQuery.insert).toHaveBeenCalledWith({
+        user_id: 'user-1',
+        category: 'Clothing',
+        garment_type: 'Bottom',
+        sub_category: 'Activewear / Shorts',
+        image_url: 'https://example.com/shorts.jpg',
+        color_tags: ['Black, White'],
+        description: 'Black 2-in-1 athletic running shorts (Nike)',
+        user_notes: 'I love wearing this when exercising and running.',
+        occasions: ['Running', 'exercising'],
+        seasons: ['All Season'],
+        embedding: [0.11, 0.22, 0.33],
+        ai_attributes: {
+          rawColor: 'Black, White',
+          whereWornOften: 'Running and exercising',
+          description: 'Black 2-in-1 athletic running shorts (Nike)',
+          userNotes: 'I love wearing this when exercising and running.',
+        },
+      });
+      expect(captureSpy).not.toHaveBeenCalled();
+    });
+
+    it('preserves user-entered extra model attributes inside ai_attributes instead of invalid top-level columns', async () => {
+      const mockQuery: any = {
+        insert: jest.fn().mockResolvedValue({ error: null }),
+      };
+      (supabase.from as jest.Mock).mockReturnValue(mockQuery);
+
+      const result = await addItem({
+        userId: 'user-1',
+        category: 'Clothing',
+        garmentType: 'Bottom',
+        imageUrl: 'https://example.com/shorts.jpg',
+        material: 'Polyester',
+        fit: 'Athletic',
+        aiAttributes: { customTag: 'trail' },
+      });
+
+      expect(result.ok).toBe(true);
+      const inserted = mockQuery.insert.mock.calls[0][0];
+      expect(inserted.material).toBeUndefined();
+      expect(inserted.fit).toBeUndefined();
+      expect(inserted.ai_attributes).toEqual(expect.objectContaining({
+        material: 'Polyester',
+        fit: 'Athletic',
+        customTag: 'trail',
+      }));
+    });
+
     it('handles insert failure and captures error', async () => {
       const mockQuery: any = {
         insert: jest.fn().mockResolvedValue({ error: { message: 'Insert failed', code: '42501' } }),
@@ -73,6 +144,36 @@ describe('wardrobeService', () => {
         expect(result.error.code).toBe('42501');
       }
       expect(captureSpy).toHaveBeenCalled();
+    });
+
+    it('fallback does not silently drop supported rich fields (description, user_notes, occasions, seasons)', async () => {
+      const mockQuery: any = {
+        insert: jest
+          .fn()
+          .mockResolvedValueOnce({ error: { code: 'PGRST204', message: "Could not find the 'ai_attributes' column" } })
+          .mockResolvedValueOnce({ error: null }),
+      };
+      (supabase.from as jest.Mock).mockReturnValue(mockQuery);
+
+      const result = await addItem({
+        userId: 'user-1',
+        category: 'Clothing',
+        garmentType: 'Bottom',
+        imageUrl: 'https://example.com/shorts.jpg',
+        description: 'Black running shorts',
+        userNotes: 'Worn for 5k runs',
+        whereWornOften: 'Running',
+        seasons: ['Summer'],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockQuery.insert).toHaveBeenCalledTimes(2);
+      const fallbackCall = mockQuery.insert.mock.calls[1][0];
+      expect(fallbackCall.description).toBe('Black running shorts');
+      expect(fallbackCall.user_notes).toBe('Worn for 5k runs');
+      expect(fallbackCall.occasions).toEqual(['Running']);
+      expect(fallbackCall.seasons).toEqual(['Summer']);
+      expect(fallbackCall.ai_attributes).toBeUndefined();
     });
   });
 
@@ -327,6 +428,57 @@ describe('wardrobeService', () => {
       expect(mockQuery.delete).toHaveBeenCalled();
       expect(mockQuery.eq).toHaveBeenCalledWith('id', 'cap-1');
       expect(result.ok).toBe(true);
+    });
+  });
+
+  describe('legacy items compatibility', () => {
+    it('safely handles legacy item without ai_attributes or description', async () => {
+      const legacyItem = {
+        id: 'legacy-1',
+        user_id: 'user-1',
+        category: 'Clothing',
+        sub_category: 'Shorts',
+        garment_type: 'Bottom',
+        color_tags: ['Black'],
+        description: null,
+        user_notes: null,
+        ai_attributes: null,
+        occasions: null,
+      };
+
+      const mockChain: any = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValueOnce({ data: legacyItem, error: null }),
+        update: jest.fn().mockReturnThis(),
+      };
+      mockChain.update.mockReturnValue(mockChain);
+      mockChain.single.mockResolvedValueOnce({
+        data: {
+          ...legacyItem,
+          description: 'Updated description',
+          ai_attributes: { description: 'Updated description' },
+        },
+        error: null,
+      });
+
+      (supabase.from as jest.Mock).mockReturnValue(mockChain);
+
+      const result = await updateItem('legacy-1', 'user-1', {
+        description: 'Updated description',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(mockChain.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            description: 'Updated description',
+            ai_attributes: expect.objectContaining({
+              description: 'Updated description',
+            }),
+          })
+        );
+      }
     });
   });
 });

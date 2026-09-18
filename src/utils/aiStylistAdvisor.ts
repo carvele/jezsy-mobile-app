@@ -723,7 +723,11 @@ export function buildGarmentSemanticProfile(
 ): GarmentSemanticProfile {
   const category = wardrobeItem?.category || item.garment_type || '';
   const subCategory = wardrobeItem?.sub_category || '';
-  const color = (wardrobeItem as any)?.color || (wardrobeItem as any)?.colors || '';
+  const color =
+    (wardrobeItem as any)?.color ||
+    (wardrobeItem as any)?.colors ||
+    (wardrobeItem as any)?.ai_attributes?.rawColor ||
+    '';
   const colorTags = wardrobeItem?.color_tags || [];
   const whereWornOften =
     (wardrobeItem as any)?.where_worn_often ||

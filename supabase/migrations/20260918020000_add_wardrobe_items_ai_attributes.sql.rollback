@@ -1,0 +1,8 @@
+-- Rollback: 20260918020000_add_wardrobe_items_ai_attributes.sql.rollback
+
+DROP INDEX IF EXISTS idx_wardrobe_items_occasions;
+
+ALTER TABLE public.wardrobe_items
+  DROP COLUMN IF EXISTS seasons,
+  DROP COLUMN IF EXISTS occasions,
+  DROP COLUMN IF EXISTS ai_attributes;

@@ -180,24 +180,27 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
 
     if (input.description) insertPayload.description = input.description;
     if (input.userNotes) insertPayload.user_notes = input.userNotes;
-    if (input.pattern) insertPayload.pattern = input.pattern;
-    if (input.material) insertPayload.material = input.material;
-    if (input.fit) insertPayload.fit = input.fit;
-    if (input.lengthType) insertPayload.length_type = input.lengthType;
-    if (input.sleeveType) insertPayload.sleeve_type = input.sleeveType;
-    if (input.neckline) insertPayload.neckline = input.neckline;
-    if (input.silhouette) insertPayload.silhouette = input.silhouette;
     if (effectiveOccasions) insertPayload.occasions = effectiveOccasions;
     if (input.seasons && input.seasons.length > 0) insertPayload.seasons = input.seasons;
-    if (input.colorDetails && input.colorDetails.length > 0) insertPayload.color_details = input.colorDetails;
-    if (input.isCustomCategory !== undefined) insertPayload.is_custom_category = input.isCustomCategory;
+    if (input.embedding) insertPayload.embedding = input.embedding;
 
     const hasAiAttrs = Boolean(
       input.aiAttributes ||
       input.color ||
       input.whereWornOften ||
       input.description !== undefined ||
-      input.userNotes !== undefined
+      input.userNotes !== undefined ||
+      input.pattern ||
+      input.material ||
+      input.fit ||
+      input.lengthType ||
+      input.sleeveType ||
+      input.neckline ||
+      input.silhouette ||
+      input.colorDetails ||
+      input.isCustomCategory !== undefined ||
+      input.aiConfidence !== undefined ||
+      input.userCorrections
     );
     if (hasAiAttrs) {
       const aiAttrs: Record<string, any> = {
@@ -215,12 +218,19 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
       if (input.userNotes !== undefined || (input.aiAttributes as any)?.userNotes !== undefined) {
         aiAttrs.userNotes = input.userNotes ?? (input.aiAttributes as any)?.userNotes;
       }
+      if (input.pattern) aiAttrs.pattern = input.pattern;
+      if (input.material) aiAttrs.material = input.material;
+      if (input.fit) aiAttrs.fit = input.fit;
+      if (input.lengthType) aiAttrs.lengthType = input.lengthType;
+      if (input.sleeveType) aiAttrs.sleeveType = input.sleeveType;
+      if (input.neckline) aiAttrs.neckline = input.neckline;
+      if (input.silhouette) aiAttrs.silhouette = input.silhouette;
+      if (input.colorDetails) aiAttrs.colorDetails = input.colorDetails;
+      if (input.isCustomCategory !== undefined) aiAttrs.isCustomCategory = input.isCustomCategory;
+      if (input.aiConfidence !== undefined) aiAttrs.aiConfidence = input.aiConfidence;
+      if (input.userCorrections) aiAttrs.userCorrections = input.userCorrections;
       insertPayload.ai_attributes = aiAttrs;
     }
-
-    if (input.aiConfidence !== undefined) insertPayload.ai_confidence = input.aiConfidence;
-    if (input.userCorrections) insertPayload.user_corrections = input.userCorrections;
-    if (input.embedding) insertPayload.embedding = input.embedding;
 
     let { error } = await (supabase.from('wardrobe_items') as any).insert(insertPayload);
 
@@ -236,6 +246,8 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
       };
       if (input.description) basePayload.description = input.description;
       if (input.userNotes) basePayload.user_notes = input.userNotes;
+      if (effectiveOccasions && !error.message?.includes('occasions')) basePayload.occasions = effectiveOccasions;
+      if (input.seasons && input.seasons.length > 0 && !error.message?.includes('seasons')) basePayload.seasons = input.seasons;
 
       errorReporting.capture(new DomainError({
         code: 'WARN_WARDROBE_ITEM_ADD_FALLBACK',
@@ -541,6 +553,9 @@ export async function updateItem(
         user_notes: effectiveNotes,
         color_tags: effectiveColorTags,
       };
+      if (effectiveOccasions && !updateErr.message?.includes('occasions')) {
+        basePayload.occasions = effectiveOccasions;
+      }
 
       errorReporting.capture(new DomainError({
         code: 'WARN_WARDROBE_ITEM_UPDATE_FALLBACK',
