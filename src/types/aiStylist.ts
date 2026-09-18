@@ -23,7 +23,6 @@ export interface StylistEvidencePacketItem {
     rawText?: string;
   };
   styleSignals?: Record<string, boolean>;
-  imageUrl?: string;
 }
 
 export interface StylistEvidencePacket {

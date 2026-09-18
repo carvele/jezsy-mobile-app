@@ -53,6 +53,7 @@ export type ActivityType =
   | 'beachResort'
   | 'running'
   | 'gymWorkout'
+  | 'hiking'
   | 'formalCeremony'
   | 'beachWedding'
   | 'workProfessional'
@@ -96,6 +97,7 @@ export type OccasionType =
   | 'swimming'
   | 'running'
   | 'gym'
+  | 'hiking'
   | 'office'
   | 'casualWalk'
   | 'breakfastDining'
@@ -510,6 +512,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
   const mentionsBreakfast = /\b(breakfast|brunch|morning meal|pancakes|waffles|indoor breakfast)\b/i.test(full);
   const mentionsCoffee = /\b(coffee|cafe|coffee date|starbucks|latte|espresso|coffee shop)\b/i.test(full);
   const isRun = /\b(running|jogging|marathon|track|5k|10k|sprint)\b/i.test(full);
+  const isHiking = /\b(hiking|hike|trail|trekking|trek)\b/i.test(full);
   const isWalk = /\b(walk|walking|stroll|afternoon walk|evening walk|park walk)\b/i.test(full);
 
   let occasionType: OccasionType = 'general';
@@ -584,6 +587,16 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     formalityExpectation = 'casual';
     socialSetting = 'athleticWorkout';
     practicalityRequirements.push('athletic moisture-wicking gear', 'cushioned running footwear');
+  } else if (isHiking) {
+    occasionType = 'hiking';
+    activity = 'hiking';
+    environment = 'outdoors';
+    waterExposure = 'none';
+    physicalActivity = 'high';
+    mobilityRequirement = 'high';
+    formalityExpectation = 'casual';
+    socialSetting = 'athleticWorkout';
+    practicalityRequirements.push('supportive hiking or trail footwear', 'breathable weather-appropriate layers', 'high-mobility bottoms');
   } else if (/\b(gym|workout|fitness|training|yoga|pilates|crossfit)\b/i.test(full)) {
     occasionType = 'gym';
     activity = 'gymWorkout';
@@ -1099,6 +1112,27 @@ export function buildOccasionRequirements(
     };
   }
 
+  if (activity === 'hiking') {
+    return {
+      requiresSwimwear: false,
+      requiresWaterCompatibility: 'none',
+      requiresHighMobility: true,
+      requiresFormalAttire: false,
+      allowsResortElevated: false,
+      prohibitsAthletic: false,
+      prohibitsSwimwearConflicts: false,
+      prohibitsCasualFootwear: false,
+      requiresBaseTop: true,
+      occasionType,
+      requiresWarmth,
+      prohibitsExposedLegsInCold,
+      allowsAthletic: true,
+      timeOfDay,
+      weather,
+      summary: 'Hiking requires supportive trail footwear, high-mobility bottoms, and breathable weather-appropriate layers.',
+    };
+  }
+
   if (occasionType === 'date') {
     return {
       requiresSwimwear: false,
@@ -1454,6 +1488,63 @@ export function detectContradictions(
           'An exposed-leg silhouette creates thermal inconsistency and reads as an incomplete cold-weather outfit.',
         suggestedFix: 'Balance upper warmth with full-coverage bottoms or warm tights.',
       });
+    }
+  }
+
+  // 4b. HOT WEATHER / BREATHABILITY CONTRADICTIONS (heavy warm pieces in heat)
+  if (reqs.weather === 'hot' || reqs.weather === 'warm') {
+    for (const g of garments) {
+      const isHeavyWarm =
+        (g.garmentStructure.isUpperBody || g.garmentStructure.isOuterwear || g.garmentStructure.isOnePiece) &&
+        (g.thermal === 'heavyWarmth' ||
+          g.materialSignals.includes('knit') ||
+          g.materialSignals.includes('wool') ||
+          /\b(sweater|turtleneck|cardigan|wool|cashmere|fleece|heavy coat)\b/i.test(g.combinedText));
+      if (isHeavyWarm) {
+        contradictions.push({
+          severity: reqs.weather === 'hot' ? 'major' : 'moderate',
+          category: 'weather_thermal',
+          garmentName: g.identity.name,
+          reason: `${g.identity.name} is a heavy warm layer that traps heat and will cause overheating in ${reqs.weather} conditions.`,
+          whyItMatters: `${reqs.weather === 'hot' ? 'Hot' : 'Warm'} weather requires breathable, lightweight fabrics; insulating knitwear prevents sweat evaporation and causes rapid discomfort.`,
+          suggestedFix: 'Swap for a lightweight, breathable top such as a moisture-wicking tee or a breathable cotton or linen piece.',
+        });
+      }
+    }
+  }
+
+  // 4c. HIKING-SPECIFIC PRACTICALITY CONTRADICTIONS
+  if (reqs.occasionType === 'hiking') {
+    for (const s of structure.shoes) {
+      const isSupportiveHikingFootwear =
+        s.styleSignals.athletic ||
+        /\b(hiking|trail|boots?|trainers?|sneakers?|running shoes?)\b/i.test(s.combinedText);
+      if (!isSupportiveHikingFootwear) {
+        contradictions.push({
+          severity: 'major',
+          category: 'environment_practicality',
+          garmentName: s.identity.name,
+          reason: `${s.identity.name} lack the traction, ankle support, and durability needed for uneven trail terrain.`,
+          whyItMatters: 'Hiking on uneven ground in unsupportive footwear risks slips, blisters, and foot injury.',
+          suggestedFix: 'Switch to hiking boots, trail runners, or supportive athletic sneakers.',
+        });
+      }
+    }
+
+    for (const b of structure.bottoms) {
+      const isImpracticalBottom =
+        /\b(skirt|mini skirt|micro mini|dress pants|slacks|tailored)\b/i.test(b.combinedText) &&
+        !b.styleSignals.athletic;
+      if (isImpracticalBottom) {
+        contradictions.push({
+          severity: 'moderate',
+          category: 'environment_practicality',
+          garmentName: b.identity.name,
+          reason: `${b.identity.name} restricts movement and offers no protection against brush, chafing, or uneven terrain on a trail.`,
+          whyItMatters: 'Hiking requires unrestricted leg mobility and durable coverage, which skirts and tailored bottoms do not provide.',
+          suggestedFix: 'Choose hiking shorts, joggers, or flexible trail pants instead.',
+        });
+      }
     }
   }
 
@@ -2519,7 +2610,6 @@ export function buildStylistEvidencePacket(
         ? { activities: p.personalUsage.activities, rawText: p.personalUsage.rawText }
         : undefined,
       styleSignals: p.styleSignals,
-      imageUrl: p.identity.imageUrl,
     };
   });
 

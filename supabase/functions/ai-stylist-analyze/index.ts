@@ -6,17 +6,35 @@ const jsonResponse = (req: Request, body: unknown, status = 200) =>
     headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   });
 
-// Free-tier LLM providers can stall far longer than a user will wait; bail out fast
-// so the client falls back to the deterministic engine instead of hanging.
-const LLM_TIMEOUT_MS = 20_000;
+// Free-tier LLM providers can stall far longer than a user will wait; bail out fast so
+// the client falls back to the deterministic engine instead of hanging. Kept comfortably
+// under the client's own 15s hard cutoff (src/services/aiStylistProvider.ts) so a response
+// that does complete in time has a chance to reach the client before it gives up.
+const LLM_TIMEOUT_MS = 12_000;
 
+class LlmTimeoutError extends Error {
+  constructor() {
+    super('LLM request exceeded timeout');
+    this.name = 'LlmTimeoutError';
+  }
+}
+
+// AbortController.abort() alone does not reliably cut off a slow provider response in
+// this runtime, so race the fetch against an independent timer: whichever settles first
+// wins, guaranteeing the client gets a response within timeoutMs regardless of whether
+// the underlying request actually cancels.
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const abortTimer = setTimeout(() => controller.abort(), timeoutMs);
+  let raceTimer: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<Response>((_, reject) => {
+    raceTimer = setTimeout(() => reject(new LlmTimeoutError()), timeoutMs);
+  });
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await Promise.race([fetch(url, { ...init, signal: controller.signal }), timeoutPromise]);
   } finally {
-    clearTimeout(timer);
+    clearTimeout(abortTimer);
+    clearTimeout(raceTimer!);
   }
 }
 
@@ -104,6 +122,20 @@ Deno.serve(async (req) => {
 
   if (!packet || !packet.request || !packet.outfit) {
     return jsonResponse(req, { error: 'Missing required evidence packet fields' }, 400);
+  }
+
+  // The packet should be a compact structured summary (a few KB at most). Guard against
+  // an oversized payload (e.g. a stray embedded image) blowing up the LLM prompt into
+  // hundreds of thousands of tokens, which stalls or errors out the request.
+  const MAX_PACKET_CHARS = 20_000;
+  const packetSize = JSON.stringify(packet).length;
+  if (packetSize > MAX_PACKET_CHARS) {
+    console.error('[ai-stylist-analyze] Evidence packet too large:', packetSize, 'chars');
+    return jsonResponse(req, {
+      success: false,
+      fallbackRequired: true,
+      reason: 'PACKET_TOO_LARGE',
+    });
   }
 
   // Check for server-side configured AI keys
@@ -253,7 +285,7 @@ Produce a structured JSON critique with this exact schema:
       analysisId: packet.request.analysisId,
     });
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
+    if (err instanceof Error && (err.name === 'AbortError' || err.name === 'LlmTimeoutError')) {
       console.error('[ai-stylist-analyze] LLM request timed out after', LLM_TIMEOUT_MS, 'ms');
       return jsonResponse(req, {
         success: false,

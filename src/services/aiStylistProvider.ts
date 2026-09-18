@@ -142,6 +142,18 @@ export interface IAIStylistProvider {
   ): Promise<AIAnalysisResult>;
 }
 
+// A slow or overloaded free-tier LLM provider can stall the edge function well past any
+// timeout it sets internally, and the platform can force-kill the isolate outright before
+// it ever responds. The client can't trust the server to bound its own latency, so it owns
+// the hard cutoff here: whichever settles first (the real response or this timer) wins.
+const CLIENT_LLM_TIMEOUT_MS = 15_000;
+
+function timeoutAfter(ms: number): Promise<never> {
+  return new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`AI stylist request exceeded ${ms}ms client-side timeout`)), ms);
+  });
+}
+
 /**
  * Supabase Edge Function Provider for secure server-side LLM execution
  */
@@ -151,9 +163,10 @@ export class SupabaseEdgeAIStylistProvider implements IAIStylistProvider {
     wardrobeLookup?: Record<string, WardrobeItem>
   ): Promise<AIAnalysisResult> {
     try {
-      const { data, error } = await supabase.functions.invoke('ai-stylist-analyze', {
-        body: packet,
-      });
+      const { data, error } = await Promise.race([
+        supabase.functions.invoke('ai-stylist-analyze', { body: packet }),
+        timeoutAfter(CLIENT_LLM_TIMEOUT_MS),
+      ]);
 
       if (error) {
         return {
