@@ -249,6 +249,12 @@ export default function CartScreen() {
           </TouchableOpacity>
         </View>
 
+        {item.maxQuantity !== undefined && (
+          <Text style={[styles.stockHint, { color: colors.secondaryText }]}>
+            {item.maxQuantity} available
+          </Text>
+        )}
+
         <TouchableOpacity
           style={[styles.reserveBtn, { backgroundColor: colors.tint }]}
           onPress={() =>
@@ -512,6 +518,10 @@ const createStyles = (colors: any) => StyleSheet.create({
   priceUpdated: {
     ...Type.caption,
     fontWeight: "700",
+    marginTop: Spacing.xs,
+  },
+  stockHint: {
+    ...Type.caption,
     marginTop: Spacing.xs,
   },
   variants: {
