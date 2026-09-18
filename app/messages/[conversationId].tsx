@@ -23,6 +23,8 @@ import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 import { getConversationMessagesPage, MessageRow } from '@/src/services/chatService';
 import { useTypingIndicator } from '@/src/hooks/useTypingIndicator';
 import { ErrorRetryState } from '@/src/components/ErrorRetryState';
+import { ChatStarterChips } from '@/src/components/ChatStarterChips';
+import { resolveOutgoingText } from '@/src/utils/chatSend';
 
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 
@@ -415,10 +417,14 @@ export default function ChatScreen() {
     }
   };
 
-  const handleSend = async () => {
+  // overrideText lets a starter chip send its own text directly rather than
+  // going through setInputText + a second render. Every call site passes
+  // either an explicit string or nothing -- never the RN event object
+  // TextInput/TouchableOpacity would otherwise hand this function.
+  const handleSend = async (overrideText?: string) => {
     if (editingId) return handleSaveEdit();
-    if (!inputText.trim() || !conversationId) return;
-    const textToSend = inputText.trim();
+    const textToSend = resolveOutgoingText(overrideText, inputText);
+    if (!textToSend || !conversationId) return;
     const contextToSend = pendingContext;
     setInputText('');
 
@@ -882,6 +888,7 @@ export default function ChatScreen() {
               flatListRef.current?.scrollToEnd({ animated: false });
             }
           }}
+          ListEmptyComponent={<ChatStarterChips onSelect={(text) => handleSend(text)} />}
           ListHeaderComponent={
             hasOlderMessages ? (
               <View style={styles.loadOlderContainer}>
@@ -1036,12 +1043,12 @@ export default function ChatScreen() {
               maxLength={500}
               returnKeyType={editingId ? 'done' : 'send'}
               blurOnSubmit={false}
-              onSubmitEditing={handleSend}
+              onSubmitEditing={() => handleSend()}
               accessibilityLabel={editingId ? 'Edit message' : 'Message input'}
             />
             <TouchableOpacity
               style={[styles.sendButton, { backgroundColor: inputText.trim() ? colors.tint : 'transparent' }]}
-              onPress={handleSend}
+              onPress={() => handleSend()}
               disabled={!inputText.trim()}
               accessibilityRole="button"
               accessibilityLabel={editingId ? 'Save changes' : 'Send message'}
