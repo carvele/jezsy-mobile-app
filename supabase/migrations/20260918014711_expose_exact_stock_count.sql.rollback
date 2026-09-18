@@ -1,0 +1,29 @@
+-- Rollback: restore boolean-only product_variants view (drop the available count column)
+-- CREATE OR REPLACE VIEW cannot remove a trailing column, so this drops and recreates.
+
+DROP VIEW IF EXISTS public.product_variants;
+
+CREATE VIEW public.product_variants AS
+SELECT
+  i.id,
+  i.product_doc_id,
+  i.sku,
+  i.size,
+  i.color,
+  i.hex_color,
+  i.pattern,
+  (i.available > 0) AS is_available,
+  (i.available > 0 AND i.available <= 3) AS is_low_stock,
+  CASE
+    WHEN i.available <= 0 THEN 'sold_out'
+    WHEN i.available <= 3 THEN 'low_stock'
+    ELSE 'in_stock'
+  END AS stock_status
+FROM public.inventory i
+JOIN public.products p ON p.id = i.product_doc_id
+WHERE i.deleted = false
+  AND p.deleted = false
+  AND p.visibility = 'public';
+
+ALTER VIEW public.product_variants OWNER TO postgres;
+GRANT SELECT ON public.product_variants TO anon, authenticated;

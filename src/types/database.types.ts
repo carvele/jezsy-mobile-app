@@ -3041,6 +3041,7 @@ export type Database = {
     Views: {
       product_variants: {
         Row: {
+          available: number | null
           color: string | null
           hex_color: string | null
           id: string | null
