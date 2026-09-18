@@ -128,7 +128,7 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
             <SafeAreaView edges={['bottom']} style={[styles.actions, { borderTopColor: colors.border, backgroundColor: colors.card }]}>
               {loading ? (
                 <Text style={[styles.loadingHint, { color: colors.secondaryText }]}>
-                  This can take up to a minute on our free AI tier — hang tight.
+                  This can take up to 2 minutes on our free AI tier — hang tight, or cancel anytime.
                 </Text>
               ) : null}
               <View style={styles.actionsRow}>

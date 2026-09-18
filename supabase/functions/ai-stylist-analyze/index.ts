@@ -8,10 +8,11 @@ const jsonResponse = (req: Request, body: unknown, status = 200) =>
 
 // Free-tier LLM providers can stall far longer than a user will wait; bail out before the
 // platform's own resource-limit kill so we can at least return a clean fallback response
-// instead of a hard crash. Kept comfortably under the client's own 90s hard cutoff
-// (src/services/aiStylistProvider.ts) so a response that does complete in time can still
-// reach the client before it gives up.
-const LLM_TIMEOUT_MS = 80_000;
+// instead of a hard crash. Kept comfortably under the client's own 140s hard cutoff
+// (src/services/aiStylistProvider.ts) and under the ~150s WORKER_RESOURCE_LIMIT kill
+// observed twice in testing, so a response that does complete in time can still reach the
+// client before it gives up.
+const LLM_TIMEOUT_MS = 130_000;
 
 class LlmTimeoutError extends Error {
   constructor() {

@@ -146,10 +146,11 @@ export interface IAIStylistProvider {
 // timeout it sets internally, and the platform can force-kill the isolate outright before
 // it ever responds. The client can't trust the server to bound its own latency, so it owns
 // the hard cutoff here: whichever settles first (the real response or this timer) wins.
-// Set generously (observed successful free-tier responses ranging 7s-90s) so the AI gets a
-// real chance to answer instead of always falling back to the more limited rule-based engine
-// -- kept safely under Supabase's own ~150s isolate resource-limit kill.
-const CLIENT_LLM_TIMEOUT_MS = 90_000;
+// 90s proved too tight -- repeated real attempts never got a chance to finish before it
+// fired, always landing on the rule-based fallback. Measured the platform's own hard kill
+// (WORKER_RESOURCE_LIMIT) at ~150s twice, so push this right up to that ceiling to give the
+// free tier its full realistic window.
+const CLIENT_LLM_TIMEOUT_MS = 140_000;
 
 function timeoutAfter(ms: number): Promise<never> {
   return new Promise((_, reject) => {
