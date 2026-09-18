@@ -448,6 +448,145 @@ describe('garmentSemanticClassifier', () => {
       };
       expect(resolveEffectiveGarmentBucket(correctBottom)).toBe('Bottom');
     });
+
+    // =========================================================================
+    // PHASE 20 MANDATORY TESTS
+    // =========================================================================
+    describe('Phase 20 Authoritative Semantic Resolver Test Cases', () => {
+      test('TEST 1: category = Tops, sub_category = T-Shirt, garment_type = Bottom -> Top', () => {
+        const item = {
+          category: 'Tops',
+          sub_category: 'T-Shirt',
+          garment_type: 'Bottom',
+        };
+        expect(resolveEffectiveGarmentBucket(item)).toBe('Top');
+      });
+
+      test('TEST 2: category = Tops, sub_category = T-Shirt, garment_type = Top -> Top', () => {
+        const item = {
+          category: 'Tops',
+          sub_category: 'T-Shirt',
+          garment_type: 'Top',
+        };
+        expect(resolveEffectiveGarmentBucket(item)).toBe('Top');
+      });
+
+      test('TEST 3: category = Bottoms, sub_category = Running Shorts, garment_type = Top -> Bottom', () => {
+        const item = {
+          category: 'Bottoms',
+          sub_category: 'Running Shorts',
+          garment_type: 'Top',
+        };
+        expect(resolveEffectiveGarmentBucket(item)).toBe('Bottom');
+      });
+
+      test('TEST 4: category = Dresses, sub_category = Maxi Dress, garment_type = Bottom -> Dress', () => {
+        const item = {
+          category: 'Dresses',
+          sub_category: 'Maxi Dress',
+          garment_type: 'Bottom',
+        };
+        expect(resolveEffectiveGarmentBucket(item)).toBe('Dress');
+      });
+
+      test('TEST 5: category = Outerwear, sub_category = Blazer, garment_type = Bottom -> Outerwear', () => {
+        const item = {
+          category: 'Outerwear',
+          sub_category: 'Blazer',
+          garment_type: 'Bottom',
+        };
+        expect(resolveEffectiveGarmentBucket(item)).toBe('Outerwear');
+      });
+
+      test('TEST 6: Edit: Tops / T-Shirt -> Bottoms / Running Shorts changes bucket Top -> Bottom', () => {
+        const before = { category: 'Tops', sub_category: 'T-Shirt', garment_type: 'Top' };
+        expect(resolveEffectiveGarmentBucket(before)).toBe('Top');
+
+        const after = { ...before, category: 'Bottoms', sub_category: 'Running Shorts' };
+        expect(resolveEffectiveGarmentBucket(after)).toBe('Bottom');
+      });
+
+      test('TEST 7: Edit: Bottoms / Running Shorts -> Tops / T-Shirt changes bucket Bottom -> Top', () => {
+        const before = { category: 'Bottoms', sub_category: 'Running Shorts', garment_type: 'Bottom' };
+        expect(resolveEffectiveGarmentBucket(before)).toBe('Bottom');
+
+        const after = { ...before, category: 'Tops', sub_category: 'T-Shirt' };
+        expect(resolveEffectiveGarmentBucket(after)).toBe('Top');
+      });
+
+      test('TEST 8: Color "Navy Blue, White" raw value remains exactly unchanged', () => {
+        const rawColor = 'Navy Blue, White';
+        const ev = extractGarmentEvidence('Tops', 'T-Shirt', rawColor, '', '');
+        expect(ev.colors).toEqual(['Navy Blue', 'White']);
+      });
+
+      test('TEST 9: Where worn "Daily Activity out door" raw text is preserved verbatim', () => {
+        const whereWorn = 'Daily Activity out door';
+        const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', whereWorn, '');
+        expect(ev.personalUsage.rawText).toBe(whereWorn);
+      });
+
+      test('TEST 10: Description and Personal Notes remain separate and preserved', () => {
+        const desc = 'Y2K-style layered short-sleeve top';
+        const notes = 'I love wearing this every day without much active activity.';
+        const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', '', desc, notes);
+        expect(ev.personalUsage.rawText).toBe(notes);
+      });
+
+      test('TEST 11: Unknown Material leaves material evidence empty', () => {
+        const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', '', 'A simple plain top');
+        expect(ev.material).toEqual([]);
+      });
+
+      test('TEST 12: Unknown Style leaves style evidence empty', () => {
+        const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', '', 'A simple plain top');
+        expect(ev.style).toEqual([]);
+      });
+
+      test('TEST 13: Unknown Activity leaves activity evidence empty', () => {
+        const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', '', 'A simple plain top');
+        expect(ev.activity).toEqual([]);
+      });
+
+      test('TEST 14: Legacy item with stale garment_type heals to current semantic result', () => {
+        const staleItem = {
+          garment_type: 'Bottom',
+          category: 'Tops',
+          sub_category: 'T-Shirt',
+          description: 'White cotton t-shirt',
+        };
+        expect(resolveEffectiveGarmentBucket(staleItem)).toBe('Top');
+      });
+
+      test('TEST 15: Item Details, Mannequin and Stylist all resolve the same effective bucket', () => {
+        const garment = {
+          category: 'Tops',
+          sub_category: 'T-Shirt',
+          garment_type: 'Bottom', // stale in DB
+          description: 'Casual cotton t-shirt',
+          color_tags: ['Navy Blue', 'White'],
+          occasions: ['Daily Activity'],
+        };
+        const bucket = resolveEffectiveGarmentBucket(garment);
+        const norm = normalizeGarment(
+          garment.category,
+          garment.sub_category,
+          'Navy Blue, White',
+          'Daily Activity',
+          garment.description
+        );
+        expect(bucket).toBe('Top');
+        expect(norm.systemBucket).toBe('Top');
+        expect(norm.family).toBe('Top');
+      });
+
+      test('Conflict detection: flags conflict when Category is Tops but Sub Category is Running Shorts', () => {
+        const norm = normalizeGarment('Tops', 'Running Shorts', '', '', '');
+        expect(norm.conflict?.hasConflict).toBe(true);
+        expect(norm.family).toBe('Bottom'); // concrete garment determines bucket
+        expect(norm.conflict?.message).toContain('Category is Tops but Sub Category indicates Bottom');
+      });
+    });
   });
 });
 

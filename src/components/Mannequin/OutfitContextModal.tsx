@@ -10,6 +10,7 @@ import {
   Dimensions,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
@@ -21,11 +22,12 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface Props {
   visible: boolean;
+  loading?: boolean;
   onConfirm: (context: OutfitContext) => void;
   onCancel: () => void;
 }
 
-export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
+export function OutfitContextModal({ visible, loading = false, onConfirm, onCancel }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
 
@@ -36,17 +38,16 @@ export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
   const canProceed = trimmedOccasion.length > 0;
 
   const handleConfirm = () => {
-    if (!canProceed) return;
+    if (!canProceed || loading) return;
     const ctx: OutfitContext = {
       occasion: trimmedOccasion,
       additionalContext: additionalContext.trim() || undefined,
     };
-    setOccasion('');
-    setAdditionalContext('');
     onConfirm(ctx);
   };
 
   const handleCancel = () => {
+    if (loading) return;
     setOccasion('');
     setAdditionalContext('');
     onCancel();
@@ -93,6 +94,7 @@ export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
                   onChangeText={setOccasion}
                   autoFocus
                   maxLength={100}
+                  editable={!loading}
                 />
               </View>
 
@@ -116,26 +118,40 @@ export function OutfitContextModal({ visible, onConfirm, onCancel }: Props) {
                   numberOfLines={3}
                   maxLength={500}
                   textAlignVertical="top"
+                  editable={!loading}
                 />
               </View>
             </ScrollView>
 
             {/* Actions */}
             <SafeAreaView edges={['bottom']} style={[styles.actions, { borderTopColor: colors.border, backgroundColor: colors.card }]}>
-              <TouchableOpacity style={[styles.cancelBtn, { borderColor: colors.border }]} onPress={handleCancel}>
+              <TouchableOpacity
+                style={[styles.cancelBtn, { borderColor: colors.border, opacity: loading ? 0.5 : 1 }]}
+                onPress={handleCancel}
+                disabled={loading}
+              >
                 <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.checkBtn, { backgroundColor: canProceed ? colors.tint : colors.border }]}
                 onPress={handleConfirm}
-                disabled={!canProceed}
+                disabled={!canProceed || loading}
                 accessibilityRole="button"
                 accessibilityLabel="Check My Outfit"
               >
-                <IconSymbol name="sparkles" size={14} color={canProceed ? colors.onTint : colors.secondaryText} />
-                <Text style={[styles.checkBtnText, { color: canProceed ? colors.onTint : colors.secondaryText }]}>
-                  Check My Outfit
-                </Text>
+                {loading ? (
+                  <>
+                    <ActivityIndicator size="small" color={colors.onTint} />
+                    <Text style={[styles.checkBtnText, { color: colors.onTint }]}>Analyzing your outfit…</Text>
+                  </>
+                ) : (
+                  <>
+                    <IconSymbol name="sparkles" size={14} color={canProceed ? colors.onTint : colors.secondaryText} />
+                    <Text style={[styles.checkBtnText, { color: canProceed ? colors.onTint : colors.secondaryText }]}>
+                      Check My Outfit
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             </SafeAreaView>
           </View>

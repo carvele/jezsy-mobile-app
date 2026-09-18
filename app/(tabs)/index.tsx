@@ -28,11 +28,12 @@ import { useToast } from '@/src/context/ToastContext';
 import { cacheProductCatalog, getCachedCatalog, OfflineProduct } from '@/src/services/offlineSync';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
-import { GRID_GUTTER, GRID_COLUMN_GAP } from '@/src/utils/layout';
+import { GRID_GUTTER, GRID_COLUMN_GAP, useGridCardWidth } from '@/src/utils/layout';
 import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { Skeleton, ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { ErrorRetryState } from '@/src/components/ErrorRetryState';
+import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 import { StyleGallery } from '@/components/StyleGallery';
 import { useWishlist } from '@/src/context/WishlistContext';
@@ -92,12 +93,14 @@ export default function HomeScreen() {
   }, []);
   const screenWidth = mounted ? rawScreenWidth : 400; // default to mobile size during SSR
   const heroCardWidth = screenWidth / GOLDEN_RATIO;
+  const { cardWidth } = useGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { session } = useAuth();
   const router = useRouter();
+  const reduceMotion = useReduceMotion();
 
   const [showTour, setShowTour] = useState(false);
   const [tourProgress, setTourProgress] = useState<TourProgressSnapshot | null>(null);
@@ -280,7 +283,7 @@ export default function HomeScreen() {
   // When advancing to the clone of product 1, waits for the native smooth
   // slide (400ms) to come to rest, then imperceptibly snaps to real card 1.
   useEffect(() => {
-    if (featuredProducts.length <= 1) return;
+    if (featuredProducts.length <= 1 || reduceMotion) return;
     const step = heroCardWidth + HERO_CARD_GAP;
     let settleTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -305,7 +308,7 @@ export default function HomeScreen() {
       clearInterval(timer);
       if (settleTimeout) clearTimeout(settleTimeout);
     };
-  }, [featuredProducts.length, heroCardWidth]);
+  }, [featuredProducts.length, heroCardWidth, reduceMotion]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -339,12 +342,12 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.sectionContainer}>
-            <View style={{ paddingHorizontal: Spacing.xl, marginBottom: Spacing.lg }}>
+            <View style={{ paddingHorizontal: GRID_GUTTER, marginBottom: Spacing.lg }}>
               <Skeleton width={140} height={22} />
             </View>
             <View style={styles.trendingGrid}>
               <SkeletonList count={4}>
-                <ProductCardSkeleton width={(screenWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP) / 2} />
+                <ProductCardSkeleton width={typeof cardWidth === 'number' ? cardWidth : (screenWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP) / 2} />
               </SkeletonList>
             </View>
           </View>
@@ -780,7 +783,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: GRID_COLUMN_GAP,
     paddingHorizontal: GRID_GUTTER,
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
   },
   sectionTitle: {
     ...Type.title,
@@ -791,7 +794,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: GRID_GUTTER,
     marginBottom: Spacing.lg,
   },
   seeAllText: {
@@ -811,14 +814,5 @@ const styles = StyleSheet.create({
   editsScrollContainer: {
     paddingHorizontal: Spacing.xl,
     gap: Spacing.lg,
-  },
-
-  // Trending Grid
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    // Feeds gridCardWidth via GRID_GUTTER, same as Explore's grid.
-    paddingHorizontal: GRID_GUTTER,
-        gap: GRID_COLUMN_GAP,
   },
 });

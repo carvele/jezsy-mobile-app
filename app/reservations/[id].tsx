@@ -278,7 +278,8 @@ export default function ReservationDetailScreen() {
                 showToast('Reservation cancelled.', 'success');
                 await fetchReservation();
               } else {
-                showToast(res.error.message || 'Could not cancel reservation.', 'error');
+                console.error('[cancelReservation] Cancel failed:', res.error);
+                showToast('Could not cancel your reservation. Please try again.', 'error');
               }
             } finally {
               setCancellingReservation(false);
@@ -325,7 +326,8 @@ export default function ReservationDetailScreen() {
       await fetchReservation();
       showToast('Request sent. We will confirm once it has been reviewed.', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Could not send your request. Please try again.', 'error');
+      console.error('[handleReschedule] Reschedule request failed:', err);
+      showToast('Could not send your request. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -351,7 +353,7 @@ export default function ReservationDetailScreen() {
         setIsPaymentProcessing(true);
         showToast('Your payment was received and is processing.', 'success');
       } else {
-        showToast(err.message || 'Could not start the payment.', 'error');
+        showToast('Could not start the payment. Please try again.', 'error');
       }
       // If payment failed (e.g. 409 conflict, cancelled, expired), refresh
       // reservation state to reflect latest server status and disable stale actions.
@@ -441,7 +443,8 @@ export default function ReservationDetailScreen() {
       await fetchReservation();
       showToast('Receipt sent. We will confirm once it has been checked.', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Could not send the receipt.', 'error');
+      console.error('[handleUploadReceipt] Receipt upload failed:', err);
+      showToast('Could not send the receipt. Please try again.', 'error');
     } finally {
       setUploadingReceipt(false);
     }
@@ -505,7 +508,8 @@ export default function ReservationDetailScreen() {
       await fetchReservation();
       showToast('Balance receipt sent. We will confirm once it has been checked.', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Could not send the balance receipt.', 'error');
+      console.error('[handleUploadBalanceReceipt] Balance receipt upload failed:', err);
+      showToast('Could not send the balance receipt. Please try again.', 'error');
     } finally {
       setUploadingBalanceReceipt(false);
     }

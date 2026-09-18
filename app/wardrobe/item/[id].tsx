@@ -89,7 +89,7 @@ export default function WardrobeItemDetailScreen() {
       if (error) throw error;
       if (data) {
         const effective = resolveEffectiveGarmentBucket(data);
-        if (effective !== data.garment_type && (data.garment_type === 'Top' || !data.garment_type)) {
+        if (effective !== data.garment_type) {
           supabase
             .from('wardrobe_items')
             .update({ garment_type: effective })
@@ -219,6 +219,7 @@ export default function WardrobeItemDetailScreen() {
       setItem(result.data);
       setEditModalVisible(false);
       showToast('Garment details updated.', 'success');
+      await fetchItem();
     } catch (err: any) {
       console.error('Error updating wardrobe item:', err);
       showToast(err?.message || 'Failed to update garment details.', 'error');
@@ -362,8 +363,48 @@ export default function WardrobeItemDetailScreen() {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.cardHeader}>
             <IconSymbol name="tshirt" size={16} color={colors.tint} />
-            <Text style={[styles.cardTitle, { color: colors.text }]}>My Garment Details</Text>
+            <Text style={[styles.cardTitle, { color: colors.text, flex: 1 }]}>My Garment Details</Text>
+            <TouchableOpacity
+              onPress={openEditModal}
+              style={[styles.editCardBtn, { borderColor: colors.tint }]}
+              accessibilityRole="button"
+              accessibilityLabel="Edit garment details"
+            >
+              <IconSymbol name="pencil" size={14} color={colors.tint} />
+              <Text style={[styles.editCardBtnText, { color: colors.tint }]}>Edit</Text>
+            </TouchableOpacity>
           </View>
+
+          {/* Category */}
+          <View style={styles.fieldBlock}>
+            <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>CATEGORY</Text>
+            <Text style={[styles.fieldValue, { color: colors.text }]}>
+              {item.category || 'Not specified'}
+            </Text>
+          </View>
+
+          {/* Sub Category */}
+          <View style={styles.fieldBlock}>
+            <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>SUB CATEGORY</Text>
+            <Text style={[styles.fieldValue, { color: colors.text }]}>
+              {item.sub_category || 'Not specified'}
+            </Text>
+          </View>
+
+          {/* Conflict Warning if Category and Sub Category contradict */}
+          {normalized.conflict?.hasConflict && (
+            <View style={[styles.conflictBanner, { backgroundColor: colors.notification + '18', borderColor: colors.notification }]}>
+              <IconSymbol name="exclamationmark.triangle.fill" size={16} color={colors.notification} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.conflictTitle, { color: colors.notification }]}>
+                  Category/Sub Category need review
+                </Text>
+                <Text style={[styles.conflictText, { color: colors.text }]}>
+                  {normalized.conflict.message}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Color */}
           <View style={styles.fieldBlock}>
@@ -398,15 +439,13 @@ export default function WardrobeItemDetailScreen() {
             </Text>
           </View>
 
-          {/* Personal Notes (Shown only if present) */}
-          {rawUserNotesText ? (
-            <View style={styles.fieldBlock}>
-              <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>PERSONAL NOTES</Text>
-              <Text style={[styles.fieldValue, styles.notesText, { color: colors.text }]}>
-                {rawUserNotesText}
-              </Text>
-            </View>
-          ) : null}
+          {/* Personal Notes */}
+          <View style={styles.fieldBlock}>
+            <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>PERSONAL NOTES</Text>
+            <Text style={[styles.fieldValue, styles.notesText, { color: colors.text }]}>
+              {rawUserNotesText || 'None provided'}
+            </Text>
+          </View>
         </View>
 
         {/* Derived JeZsy Classification Card (Clearly labeled as system-derived) */}
@@ -424,26 +463,28 @@ export default function WardrobeItemDetailScreen() {
           <View style={styles.attrGrid}>
             <View style={styles.attrItem}>
               <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Garment Family</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.family}</Text>
+              <Text style={[styles.attrValue, { color: colors.text }]}>
+                {normalized.family === 'Unknown' ? 'Not specified' : normalized.family}
+              </Text>
             </View>
             <View style={styles.attrItem}>
               <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Garment Type</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.type || 'Standard'}</Text>
+              <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.type || 'Not specified'}</Text>
             </View>
             <View style={styles.attrItem}>
               <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Subtype</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.subtype || 'Standard'}</Text>
+              <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.subtype || 'Not specified'}</Text>
             </View>
             <View style={styles.attrItem}>
               <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Style</Text>
               <Text style={[styles.attrValue, { color: colors.text }]}>
-                {normalized.style.length > 0 ? normalized.style.join(' · ') : 'Standard'}
+                {normalized.style.length > 0 ? normalized.style.join(' · ') : 'Not specified'}
               </Text>
             </View>
             <View style={styles.attrItem}>
               <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Activity</Text>
               <Text style={[styles.attrValue, { color: colors.text }]}>
-                {normalized.activity.length > 0 ? normalized.activity.join(' · ') : 'General'}
+                {normalized.activity.length > 0 ? normalized.activity.join(' · ') : 'Not specified'}
               </Text>
             </View>
             <View style={styles.attrItem}>
@@ -776,6 +817,36 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 11,
     marginTop: 1,
+  },
+  editCardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  editCardBtnText: {
+    ...Type.caption,
+    fontWeight: '700',
+  },
+  conflictBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.xs,
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  conflictTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  conflictText: {
+    fontSize: 11,
+    lineHeight: 16,
   },
   fieldBlock: {
     gap: 4,

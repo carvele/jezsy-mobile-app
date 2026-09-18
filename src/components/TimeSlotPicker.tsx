@@ -266,6 +266,38 @@ export function TimeSlotPicker({
     );
   }
 
+  if (
+    slots.length === 1 &&
+    !slots[0].isAvailable &&
+    slots[0].value === "error"
+  ) {
+    return (
+      <View
+        style={[
+          styles.errorContainer,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+        testID="timeslot-error-container"
+      >
+        <Text style={[styles.errorText, { color: colors.text }]}>
+          Could not load schedule
+        </Text>
+        <TouchableOpacity
+          style={[styles.retryButton, { backgroundColor: colors.tint }]}
+          onPress={() => {
+            setLoading(true);
+            fetchSlots();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading schedule"
+          testID="timeslot-retry-button"
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const selectedLabel = slots.find((s) => s.value === selectedSlot)?.label;
   const availableCount = slots.filter((s) => s.isAvailable).length;
 
@@ -448,5 +480,25 @@ const styles = StyleSheet.create({
   closedText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  errorContainer: {
+    padding: Spacing.lg,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: Spacing.md,
+  },
+  errorText: {
+    ...Type.bodyStrong,
+    textAlign: "center",
+  },
+  retryButton: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.sm,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#FFFFFF",
+    ...Type.bodyStrong,
   },
 });

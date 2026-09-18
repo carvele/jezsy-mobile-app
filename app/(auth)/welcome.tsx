@@ -137,7 +137,7 @@ export default function WelcomeScreen() {
       }
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
-      showToast(err.message ?? 'Could not sign in with Google. Please try again.', 'error');
+      showToast('Could not sign in with Google. Please try again.', 'error');
     } finally {
       setGoogleLoading(false);
     }

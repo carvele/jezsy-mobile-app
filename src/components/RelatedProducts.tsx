@@ -10,6 +10,7 @@ import { getRecentlyViewed } from '@/src/utils/recentlyViewed';
 import { rankCandidates } from '@/src/utils/recommendations';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CATEGORY_SELECT } from '@/src/utils/categoryDisplay';
+import { isInStock } from '@/src/utils/stock';
 
 // Fetched wide, then ranked down -- ordering by relevance has to happen after
 // the affinity signals are known, which Postgres has no way to express here.
@@ -78,19 +79,23 @@ export function RelatedProducts({
         .neq('id', currentProductId)
         .eq('deleted', false)
         .eq('visibility', 'public')
+        .or('stock.gt.0,stock.is.null')
         .limit(CANDIDATE_POOL);
 
       if (cancelled || !data) return;
+
+      // Never recommend sold-out products.
+      const inStockData = data.filter(isInStock);
 
       // Wishlisted and recently-viewed items are strong signals but poor
       // suggestions -- the user has already seen or saved them, and both get
       // their own strip elsewhere on this screen.
       const seen = new Set([...wishlistIds, ...recentIds]);
-      const unseen = data.filter((p) => !seen.has(p.id));
+      const unseen = inStockData.filter((p) => !seen.has(p.id));
 
-      // Falling back to the full pool matters on a small catalog, where
+      // Falling back to the in-stock pool matters on a small catalog, where
       // excluding everything the user has touched can empty the strip.
-      const candidates = unseen.length > 0 ? unseen : data;
+      const candidates = unseen.length > 0 ? unseen : inStockData;
       const signals = { currentSubCategoryId, affinityCategoryIds };
       setProducts(rankCandidates(candidates, signals, VISIBLE_COUNT));
     };

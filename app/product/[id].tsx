@@ -412,33 +412,51 @@ export default function ProductDetailScreen() {
     );
   }
 
-  // product_variants only carries a boolean is_available (plus is_low_stock/
-  // stock_status) -- there is no per-variant quantity column. Treating
-  // is_available as a quantity (true -> 1, false -> 0) produced a fixed
-  // "Only 1 left" that never changed as reservations were made, decoupled
-  // from products.stock (the real, live-decrementing shared count). Use the
-  // real number for any available variant instead of fabricating one.
+  // product_variants deliberately exposes only booleans (is_available,
+  // is_low_stock, stock_status), never a numeric count -- the raw inventory
+  // table with real total/reserved/available integers is staff/admin/owner
+  // only by design (20260914220000_progressive_auth_sanitized_projections.sql).
+  // 0/1 here is fine for purchasability gating (out of stock vs not) since
+  // that's exactly what is_available already means; it must not be read as,
+  // or displayed as, an actual remaining-units count. See getStockLabel for
+  // the customer-safe "Low stock" text, which is per-variant real data (each
+  // size's own is_low_stock), unlike borrowing the product-wide total.
   const getStockInfo = (size?: string | null, color?: string | null): number | null => {
-    const realStock = product.stock ?? null;
     if (inventory && inventory.length > 0) {
       if (size) {
         const inv = inventory.find((i: any) =>
           i.size === size &&
           (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
         );
-        if (inv) return inv.is_available ? (realStock ?? 1) : 0;
+        if (inv) return inv.is_available ? 1 : 0;
         // If variants are tracked for this product, an unlisted variant combination has 0 available
         const hasSizeVariant = inventory.some((i: any) => i.size === size);
         if (hasSizeVariant) return 0;
       } else if (color) {
         const matching = inventory.filter((i: any) => !i.color || i.color.toLowerCase() === color.toLowerCase());
         if (matching.length > 0) {
-          return matching.some((i: any) => i.is_available) ? (realStock ?? 1) : 0;
+          return matching.some((i: any) => i.is_available) ? 1 : 0;
         }
       }
     }
-    // Fallback to top-level product stock if variants are not tracked
-    return realStock;
+    // Fallback to top-level product stock if variants are not tracked.
+    // products.stock itself isn't access-restricted like inventory is, so
+    // this is fine for products with no per-variant breakdown at all.
+    return product.stock ?? null;
+  };
+
+  // Customer-safe "running low" signal for a specific size, sourced from the
+  // variant's own is_low_stock/stock_status -- real per-size data, unlike a
+  // number borrowed from the product-wide total (which is the same value
+  // for every size regardless of how depleted that size actually is).
+  const getStockLabel = (size?: string | null, color?: string | null): string | null => {
+    if (!inventory || inventory.length === 0 || !size) return null;
+    const inv = inventory.find((i: any) =>
+      i.size === size &&
+      (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
+    );
+    if (!inv || !inv.is_available) return null;
+    return inv.is_low_stock ? 'Low stock' : null;
   };
 
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is

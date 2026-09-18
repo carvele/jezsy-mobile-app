@@ -37,27 +37,26 @@ export function useGridCardWidth(): { cardWidth: DimensionValue; columns: number
     setMounted(true);
   }, []);
 
+  const isWeb = Platform.OS === 'web';
+  const webClientWidth =
+    isWeb && typeof document !== 'undefined' && document.documentElement?.clientWidth
+      ? document.documentElement.clientWidth
+      : null;
+
   // SSR / pre-hydration: pin to a standard mobile width to match the server render.
-  const effectiveWidth = mounted ? width : 400;
+  const effectiveWidth = mounted ? (webClientWidth || width) : 400;
 
   // Phones get 2 cols, small tablets 3, large tablets/web 4+
   const columns = effectiveWidth > 1200 ? 5 : effectiveWidth > 900 ? 4 : effectiveWidth > 600 ? 3 : 2;
 
-  // Hand-picked percentages (e.g. '47%' for 2 columns) don't actually leave
-  // room for GRID_COLUMN_GAP: 2 * 47% = 94% of the content box, plus a fixed
-  // 20px gap, comes out to just over 100% on a real 375px phone width --
-  // enough to trip flexWrap and collapse the grid to a single column. Percent
-  // widths and a fixed-pixel gap don't compose the way "leaves easily fits"
-  // implies. Computing an exact pixel width instead (floored, so rounding
-  // can only leave slack, never overflow) mathematically guarantees columns
+  // Computing an exact pixel width mathematically guarantees columns
   // fit regardless of gap/gutter values.
-  const isWeb = Platform.OS === 'web';
-  const webScrollbarSlack = isWeb ? 16 : 0;
-  const contentWidth = effectiveWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP * (columns - 1) - webScrollbarSlack;
+  const contentWidth = effectiveWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP * (columns - 1);
   
-  // Subtract 1px to provide slack for Android's Yoga layout engine, which
+  // Subtract 1px on Android to provide slack for Yoga layout engine, which
   // often wraps exact-fit flex items due to floating point inaccuracies.
-  const cardWidth: DimensionValue = Math.floor(contentWidth / columns) - 1;
+  const yogaSlack = Platform.OS === 'android' ? 1 : 0;
+  const cardWidth: DimensionValue = Math.floor(contentWidth / columns) - yogaSlack;
 
   return { cardWidth, columns };
 }

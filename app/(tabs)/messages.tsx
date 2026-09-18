@@ -10,6 +10,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { announcementService } from '@/src/services';
 import { formatPHDate } from '@/src/utils/dateTime';
 import { ListRowSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { ErrorRetryState } from '@/src/components/ErrorRetryState';
 import { useToast } from '@/src/context/ToastContext';
 import { getNotificationsPage, NotificationItem } from '@/src/services/notificationService';
 import { useNotifications } from '@/src/context/NotificationContext';
@@ -20,7 +21,7 @@ import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 
 export default function InboxScreen() {
   const bottomInset = useSharedBottomInset();
-  const { conversations, loading: messagesLoading, onlineUsers, isStaffOnline, getOrCreateConversation } = useMessages();
+  const { conversations, loading: messagesLoading, error: messagesError, refreshConversations, onlineUsers, isStaffOnline, getOrCreateConversation } = useMessages();
   const { user, profile } = useAuth();
   const { unreadNonChatCount, markAsRead: markNotifReadInContext, markAllAsRead: markAllNotifsReadInContext } = useNotifications();
   const router = useRouter();
@@ -64,6 +65,7 @@ export default function InboxScreen() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [notifOffset, setNotifOffset] = useState(0);
   const [hasMoreNotifications, setHasMoreNotifications] = useState(false);
   const [loadingMoreNotifications, setLoadingMoreNotifications] = useState(false);
@@ -72,17 +74,20 @@ export default function InboxScreen() {
     if (!user) {
       setNotifications([]);
       setNotificationsLoading(false);
+      setNotificationsError(null);
       return;
     }
     setNotificationsLoading(true);
+    setNotificationsError(null);
     try {
       const res = await getNotificationsPage(user.id, 0, 30);
       setNotifications(res.items);
       setNotifOffset(res.nextOffset);
       setHasMoreNotifications(res.hasMore);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching notifications:', err);
-      showToast('Could not load your messages. Please try again.', 'error');
+      setNotificationsError(err?.message || 'Could not load notifications.');
+      showToast('Could not load your notifications. Please try again.', 'error');
     } finally {
       setNotificationsLoading(false);
     }
@@ -375,10 +380,13 @@ export default function InboxScreen() {
       
 
       {/* Segmented Control */}
-      <View style={[styles.segmentedControl, { backgroundColor: colors.border }]}>
+      <View style={[styles.segmentedControl, { backgroundColor: colors.border }]} accessibilityRole="tablist">
         <TouchableOpacity
           style={[styles.segment, activeTab === 'shop' && [styles.activeSegment, { backgroundColor: colors.card }]]}
           onPress={() => setActiveTab('shop')}
+          accessibilityRole="tab"
+          accessibilityLabel="Shop tab"
+          accessibilityState={{ selected: activeTab === 'shop' }}
         >
           <View style={styles.segmentContent}>
             <Text style={[styles.segmentText, { color: activeTab === 'shop' ? colors.text : colors.secondaryText }]}>
@@ -394,6 +402,9 @@ export default function InboxScreen() {
         <TouchableOpacity
           style={[styles.segment, activeTab === 'notifications' && [styles.activeSegment, { backgroundColor: colors.card }]]}
           onPress={() => setActiveTab('notifications')}
+          accessibilityRole="tab"
+          accessibilityLabel="Notifications tab"
+          accessibilityState={{ selected: activeTab === 'notifications' }}
         >
           <View style={styles.segmentContent}>
             <Text style={[styles.segmentText, { color: activeTab === 'notifications' ? colors.text : colors.secondaryText }]}>
@@ -414,6 +425,12 @@ export default function InboxScreen() {
           <View style={{ paddingHorizontal: Spacing.lg }}>
             <SkeletonList count={5}><ListRowSkeleton /></SkeletonList>
           </View>
+        ) : messagesError && conversations.length === 0 ? (
+          <ErrorRetryState
+            title="Unable to load messages"
+            message={messagesError}
+            onRetry={refreshConversations}
+          />
         ) : conversations.length === 0 ? (
           <View style={styles.emptyContainer}>
             {isStaff ? (
@@ -481,6 +498,12 @@ export default function InboxScreen() {
           <View style={{ paddingHorizontal: Spacing.lg }}>
             <SkeletonList count={4}><ListRowSkeleton /></SkeletonList>
           </View>
+        ) : notificationsError && notifications.length === 0 ? (
+          <ErrorRetryState
+            title="Unable to load notifications"
+            message={notificationsError}
+            onRetry={fetchNotifications}
+          />
         ) : notifications.length === 0 ? (
           <View style={styles.emptyContainer}>
             <IconSymbol name="bell.slash" size={48} color={colors.border} />

@@ -70,6 +70,11 @@ back to Three.js remains available. No model timeout/retry subsystem was added u
   This is not evidence of Filament compatibility or incompatibility.
 - No device is connected. No APK installation, physical comparison, GPU measurement, or Phase 6
   final-validation protocol has been performed.
+- **Update 2026-09-13**: first real-device run completed. Decision gate #1 below is now tested and
+  failed (a renderer-switch hang triggered a real Android ANR on the first attempt), and gate #2's
+  anchor/color checks found real, unresolved bugs. Full detail, evidence, and root-cause analysis in
+  `docs/ar-filament-experiment-device-verification-2026-09-13.md`. Do not re-attempt this
+  verification without reading that document first.
 
 ## Run locally after resolving the build prerequisite
 
@@ -96,10 +101,18 @@ Changing back to Three.js does not uninstall the native dependency; release adop
 
 ## Decision gates still open
 
-1. Complete an arm64 native build and run on the actual target phone. Verify cold launch, older-client
-   fallback, repeated renderer switching, pause/resume, and resource cleanup without native crashes.
+1. ~~Complete an arm64 native build and run on the actual target phone.~~ Done 2026-09-13. Cold
+   launch, older-client fallback, and pause/resume were not all exercised before testing was cut
+   short, but repeated renderer switching and resource cleanup were tested and **failed**: a
+   renderer-switch hang produced a real Android ANR on the very first attempt. See
+   `docs/ar-filament-experiment-device-verification-2026-09-13.md` (Finding 1). This gate is not
+   satisfied and needs a fix or an upstream report before revisiting.
 2. Confirm identical GLB bytes/hash, calibration, chart size, viewport, fixture start, and warmed asset state.
    Check shoulder-anchor displacement, sleeve response, mirroring, and clipping at every fixture phase.
+   **Attempted 2026-09-13**: shoulder-anchor displacement and color are both confirmed wrong on
+   device (garment renders ~1 head-height too high, wrong color), root cause not yet isolated to a
+   single line -- see Finding 2 in the same document. Sleeve/mirroring/clipping checks were not
+   reached.
 3. Establish numerical camera/root/bone parity with the reference and port or explicitly control
    occlusion and lighting before drawing comparative performance conclusions.
 4. Use platform profiling for frame-time distribution, dropped frames, memory, heat, and sustained

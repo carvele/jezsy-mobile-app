@@ -1,0 +1,4 @@
+-- Rollback: 20260918020500_add_wardrobe_items_embedding.sql.rollback
+
+ALTER TABLE public.wardrobe_items
+  DROP COLUMN IF EXISTS embedding;
