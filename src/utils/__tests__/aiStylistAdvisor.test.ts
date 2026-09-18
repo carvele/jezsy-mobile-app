@@ -3,6 +3,10 @@ import {
   extractColors,
   interpretOutfitContext,
   buildGarmentSemanticProfile,
+  STYLIST_ANALYSIS_VERSION,
+  computeContextHash,
+  computeOutfitHash,
+  validateContextRelevance,
 } from '../aiStylistAdvisor';
 import { MannequinCanvasItem } from '../mannequinConfig';
 import { DEFAULT_STYLE_PROFILE, updateProfileFromFeedback } from '../personalStyleEngine';
@@ -1053,6 +1057,242 @@ describe('aiStylistAdvisor - Critical Context & Garment Compatibility Engine', (
       const botAlt = critique.wardrobeAlternatives?.find((a) => a.slot === 'bottom');
       expect(botAlt?.found).toBe(false);
       expect(botAlt?.recommendationText).toMatch(/I don't see a wardrobe item that resolves/);
+    });
+  });
+
+  // =========================================================================
+  // REAL-TIME CONTEXTUAL ANALYSIS REBUILD & QA TEST MATRIX
+  // =========================================================================
+
+  describe('Real-Time Contextual Analysis & QA Scenario Matrix', () => {
+    // Exact User Outfit: Knit Sweater + 2-in-1 Nike Running Shorts + Flats
+    const knitSweater = mockItem('top_knit', 'Top', 'Knit Sweater', {
+      category: 'Top',
+      sub_category: 'Sweater',
+      color: 'maroon',
+      description: 'Cozy relaxed knit sweater with ribbed cuffs and warm drape',
+    });
+
+    const nikeRunningShorts = mockItem('bot_running', 'Bottom', 'Activewear / Running Shorts', {
+      category: 'Bottom',
+      sub_category: 'Running Shorts',
+      color: 'black',
+      description:
+        'Black 2-in-1 athletic running shorts (Nike) featuring a wide gathered elastic waistband, loose curved-hem outer shell, built-in undershorts, and a white swoosh logo.',
+      user_notes: 'I love wearing this when exercising and running.',
+      where_worn_often: 'Running, gym, workouts',
+    });
+
+    const flats = mockItem('shoe_flats', 'Shoes', 'Flats', {
+      category: 'Shoes',
+      sub_category: 'Flats',
+      color: 'brown',
+      description: 'Leather slip-on flats with subtle profile and everyday comfort',
+    });
+
+    const outfitItems = [knitSweater.canvasItem, nikeRunningShorts.canvasItem, flats.canvasItem];
+    const outfitLookup = {
+      [knitSweater.wardrobeItem.id]: knitSweater.wardrobeItem,
+      [nikeRunningShorts.wardrobeItem.id]: nikeRunningShorts.wardrobeItem,
+      [flats.wardrobeItem.id]: flats.wardrobeItem,
+    };
+
+    // 1. Freshness Metadata
+    test('Freshness metadata: every critique attaches analysisId, generatedAt, version, and hashes', () => {
+      const critique = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Casual afternoon walk',
+      });
+
+      expect(critique.analysisId).toBeDefined();
+      expect(critique.analysisId).toMatch(/^stylist_\d+_[a-z0-9]+$/);
+      expect(critique.generatedAt).toBeDefined();
+      expect(critique.analysisVersion).toBe(STYLIST_ANALYSIS_VERSION);
+      expect(critique.analysisMode).toBe('ruleBasedEvidence');
+      expect(critique.contextHash).toBeDefined();
+      expect(critique.outfitHash).toBeDefined();
+      expect(critique.wardrobeItemIds).toEqual([
+        knitSweater.canvasItem.wardrobe_item_id,
+        nikeRunningShorts.canvasItem.wardrobe_item_id,
+        flats.canvasItem.wardrobe_item_id,
+      ]);
+    });
+
+    // 2. Hash separation: different contexts produce different context hashes
+    test('Context hashing: differing contexts produce distinct hashes', () => {
+      const hashA = computeContextHash({ occasion: 'Cold night date', additionalContext: 'It will be cold tonight' });
+      const hashB = computeContextHash({ occasion: 'Running 5km tonight' });
+      const hashC = computeContextHash({ occasion: 'Swimming — I will be swimming a lot in the pool' });
+
+      expect(hashA).not.toBe(hashB);
+      expect(hashB).not.toBe(hashC);
+      expect(hashA).not.toBe(hashC);
+
+      const outfitHash = computeOutfitHash(outfitItems, outfitLookup);
+      expect(outfitHash).toBeDefined();
+      expect(outfitHash).toMatch(/^outfit_[a-z0-9]+$/);
+    });
+
+    // 3. Scenario A: Swimming
+    test('Scenario A (Swimming): addresses pool immersion, knit water absorption, flats ruin, and running shorts vs swimwear', () => {
+      const critique = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Swimming',
+        additionalContext: "I'll be swimming a lot in the pool.",
+      });
+
+      expect(critique.assessment).toBe('Not appropriate for this occasion');
+      expect(critique.headline).toBe('Activity & Water Mismatch');
+      expect(critique.whyJezsySaysThis).toMatch(/pool|water|swimming/i);
+      expect(critique.whyJezsySaysThis).toMatch(/knit sweater/i);
+      expect(critique.whyJezsySaysThis).toMatch(/running shorts/i);
+      // Invariant: MUST NOT mention hardcoded denim skirt!
+      expect(critique.whyJezsySaysThis).not.toMatch(/denim/i);
+      expect(critique.stylistsTake).not.toMatch(/denim/i);
+      expect(critique.whyJezsySaysThis).not.toBe(critique.stylistsTake);
+      expect(validateContextRelevance(critique, critique.contextInterpretation)).toBe(true);
+    });
+
+    // 4. Scenario B: Cold Night Date
+    test('Scenario B (Cold Night Date): identifies thermal mismatch, exposed legs, athletic running shorts identity, and user exercise association', () => {
+      const critique = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Cold night date',
+        additionalContext: 'It will be cold tonight.',
+      });
+
+      expect(critique.assessment).toBe('Not appropriate for this occasion');
+      expect(critique.headline).toBe('Thermal & Occasion Conflict');
+      expect(critique.whyJezsySaysThis).toMatch(/running shorts/i);
+      expect(critique.whyJezsySaysThis).toMatch(/cold/i);
+      expect(critique.whyJezsySaysThis).toMatch(/knit sweater/i);
+      expect(critique.whyJezsySaysThis).toMatch(/exercis|running/i);
+      expect(critique.stylistsTake).toMatch(/evening date|gym activewear|cold/i);
+      // Invariant: whyJezsySaysThis and stylistsTake must NOT be identical duplicate sentences
+      expect(critique.whyJezsySaysThis).not.toBe(critique.stylistsTake);
+      expect(validateContextRelevance(critique, critique.contextInterpretation)).toBe(true);
+    });
+
+    // 5. Scenario C: Casual Afternoon Walk
+    test('Scenario C (Casual Afternoon Walk): does NOT reject running shorts; highlights walking mobility and relaxed comfort', () => {
+      const critique = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Casual afternoon walk',
+      });
+
+      expect(critique.assessment).toBe('Appropriate for this occasion');
+      expect(critique.headline).toBe('Relaxed Walking Ensemble');
+      expect(critique.whyJezsySaysThis).toMatch(/walking|movement|mobility/i);
+      expect(critique.whyJezsySaysThis).toMatch(/sweater/i);
+      expect(critique.whyJezsySaysThis).not.toBe(critique.stylistsTake);
+      expect(validateContextRelevance(critique, critique.contextInterpretation)).toBe(true);
+    });
+
+    // 6. Scenario D: Running 5km tonight
+    test('Scenario D (Running 5km tonight): recognizes running shorts as POSITIVE match, identifies knit sweater overheating and flats conflict', () => {
+      const critique = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Running 5km tonight',
+      });
+
+      expect(critique.assessment).toBe('Could work with changes');
+      expect(critique.headline).toBe('Athletic Bottom with Heavy Top');
+      // Running shorts are positive:
+      expect(critique.whatWorks).toMatch(/running shorts|mobility|unrestricted|2-in-1/i);
+      // Knit sweater is an overheating conflict:
+      expect(critique.whyJezsySaysThis).toMatch(/sweater.*overheating|heat/i);
+      // Flats are a non-running shoe conflict:
+      expect(critique.whyJezsySaysThis).toMatch(/flats.*cushioning|running/i);
+      expect(critique.whyJezsySaysThis).not.toBe(critique.stylistsTake);
+      expect(validateContextRelevance(critique, critique.contextInterpretation)).toBe(true);
+    });
+
+    // 7. Scenario E: Indoor Breakfast
+    test('Scenario E (Indoor Breakfast): generates distinct reasoning for indoor morning dining and avoids generic boilerplate', () => {
+      const critique = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Indoor breakfast',
+      });
+
+      expect(critique.assessment).toBe('Appropriate for this occasion');
+      expect(critique.headline).toBe('Casual Morning Separates');
+      // Invariant: MUST NOT produce the old generic fallback phrase!
+      expect(critique.whyJezsySaysThis).not.toMatch(/The pieces create a relaxed, wearable outfit for casual morning wear/);
+      expect(critique.headline).not.toBe('Casual Everyday Outfit');
+      // Grounded in indoor breakfast and actual garments:
+      expect(critique.whyJezsySaysThis).toMatch(/indoor breakfast|climate-controlled|morning dining/i);
+      expect(critique.whyJezsySaysThis).toMatch(/knit sweater/i);
+      expect(critique.whyJezsySaysThis).toMatch(/running shorts.*gym|activewear/i);
+      expect(critique.whyJezsySaysThis).not.toBe(critique.stylistsTake);
+      expect(validateContextRelevance(critique, critique.contextInterpretation)).toBe(true);
+    });
+
+    // 8. Material Difference Assertion: Same Outfit across 5 Contexts produces 5 Mutually Distinct Reasonings
+    test('Mandatory acceptance: same clothes across 5 contexts produce mutually distinct reasonings', () => {
+      const critiqueSwim = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Swimming',
+        additionalContext: "I'll be swimming a lot in the pool.",
+      });
+
+      const critiqueColdDate = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Cold night date',
+        additionalContext: 'It will be cold tonight.',
+      });
+
+      const critiqueWalk = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Casual afternoon walk',
+      });
+
+      const critiqueRun = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Running 5km tonight',
+      });
+
+      const critiqueBreakfast = gradeOutfit(outfitItems, outfitLookup, {
+        occasion: 'Indoor breakfast',
+      });
+
+      const verdicts = [
+        critiqueSwim.verdict,
+        critiqueColdDate.verdict,
+        critiqueWalk.verdict,
+        critiqueRun.verdict,
+        critiqueBreakfast.verdict,
+      ];
+      const uniqueVerdicts = new Set(verdicts);
+      expect(uniqueVerdicts.size).toBe(5);
+
+      const whyJezsyList = [
+        critiqueSwim.whyJezsySaysThis,
+        critiqueColdDate.whyJezsySaysThis,
+        critiqueWalk.whyJezsySaysThis,
+        critiqueRun.whyJezsySaysThis,
+        critiqueBreakfast.whyJezsySaysThis,
+      ];
+      const uniqueWhys = new Set(whyJezsyList);
+      expect(uniqueWhys.size).toBe(5);
+
+      const takesList = [
+        critiqueSwim.stylistsTake,
+        critiqueColdDate.stylistsTake,
+        critiqueWalk.stylistsTake,
+        critiqueRun.stylistsTake,
+        critiqueBreakfast.stylistsTake,
+      ];
+      const uniqueTakes = new Set(takesList);
+      expect(uniqueTakes.size).toBe(5);
+    });
+
+    // 9. Anti-Duplication Test: whyJezsySaysThis, whatWorks, and stylistsTake must serve different purposes
+    test('Anti-Duplication: whyJezsySaysThis and stylistsTake do NOT copy each other across scenarios', () => {
+      const contexts = [
+        { occasion: 'Cold night date', additionalContext: 'It will be cold tonight.' },
+        { occasion: 'Running 5km tonight' },
+        { occasion: 'Indoor breakfast' },
+        { occasion: 'Casual afternoon walk' },
+      ];
+
+      for (const ctx of contexts) {
+        const critique = gradeOutfit(outfitItems, outfitLookup, ctx);
+        expect(critique.whyJezsySaysThis).not.toBe(critique.stylistsTake);
+        if (critique.whatWorks) {
+          expect(critique.whatWorks).not.toBe(critique.whyJezsySaysThis);
+          expect(critique.whatWorks).not.toBe(critique.stylistsTake);
+        }
+      }
     });
   });
 });

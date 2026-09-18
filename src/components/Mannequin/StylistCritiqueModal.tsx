@@ -123,6 +123,29 @@ export function StylistCritiqueModal({
               </View>
             ) : null}
 
+            {/* DEV Diagnostic Freshness Indicator */}
+            {__DEV__ && critique.analysisId ? (
+              <View
+                style={[
+                  styles.contextCard,
+                  { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 8, padding: 10 },
+                ]}
+              >
+                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.secondaryText, letterSpacing: 0.5 }}>
+                  STYLIST DIAGNOSTICS (DEV)
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.text, marginTop: 2 }}>
+                  Instance: {critique.analysisId}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                  Engine: v{critique.analysisVersion || '2.2.0'} ({critique.analysisMode || 'ruleBasedEvidence'})
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                  Context Hash: {critique.contextHash} | Outfit Hash: {critique.outfitHash}
+                </Text>
+              </View>
+            ) : null}
+
             {/* YOUR OUTFIT — Actual Mannequin Items */}
             {critique.mannequinItems && critique.mannequinItems.length > 0 && (
               <View style={styles.section}>
