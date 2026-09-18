@@ -16,6 +16,14 @@ import { StylistCritique, OverallAssessment } from '@/src/utils/aiStylistAdvisor
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+/** CSS only recognizes single-word color names; multi-word fashion terms (e.g. "neon green")
+ * usually end in the base hue, so fall back to the last word rather than rendering no color. */
+function resolveSwatchColor(colorName: string): string {
+  const trimmed = colorName.trim().toLowerCase();
+  const words = trimmed.split(/\s+/);
+  return words[words.length - 1] || trimmed;
+}
+
 interface Props {
   visible: boolean;
   critique: StylistCritique;
@@ -249,7 +257,7 @@ export function StylistCritiqueModal({
                       key={idx}
                       style={[styles.paletteChip, { backgroundColor: colors.card, borderColor: colors.border }]}
                     >
-                      <View style={[styles.colorDot, { backgroundColor: colorName.toLowerCase() }]} />
+                      <View style={[styles.colorDot, { backgroundColor: resolveSwatchColor(colorName) }]} />
                       <Text style={[styles.paletteText, { color: colors.text }]}>
                         {colorName.charAt(0).toUpperCase() + colorName.slice(1)}
                       </Text>

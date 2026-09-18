@@ -2626,7 +2626,8 @@ export function synthesizeHybridCritique(
       ? aiResponse.missing.join(' ')
       : undefined;
 
-  const verdict = `${aiResponse.headline}: ${aiResponse.whyJezsySaysThis.slice(0, 120)}...`;
+  const isTruncated = aiResponse.whyJezsySaysThis.length > 120;
+  const verdict = `${aiResponse.headline}: ${aiResponse.whyJezsySaysThis.slice(0, 120)}${isTruncated ? '...' : ''}`;
 
   const tips: string[] = [];
   if (aiResponse.improvements && aiResponse.improvements.length > 0) {

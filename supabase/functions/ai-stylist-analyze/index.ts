@@ -176,7 +176,7 @@ Produce a structured JSON critique with this exact schema:
       resultJson = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
     } else if (openaiApiKey || openrouterApiKey) {
       providerName = openaiApiKey ? 'openai' : 'openrouter';
-      modelName = openaiApiKey ? 'gpt-4o-mini' : 'meta-llama/llama-3.1-8b-instruct';
+      modelName = openaiApiKey ? 'gpt-4o-mini' : 'deepseek/deepseek-v4-flash-0731:free';
       const endpoint = openaiApiKey
         ? 'https://api.openai.com/v1/chat/completions'
         : 'https://openrouter.ai/api/v1/chat/completions';
