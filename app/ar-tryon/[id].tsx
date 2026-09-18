@@ -452,7 +452,21 @@ export default function ARTryOnScreen() {
   // Moved above handlePoseResults (Section 00 Phase 2's stale-closure lesson applies
   // here too): handlePoseResults's dependency array needs these identifiers declared
   // before it, not just referenced inside its body.
-  const { measurements: sizingMeasurements, fitPreference, ready: sizingReady } = useSizingProfile();
+  const { measurements: sizingMeasurements, fitPreference, ready: sizingReady, refetch: refetchSizingProfile } = useSizingProfile();
+  // useSizingProfile only loads on mount (keyed on user id); a fit-preference or
+  // measurements edit made in Settings while this screen stayed mounted in the
+  // background never reached it. Refetch whenever the screen regains focus, same
+  // trigger isFocused already uses above, skipping the initial mount since the
+  // hook's own effect already covers that fetch.
+  const didFocusOnceRef = React.useRef(false);
+  useEffect(() => {
+    if (!isFocused) return;
+    if (!didFocusOnceRef.current) {
+      didFocusOnceRef.current = true;
+      return;
+    }
+    refetchSizingProfile();
+  }, [isFocused, refetchSizingProfile]);
   const recommendedSize = useMemo(
     () => (sizingReady && sizingMeasurements && product?.measurements
       ? recommendSize(sizingMeasurements, product.measurements as any, fitPreference, product?.category)
