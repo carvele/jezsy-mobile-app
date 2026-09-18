@@ -1293,7 +1293,7 @@ export function detectContradictions(
           severity: 'severe',
           category: 'activity_water',
           garmentName: name,
-          reason: `${name} is a knit sweater/garment that absorbs heavy water and restricts movement in a pool.`,
+          reason: `${name} is a knit garment that absorbs heavy water and restricts movement in a pool.`,
           whyItMatters: 'Heavy knits become waterlogged, dangerously heavy, and distorted when immersed in water.',
           suggestedFix: 'Swap the knitwear for swimwear or a lightweight swim rash guard.',
         });
@@ -1406,10 +1406,10 @@ export function detectContradictions(
           severity: 'major',
           category: 'environment_practicality',
           garmentName: t.identity.name,
-          reason: `${t.identity.name} is a heavy insulating knit sweater that traps body heat and causes overheating during a sustained run.`,
+          reason: `${t.identity.name} is heavy and insulating, which traps body heat and causes overheating during a sustained run.`,
           whyItMatters:
             'Running generates intense metabolic body heat; non-breathable knitwear prevents sweat evaporation and leads to rapid thermal discomfort.',
-          suggestedFix: 'Replace the knit sweater with a moisture-wicking technical running shirt or lightweight athletic tee.',
+          suggestedFix: `Replace ${t.identity.name} with a moisture-wicking technical running shirt or lightweight athletic tee.`,
         });
       }
     }
@@ -1873,17 +1873,19 @@ export function gradeOutfit(
       if (shoeNames) pieceSummaries.push(`the ${shoeNames}`);
       const pieceList = pieceSummaries.join(', ');
 
+      const topItemDesc = structure.baseTops[0]
+        ? `${structure.baseTops[0].identity.name} will absorb water and become heavy when wet, `
+        : '';
+      const botItemDesc = structure.bottoms[0]
+        ? `${structure.bottoms[0].identity.name} lacks chlorine-resistant aquatic swimwear construction, `
+        : '';
+      const shoeItemDesc = structure.shoes[0]
+        ? `and footwear like ${structure.shoes[0].identity.name.toLowerCase()} cannot withstand pool water immersion.`
+        : 'and everyday footwear cannot withstand pool water immersion.';
+
       whyJezsySaysThis = `You indicated active swimming in a pool, which requires water-safe swimwear and aquatic mobility. The selected separates (${
         pieceList || 'street garments'
-      }) are fashion pieces: ${
-        structure.baseTops.some((t) => t.materialSignals.includes('knit'))
-          ? 'the knit sweater will absorb chlorinated water and become dangerously heavy, '
-          : ''
-      }${
-        structure.bottoms.some((b) => b.styleSignals.athletic)
-          ? 'the running shorts lack chlorine-resistant aquatic construction, '
-          : ''
-      }and footwear like flats cannot withstand pool water immersion.`;
+      }) are fashion pieces: ${topItemDesc}${botItemDesc}${shoeItemDesc}`;
 
       stylistsTake = `You said you'll be actively swimming a lot in a pool, so the outfit needs to support water exposure, movement, and swimming rather than simply look coordinated. The ${
         pieceList || 'selected separates'
@@ -1911,7 +1913,7 @@ export function gradeOutfit(
       tips.push('Active pool swimming requires chlorine-resistant, water-compatible fabrics like nylon or spandex.');
       tips.push('Wear pool slides or water shoes on the pool deck to protect footwear from water damage.');
     } else if (occasionType === 'date' || reqs.requiresWarmth) {
-      // Test Case A Scenario: Cold Night Date with Running Shorts, Sweater, Flats
+      // Cold Night Date Scenario with Running Shorts / Separates
       assessment = 'Not appropriate for this occasion';
       headline = 'Thermal & Occasion Conflict';
       verdict = `The athletic running shorts create both a thermal and occasion mismatch for a cold night date.`;
@@ -1923,15 +1925,24 @@ export function gradeOutfit(
         ? ` and you associate them with ${conflictShorts.personalUsage.activities.join(' and ') || 'exercise'}`
         : '';
       const shortsDesc = conflictShorts?.identity.name || 'running shorts';
+      const topG = structure.baseTops[0];
+      const topName = topG?.identity.name || 'top';
+      const isTopWarm = topG?.materialSignals.includes('knit') || topG?.thermal === 'heavyWarmth';
 
-      whyJezsySaysThis = `The main conflict is the ${shortsDesc}. Your description identifies them as athletic running shorts${personalNote}, so they carry a strong performance/activewear signal. That works naturally for running but conflicts with the cold-night part of your date context because the shorts provide limited warmth and leave legs exposed. The knit sweater helps with upper-body warmth, but it does not fully resolve the exposed-leg and occasion mismatch.`;
+      whyJezsySaysThis = `The main conflict is the ${shortsDesc}. Your description identifies them as athletic running shorts${personalNote}, so they carry a strong performance/activewear signal. That works naturally for running but conflicts with the cold-night part of your date context because the shorts provide limited warmth and leave legs exposed. ${
+        isTopWarm
+          ? `The ${topName.toLowerCase()} helps with upper-body warmth, but it does not fully resolve the exposed-leg and occasion mismatch.`
+          : `The ${topName.toLowerCase()} also provides limited cold-weather protection, compounding the low temperature mismatch.`
+      }`;
 
-      stylistsTake = `While the sweater provides soft upper warmth and the flats keep footwear subtle, the running shorts pull the outfit into gym activewear and offer no protection against tonight's cold. Swapping the shorts for full-length pants or warm tights will instantly align the look with an evening date.`;
+      stylistsTake = `While ${
+        isTopWarm ? `the ${topName.toLowerCase()} provides upper warmth` : `the upper pieces offer casual styling`
+      } and the flats keep footwear subtle, the running shorts pull the outfit into gym activewear and offer no protection against tonight's cold. Swapping the shorts for full-length pants or warm tights will instantly align the look with an evening date.`;
 
       // Positive elements grounded in reality:
       const positivePoints: string[] = [];
-      if (structure.baseTops.some((t) => t.materialSignals.includes('knit') || t.thermal === 'heavyWarmth')) {
-        positivePoints.push('The knit sweater provides upper-body warmth and texture');
+      if (isTopWarm) {
+        positivePoints.push(`The ${topName.toLowerCase()} provides upper-body warmth and texture`);
       }
       if (structure.shoes.some((s) => !s.styleSignals.athletic)) {
         positivePoints.push('the flats keep the footwear from reinforcing the athletic identity of the shorts');
@@ -1958,11 +1969,18 @@ export function gradeOutfit(
         );
       } else {
         whatsMissing = "Bottom — I don't see a wardrobe item that resolves the main cold-weather issue.";
-        tips.push('Full-length trousers or jeans would balance the sweater and provide necessary cold-night warmth.');
+        tips.push(`Full-length trousers or jeans would balance the ${topName.toLowerCase()} and provide necessary cold-night warmth.`);
       }
       tips.push('An evening date calls for intentional social styling rather than workout activewear.');
     } else if (occasionType === 'running' || activity === 'running') {
-      // Running Scenario with practical issues (e.g. heavy knit sweater or lifestyle flats)
+      // Running Scenario with practical issues (heavy top vs lifestyle footwear)
+      const topG = structure.baseTops[0];
+      const botG = structure.bottoms[0];
+      const shoeG = structure.shoes[0];
+      const topName = topG?.identity.name || 'top';
+      const botName = botG?.identity.name || 'running shorts';
+      const shoeName = shoeG?.identity.name || 'lifestyle footwear';
+
       const hasHeavySweater = structure.baseTops.some(
         (t) => t.materialSignals.includes('knit') || t.thermal === 'heavyWarmth'
       );
@@ -1972,39 +1990,48 @@ export function gradeOutfit(
       const runningShorts = garmentProfiles.find(
         (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
       );
-
-      assessment = 'Could work with changes';
-      headline = 'Athletic Bottom with Heavy Top';
-      verdict = `The running shorts are built for running, but a heavy knit sweater will trap excess body heat during a run.`;
-
       const userPersonalizationNote = runningShorts?.personalUsage?.rawText
         ? ` and you explicitly love wearing them for exercise and running`
         : '';
+      const runningShortsDesc = runningShorts?.rawUserData.description
+        ? runningShorts.rawUserData.description
+        : runningShorts?.identity.name || '2-in-1 athletic running shorts';
 
-      whyJezsySaysThis = `The running shorts are one of the strongest context matches in this outfit: your description notes they are 2-in-1 athletic running shorts${userPersonalizationNote}, and your stated activity is running. Their lightweight shell and built-in undershorts support natural stride and athletic mobility. However, the knit sweater is heavy and insulating, which traps body heat and causes overheating during a sustained run${
-        hasFlatsOrNonRunningShoes
-          ? ', while lifestyle flats lack the cushioning, arch support, and road impact absorption required for running'
-          : ''
-      }.`;
-
-      stylistsTake = `Keep the running shorts as your functional athletic foundation, but swap the heavy knit sweater for a breathable moisture-wicking top and wear supportive running shoes to protect your feet and joints during the run.`;
-
-      whatWorks =
-        'The running shorts are directly aligned with your running activity, offering unrestricted mobility, lightweight 2-in-1 construction, and athletic ventilation.';
-
-      const conflicts: string[] = [];
-      if (hasHeavySweater) {
-        conflicts.push(
-          'Swap the heavy knit sweater for a breathable moisture-wicking running shirt or lightweight technical top'
-        );
-      }
-      if (hasFlatsOrNonRunningShoes) {
-        conflicts.push('replace flats with cushioned running shoes designed for athletic impact');
-      }
-      whatCouldBeBetter = `${conflicts.join(', and ')}.`;
-      tips.push('Choose technical performance fabrics (like nylon or poly-spandex) to regulate body temperature while running.');
-      if (hasFlatsOrNonRunningShoes) {
+      if (hasHeavySweater && hasFlatsOrNonRunningShoes) {
+        assessment = 'Could work with changes';
+        headline = 'Athletic Bottom with Heavy Top';
+        verdict = `The ${botName.toLowerCase()} are built for running, but a heavy top will trap excess body heat and ${shoeName.toLowerCase()} lack impact cushioning.`;
+        whyJezsySaysThis = `The ${botName.toLowerCase()} are one of the strongest context matches in this outfit: your description notes they are ${runningShortsDesc}${userPersonalizationNote}, and your stated activity is running. Their lightweight shell and built-in undershorts support natural stride and athletic mobility. However, the ${topName.toLowerCase()} is heavy and insulating, which traps body heat and causes overheating during a sustained run, while ${shoeName.toLowerCase()} lack the cushioning, arch support, and road impact absorption required for running.`;
+        stylistsTake = `Keep the ${botName.toLowerCase()} as your functional athletic foundation, but swap the ${topName.toLowerCase()} for a breathable moisture-wicking top and wear supportive running shoes to protect your feet and joints during the run.`;
+        whatWorks = `The ${botName.toLowerCase()} are directly aligned with your running activity, offering unrestricted mobility, lightweight construction, and athletic ventilation.`;
+        whatCouldBeBetter = `Swap the ${topName.toLowerCase()} for a breathable moisture-wicking running shirt or lightweight technical top, and replace ${shoeName.toLowerCase()} with cushioned running shoes designed for athletic impact.`;
+        tips.push('Choose technical performance fabrics (like nylon or poly-spandex) to regulate body temperature while running.');
         tips.push('Cushioned running shoes are essential for shock absorption and joint protection.');
+      } else if (hasHeavySweater) {
+        assessment = 'Could work with changes';
+        headline = 'Athletic Bottom with Heavy Top';
+        verdict = `The ${botName.toLowerCase()} are built for running, but a heavy top will trap excess body heat during a run.`;
+        whyJezsySaysThis = `The ${botName.toLowerCase()} and athletic shoes match your running activity: your description notes they are ${runningShortsDesc}${userPersonalizationNote}, and your stated activity is running. However, the ${topName.toLowerCase()} is heavy and insulating, which traps body heat and causes overheating during a sustained run.`;
+        stylistsTake = `Keep the ${botName.toLowerCase()} as your functional athletic foundation, but swap the ${topName.toLowerCase()} for a breathable moisture-wicking top and wear supportive running shoes to protect your feet and joints during the run.`;
+        whatWorks = `The ${botName.toLowerCase()} are directly aligned with your running activity, offering unrestricted mobility, lightweight construction, and athletic ventilation.`;
+        whatCouldBeBetter = `Swap the ${topName.toLowerCase()} for a breathable moisture-wicking running shirt or lightweight technical top.`;
+        tips.push('Choose technical performance fabrics (like nylon or poly-spandex) to regulate body temperature while running.');
+      } else if (hasFlatsOrNonRunningShoes) {
+        assessment = 'Could work with changes';
+        headline = 'Athletic Separates with Lifestyle Footwear';
+        verdict = `The ${botName.toLowerCase()} and ${topName.toLowerCase()} suit running, but ${shoeName.toLowerCase()} lack athletic impact cushioning.`;
+        whyJezsySaysThis = `The ${botName.toLowerCase()} are one of the strongest context matches in this outfit: your description notes they are ${runningShortsDesc}${userPersonalizationNote}, and your stated activity is running. Their lightweight shell and built-in undershorts support natural stride and athletic mobility. The ${topName.toLowerCase()} provides lightweight, breathable upper coverage. However, ${shoeName.toLowerCase()} lack the cushioning, arch support, and road impact absorption required for running.`;
+        stylistsTake = `Keep the ${botName.toLowerCase()} and ${topName.toLowerCase()} as your functional athletic foundation, but replace ${shoeName.toLowerCase()} with cushioned running shoes to protect your feet and joints during the run.`;
+        whatWorks = `The ${botName.toLowerCase()} and ${topName.toLowerCase()} are directly aligned with your running activity, offering unrestricted mobility, lightweight construction, and athletic ventilation.`;
+        whatCouldBeBetter = `Replace ${shoeName.toLowerCase()} with cushioned running shoes designed for athletic impact.`;
+        tips.push('Cushioned running shoes are essential for shock absorption and joint protection.');
+      } else {
+        assessment = 'Appropriate for this occasion';
+        headline = 'Functional Athletic Gear';
+        verdict = `Performance pieces suited for ${occasionLabel}.`;
+        whyJezsySaysThis = `The ${botName.toLowerCase()} provide unrestricted stride mobility and ventilation, the ${topName.toLowerCase()} allows breathable movement, and your athletic footwear provides necessary joint cushioning and traction for running.`;
+        stylistsTake = 'A purpose-built athletic outfit with lightweight fabrics and unrestricted movement ready for running.';
+        whatWorks = 'Activewear fabrics and cuts support natural movement and breathability.';
       }
     } else {
       // General major contradiction
@@ -2124,6 +2151,13 @@ export function gradeOutfit(
       }
     } else if (occasionType === 'running' || activity === 'running') {
       // Running Scenario (e.g. Running 5km tonight)
+      const topG = structure.baseTops[0];
+      const botG = structure.bottoms[0];
+      const shoeG = structure.shoes[0];
+      const topName = topG?.identity.name || 'top';
+      const botName = botG?.identity.name || 'running shorts';
+      const shoeName = shoeG?.identity.name || 'lifestyle footwear';
+
       const hasHeavySweater = structure.baseTops.some(
         (t) => t.materialSignals.includes('knit') || t.thermal === 'heavyWarmth'
       );
@@ -2133,62 +2167,63 @@ export function gradeOutfit(
       const runningShorts = garmentProfiles.find(
         (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
       );
+      const userPersonalizationNote = runningShorts?.personalUsage?.rawText
+        ? ` and you explicitly love wearing them for exercise and running`
+        : '';
+      const runningShortsDesc = runningShorts?.rawUserData.description
+        ? runningShorts.rawUserData.description
+        : runningShorts?.identity.name || '2-in-1 athletic running shorts';
 
-      if (hasHeavySweater || hasFlatsOrNonRunningShoes) {
+      if (hasHeavySweater && hasFlatsOrNonRunningShoes) {
         assessment = 'Could work with changes';
         headline = 'Athletic Bottom with Heavy Top';
-        verdict = `The running shorts are built for running, but a heavy knit sweater will trap excess body heat during a run.`;
-
-        const userPersonalizationNote = runningShorts?.personalUsage?.rawText
-          ? ` and you explicitly love wearing them for exercise and running`
-          : '';
-
-        whyJezsySaysThis = `The running shorts are one of the strongest context matches in this outfit: your description notes they are 2-in-1 athletic running shorts${userPersonalizationNote}, and your stated activity is running. Their lightweight shell and built-in undershorts support natural stride and athletic mobility. However, the knit sweater is heavy and insulating, which traps body heat and causes overheating during a sustained run${
-          hasFlatsOrNonRunningShoes
-            ? ', while lifestyle flats lack the cushioning, arch support, and road impact absorption required for running'
-            : ''
-        }.`;
-
-        stylistsTake = `Keep the running shorts as your functional athletic foundation, but swap the heavy knit sweater for a breathable moisture-wicking top and wear supportive running shoes to protect your feet and joints during the run.`;
-
-        whatWorks =
-          'The running shorts are directly aligned with your running activity, offering unrestricted mobility, lightweight 2-in-1 construction, and athletic ventilation.';
-
-        const conflicts: string[] = [];
-        if (hasHeavySweater) {
-          conflicts.push(
-            'Swap the heavy knit sweater for a breathable moisture-wicking running shirt or lightweight technical top'
-          );
-        }
-        if (hasFlatsOrNonRunningShoes) {
-          conflicts.push('replace flats with cushioned running shoes designed for athletic impact');
-        }
-        whatCouldBeBetter = `${conflicts.join(', and ')}.`;
+        verdict = `The ${botName.toLowerCase()} are built for running, but a heavy top will trap excess body heat and ${shoeName.toLowerCase()} lack impact cushioning.`;
+        whyJezsySaysThis = `The ${botName.toLowerCase()} are one of the strongest context matches in this outfit: your description notes they are ${runningShortsDesc}${userPersonalizationNote}, and your stated activity is running. Their lightweight shell and built-in undershorts support natural stride and athletic mobility. However, the ${topName.toLowerCase()} is heavy and insulating, which traps body heat and causes overheating during a sustained run, while ${shoeName.toLowerCase()} lack the cushioning, arch support, and road impact absorption required for running.`;
+        stylistsTake = `Keep the ${botName.toLowerCase()} as your functional athletic foundation, but swap the ${topName.toLowerCase()} for a breathable moisture-wicking top and wear supportive running shoes to protect your feet and joints during the run.`;
+        whatWorks = `The ${botName.toLowerCase()} are directly aligned with your running activity, offering unrestricted mobility, lightweight construction, and athletic ventilation.`;
+        whatCouldBeBetter = `Swap the ${topName.toLowerCase()} for a breathable moisture-wicking running shirt or lightweight technical top, and replace ${shoeName.toLowerCase()} with cushioned running shoes designed for athletic impact.`;
         tips.push('Choose technical performance fabrics (like nylon or poly-spandex) to regulate body temperature while running.');
-        if (hasFlatsOrNonRunningShoes) {
-          tips.push('Cushioned running shoes are essential for shock absorption and joint protection.');
-        }
+        tips.push('Cushioned running shoes are essential for shock absorption and joint protection.');
+      } else if (hasHeavySweater) {
+        assessment = 'Could work with changes';
+        headline = 'Athletic Bottom with Heavy Top';
+        verdict = `The ${botName.toLowerCase()} are built for running, but a heavy top will trap excess body heat during a run.`;
+        whyJezsySaysThis = `The ${botName.toLowerCase()} and athletic shoes match your running activity: your description notes they are ${runningShortsDesc}${userPersonalizationNote}, and your stated activity is running. However, the ${topName.toLowerCase()} is heavy and insulating, which traps body heat and causes overheating during a sustained run.`;
+        stylistsTake = `Keep the ${botName.toLowerCase()} as your functional athletic foundation, but swap the ${topName.toLowerCase()} for a breathable moisture-wicking top and wear supportive running shoes to protect your feet and joints during the run.`;
+        whatWorks = `The ${botName.toLowerCase()} are directly aligned with your running activity, offering unrestricted mobility, lightweight construction, and athletic ventilation.`;
+        whatCouldBeBetter = `Swap the ${topName.toLowerCase()} for a breathable moisture-wicking running shirt or lightweight technical top.`;
+        tips.push('Choose technical performance fabrics (like nylon or poly-spandex) to regulate body temperature while running.');
+      } else if (hasFlatsOrNonRunningShoes) {
+        assessment = 'Could work with changes';
+        headline = 'Athletic Separates with Lifestyle Footwear';
+        verdict = `The ${botName.toLowerCase()} and ${topName.toLowerCase()} suit running, but ${shoeName.toLowerCase()} lack athletic impact cushioning.`;
+        whyJezsySaysThis = `The ${botName.toLowerCase()} are one of the strongest context matches in this outfit: your description notes they are ${runningShortsDesc}${userPersonalizationNote}, and your stated activity is running. Their lightweight shell and built-in undershorts support natural stride and athletic mobility. The ${topName.toLowerCase()} provides lightweight, breathable upper coverage. However, ${shoeName.toLowerCase()} lack the cushioning, arch support, and road impact absorption required for running.`;
+        stylistsTake = `Keep the ${botName.toLowerCase()} and ${topName.toLowerCase()} as your functional athletic foundation, but replace ${shoeName.toLowerCase()} with cushioned running shoes to protect your feet and joints during the run.`;
+        whatWorks = `The ${botName.toLowerCase()} and ${topName.toLowerCase()} are directly aligned with your running activity, offering unrestricted mobility, lightweight construction, and athletic ventilation.`;
+        whatCouldBeBetter = `Replace ${shoeName.toLowerCase()} with cushioned running shoes designed for athletic impact.`;
+        tips.push('Cushioned running shoes are essential for shock absorption and joint protection.');
       } else {
         assessment = 'Appropriate for this occasion';
         headline = 'Functional Athletic Gear';
         verdict = `Performance pieces suited for ${occasionLabel}.`;
-        whyJezsySaysThis =
-          'The athletic separates offer optimal mobility and functional performance for running activity.';
-        stylistsTake =
-          'A purpose-built athletic outfit with lightweight fabrics and unrestricted movement ready for running.';
+        whyJezsySaysThis = `The ${botName.toLowerCase()} provide unrestricted stride mobility and ventilation, the ${topName.toLowerCase()} allows breathable movement, and your athletic footwear provides necessary joint cushioning and traction for running.`;
+        stylistsTake = 'A purpose-built athletic outfit with lightweight fabrics and unrestricted movement ready for running.';
         whatWorks = 'Activewear fabrics and cuts support natural movement and breathability.';
       }
     } else if (occasionType === 'casualWalk') {
       // Casual afternoon walk scenario
+      const topG = structure.baseTops[0];
+      const botG = structure.bottoms[0];
+      const topName = topG?.identity.name || 'top';
+      const botName = botG?.identity.name || 'bottom';
+      const isTopKnit = topG?.materialSignals.includes('knit');
+
       assessment = 'Appropriate for this occasion';
       headline = 'Relaxed Walking Ensemble';
       verdict = `A comfortable casual combination well-suited for an afternoon walk.`;
-      whyJezsySaysThis =
-        'The athletic shorts provide unrestricted ease of movement and ventilation for walking, balanced comfortably by the knit sweater for relaxed upper warmth and practical flats for an easy stroll.';
-      stylistsTake =
-        'An effortless casual pairing where lower-body athletic mobility meets cozy upper knitwear for an easy afternoon pace.';
-      whatWorks =
-        'The athletic shorts provide unrestricted mobility for walking, while the sweater adds relaxed casual comfort.';
+      whyJezsySaysThis = `The ${botName.toLowerCase()} provide ease of movement and ventilation for walking, balanced comfortably by the ${topName.toLowerCase()}${isTopKnit ? ' for relaxed upper warmth' : ' for comfortable casual coverage'} and practical footwear for an easy stroll.`;
+      stylistsTake = `An effortless casual pairing where lower-body mobility meets comfortable ${topName.toLowerCase()} styling for an easy afternoon pace.`;
+      whatWorks = `The ${botName.toLowerCase()} provide unrestricted mobility for walking, while the ${topName.toLowerCase()} adds relaxed casual comfort.`;
       if (!structure.hasShoes) {
         whatCouldBeBetter = 'Ensure you wear comfortable walking shoes for prolonged steps.';
       } else {
@@ -2198,6 +2233,11 @@ export function gradeOutfit(
       tips.push('If walking prolonged distances, consider supportive walking sneakers.');
     } else if (occasionType === 'breakfastDining' || activity === 'breakfastDining') {
       // Indoor Breakfast Scenario
+      const topG = structure.baseTops[0];
+      const botG = structure.bottoms[0];
+      const topName = topG?.identity.name || 'top';
+      const botName = botG?.identity.name || 'bottom';
+
       const conflictShorts = garmentProfiles.find(
         (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
       );
@@ -2206,30 +2246,35 @@ export function gradeOutfit(
 
       assessment = 'Appropriate for this occasion';
       headline = 'Casual Morning Separates';
-      verdict = `Comfortable morning separates, though the athletic running shorts contrast stylistically with the cozy knit sweater.`;
+      verdict = `Comfortable morning separates, though the ${botName.toLowerCase()} contrast stylistically with the ${topName.toLowerCase()}.`;
 
-      whyJezsySaysThis = `For an indoor breakfast ${venueSetting}, the knit sweater provides cozy, relaxed upper-body warmth, and the flats keep footwear understated and easy. However, your running shorts—which you describe as 2-in-1 athletic running shorts and enjoy wearing for exercise—carry an explicit gym and workout identity. While physically comfortable for a quiet breakfast at home, pairing performance activewear with a cozy knit top creates a noticeable stylistic contrast between athletic training gear and leisure morning dining.`;
+      whyJezsySaysThis = `For an indoor breakfast ${venueSetting}, the ${topName.toLowerCase()} provides cozy, relaxed upper-body coverage, and the footwear keeps things understated and easy. However, your ${botName.toLowerCase()}—which carry an explicit gym and workout identity—create a noticeable stylistic contrast between athletic training gear and leisure morning dining.`;
 
-      stylistsTake = `The outfit is comfortable and wearable for relaxed morning downtime at home, but swapping the athletic running shorts for casual chinos, lounge pants, or soft denim creates a more cohesive look for breakfast out.`;
+      stylistsTake = `The outfit is comfortable and wearable for relaxed morning downtime at home, but swapping the athletic ${botName.toLowerCase()} for casual chinos, lounge pants, or soft denim creates a more cohesive look for breakfast out.`;
 
-      whatWorks = `The knit sweater delivers soft, comfortable upper warmth suited for indoor morning dining, and the flats keep footwear understated without reinforcing the athletic identity of the shorts.`;
+      whatWorks = `The ${topName.toLowerCase()} delivers comfortable upper coverage suited for indoor morning dining, and the footwear keeps styling understated.`;
 
       whatCouldBeBetter = conflictShorts
-        ? 'If having breakfast out at a cafe or diner rather than relaxing at home, swap the athletic running shorts for casual trousers, chinos, or comfortable jeans.'
+        ? `If having breakfast out at a cafe or diner rather than relaxing at home, swap the ${botName.toLowerCase()} for casual trousers, chinos, or comfortable jeans.`
         : undefined;
 
-      tips.push('Pair the knit sweater with casual pants or soft denim for a cohesive breakfast presentation.');
+      tips.push(`Pair the ${topName.toLowerCase()} with casual pants or soft denim for a cohesive breakfast presentation.`);
     } else if (occasionType === 'coffeeSocial' || activity === 'coffeeSocial') {
       // Cafe / Coffee Social Scenario
+      const topG = structure.baseTops[0];
+      const botG = structure.bottoms[0];
+      const topName = topG?.identity.name || 'top';
+      const botName = botG?.identity.name || 'bottom';
+
       assessment = 'Appropriate for this occasion';
       headline = 'Casual Cafe Styling';
-      verdict = `A relaxed cafe combination with cozy knitwear and understated footwear.`;
-      whyJezsySaysThis = `For a casual coffee outing, the knit sweater brings a comfortable, approachable texture that fits a cafe atmosphere well, paired with versatile flats. The athletic shorts give the outfit a distinctly sporty tone; casual trousers or denim balance the sweater naturally.`;
+      verdict = `A relaxed cafe combination with ${topName.toLowerCase()} and understated footwear.`;
+      whyJezsySaysThis = `For a casual coffee outing, the ${topName.toLowerCase()} brings an approachable texture that fits a cafe atmosphere well, paired with versatile footwear. The athletic ${botName.toLowerCase()} give the outfit a distinctly sporty tone; casual trousers or denim balance the look naturally.`;
       stylistsTake = `An easy, casual coffee ensemble that balances relaxed morning leisure with sporty comfort.`;
-      whatWorks = `The knit sweater provides soft, cozy drape that suits a casual cafe atmosphere comfortably.`;
+      whatWorks = `The ${topName.toLowerCase()} provides a comfortable drape that suits a casual cafe atmosphere comfortably.`;
       whatCouldBeBetter =
         'For a more polished cafe setting, casual jeans or tailored trousers elevate the look beyond gym activewear.';
-      tips.push('Opt for soft denim or chinos to complement the knit sweater for coffee meetings.');
+      tips.push(`Opt for soft denim or chinos to complement the ${topName.toLowerCase()} for coffee meetings.`);
     } else {
       // Evidence-grounded dynamic evaluation for general separates
       const topG = structure.baseTops[0];
@@ -2438,26 +2483,45 @@ export function buildStylistEvidencePacket(
   const contradictions = detectContradictions(garmentProfiles, reqs, structure);
   const paletteColors = extractColors(items, wardrobeLookup);
 
-  const outfitItems: StylistEvidencePacketItem[] = garmentProfiles.map((p) => ({
-    wardrobeItemId: p.identity.wardrobeItemId || p.identity.name,
-    category: p.rawUserData.category,
-    subCategory: p.rawUserData.subCategory,
-    garmentType: p.garmentStructure.garmentType,
-    garmentFamily: p.garmentStructure.garmentFamily,
-    garmentSubtype: p.subtype || undefined,
-    description: p.rawUserData.description || undefined,
-    userNotes: p.rawUserData.userNotes || undefined,
-    rawColor: p.rawUserData.color,
-    colorTags: p.rawUserData.colorTags,
-    thermalLevel: p.thermal,
-    coverageLevel: p.coverage,
-    functionalRole: p.functionalRole,
-    personalUsage: p.personalUsage?.rawText
-      ? { activities: p.personalUsage.activities, rawText: p.personalUsage.rawText }
-      : undefined,
-    styleSignals: p.styleSignals,
-    imageUrl: p.identity.imageUrl,
-  }));
+  const outfitItems: StylistEvidencePacketItem[] = garmentProfiles.map((p) => {
+    const effectiveBucket =
+      p.garmentStructure.garmentFamily === 'upperBody'
+        ? 'Top'
+        : p.garmentStructure.garmentFamily === 'lowerBody'
+        ? 'Bottom'
+        : p.garmentStructure.garmentFamily === 'onePiece'
+        ? 'Dress'
+        : p.garmentStructure.garmentFamily === 'outerwear'
+        ? 'Outerwear'
+        : p.garmentStructure.garmentFamily === 'footwear'
+        ? 'Footwear'
+        : p.garmentStructure.garmentFamily === 'accessory'
+        ? 'Accessory'
+        : 'Top';
+
+    return {
+      wardrobeItemId: p.identity.wardrobeItemId || p.identity.name,
+      category: p.rawUserData.category,
+      subCategory: p.rawUserData.subCategory,
+      effectiveGarmentBucket: effectiveBucket,
+      garmentType: p.garmentStructure.garmentType,
+      garmentFamily: p.garmentStructure.garmentFamily,
+      garmentSubtype: p.subtype || undefined,
+      description: p.rawUserData.description || undefined,
+      userNotes: p.rawUserData.userNotes || undefined,
+      whereWorn: p.rawUserData.whereWornOften || undefined,
+      rawColor: p.rawUserData.color,
+      colorTags: p.rawUserData.colorTags,
+      thermalLevel: p.thermal,
+      coverageLevel: p.coverage,
+      functionalRole: p.functionalRole,
+      personalUsage: p.personalUsage?.rawText
+        ? { activities: p.personalUsage.activities, rawText: p.personalUsage.rawText }
+        : undefined,
+      styleSignals: p.styleSignals,
+      imageUrl: p.identity.imageUrl,
+    };
+  });
 
   const personalization = garmentProfiles
     .filter((p) => p.personalUsage?.rawText || p.rawUserData.whereWornOften || p.rawUserData.description)

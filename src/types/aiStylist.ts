@@ -4,11 +4,13 @@ export interface StylistEvidencePacketItem {
   wardrobeItemId: string;
   category: string;
   subCategory: string;
+  effectiveGarmentBucket?: string;
   garmentType?: string;
   garmentFamily?: string;
   garmentSubtype?: string;
   description?: string;
   userNotes?: string;
+  whereWorn?: string;
   rawColor?: string;
   colorTags?: string[];
   material?: string;
