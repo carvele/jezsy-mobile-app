@@ -35,6 +35,8 @@ ALTER TABLE public.admin_notification_receipts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own receipts" ON public.admin_notification_receipts
 FOR SELECT TO authenticated USING (user_id = auth.uid());
 
+GRANT SELECT ON public.admin_notification_receipts TO authenticated;
+
 -- 5. Backfill receipts for existing notifications
 INSERT INTO public.admin_notification_receipts (notification_id, user_id, is_read, created_at)
 SELECT n.id, p.id, n.is_read, n.created_at

@@ -12,6 +12,7 @@ END $$;
 -- 2. Drop RPCs
 DROP FUNCTION IF EXISTS public.dismiss_admin_notifications(UUID[]);
 DROP FUNCTION IF EXISTS public.mark_admin_notifications_read(UUID[]);
+DROP FUNCTION IF EXISTS public.get_unread_notification_count();
 
 -- 3. Drop View
 DROP VIEW IF EXISTS public.admin_user_notifications_view;
