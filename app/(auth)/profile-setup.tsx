@@ -304,7 +304,8 @@ export default function ProfileSetupScreen() {
 
       router.replace('/(tabs)');
     } catch (err: any) {
-      showToast(err.message ?? 'Could not save profile. Please try again.', 'error');
+      console.error('Failed to save profile:', err);
+      showToast('Could not save your profile. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -324,6 +325,7 @@ export default function ProfileSetupScreen() {
             onChangeText={v => set('firstName', v)}
             autoFocus
             returnKeyType="next"
+            accessibilityLabel="First name"
           />
         </View>
         <View style={styles.fieldGroup}>
@@ -336,6 +338,7 @@ export default function ProfileSetupScreen() {
             onChangeText={v => set('username', v)}
             autoCapitalize="none"
             returnKeyType="next"
+            accessibilityLabel="Username (optional)"
           />
         </View>
         <View style={styles.fieldGroup}>
@@ -348,6 +351,7 @@ export default function ProfileSetupScreen() {
             onChangeText={v => set('lastName', v)}
             returnKeyType="done"
             onSubmitEditing={next}
+            accessibilityLabel="Last name"
           />
         </View>
         <Text style={[styles.helperText, { color: colors.secondaryText }]}>
@@ -380,6 +384,7 @@ export default function ProfileSetupScreen() {
                 onChangeText={handlePhoneChange}
                 keyboardType="phone-pad"
                 autoFocus
+                accessibilityLabel="Mobile phone number"
               />
             </View>
           </View>
@@ -393,11 +398,14 @@ export default function ProfileSetupScreen() {
                 value={data.dateOfBirth}
                 onChangeText={handleDOBChange}
                 keyboardType="numbers-and-punctuation"
+                accessibilityLabel="Date of birth"
               />
               <TouchableOpacity
                 style={styles.calendarBtn}
                 onPress={() => setShowDatePickerModal(true)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Open calendar to pick date of birth"
               >
                 <Calendar size={20} color={colors.tint} />
               </TouchableOpacity>
@@ -416,6 +424,9 @@ export default function ProfileSetupScreen() {
                   ]}
                   onPress={() => set('gender', g)}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={g}
+                  accessibilityState={{ selected: data.gender === g }}
                 >
                   <Text
                     style={[
@@ -448,6 +459,7 @@ export default function ProfileSetupScreen() {
               onChangeText={v => set('addressLine', v)}
               autoFocus
               returnKeyType="next"
+              accessibilityLabel="Street address"
             />
           </View>
           <View style={styles.fieldGroup}>
@@ -459,6 +471,7 @@ export default function ProfileSetupScreen() {
               value={data.barangay}
               onChangeText={v => set('barangay', v)}
               returnKeyType="next"
+              accessibilityLabel="Barangay"
             />
           </View>
           <View style={styles.row}>
@@ -471,6 +484,7 @@ export default function ProfileSetupScreen() {
                 value={data.city}
                 onChangeText={v => set('city', v)}
                 returnKeyType="next"
+                accessibilityLabel="City or Municipality"
               />
             </View>
           </View>
@@ -484,6 +498,7 @@ export default function ProfileSetupScreen() {
                 value={data.province}
                 onChangeText={v => set('province', v)}
                 returnKeyType="next"
+                accessibilityLabel="Province"
               />
             </View>
             <View style={{ width: 16 }} />
@@ -498,6 +513,7 @@ export default function ProfileSetupScreen() {
                 keyboardType="numeric"
                 returnKeyType="done"
                 onSubmitEditing={next}
+                accessibilityLabel="Zip code"
               />
             </View>
           </View>

@@ -19,6 +19,7 @@ interface MessagesContextType {
   conversations: Conversation[];
   unreadCount: number;
   loading: boolean;
+  error: string | null;
   sendMessage: (conversationId: string, text: string, imageUrl?: string, context?: MessageContext) => Promise<Message | null>;
   editMessage: (messageId: string, text: string) => Promise<Message | null>;
   toggleReaction: (messageId: string, emoji: string) => Promise<Record<string, string> | null>;
@@ -38,6 +39,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const { session, profile } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const onlineUsers = usePresence(session?.user?.id, profile?.role);
 
   const isStaff = profile?.role === 'staff' || profile?.role === 'owner';
@@ -54,16 +56,18 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     if (!session?.user.id) return;
     
     try {
-      const { data, error } = await supabase
+      setError(null);
+      const { data, error: fetchErr } = await supabase
         .from('conversations')
         .select('*')
         .order('last_message_time', { ascending: false })
         .limit(50);
         
-      if (error) throw error;
+      if (fetchErr) throw fetchErr;
       setConversations(data || []);
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
+    } catch (err: any) {
+      console.error('Error fetching conversations:', err);
+      setError(err?.message || 'Could not load conversations.');
     } finally {
       setLoading(false);
     }
@@ -256,6 +260,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     conversations,
     unreadCount,
     loading,
+    error,
     sendMessage,
     editMessage,
     toggleReaction,
@@ -269,6 +274,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     conversations,
     unreadCount,
     loading,
+    error,
     sendMessage,
     editMessage,
     toggleReaction,

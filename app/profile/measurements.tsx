@@ -602,6 +602,8 @@ export default function MeasurementsScreen() {
                   keyboardType="numeric"
                   value={height}
                   onChangeText={(v) => setHeight(sanitizeNumericInput(v))}
+                  accessibilityLabel={`Height in ${unit === 'in' ? 'inches' : 'centimeters'}`}
+                  accessibilityHint={`Enter your height in ${unit === 'in' ? 'inches' : 'centimeters'}`}
                 />
               </View>
               <View style={styles.inputGroup}>
@@ -613,6 +615,8 @@ export default function MeasurementsScreen() {
                   keyboardType="numeric"
                   value={weight}
                   onChangeText={(v) => setWeight(sanitizeNumericInput(v))}
+                  accessibilityLabel="Weight in kilograms"
+                  accessibilityHint="Enter your weight in kilograms"
                 />
               </View>
             </View>

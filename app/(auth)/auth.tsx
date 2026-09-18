@@ -504,6 +504,8 @@ export default function AuthScreen() {
                     autoComplete="email"
                     returnKeyType={mode === 'forgot' || mode === 'otp_request' ? 'done' : 'next'}
                     onSubmitEditing={mode === 'forgot' || mode === 'otp_request' ? handleSubmit : undefined}
+                    accessibilityLabel="Email"
+                    accessibilityHint="Enter your email address"
                   />
                 </View>
               </View>
@@ -526,6 +528,8 @@ export default function AuthScreen() {
                     autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                     returnKeyType={mode === 'signup' ? 'next' : 'done'}
                     onSubmitEditing={mode === 'login' ? handleSubmit : undefined}
+                    accessibilityLabel="Password"
+                    accessibilityHint={mode === 'signup' ? 'Create a password with at least 8 characters' : 'Enter your password'}
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
@@ -562,6 +566,8 @@ export default function AuthScreen() {
                     autoComplete="new-password"
                     returnKeyType="done"
                     onSubmitEditing={handleSubmit}
+                    accessibilityLabel="Confirm password"
+                    accessibilityHint="Re-enter your password to confirm"
                   />
                   <TouchableOpacity
                     onPress={() => setShowConfirmPassword(!showConfirmPassword)}

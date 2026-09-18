@@ -22,6 +22,7 @@ async function getFeatureExtractor(): Promise<any> {
     try {
       if (typeof window === 'undefined') return null;
       // @ts-ignore
+      // eslint-disable-next-line import/no-unresolved
       const { pipeline, env } = await import('@xenova/transformers');
       env.allowLocalModels = false;
       env.useBrowserCache = true;

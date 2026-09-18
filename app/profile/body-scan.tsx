@@ -115,6 +115,7 @@ export default function BodyScanScreen() {
   const [overlayLandmarks, setOverlayLandmarks] = useState<Landmark[]>([]);
   const [progress, setProgress] = useState(0);
   const [modelError, setModelError] = useState(false);
+  const [cameraRuntimeError, setCameraRuntimeError] = useState<string | null>(null);
   const [showScanHint, setShowScanHint] = useState(false);
 
   useEffect(() => {
@@ -736,6 +737,32 @@ export default function BodyScanScreen() {
     );
   }
 
+  if (cameraRuntimeError) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
+          <HardwarePermissionState
+            status="runtime_error"
+            featureName="Body Scan"
+            errorMessage={cameraRuntimeError}
+            onRetry={() => {
+              setCameraRuntimeError(null);
+              resetScanSession();
+            }}
+          />
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, marginTop: Spacing.lg }]}
+            onPress={() => router.replace({ pathname: "/profile/measurements", params: { height, weight, gender } })}
+            accessibilityRole="button"
+            accessibilityLabel="Enter measurements manually"
+          >
+            <Text style={[styles.actionText, { color: colors.text }]}>Enter Manually</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Camera
@@ -746,7 +773,10 @@ export default function BodyScanScreen() {
         frameProcessor={poseDetection.frameProcessor}
         onLayout={poseDetection.cameraViewLayoutChangeHandler}
         onOutputOrientationChanged={onOutputOrientationChanged}
-        onError={(e: any) => console.warn('Camera Error:', e)}
+        onError={(e: any) => {
+          console.warn('Camera Error:', e);
+          setCameraRuntimeError(e?.message || 'Camera failed during scan. Please try again.');
+        }}
       />
       <PoseLandmarkOverlay landmarks={overlayLandmarks} />
 

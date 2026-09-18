@@ -33,6 +33,7 @@ import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { Skeleton, ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { ErrorRetryState } from '@/src/components/ErrorRetryState';
+import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
 import { StyleGallery } from '@/components/StyleGallery';
 import { useWishlist } from '@/src/context/WishlistContext';
@@ -98,6 +99,7 @@ export default function HomeScreen() {
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { session } = useAuth();
   const router = useRouter();
+  const reduceMotion = useReduceMotion();
 
   const [showTour, setShowTour] = useState(false);
   const [tourProgress, setTourProgress] = useState<TourProgressSnapshot | null>(null);
@@ -280,7 +282,7 @@ export default function HomeScreen() {
   // When advancing to the clone of product 1, waits for the native smooth
   // slide (400ms) to come to rest, then imperceptibly snaps to real card 1.
   useEffect(() => {
-    if (featuredProducts.length <= 1) return;
+    if (featuredProducts.length <= 1 || reduceMotion) return;
     const step = heroCardWidth + HERO_CARD_GAP;
     let settleTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -305,7 +307,7 @@ export default function HomeScreen() {
       clearInterval(timer);
       if (settleTimeout) clearTimeout(settleTimeout);
     };
-  }, [featuredProducts.length, heroCardWidth]);
+  }, [featuredProducts.length, heroCardWidth, reduceMotion]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

@@ -3,6 +3,7 @@ import { StyleSheet, View, ViewStyle, DimensionValue } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 
 interface SkeletonProps {
   width?: DimensionValue;
@@ -16,10 +17,15 @@ export function Skeleton({ width = '100%', height = 16, radius = 8, style }: Ske
   const theme = useColorScheme();
   const colors = Colors[theme];
   const pulse = useSharedValue(0.4);
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
+    if (reduceMotion) {
+      pulse.value = 0.6;
+      return;
+    }
     pulse.value = withRepeat(withTiming(0.9, { duration: 800, easing: Easing.inOut(Easing.ease) }), -1, true);
-  }, [pulse]);
+  }, [pulse, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 

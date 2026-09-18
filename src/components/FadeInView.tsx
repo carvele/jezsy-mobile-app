@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { AccessibilityInfo, ViewStyle, StyleProp } from 'react-native';
+import { ViewStyle, StyleProp } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing } from 'react-native-reanimated';
 import { Motion } from '@/constants/theme';
+import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 
 interface Props {
   children: React.ReactNode;
@@ -29,13 +30,7 @@ const MAX_STAGGER_INDEX = 8;
  */
 export function FadeInView({ children, index = 0, offset = 12, style }: Props) {
   const progress = useSharedValue(0);
-  const [reduceMotion, setReduceMotion] = React.useState(false);
-
-  useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => subscription.remove();
-  }, []);
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
     if (reduceMotion) {
