@@ -373,11 +373,37 @@ export default function ReservationDetailScreen() {
   const bankEnabled = Boolean(paymentInstructions?.bank_transfer_enabled);
   const isManualPaymentEnabled = gcashEnabled || bankEnabled;
 
+  const isDepositRejected =
+    Boolean(reservation?.last_receipt_rejected_at) &&
+    (reservation?.payment_status || 'Pending').toLowerCase() === 'pending';
+
+  const depositRejectionReasonText = useMemo(() => {
+    switch (reservation?.last_receipt_rejection_reason) {
+      case 'unreadable_receipt':
+        return 'The receipt image could not be verified. Please ensure the full receipt is clear, legible, and uncropped.';
+      case 'wrong_amount':
+        return `The amount shown on the receipt does not match the required reservation fee of ₱${(reservation?.deposit || 0).toFixed(2)}.`;
+      case 'invalid_reference':
+        return 'The transaction reference number could not be verified with our records.';
+      case 'duplicate_receipt':
+        return 'This receipt has already been submitted for another transaction.';
+      case 'suspected_fraud':
+        return 'We could not verify this payment. Please contact boutique staff for assistance.';
+      default:
+        return 'Your previous payment receipt could not be verified. Please submit a valid receipt or pay using GCash before the deadline.';
+    }
+  }, [reservation?.last_receipt_rejection_reason, reservation?.deposit]);
+
   const manualPaymentButtonLabel = useMemo(() => {
+    if (isDepositRejected) {
+      if (gcashEnabled && !bankEnabled) return 'Upload another GCash receipt';
+      if (bankEnabled && !gcashEnabled) return 'Upload another bank transfer receipt';
+      return 'Upload another receipt';
+    }
     if (gcashEnabled && !bankEnabled) return 'Pay via GCash transfer / Upload receipt';
     if (bankEnabled && !gcashEnabled) return 'Pay via bank transfer / Upload receipt';
     return 'Pay by transfer / Upload receipt';
-  }, [gcashEnabled, bankEnabled]);
+  }, [gcashEnabled, bankEnabled, isDepositRejected]);
 
   const balanceManualPaymentButtonLabel = useMemo(() => {
     if (gcashEnabled && !bankEnabled) return 'Pay balance via GCash / Upload receipt';
@@ -565,40 +591,52 @@ export default function ReservationDetailScreen() {
   const isBalanceUnderReview = balanceStatus === 'submitted';
   const isBalanceRejected = balanceStatus === 'rejected';
   const isBalanceSettled = Boolean(reservation.balance_settled_at) || balanceStatus === 'paid';
-  const balanceDue = isBalanceSettled ? 0 : rawBalanceDue;
+
+  const paymentState = (reservation.payment_status || 'Pending').toLowerCase();
+  const reservationState = statusBucket(reservation.status);
+  const isReservationCancelled =
+    reservationState === 'cancelled' ||
+    (reservation.status || '').toLowerCase() === 'cancelled' ||
+    paymentState === 'cancelled';
+  const balanceDue = isBalanceSettled || isReservationCancelled ? 0 : rawBalanceDue;
+
   // Matches the dashboard's CAN_RESCHEDULE_STATUSES. The old list stopped at
   // 'confirmed', so a customer whose item was already waiting for collection
   // could not move the appointment even though staff could.
-  const canRescheduleNow = canReschedule(reservation.status);
+  const canRescheduleNow = canReschedule(reservation.status) && !isReservationCancelled;
   // One outstanding request at a time. While it is pending the live booking is
   // still the one to show, so the proposal appears beside it rather than
   // replacing it -- the customer has not moved anything yet.
   const reschedulePending = Boolean(reservation.reschedule_requested_at);
 
-  const paymentState = (reservation.payment_status || 'Pending').toLowerCase();
-  const reservationState = statusBucket(reservation.status);
-  const awaitingPayment = Boolean(displayState.showToPayAction);
+  const awaitingPayment = Boolean(displayState.showToPayAction) && !isReservationCancelled;
   const receiptUnderReview = paymentState === 'submitted' || displayState.badgeColorType === 'paymentUnderReview';
   const timeLeft = displayState.showCountdown && reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
   const initialPaymentPurpose: PaymentPurpose =
     (reservation.payment_type || '').toLowerCase() === 'full' ? 'full_payment' : 'initial_deposit';
-  const canUpgradeToFullPayment = initialPaymentPurpose === 'initial_deposit' && rawBalanceDue > 0;
+  const canUpgradeToFullPayment = initialPaymentPurpose === 'initial_deposit' && rawBalanceDue > 0 && !isReservationCancelled;
   const canPayRemainingBalance =
     paymentState === 'paid' &&
     !isBalanceSettled &&
     !isBalanceUnderReview &&
     balanceDue > 0 &&
-    reservationState !== 'cancelled' &&
+    !isReservationCancelled &&
     reservationState !== 'completed';
-  const paymentDisplayStatus = isBalanceSettled
-    ? 'Paid in full'
-    : paymentState === 'paid'
-      ? (isBalanceUnderReview
-          ? 'Deposit verified · Balance proof under review'
-          : isBalanceRejected
-            ? 'Deposit verified · Balance proof needs attention'
-            : (balanceDue > 0 ? 'Reservation payment received' : 'Paid in full'))
-      : reservation.payment_status || 'Pending';
+  const paymentDisplayStatus = isReservationCancelled
+    ? (paymentState === 'refunded'
+        ? 'Refunded'
+        : paymentState === 'refund required'
+          ? 'Refund Required'
+          : 'Cancelled')
+    : isBalanceSettled
+      ? 'Paid in full'
+      : paymentState === 'paid'
+        ? (isBalanceUnderReview
+            ? 'Deposit verified · Balance proof under review'
+            : isBalanceRejected
+              ? 'Deposit verified · Balance proof needs attention'
+              : (balanceDue > 0 ? 'Reservation payment received' : 'Paid in full'))
+        : reservation.payment_status || 'Pending';
 
   // Falls back to the reservation's own denormalised product columns if the
   // lines could not be read, so the screen still shows the item rather than
@@ -895,10 +933,17 @@ export default function ReservationDetailScreen() {
         )}
 
         {awaitingPayment && (
-          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.tint }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment needed</Text>
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: isDepositRejected ? colors.error : colors.tint }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              {isDepositRejected && <IconSymbol name="exclamationmark.circle" size={18} color={colors.error} />}
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                {isDepositRejected ? 'Payment proof needs attention' : 'Payment needed'}
+              </Text>
+            </View>
             <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
-              Pay ₱{(reservation.deposit || 0).toFixed(2)} before the deadline to keep this item reserved for you.
+              {isDepositRejected
+                ? depositRejectionReasonText
+                : `Pay ₱${(reservation.deposit || 0).toFixed(2)} before the deadline to keep this item reserved for you.`}
             </Text>
 
             {/* The deadline was previously invisible -- the customer was on a
@@ -1407,9 +1452,11 @@ export default function ReservationDetailScreen() {
           </View>
           <View style={[styles.row, { marginBottom: 0 }]}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              {isBalanceSettled ? 'Balance' : 'Balance Due at Pickup'}
+              {isBalanceSettled ? 'Balance' : (isReservationCancelled ? 'Balance Due' : 'Balance Due at Pickup')}
             </Text>
-            {isBalanceSettled ? (
+            {isReservationCancelled ? (
+              <Text style={[styles.rowValue, { color: colors.secondaryText }]}>—</Text>
+            ) : isBalanceSettled ? (
               <Text style={[styles.rowValue, { color: colors.success }]}>Collected ✓</Text>
             ) : (
               <Text style={[styles.rowValue, { color: colors.tint }]}>₱{balanceDue.toFixed(2)}</Text>

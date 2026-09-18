@@ -259,4 +259,33 @@ describe('getCustomerReservationDisplayState & getReservationCardActions regress
     expect(stateRefunded.label).toBe('Refunded');
     expect(getReservationCardActions(resRefunded)).toEqual(['buyAgain']);
   });
+
+  test('10. Cancelled reservation: unpaid cancelled reservation with payment_status: Cancelled', () => {
+    const resCancelled = {
+      status: 'Cancelled',
+      payment_status: 'Cancelled',
+      countdown: false,
+    };
+    const state = getCustomerReservationDisplayState(resCancelled);
+    expect(state.label).toBe('Cancelled');
+    expect(state.bucket).toBe('cancelled');
+    expect(state.badgeColorType).toBe('cancelled');
+    expect(state.showCountdown).toBe(false);
+    expect(state.showToPayAction).toBe(false);
+    expect(getReservationCardActions(resCancelled)).toEqual([]);
+
+    // Contradictory status with payment_status = Cancelled
+    const contradictoryRes = {
+      status: 'To Pay',
+      payment_status: 'Cancelled',
+      countdown: true,
+      payment_due_at: futureDue,
+    };
+    const contradictoryState = getCustomerReservationDisplayState(contradictoryRes);
+    expect(contradictoryState.label).toBe('Cancelled');
+    expect(contradictoryState.bucket).toBe('cancelled');
+    expect(contradictoryState.showCountdown).toBe(false);
+    expect(contradictoryState.showToPayAction).toBe(false);
+    expect(getReservationCardActions(contradictoryRes)).toEqual([]);
+  });
 });

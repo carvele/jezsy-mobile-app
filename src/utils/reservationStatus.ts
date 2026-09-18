@@ -232,7 +232,7 @@ export function getCustomerReservationDisplayState(
       showToPayAction: false,
     };
   }
-  if (bucket === 'cancelled' || rawStatus === 'cancelled') {
+  if (paymentStatus === 'cancelled' || bucket === 'cancelled' || rawStatus === 'cancelled') {
     return {
       label: 'Cancelled',
       bucket: 'cancelled',
