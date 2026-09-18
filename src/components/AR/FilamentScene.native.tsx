@@ -42,6 +42,16 @@ const SceneContent = forwardRef<GarmentRendererRef, FilamentExperimentProps>((pr
       }
       setBoundCount(Object.keys(bindings.current).length);
       setRigError(null);
+      // TEMP DEBUG: root's own rest-pose world transform, to check whether the GLB
+      // carries a baked root offset Three.js's GLTFLoader zeroes out but Filament's
+      // importer preserves -- see docs/ar-filament-experiment.md decision gate #2.
+      if (root) {
+        const rootWorld = transformManager.getWorldTransform(root).data;
+        const rootLocal = transformManager.getTransform(root).data;
+        console.log('[FILAMENT-DEBUG] root world translation', rootWorld[12], rootWorld[13], rootWorld[14]);
+        console.log('[FILAMENT-DEBUG] root local translation', rootLocal[12], rootLocal[13], rootLocal[14]);
+        console.log('[FILAMENT-DEBUG] anchorOffset', JSON.stringify(metadata?.anatomicalAnchorOffset), 'restPoseMetricWidth', metadata?.restPoseMetricWidth);
+      }
     } catch (error) {
       bindings.current = {};
       setRigError(error instanceof Error ? error.message : 'Cannot bind garment rig');
@@ -55,8 +65,16 @@ const SceneContent = forwardRef<GarmentRendererRef, FilamentExperimentProps>((pr
       if (!root || rigError || !metadata || !landmarks?.[11] || !landmarks?.[12] || !visible || boundCount !== 4) return;
       const projected = projection.update(landmarks[11], landmarks[12], rotation, stageWidth, stageHeight, metadata.restPoseMetricWidth, fitModifier);
       if (!projected) return;
+      const rootPosition = anchoredPosition(projected, metadata.anatomicalAnchorOffset);
+      // TEMP DEBUG: one-shot dump of the actual projected values driving the anchor bug.
+      if (sequence.current === 0) {
+        console.log('[FILAMENT-DEBUG] projected', JSON.stringify(projected));
+        console.log('[FILAMENT-DEBUG] rootPosition', JSON.stringify(rootPosition));
+        console.log('[FILAMENT-DEBUG] landmarks11_12', JSON.stringify(landmarks[11]), JSON.stringify(landmarks[12]));
+        console.log('[FILAMENT-DEBUG] stage', stageWidth, stageHeight, 'calibration', JSON.stringify(cameraCalibration));
+      }
       const transforms: Transform[] = [{ entity: root, ...axisAngle(projected.rotation),
-        scale: [projected.scale, projected.scale, projected.scale], position: anchoredPosition(projected, metadata.anatomicalAnchorOffset) }];
+        scale: [projected.scale, projected.scale, projected.scale], position: rootPosition }];
       for (const [name, bind] of Object.entries(bindings.current)) {
         const delta = boneRotations?.[name] ?? { x: 0, y: 0, z: 0, w: 1 };
         transforms.push({ entity: bind.entity, ...axisAngle(correctBindRotation(bind.local, bind.world, delta)), scale: bind.scale, position: bind.position });
@@ -83,6 +101,18 @@ const SceneContent = forwardRef<GarmentRendererRef, FilamentExperimentProps>((pr
       }
     } finally {
       transformManager.commitLocalTransformTransaction();
+    }
+    // TEMP DEBUG: read back the root's actual world transform after commit, to check
+    // whether the scaling().rotate().translate() chain composes as the intended
+    // Translate*Rotate*Scale (world-space position last) or right-multiplies into
+    // Scale*Rotate*Translate (position applied in local space, before R/S) --
+    // see docs/ar-filament-experiment.md decision gate #2, anchor-displacement bug.
+    if (current.sequence === 1) {
+      const rootEntity = current.transforms[0].entity;
+      const after = transformManager.getWorldTransform(rootEntity).data;
+      const intended = current.transforms[0].position;
+      console.log('[FILAMENT-DEBUG] root world AFTER setTransform', after[12], after[13], after[14]);
+      console.log('[FILAMENT-DEBUG] root position INTENDED', intended[0], intended[1], intended[2]);
     }
     animator.updateBoneMatrices();
     lastSequence.value = current.sequence;

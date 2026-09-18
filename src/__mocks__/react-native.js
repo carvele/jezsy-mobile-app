@@ -5,6 +5,10 @@ module.exports = {
     select: (obj) => obj.web || obj.default,
   },
   useColorScheme: jest.fn(() => 'dark'),
+  AccessibilityInfo: {
+    isReduceMotionEnabled: jest.fn(() => Promise.resolve(false)),
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  },
   Linking: {
     openSettings: jest.fn(() => Promise.resolve()),
   },
@@ -19,6 +23,7 @@ module.exports = {
   Modal: 'Modal',
   ActivityIndicator: 'ActivityIndicator',
   ScrollView: 'ScrollView',
+  Pressable: 'Pressable',
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Dimensions: {
     get: jest.fn(() => ({ width: 375, height: 812 })),

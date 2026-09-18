@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -12,6 +12,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
+import { showAlert } from '@/src/utils/alert';
 import {
   STATUS_FILTERS,
   type StatusFilter,
@@ -167,7 +168,7 @@ export default function ReservationsScreen() {
   }, []);
 
   const handleCancelReservation = useCallback((item: Reservation) => {
-    Alert.alert(
+    showAlert(
       'Cancel Reservation',
       'Are you sure you want to cancel this reservation? The held item will be released back into boutique inventory.',
       [

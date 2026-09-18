@@ -681,16 +681,22 @@ export default function OutfitBuilderScreen() {
       })()}
 
       {/* View Mode Toggle */}
-      <View style={[styles.viewToggleContainer, { backgroundColor: colors.surface }]}>
+      <View style={[styles.viewToggleContainer, { backgroundColor: colors.surface }]} accessibilityRole="tablist">
         <TouchableOpacity
           style={[styles.viewToggleBtn, viewMode === 'slots' && { backgroundColor: colors.tint }]}
           onPress={() => setViewMode('slots')}
+          accessibilityRole="tab"
+          accessibilityLabel="List view"
+          accessibilityState={{ selected: viewMode === 'slots' }}
         >
           <Text style={[styles.viewToggleText, { color: viewMode === 'slots' ? colors.onTint : colors.text }]}>List</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.viewToggleBtn, viewMode === 'canvas' && { backgroundColor: colors.tint }]}
           onPress={() => setViewMode('canvas')}
+          accessibilityRole="tab"
+          accessibilityLabel="Canvas view"
+          accessibilityState={{ selected: viewMode === 'canvas' }}
         >
           <Text style={[styles.viewToggleText, { color: viewMode === 'canvas' ? colors.onTint : colors.text }]}>Canvas</Text>
         </TouchableOpacity>

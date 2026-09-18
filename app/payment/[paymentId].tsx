@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Alert, AppState, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, AppState, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { showAlert } from '@/src/utils/alert';
 import {
   getPaymentStatus,
   isAllowedCheckoutUrl,
@@ -38,7 +39,7 @@ export default function PaymentScreen() {
   const finish = useCallback(
     (finalStatus: PaymentStatus | null) => {
       if (finalStatus === 'paid') {
-        Alert.alert(
+        showAlert(
           'Payment received',
           'Your payment has been received and your reservation has been updated.',
           [{ text: 'OK', onPress: () => router.replace('/reservations') }],
@@ -46,7 +47,7 @@ export default function PaymentScreen() {
         return;
       }
 
-      Alert.alert(
+      showAlert(
         'Payment not completed',
         finalStatus === 'failed'
           ? 'Your payment did not go through. You can try again from the reservation.'

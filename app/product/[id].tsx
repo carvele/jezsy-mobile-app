@@ -95,7 +95,6 @@ export default function ProductDetailScreen() {
   const [soldCount, setSoldCount] = useState<number | null>(() => {
     return id ? (styleSoldCountCache.get(id) ?? null) : null;
   });
-  const [siblingProducts, setSiblingProducts] = useState<any[]>([]);
   const flatListRef = useRef<FlatList>(null);
   const [lovedByCount, setLovedByCount] = useState(0);
   const [lovedByUsers, setLovedByUsers] = useState<any[]>([]);
@@ -183,22 +182,15 @@ export default function ProductDetailScreen() {
               setSelectedSize((prev) => prev || data.sizes![0]);
             }
 
-            // Fetch sibling products sharing the same style_code
-            if (data.style_code) {
-              const { data: siblings } = await supabase
-                .from("products")
-                .select(`id, name, base_color, color, image_url, images, style_code`)
-                .eq("style_code", data.style_code)
-                .eq("deleted", false)
-                .eq("visibility", "public");
-              if (siblings && siblings.length > 0) {
-                setSiblingProducts(siblings);
-              } else {
-                setSiblingProducts([]);
-              }
-            } else {
-              setSiblingProducts([]);
-            }
+            // Sibling-product navigation on colour select was removed
+            // entirely (not just scoped tighter) -- style_code turned out to
+            // be auto-generated from name initials during seeding, so
+            // unrelated products can collide on the same code regardless of
+            // category (e.g. "Bowknot Mini Dress" and "Metal-Detail Loafers"
+            // both landed on "JZ-BM-1001"). Selecting a colour swatch used to
+            // navigate straight from a dress to a pair of shoes. Colour
+            // selection now only ever changes local state for this product's
+            // own colour options -- see colorsList and handleSelectColor.
 
             // Compute size + color recommendations if user is logged in
             if (user?.id && data.measurements) {
@@ -355,20 +347,8 @@ export default function ProductDetailScreen() {
 
   const colorsList = useMemo(() => {
     if (!product) return [];
-    if (siblingProducts && siblingProducts.length > 0) {
-      const set = new Set<string>();
-      if (product.base_color) set.add(product.base_color.trim());
-      if (product.color) {
-        product.color.split(",").map((c: string) => c.trim()).filter(Boolean).forEach((c: string) => set.add(c));
-      }
-      siblingProducts.forEach((s) => {
-        if (s.base_color) set.add(s.base_color.trim());
-        if (s.color) {
-          s.color.split(",").map((c: string) => c.trim()).filter(Boolean).forEach((c: string) => set.add(c));
-        }
-      });
-      return Array.from(set);
-    }
+    // Only this product's own colours -- see the removed sibling-product
+    // lookup below for why merging in other products' colours isn't safe.
     if (product.color) {
       return [...new Set(product.color.split(",").map((c: string) => c.trim()).filter(Boolean))];
     }
@@ -376,7 +356,7 @@ export default function ProductDetailScreen() {
       return [product.base_color.trim()];
     }
     return [];
-  }, [product, siblingProducts]);
+  }, [product]);
 
   const imageGallery = useMemo(() => {
     if (product?.images && product.images.length > 0) {
@@ -393,32 +373,13 @@ export default function ProductDetailScreen() {
     tapLight();
     setSelectedColor(color);
 
-    const matchingSibling = siblingProducts.find((s) => {
-      const sColors = [
-        s.base_color?.toLowerCase().trim(),
-        ...(s.color ? s.color.split(",").map((c: string) => c.toLowerCase().trim()) : []),
-      ].filter(Boolean);
-      return sColors.includes(color.toLowerCase().trim());
-    });
-
-    if (matchingSibling && matchingSibling.id !== product?.id) {
-      if (product?.style_code && soldCount !== null) {
-        styleSoldCountCache.set(product.style_code, soldCount);
-      }
-      if (soldCount !== null) {
-        styleSoldCountCache.set(matchingSibling.id, soldCount);
-      }
-      router.replace({
-        pathname: "/product/[id]",
-        params: { id: matchingSibling.id },
-      });
-      return;
-    }
-
+    // Colour selection never navigates to a different product -- it only
+    // ever changes local state for this product's own colours. See the
+    // removed sibling-product lookup above.
     const directColors = product?.color
       ? product.color.split(",").map((c: string) => c.trim()).filter(Boolean)
       : [];
-    if (siblingProducts.length <= 1 && directColors.length > 1 && directColors.length === imageGallery.length) {
+    if (directColors.length > 1 && directColors.length === imageGallery.length) {
       const idx = directColors.findIndex((c: string) => c.toLowerCase() === color.toLowerCase());
       if (idx >= 0 && idx < imageGallery.length) {
         flatListRef.current?.scrollToIndex({ index: idx, animated: true });
@@ -451,6 +412,15 @@ export default function ProductDetailScreen() {
     );
   }
 
+  // product_variants deliberately exposes only booleans (is_available,
+  // is_low_stock, stock_status), never a numeric count -- the raw inventory
+  // table with real total/reserved/available integers is staff/admin/owner
+  // only by design (20260914220000_progressive_auth_sanitized_projections.sql).
+  // 0/1 here is fine for purchasability gating (out of stock vs not) since
+  // that's exactly what is_available already means; it must not be read as,
+  // or displayed as, an actual remaining-units count. See getStockLabel for
+  // the customer-safe "Low stock" text, which is per-variant real data (each
+  // size's own is_low_stock), unlike borrowing the product-wide total.
   const getStockInfo = (size?: string | null, color?: string | null): number | null => {
     if (inventory && inventory.length > 0) {
       if (size) {
@@ -469,11 +439,24 @@ export default function ProductDetailScreen() {
         }
       }
     }
-    // Fallback to top-level product stock if variants are not tracked
-    if (product.stock !== null && product.stock !== undefined) {
-      return product.stock;
-    }
-    return null;
+    // Fallback to top-level product stock if variants are not tracked.
+    // products.stock itself isn't access-restricted like inventory is, so
+    // this is fine for products with no per-variant breakdown at all.
+    return product.stock ?? null;
+  };
+
+  // Customer-safe "running low" signal for a specific size, sourced from the
+  // variant's own is_low_stock/stock_status -- real per-size data, unlike a
+  // number borrowed from the product-wide total (which is the same value
+  // for every size regardless of how depleted that size actually is).
+  const getStockLabel = (size?: string | null, color?: string | null): string | null => {
+    if (!inventory || inventory.length === 0 || !size) return null;
+    const inv = inventory.find((i: any) =>
+      i.size === size &&
+      (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
+    );
+    if (!inv || !inv.is_available) return null;
+    return inv.is_low_stock ? 'Low stock' : null;
   };
 
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
@@ -490,7 +473,13 @@ export default function ProductDetailScreen() {
   const canPurchase = !isSizingUnavailable && hasRequiredSelection && !selectedSizeOutOfStock && !isProductOutOfStock;
   const sizeChart = (product.measurements as ProductMeasurements | null) || null;
   const hasSizeChart = !!sizeChart && (product.sizes || []).some(s => sizeChart[s]);
-  const maxQuantity = 10;
+  // 10 is just a sane upper bound for the stepper UI -- selectedStock (the
+  // real per-size/colour inventory count) is the actual cap. Capping only at
+  // 10 let a customer request more units than existed: with 1 in stock, the
+  // "+" button still climbed to 10, and create_reservation_multi has no
+  // stock check of its own, so the reservation would have been accepted for
+  // 9 units that don't exist.
+  const maxQuantity = selectedStock !== null ? Math.max(Math.min(10, selectedStock), 0) : 10;
   const effectiveQuantity = Math.min(Math.max(quantity, 1), Math.max(maxQuantity, 1));
 
   return (

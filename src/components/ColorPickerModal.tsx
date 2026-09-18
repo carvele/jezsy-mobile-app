@@ -83,6 +83,7 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
                 onChangeText={setName}
                 placeholder="e.g. Navy Blue, Charcoal"
                 placeholderTextColor="#666"
+                accessibilityLabel="Color name"
               />
               <Text style={[styles.label, { marginTop: 8 }]}>HEX Code</Text>
               <TextInput
@@ -92,13 +93,14 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
                 placeholder="#RRGGBB"
                 placeholderTextColor="#666"
                 autoCapitalize="characters"
+                accessibilityLabel="HEX Code"
               />
             </View>
           </View>
 
           {/* Role Selection */}
           <Text style={styles.sectionLabel}>Color Role</Text>
-          <View style={styles.roleRow}>
+          <View style={styles.roleRow} accessibilityRole="radiogroup">
             {[
               { id: 'dominant', label: 'Main color' },
               { id: 'secondary', label: 'Other color' },
@@ -108,6 +110,9 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
                 key={item.id}
                 style={[styles.roleChip, role === item.id && styles.roleChipActive]}
                 onPress={() => setRole(item.id as ColorRole)}
+                accessibilityRole="radio"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected: role === item.id }}
               >
                 <Text style={[styles.roleText, role === item.id && styles.roleTextActive]}>
                   {item.label}
@@ -128,6 +133,9 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
                   hex.toLowerCase() === swatch.hex.toLowerCase() && styles.swatchSelected
                 ]}
                 onPress={() => handleSelectPreset(swatch)}
+                accessibilityRole="button"
+                accessibilityLabel={`${swatch.name} swatch`}
+                accessibilityState={{ selected: hex.toLowerCase() === swatch.hex.toLowerCase() }}
               />
             ))}
           </ScrollView>
