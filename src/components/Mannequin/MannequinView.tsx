@@ -36,7 +36,7 @@ import {
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { buildSilhouetteParams } from '@/src/utils/bodySilhouette';
-import { gradeOutfit, StylistCritique, OutfitContext } from '@/src/utils/aiStylistAdvisor';
+import { gradeOutfitWithAI, StylistCritique, OutfitContext } from '@/src/utils/aiStylistAdvisor';
 import { StylistCritiqueModal } from './StylistCritiqueModal';
 import { OutfitContextModal } from './OutfitContextModal';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
@@ -1025,7 +1025,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
           if (requestId !== currentStylistRequestIdRef.current) {
             return;
           }
-          const critique = gradeOutfit(canvasItems, wardrobeLookup, ctx, profile);
+          const critique = await gradeOutfitWithAI(canvasItems, wardrobeLookup, ctx, profile);
           if (requestId !== currentStylistRequestIdRef.current) {
             return;
           }

@@ -26,6 +26,13 @@ import {
   FunctionalRole,
   PersonalUsageSignal,
 } from './garmentSemanticClassifier';
+import {
+  StylistEvidencePacket,
+  StylistEvidencePacketItem,
+  StructuredAIResponse,
+  StylistAnalysisMode,
+} from '../types/aiStylist';
+import { IAIStylistProvider, defaultAIStylistProvider } from '../services/aiStylistProvider';
 
 export type OverallAssessment =
   | 'Appropriate for this occasion'
@@ -263,11 +270,23 @@ export interface StylistCritique {
   analysisId?: string;
   generatedAt?: string;
   analysisVersion?: string;
-  analysisMode?: 'ruleBasedEvidence' | 'hybrid' | 'fallback' | 'llm';
+  analysisMode?: StylistAnalysisMode;
   contextHash?: string;
   outfitHash?: string;
   wardrobeItemIds?: string[];
   cacheStatus?: 'fresh' | 'cache_hit' | 'miss';
+  aiProvider?: string;
+  aiModel?: string;
+  evidenceCount?: number;
+  fallbackReason?: string;
+  contextFit?: {
+    occasion?: string;
+    activity?: string;
+    weather?: string;
+    thermal?: string;
+    social?: string;
+    practicality?: string;
+  };
   assessment: OverallAssessment;
   headline: string;
   verdict: string;
@@ -276,6 +295,7 @@ export interface StylistCritique {
   whatWorks?: string;
   whatCouldBeBetter?: string;
   whatsMissing?: string;
+  personalization?: string;
   wardrobeAlternatives?: WardrobeAlternative[];
   tips: string[];
   vibe: string;
@@ -294,7 +314,7 @@ export interface StylistCritique {
   explanation?: OutfitExplanation;
 }
 
-export const STYLIST_ANALYSIS_VERSION = '2.2.0';
+export const STYLIST_ANALYSIS_VERSION = '3.0.0';
 
 export function generateAnalysisId(): string {
   return `stylist_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -2338,6 +2358,9 @@ export function gradeOutfit(
     outfitHash,
     wardrobeItemIds,
     cacheStatus,
+    aiProvider: 'deterministic-local',
+    aiModel: 'evidence-engine-v3',
+    evidenceCount: contradictions.length + items.length,
     assessment,
     headline,
     verdict,
@@ -2417,4 +2440,269 @@ export function validateContextRelevance(
 
   return true;
 }
+
+/**
+ * Builds the structured Stylist Evidence Packet sent to the server-side LLM.
+ * Contains only grounded facts, semantic classifications, structural analysis,
+ * detected contradictions, and user personalization notes.
+ */
+export function buildStylistEvidencePacket(
+  items: MannequinCanvasItem[],
+  wardrobeLookup?: Record<string, WardrobeItem>,
+  context?: OutfitContext,
+  _profile?: UserStyleProfileDto | null
+): StylistEvidencePacket {
+  const contextInterpretation = interpretOutfitContext(context);
+  const garmentProfiles = (items || []).map((item) => {
+    const w = wardrobeLookup?.[item.wardrobe_item_id];
+    return buildGarmentSemanticProfile(item, w);
+  });
+  const structure = buildOutfitStructure(garmentProfiles);
+  const reqs = buildOccasionRequirements(contextInterpretation);
+  const contradictions = detectContradictions(garmentProfiles, reqs, structure);
+  const paletteColors = extractColors(items, wardrobeLookup);
+
+  const outfitItems: StylistEvidencePacketItem[] = garmentProfiles.map((p) => ({
+    wardrobeItemId: p.identity.wardrobeItemId || p.identity.name,
+    category: p.rawUserData.category,
+    subCategory: p.rawUserData.subCategory,
+    garmentType: p.garmentStructure.garmentType,
+    garmentFamily: p.garmentStructure.garmentFamily,
+    garmentSubtype: p.subtype || undefined,
+    description: p.rawUserData.description || undefined,
+    userNotes: p.rawUserData.userNotes || undefined,
+    rawColor: p.rawUserData.color,
+    colorTags: p.rawUserData.colorTags,
+    thermalLevel: p.thermal,
+    coverageLevel: p.coverage,
+    functionalRole: p.functionalRole,
+    personalUsage: p.personalUsage?.rawText
+      ? { activities: p.personalUsage.activities, rawText: p.personalUsage.rawText }
+      : undefined,
+    styleSignals: p.styleSignals,
+    imageUrl: p.identity.imageUrl,
+  }));
+
+  const personalization = garmentProfiles
+    .filter((p) => p.personalUsage?.rawText || p.rawUserData.whereWornOften || p.rawUserData.description)
+    .map((p) => ({
+      garmentId: p.identity.wardrobeItemId || p.identity.name,
+      description: p.rawUserData.description,
+      activities: (p.personalUsage?.activities || []).map((a) => a.toLowerCase()),
+    }));
+
+  return {
+    request: {
+      analysisId: generateAnalysisId(),
+      rawContext: `${context?.occasion || ''} ${context?.additionalContext || ''}`.trim(),
+      structuredContext: {
+        rawOccasion: contextInterpretation.rawOccasion,
+        rawAdditionalContext: contextInterpretation.rawAdditionalContext,
+        activity: contextInterpretation.activity,
+        occasionType: contextInterpretation.occasionType,
+        timeOfDay: contextInterpretation.timeOfDay,
+        weather: contextInterpretation.weather,
+        temperatureRequirement: contextInterpretation.temperatureRequirement,
+        socialContext: contextInterpretation.socialSetting,
+        environment: contextInterpretation.isIndoorOverride ? 'indoor' : 'unknown',
+        isIndoorOverride: contextInterpretation.isIndoorOverride,
+      },
+      generatedAt: new Date().toISOString(),
+    },
+    outfit: {
+      items: outfitItems,
+    },
+    structure: {
+      completeness:
+        (structure.hasOnePiece || (structure.hasTop && structure.hasBottom)) && !structure.isOvercrowded
+          ? 'complete'
+          : 'incomplete',
+      hasTop: structure.hasTop,
+      hasBottom: structure.hasBottom,
+      hasOnePiece: structure.hasOnePiece,
+      hasOuterwear: structure.hasOuterwear,
+      hasShoes: structure.hasShoes,
+      isOvercrowded: structure.isOvercrowded,
+      structuralNotes: structure.overcrowdingNote || undefined,
+    },
+    requirements: {
+      formalityLevel: reqs.requiresFormalAttire ? 'formal' : 'casual',
+      requiresThermalCoverage: reqs.requiresWarmth,
+      requiresWaterCompatibility: reqs.requiresWaterCompatibility !== 'none',
+      requiresActivewear: reqs.requiresHighMobility,
+      allowsAthleticPieces: reqs.allowsAthletic,
+    },
+    contradictions: contradictions.map((c) => ({
+      dimension: c.category,
+      severity: c.severity,
+      message: c.reason,
+      garmentId: c.garmentName,
+    })),
+    personalization,
+    visualEvidence: {
+      paletteColors,
+    },
+  };
+}
+
+/**
+ * Synthesizes a hybrid critique merging validated server LLM reasoning over grounded evidence.
+ */
+export function synthesizeHybridCritique(
+  aiResponse: StructuredAIResponse,
+  packet: StylistEvidencePacket,
+  items: MannequinCanvasItem[],
+  wardrobeLookup?: Record<string, WardrobeItem>,
+  context?: OutfitContext,
+  providerName?: string,
+  modelName?: string
+): StylistCritique {
+  const contextInterpretation = interpretOutfitContext(context);
+  const garmentProfiles = (items || []).map((item) => {
+    const w = wardrobeLookup?.[item.wardrobe_item_id];
+    return buildGarmentSemanticProfile(item, w);
+  });
+  const structure = buildOutfitStructure(garmentProfiles);
+  const reqs = buildOccasionRequirements(contextInterpretation);
+  const contradictions = detectContradictions(garmentProfiles, reqs, structure);
+  const paletteColors = extractColors(items, wardrobeLookup);
+  const colorEval: ColorMatchResult = evaluateColors(paletteColors);
+  const wardrobeAlternatives = generateWardrobeAlternatives(contradictions, wardrobeLookup, reqs);
+
+  const vibe = aiResponse.headline || 'Styled Look';
+
+  const whatWorks =
+    Array.isArray(aiResponse.whatWorks) && aiResponse.whatWorks.length > 0
+      ? aiResponse.whatWorks.join(' ')
+      : undefined;
+
+  const whatCouldBeBetter =
+    Array.isArray(aiResponse.whatConflicts) && aiResponse.whatConflicts.length > 0
+      ? aiResponse.whatConflicts.join(' ')
+      : undefined;
+
+  const whatsMissing =
+    Array.isArray(aiResponse.missing) && aiResponse.missing.length > 0
+      ? aiResponse.missing.join(' ')
+      : undefined;
+
+  const verdict = `${aiResponse.headline}: ${aiResponse.whyJezsySaysThis.slice(0, 120)}...`;
+
+  const tips: string[] = [];
+  if (aiResponse.improvements && aiResponse.improvements.length > 0) {
+    aiResponse.improvements.forEach((imp) => tips.push(imp.reason));
+  } else if (whatsMissing) {
+    tips.push(whatsMissing);
+  } else {
+    tips.push(aiResponse.stylistTake);
+  }
+
+  return {
+    analysisId: packet.request.analysisId,
+    generatedAt: packet.request.generatedAt,
+    analysisVersion: STYLIST_ANALYSIS_VERSION,
+    analysisMode: 'hybridLLM',
+    contextHash: computeContextHash(context),
+    outfitHash: computeOutfitHash(items, wardrobeLookup),
+    wardrobeItemIds: (items || []).map((i) => i.wardrobe_item_id).filter(Boolean),
+    cacheStatus: 'fresh',
+    aiProvider: providerName || 'supabase-edge',
+    aiModel: modelName || 'gemini-1.5-flash',
+    evidenceCount: (packet.contradictions?.length || 0) + (packet.outfit?.items?.length || 0),
+    contextFit: aiResponse.contextFit,
+    personalization: aiResponse.personalization,
+    assessment: aiResponse.assessment,
+    headline: aiResponse.headline,
+    verdict,
+    whyJezsySaysThis: aiResponse.whyJezsySaysThis,
+    stylistsTake: aiResponse.stylistTake,
+    whatWorks,
+    whatCouldBeBetter,
+    whatsMissing,
+    wardrobeAlternatives,
+    tips: tips.slice(0, 3),
+    vibe,
+    paletteColors,
+    isOvercrowded: structure.isOvercrowded,
+    mannequinItems: items,
+    context,
+    contextInterpretation,
+    contradictions: contradictions.map((c) => `${c.reason} (${c.severity})`),
+    pillars: {
+      colorHarmony: {
+        status: colorEval.score >= 85 ? 'excellent' : colorEval.score >= 70 ? 'good' : 'warning',
+        title: colorEval.label,
+        feedback: colorEval.feedback,
+      },
+      compositionAndLayers: {
+        status:
+          aiResponse.assessment === 'Appropriate for this occasion'
+            ? 'excellent'
+            : aiResponse.assessment === 'Could work with changes'
+            ? 'good'
+            : 'alert',
+        title: aiResponse.headline,
+        feedback: verdict,
+      },
+    },
+  };
+}
+
+/**
+ * Asynchronously evaluates an outfit using the hybrid AI Stylist architecture:
+ * 1. Gathers structured facts, semantics, and contradictions via the deterministic engine.
+ * 2. Transmits the evidence packet to the secure AI provider.
+ * 3. Validates the response against grounding, item IDs, context relevance, and section uniqueness.
+ * 4. Gracefully falls back to the deterministic evidence engine if the provider is unavailable
+ *    or validation fails.
+ */
+export async function gradeOutfitWithAI(
+  items: MannequinCanvasItem[],
+  wardrobeLookup?: Record<string, WardrobeItem>,
+  context?: OutfitContext,
+  profile?: UserStyleProfileDto | null,
+  provider?: IAIStylistProvider
+): Promise<StylistCritique> {
+  if (!items || items.length === 0) {
+    return gradeOutfit(items, wardrobeLookup, context, profile);
+  }
+
+  const packet = buildStylistEvidencePacket(items, wardrobeLookup, context, profile);
+  const activeProvider = provider || defaultAIStylistProvider;
+
+  let result;
+  try {
+    result = await activeProvider.analyze(packet, wardrobeLookup);
+  } catch (err: unknown) {
+    result = {
+      success: false,
+      analysisMode: 'ruleBasedFallback' as const,
+      fallbackReason: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  if (result.success && result.data) {
+    return synthesizeHybridCritique(
+      result.data,
+      packet,
+      items,
+      wardrobeLookup,
+      context,
+      result.provider,
+      result.model
+    );
+  }
+
+  // Fallback to grounded deterministic evidence engine
+  const fallbackCritique = gradeOutfit(items, wardrobeLookup, context, profile);
+  return {
+    ...fallbackCritique,
+    analysisMode: 'ruleBasedFallback',
+    aiProvider: 'deterministic-local',
+    aiModel: 'evidence-engine-v3',
+    evidenceCount: (packet.contradictions?.length || 0) + (packet.outfit?.items?.length || 0),
+    fallbackReason: result.fallbackReason || 'AI provider unavailable',
+  };
+}
+
 
