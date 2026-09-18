@@ -13,7 +13,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { useSafeBack } from '@/src/hooks/useSafeBack';
-import { recommendSize, analyzeFit } from '@/src/utils/sizeRecommender';
+import { recommendSize, analyzeFit, summarizeOverallFit } from '@/src/utils/sizeRecommender';
 import { computeLiveLengthFit } from '@/src/utils/liveLengthFit';
 import { useARTrackingSession } from '@/src/hooks/useARTrackingSession';
 import { AR_TRACKING_GUIDANCE } from '@/src/utils/arTrackingSession';
@@ -44,6 +44,12 @@ import { HardwarePermissionState } from '@/src/components/HardwarePermissionStat
 import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 type Product = Database['public']['Tables']['products']['Row'];
+
+const OVERALL_FIT_COLORS: Record<'tight' | 'fitted' | 'loose', string> = {
+  tight: '#FF6B6B',
+  fitted: '#34C759',
+  loose: '#4DA3FF',
+};
 
 interface WebCameraFeedProps {
   active: boolean;
@@ -472,6 +478,7 @@ export default function ARTryOnScreen() {
     },
     [recommendedSize, sizingMeasurements, product?.measurements, product?.garment_metadata]
   );
+  const overallFit = useMemo(() => summarizeOverallFit(fitZones), [fitZones]);
 
   // Phase B2: real-measurement fit modifier for the AR overlay's scale (see
   // src/components/AR/GarmentRenderer.tsx). Ratio of the selected/recommended
@@ -1366,6 +1373,12 @@ export default function ARTryOnScreen() {
                 <IconSymbol name="xmark" size={14} color="#FFF" />
               </TouchableOpacity>
             </View>
+            {overallFit && (
+              <View style={[styles.fitOverallBadge, { borderColor: OVERALL_FIT_COLORS[overallFit.verdict] }]}>
+                <View style={[styles.fitOverallDot, { backgroundColor: OVERALL_FIT_COLORS[overallFit.verdict] }]} />
+                <Text style={[styles.fitOverallText, { color: OVERALL_FIT_COLORS[overallFit.verdict] }]}>{overallFit.label}</Text>
+              </View>
+            )}
             {fitZones.map((z) => {
               const vColor = z.verdict === 'too_tight' ? '#FF6B6B' : z.verdict === 'snug' ? '#FFCC00' : z.verdict === 'roomy' ? '#4DA3FF' : '#34C759';
               return (
@@ -1465,6 +1478,18 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   fitTitle: { color: '#FFF', fontSize: 13, fontWeight: '800' },
+  fitOverallBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    marginBottom: Spacing.sm,
+  },
+  fitOverallDot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
+  fitOverallText: { fontSize: 11, fontWeight: '700' },
   fitRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: Spacing.xs },
   fitZone: { color: 'rgba(255,255,255,0.8)', fontSize: 12 },
   fitVerdict: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
