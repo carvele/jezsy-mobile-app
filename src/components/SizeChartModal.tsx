@@ -25,7 +25,7 @@ interface SizeChartModalProps {
 const KNOWN_LABELS: Record<string, string> = {
   bust: 'Bust', chest: 'Chest', waist: 'Waist', hips: 'Hips', hip: 'Hips',
   shoulder: 'Shoulder', shoulderwidth: 'Shoulder Width', sleevelength: 'Sleeve Length',
-  bodylength: 'Body Length', thigh: 'Thigh', inseam: 'Pants', outseam: 'Outseam',
+  bodylength: 'Body Length', thigh: 'Thigh', inseam: 'Inseam', outseam: 'Outseam',
   totallength: 'Total Length', length: 'Length', cuff: 'Cuff', footlength: 'Foot Length',
   footwidth: 'Foot Width', width: 'Width', height: 'Height', depth: 'Depth',
   straplength: 'Strap Length',

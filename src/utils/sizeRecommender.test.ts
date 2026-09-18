@@ -25,4 +25,19 @@ describe('Size Recommender & Fit Analysis', () => {
     expect(zones.length).toBe(3);
     expect(zones.find((z) => z.zone === 'Bust')?.verdict).toBe('fitted');
   });
+
+  test('tolerates title-case and legacy alias measurement keys', () => {
+    const titleCaseChart = {
+      S: { Bust: 88, Waist: 70, Hips: 94 },
+      M: { Bust: 94, Waist: 76, Hips: 100 },
+      L: { Bust: 100, Waist: 82, Hips: 106 },
+    };
+    const user = { bust: 90, waist: 72, hips: 96 };
+    expect(recommendSize(user, titleCaseChart as any, 'regular')).toBe('M');
+
+    const garmentTitle = { Bust: 94, Waist: 76, Hips: 100 };
+    const zones = analyzeFit(user, garmentTitle as any);
+    expect(zones.length).toBe(3);
+    expect(zones.find((z) => z.zone === 'Bust')?.verdict).toBe('fitted');
+  });
 });

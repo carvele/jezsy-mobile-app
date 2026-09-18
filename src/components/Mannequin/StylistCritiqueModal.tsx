@@ -16,6 +16,14 @@ import { StylistCritique, OverallAssessment } from '@/src/utils/aiStylistAdvisor
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+/** CSS only recognizes single-word color names; multi-word fashion terms (e.g. "neon green")
+ * usually end in the base hue, so fall back to the last word rather than rendering no color. */
+function resolveSwatchColor(colorName: string): string {
+  const trimmed = colorName.trim().toLowerCase();
+  const words = trimmed.split(/\s+/);
+  return words[words.length - 1] || trimmed;
+}
+
 interface Props {
   visible: boolean;
   critique: StylistCritique;
@@ -88,7 +96,9 @@ export function StylistCritiqueModal({
             <View style={styles.headerTitleWrap}>
               <View style={[styles.headerBadge, { backgroundColor: colors.tint + '18' }]}>
                 <IconSymbol name="sparkles" size={13} color={colors.tint} />
-                <Text style={[styles.headerBadgeText, { color: colors.tint }]}>JeZsy Stylist</Text>
+                <Text style={[styles.headerBadgeText, { color: colors.tint }]}>
+                  {critique.analysisMode === 'hybridLLM' ? 'JeZsy AI Stylist' : 'JeZsy Stylist'}
+                </Text>
               </View>
             </View>
             <TouchableOpacity
@@ -119,6 +129,45 @@ export function StylistCritiqueModal({
                     <Text style={[styles.contextFieldLabel, { color: colors.text }]}>Additional context: </Text>
                     <Text style={[styles.contextFieldValue, { color: colors.secondaryText }]}>{additionalContext}</Text>
                   </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {/* DEV Diagnostic Freshness Indicator */}
+            {__DEV__ && critique.analysisId ? (
+              <View
+                style={[
+                  styles.contextCard,
+                  { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 8, padding: 10 },
+                ]}
+              >
+                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.secondaryText, letterSpacing: 0.5 }}>
+                  STYLIST DIAGNOSTICS (DEV)
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.text, marginTop: 2 }}>
+                  Instance: {critique.analysisId}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                  Engine: v{critique.analysisVersion || '3.0.0'} | Mode: {critique.analysisMode || 'ruleBasedEvidence'}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                  Provider: {critique.aiProvider || 'none'} | Model: {critique.aiModel || 'none'}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                  Cache: {critique.cacheStatus || 'fresh'} | Evidence Count: {critique.evidenceCount || 0}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                  Context Hash: {critique.contextHash} | Outfit Hash: {critique.outfitHash}
+                </Text>
+                {critique.mannequinItems && critique.mannequinItems.length > 0 ? (
+                  <Text style={{ fontSize: 10, color: colors.text, marginTop: 2 }} numberOfLines={2}>
+                    Items: {critique.mannequinItems.map((i) => `${i.name || i.garment_type}`).join(' + ')}
+                  </Text>
+                ) : null}
+                {critique.fallbackReason ? (
+                  <Text style={{ fontSize: 10, color: colors.secondaryText, fontStyle: 'italic', marginTop: 2 }}>
+                    Fallback note: {critique.fallbackReason}
+                  </Text>
                 ) : null}
               </View>
             ) : null}
@@ -208,7 +257,7 @@ export function StylistCritiqueModal({
                       key={idx}
                       style={[styles.paletteChip, { backgroundColor: colors.card, borderColor: colors.border }]}
                     >
-                      <View style={[styles.colorDot, { backgroundColor: colorName.toLowerCase() }]} />
+                      <View style={[styles.colorDot, { backgroundColor: resolveSwatchColor(colorName) }]} />
                       <Text style={[styles.paletteText, { color: colors.text }]}>
                         {colorName.charAt(0).toUpperCase() + colorName.slice(1)}
                       </Text>

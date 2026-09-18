@@ -22,6 +22,9 @@ import { useToast } from '@/src/context/ToastContext';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 import { getConversationMessagesPage, MessageRow } from '@/src/services/chatService';
 import { useTypingIndicator } from '@/src/hooks/useTypingIndicator';
+import { ErrorRetryState } from '@/src/components/ErrorRetryState';
+
+import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 
 // One reaction per person per message, so this is a shortlist rather than a
 // full picker -- matching the set the admin dashboard already offers.
@@ -41,8 +44,13 @@ type ProductPreview = {
 // delay from the others so they read as a wave rather than blinking in sync.
 function TypingDot({ delay, color }: { delay: number; color: string }) {
   const translateY = useSharedValue(0);
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
+    if (reduceMotion) {
+      translateY.value = 0;
+      return;
+    }
     translateY.value = withDelay(
       delay,
       withRepeat(
@@ -53,7 +61,7 @@ function TypingDot({ delay, color }: { delay: number; color: string }) {
         -1,
       ),
     );
-  }, [delay, translateY]);
+  }, [delay, translateY, reduceMotion]);
 
   const style = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
 
@@ -76,6 +84,8 @@ export default function ChatScreen() {
   const colors = Colors[theme];
 
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const isInitialLoadRef = useRef(true);
@@ -199,24 +209,27 @@ export default function ChatScreen() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
+  const fetchMessages = useCallback(async () => {
+    if (!conversationId) return;
+    setInitialLoading(true);
+    setLoadError(null);
+    try {
+      const result = await getConversationMessagesPage(conversationId, undefined, 30);
+      setHasOlderMessages(result.hasMore);
+      // Reverse array so messages render chronologically ascending
+      setMessages([...result.items].reverse());
+    } catch (err: any) {
+      console.error('Error fetching conversation messages:', err);
+      setLoadError(err?.message || 'Could not load messages. Please check your connection.');
+    } finally {
+      setInitialLoading(false);
+    }
+    markDelivered(conversationId);
+    markAsRead(conversationId);
+  }, [conversationId, markDelivered, markAsRead]);
+
   useEffect(() => {
     if (!conversationId) return;
-
-    let cancelled = false;
-
-    const fetchMessages = async () => {
-      try {
-        const result = await getConversationMessagesPage(conversationId, undefined, 30);
-        if (cancelled) return;
-        setHasOlderMessages(result.hasMore);
-        // Reverse array so messages render chronologically ascending
-        setMessages([...result.items].reverse());
-      } catch (err) {
-        console.error('Error fetching conversation messages:', err);
-      }
-      markDelivered(conversationId);
-      markAsRead(conversationId);
-    };
 
     fetchMessages();
 
@@ -273,12 +286,11 @@ export default function ChatScreen() {
     }
 
     return () => {
-      cancelled = true;
       if (messageSubscription) {
         supabase.removeChannel(messageSubscription);
       }
     };
-  }, [conversationId, markAsRead, markDelivered, session?.user.id, reconnectTick]);
+  }, [conversationId, fetchMessages, markAsRead, markDelivered, session?.user.id, reconnectTick]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!conversationId || !hasOlderMessages || loadingOlder) return;
@@ -827,11 +839,22 @@ export default function ChatScreen() {
         behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
+        {initialLoading ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={colors.tint} />
+          </View>
+        ) : loadError && messages.length === 0 ? (
+          <ErrorRetryState
+            title="Unable to load chat"
+            message={loadError}
+            onRetry={fetchMessages}
+          />
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderMessage}
           // Product lookups land after the messages themselves, and that
           // resolution does not touch `data` -- without this the rows keep
           // rendering the fallback chip.
@@ -899,6 +922,7 @@ export default function ChatScreen() {
             ) : null
           }
         />
+        )}
 
         <Modal
           visible={!!actionTarget}

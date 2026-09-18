@@ -1159,107 +1159,6 @@ export default function ExploreScreen() {
     );
   };
 
-  const renderQuickFilterPills = () => {
-    const isAllActive = !selectedNewArrivalsOnly && !selectedSaleOnly && !selectedArOnly && !selectedMySizeOnly;
-    return (
-      <View style={[styles.quickFiltersWrapper, { borderBottomColor: colors.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.quickFiltersScroll}>
-          <TouchableOpacity
-            style={[
-              styles.quickFilterChip,
-              {
-                backgroundColor: isAllActive ? colors.tint : colors.card,
-                borderColor: isAllActive ? colors.tint : colors.border,
-              },
-            ]}
-            onPress={() => {
-              setSelectedNewArrivalsOnly(false);
-              setSelectedSaleOnly(false);
-              setSelectedArOnly(false);
-              setSelectedMySizeOnly(false);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Show all items"
-          >
-            <Text style={[styles.quickFilterChipText, { color: isAllActive ? colors.onTint : colors.text, fontWeight: isAllActive ? '700' : '500' }]}>
-              All
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.quickFilterChip,
-              {
-                backgroundColor: selectedNewArrivalsOnly ? colors.tint : colors.card,
-                borderColor: selectedNewArrivalsOnly ? colors.tint : colors.border,
-              },
-            ]}
-            onPress={() => setSelectedNewArrivalsOnly((prev) => !prev)}
-            accessibilityRole="button"
-            accessibilityLabel="Filter by New Arrivals"
-          >
-            <Text style={[styles.quickFilterChipText, { color: selectedNewArrivalsOnly ? colors.onTint : colors.text, fontWeight: selectedNewArrivalsOnly ? '700' : '500' }]}>
-              New Arrivals
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.quickFilterChip,
-              {
-                backgroundColor: selectedSaleOnly ? colors.tint : colors.card,
-                borderColor: selectedSaleOnly ? colors.tint : colors.border,
-              },
-            ]}
-            onPress={() => setSelectedSaleOnly((prev) => !prev)}
-            accessibilityRole="button"
-            accessibilityLabel="Filter by On Sale"
-          >
-            <Text style={[styles.quickFilterChipText, { color: selectedSaleOnly ? colors.onTint : colors.text, fontWeight: selectedSaleOnly ? '700' : '500' }]}>
-              On Sale
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.quickFilterChip,
-              {
-                backgroundColor: selectedArOnly ? colors.tint : colors.card,
-                borderColor: selectedArOnly ? colors.tint : colors.border,
-              },
-            ]}
-            onPress={() => setSelectedArOnly((prev) => !prev)}
-            accessibilityRole="button"
-            accessibilityLabel="Filter by AR Try-On"
-          >
-            <Text style={[styles.quickFilterChipText, { color: selectedArOnly ? colors.onTint : colors.text, fontWeight: selectedArOnly ? '700' : '500' }]}>
-              AR Try-On
-            </Text>
-          </TouchableOpacity>
-
-          {sizingReady && sizingMeasurements && (
-            <TouchableOpacity
-              style={[
-                styles.quickFilterChip,
-                {
-                  backgroundColor: selectedMySizeOnly ? colors.tint : colors.card,
-                  borderColor: selectedMySizeOnly ? colors.tint : colors.border,
-                },
-              ]}
-              onPress={() => setSelectedMySizeOnly((prev) => !prev)}
-              accessibilityRole="button"
-              accessibilityLabel="Filter by My Size"
-            >
-              <Text style={[styles.quickFilterChipText, { color: selectedMySizeOnly ? colors.onTint : colors.text, fontWeight: selectedMySizeOnly ? '700' : '500' }]}>
-                My Size
-              </Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
-      </View>
-    );
-  };
-
   // The search and browse grids render an identical header differing only in
   // their results count and sort label. It used to be copy-pasted, so every
   // edit had to be made twice or the two drifted. A local function rather than
@@ -1447,7 +1346,6 @@ export default function ExploreScreen() {
                         'Open sort options',
                       )}
                       {renderCategoryNavPills()}
-                      {renderQuickFilterPills()}
                     </View>
                   }
                   ListEmptyComponent={
@@ -1664,7 +1562,6 @@ export default function ExploreScreen() {
                         `Sort: ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
                         `Sort by ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
                       )}
-                      {renderQuickFilterPills()}
                     </View>
                   }
                   ListEmptyComponent={
@@ -2614,23 +2511,6 @@ const styles = StyleSheet.create({
   },
   sortOptionLabel: {
     fontSize: 15,
-  },
-  quickFiltersWrapper: {
-    borderBottomWidth: 1,
-    paddingVertical: Spacing.sm,
-  },
-  quickFiltersScroll: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.xs,
-  },
-  quickFilterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  quickFilterChipText: {
-    fontSize: 12,
   },
   errorContainer: {
     alignItems: 'center',
