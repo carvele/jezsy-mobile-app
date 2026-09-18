@@ -220,10 +220,12 @@ export function StylistCritiqueModal({
                   </Text>
                 </View>
 
-                <View style={[styles.vibePill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <IconSymbol name="tag.fill" size={10} color={colors.secondaryText} />
-                  <Text style={[styles.vibeText, { color: colors.secondaryText }]}>{critique.vibe}</Text>
-                </View>
+                {critique.vibe ? (
+                  <View style={[styles.vibePill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <IconSymbol name="tag.fill" size={10} color={colors.secondaryText} />
+                    <Text style={[styles.vibeText, { color: colors.secondaryText }]}>{critique.vibe}</Text>
+                  </View>
+                ) : null}
               </View>
 
               <Text style={[styles.assessmentHeadline, { color: colors.text }]}>{critique.headline}</Text>

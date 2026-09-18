@@ -126,33 +126,42 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
 
             {/* Actions */}
             <SafeAreaView edges={['bottom']} style={[styles.actions, { borderTopColor: colors.border, backgroundColor: colors.card }]}>
-              <TouchableOpacity
-                style={[styles.cancelBtn, { borderColor: colors.border }]}
-                onPress={handleCancel}
-              >
-                <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.checkBtn, { backgroundColor: canProceed ? colors.tint : colors.border }]}
-                onPress={handleConfirm}
-                disabled={!canProceed || loading}
-                accessibilityRole="button"
-                accessibilityLabel="Check My Outfit"
-              >
-                {loading ? (
-                  <>
-                    <ActivityIndicator size="small" color={colors.onTint} />
-                    <Text style={[styles.checkBtnText, { color: colors.onTint }]}>Analyzing… can take up to a minute</Text>
-                  </>
-                ) : (
-                  <>
-                    <IconSymbol name="sparkles" size={14} color={canProceed ? colors.onTint : colors.secondaryText} />
-                    <Text style={[styles.checkBtnText, { color: canProceed ? colors.onTint : colors.secondaryText }]}>
-                      Check My Outfit
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {loading ? (
+                <Text style={[styles.loadingHint, { color: colors.secondaryText }]}>
+                  This can take up to a minute on our free AI tier — hang tight.
+                </Text>
+              ) : null}
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  style={[styles.cancelBtn, { borderColor: colors.border }]}
+                  onPress={handleCancel}
+                >
+                  <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.checkBtn, { backgroundColor: canProceed ? colors.tint : colors.border }]}
+                  onPress={handleConfirm}
+                  disabled={!canProceed || loading}
+                  accessibilityRole="button"
+                  accessibilityLabel="Check My Outfit"
+                >
+                  {loading ? (
+                    <>
+                      <ActivityIndicator size="small" color={colors.onTint} />
+                      <Text style={[styles.checkBtnText, { color: colors.onTint }]} numberOfLines={1}>
+                        Analyzing…
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <IconSymbol name="sparkles" size={14} color={canProceed ? colors.onTint : colors.secondaryText} />
+                      <Text style={[styles.checkBtnText, { color: canProceed ? colors.onTint : colors.secondaryText }]}>
+                        Check My Outfit
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
             </SafeAreaView>
           </View>
         </KeyboardAvoidingView>
@@ -235,11 +244,18 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   actions: {
-    flexDirection: 'row',
-    gap: Spacing.md,
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  loadingHint: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
   },
   cancelBtn: {
     flex: 1,
@@ -255,7 +271,9 @@ const styles = StyleSheet.create({
   },
   checkBtn: {
     flex: 2,
-    height: 48,
+    minHeight: 48,
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.sm,
     borderRadius: Radius.pill,
     flexDirection: 'row',
     alignItems: 'center',
@@ -266,5 +284,7 @@ const styles = StyleSheet.create({
   checkBtnText: {
     ...Type.bodyStrong,
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'center',
   },
 });

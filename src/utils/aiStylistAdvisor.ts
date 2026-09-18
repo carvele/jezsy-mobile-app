@@ -2699,7 +2699,10 @@ export function synthesizeHybridCritique(
   const colorEval: ColorMatchResult = evaluateColors(paletteColors);
   const wardrobeAlternatives = generateWardrobeAlternatives(contradictions, wardrobeLookup, reqs);
 
-  const vibe = aiResponse.headline || 'Styled Look';
+  // The LLM schema has no separate short style-tag concept distinct from the headline;
+  // reusing the headline here would just duplicate the text already shown as the headline.
+  // Leave it empty and let the modal hide the pill rather than show a repeat.
+  const vibe = '';
 
   const whatWorks =
     Array.isArray(aiResponse.whatWorks) && aiResponse.whatWorks.length > 0
@@ -2716,8 +2719,10 @@ export function synthesizeHybridCritique(
       ? aiResponse.missing.join(' ')
       : undefined;
 
-  const isTruncated = aiResponse.whyJezsySaysThis.length > 120;
-  const verdict = `${aiResponse.headline}: ${aiResponse.whyJezsySaysThis.slice(0, 120)}${isTruncated ? '...' : ''}`;
+  // whyJezsySaysThis is already rendered in full in its own card below; repeating a
+  // truncated copy of the headline + explanation here would just duplicate it and cut
+  // off mid-sentence, so the assessment card shows only the headline for hybridLLM results.
+  const verdict = '';
 
   const tips: string[] = [];
   if (aiResponse.improvements && aiResponse.improvements.length > 0) {
