@@ -1,0 +1,16 @@
+-- Rollback for 20260919030000_pickup_reminders.sql: removes the pickup
+-- reminder cron job, function, and marker columns. Does not touch any
+-- notifications already sent.
+
+DO $$
+BEGIN
+  PERFORM cron.unschedule('send-pickup-reminders');
+EXCEPTION
+  WHEN OTHERS THEN NULL;
+END $$;
+
+DROP FUNCTION IF EXISTS public.send_pickup_reminders();
+
+ALTER TABLE public.reservations
+  DROP COLUMN IF EXISTS pickup_reminder_24h_sent_for,
+  DROP COLUMN IF EXISTS pickup_reminder_1h_sent_for;
