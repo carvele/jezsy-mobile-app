@@ -243,6 +243,7 @@ const ACTIVITY_SIGNALS: { pattern: RegExp; label: string }[] = [
   { pattern: /\btennis\b/i,    label: 'Tennis' },
   { pattern: /\byoga\b/i,      label: 'Yoga' },
   { pattern: /\bcycling\b/i,   label: 'Cycling' },
+  { pattern: /\bloung(?:ing|e)?\b/i, label: 'Lounging' },
 ];
 
 const MATERIAL_SIGNALS: { pattern: RegExp; label: string }[] = [

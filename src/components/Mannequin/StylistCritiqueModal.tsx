@@ -138,11 +138,22 @@ export function StylistCritiqueModal({
                   Instance: {critique.analysisId}
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.secondaryText }}>
-                  Engine: v{critique.analysisVersion || '2.2.0'} ({critique.analysisMode || 'ruleBasedEvidence'})
+                  Engine: v{critique.analysisVersion || '3.0.0'} | Mode: {critique.analysisMode || 'ruleBasedEvidence'}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                  Provider: {critique.aiProvider || 'none'} | Model: {critique.aiModel || 'none'}
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.secondaryText }}>
+                  Cache: {critique.cacheStatus || 'fresh'} | Evidence Count: {critique.evidenceCount || 0}
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.secondaryText }}>
                   Context Hash: {critique.contextHash} | Outfit Hash: {critique.outfitHash}
                 </Text>
+                {critique.fallbackReason ? (
+                  <Text style={{ fontSize: 10, color: colors.secondaryText, fontStyle: 'italic', marginTop: 2 }}>
+                    Fallback note: {critique.fallbackReason}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
 
