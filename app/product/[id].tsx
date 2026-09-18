@@ -412,15 +412,11 @@ export default function ProductDetailScreen() {
     );
   }
 
-  // product_variants deliberately exposes only booleans (is_available,
-  // is_low_stock, stock_status), never a numeric count -- the raw inventory
-  // table with real total/reserved/available integers is staff/admin/owner
-  // only by design (20260914220000_progressive_auth_sanitized_projections.sql).
-  // 0/1 here is fine for purchasability gating (out of stock vs not) since
-  // that's exactly what is_available already means; it must not be read as,
-  // or displayed as, an actual remaining-units count. See getStockLabel for
-  // the customer-safe "Low stock" text, which is per-variant real data (each
-  // size's own is_low_stock), unlike borrowing the product-wide total.
+  // Real per-variant remaining count, sourced from product_variants.available
+  // (20260918014711_expose_exact_stock_count.sql). Falls back to the boolean
+  // is_available (as 0/1) if a row predates the migration or the column
+  // hasn't propagated to generated types yet, then to product.stock, the
+  // product-wide aggregate, when no variant is tracked for this size at all.
   const getStockInfo = (size?: string | null, color?: string | null): number | null => {
     if (inventory && inventory.length > 0) {
       if (size) {
@@ -428,14 +424,20 @@ export default function ProductDetailScreen() {
           i.size === size &&
           (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
         );
-        if (inv) return inv.is_available ? 1 : 0;
+        if (inv) {
+          const count = (inv as any).available;
+          return typeof count === 'number' ? count : (inv.is_available ? 1 : 0);
+        }
         // If variants are tracked for this product, an unlisted variant combination has 0 available
         const hasSizeVariant = inventory.some((i: any) => i.size === size);
         if (hasSizeVariant) return 0;
       } else if (color) {
         const matching = inventory.filter((i: any) => !i.color || i.color.toLowerCase() === color.toLowerCase());
         if (matching.length > 0) {
-          return matching.some((i: any) => i.is_available) ? 1 : 0;
+          return matching.reduce((sum: number, i: any) => {
+            const count = i.available;
+            return sum + (typeof count === 'number' ? count : (i.is_available ? 1 : 0));
+          }, 0);
         }
       }
     }
@@ -443,20 +445,6 @@ export default function ProductDetailScreen() {
     // products.stock itself isn't access-restricted like inventory is, so
     // this is fine for products with no per-variant breakdown at all.
     return product.stock ?? null;
-  };
-
-  // Customer-safe "running low" signal for a specific size, sourced from the
-  // variant's own is_low_stock/stock_status -- real per-size data, unlike a
-  // number borrowed from the product-wide total (which is the same value
-  // for every size regardless of how depleted that size actually is).
-  const getStockLabel = (size?: string | null, color?: string | null): string | null => {
-    if (!inventory || inventory.length === 0 || !size) return null;
-    const inv = inventory.find((i: any) =>
-      i.size === size &&
-      (!color || !i.color || i.color.toLowerCase() === color.toLowerCase())
-    );
-    if (!inv || !inv.is_available) return null;
-    return inv.is_low_stock ? 'Low stock' : null;
   };
 
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
@@ -473,23 +461,11 @@ export default function ProductDetailScreen() {
   const canPurchase = !isSizingUnavailable && hasRequiredSelection && !selectedSizeOutOfStock && !isProductOutOfStock;
   const sizeChart = (product.measurements as ProductMeasurements | null) || null;
   const hasSizeChart = !!sizeChart && (product.sizes || []).some(s => sizeChart[s]);
-  // getStockInfo only ever returns 0/1 for a tracked variant (is_available's
-  // boolean, not a real count -- see the comment above getStockInfo), so it
-  // can gate "is there any stock" but can't size the stepper. The real
-  // per-variant count is deliberately not exposed to customers. Cap
-  // conservatively instead: 1 when this variant is flagged low stock (real
-  // per-variant signal, ≤3 available), otherwise product.stock (the
-  // product-wide total, which IS customer-visible, unlike per-variant
-  // counts) as a generous but still real upper bound. Either way,
-  // create_reservation_multi is the actual backstop against overselling --
-  // this only shapes the UI.
-  const isLowStockSelected = !!selectedSize && !!getStockLabel(selectedSize, selectedColor || undefined);
-  const maxQuantity =
-    selectedStock !== null && selectedStock <= 0
-      ? 0
-      : isLowStockSelected
-        ? 1
-        : Math.max(1, Math.min(10, product.stock ?? 10));
+  // selectedStock is now the real per-variant remaining count (see
+  // getStockInfo), so it's a trustworthy upper bound directly. 10 is just a
+  // sane UI ceiling on top of it. The actual overselling backstop is the DB
+  // trigger hold_inventory_for_reservation_item, not this UI cap.
+  const maxQuantity = selectedStock !== null ? Math.max(0, Math.min(10, selectedStock)) : 10;
   const effectiveQuantity = Math.min(Math.max(quantity, 1), Math.max(maxQuantity, 1));
 
   return (
@@ -766,7 +742,6 @@ export default function ProductDetailScreen() {
                   const isRecommended = recommendedSize === s;
                   const stock = getStockInfo(s, selectedColor || undefined);
                   const isOutOfStock = stock !== null && stock <= 0;
-                  const stockLabel = getStockLabel(s, selectedColor || undefined);
                   const { displayLabel, approxHelper } = formatFootwearDisplay(s, product.category || '');
                   
                   return (
@@ -795,8 +770,8 @@ export default function ProductDetailScreen() {
                       {isRecommended && !isOutOfStock && (
                         <Text style={[Type.caption, { color: colors.tint, marginTop: Spacing.xs, fontWeight: '700' }]}>Best fit ✨</Text>
                       )}
-                      {!!stockLabel && !isRecommended && (
-                        <Text style={[Type.caption, { color: colors.warning, marginTop: Spacing.xs }]}>{stockLabel}</Text>
+                      {stock !== null && stock > 0 && stock <= 5 && !isRecommended && (
+                        <Text style={[Type.caption, { color: colors.warning, marginTop: Spacing.xs }]}>Only {stock} left</Text>
                       )}
                       {isOutOfStock && (
                         <Text style={[Type.caption, { color: colors.secondaryText, marginTop: Spacing.xs }]}>Out of stock</Text>
@@ -843,8 +818,8 @@ export default function ProductDetailScreen() {
                 >
                   <IconSymbol name="plus" size={16} color={colors.text} />
                 </TouchableOpacity>
-                {isLowStockSelected && (
-                  <Text style={[styles.quantityHint, { color: colors.warning }]}>Low stock</Text>
+                {selectedStock !== null && (
+                  <Text style={[styles.quantityHint, { color: colors.secondaryText }]}>{selectedStock} available</Text>
                 )}
               </View>
             </View>
