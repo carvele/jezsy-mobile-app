@@ -184,6 +184,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   const [activeCritique, setActiveCritique] = useState<StylistCritique | null>(null);
   const [activeStylistContext, setActiveStylistContext] = useState<OutfitContext | null>(null);
   const [userFeedback, setUserFeedback] = useState<'liked' | 'passed' | 'worn' | null>(null);
+  const currentStylistRequestIdRef = useRef(0);
 
   // Consolidates less-frequently-used actions (Load/Clear/Share) behind one button.
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
@@ -1009,7 +1010,9 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       <OutfitContextModal
         visible={outfitContextVisible}
         onConfirm={async (ctx) => {
+          const requestId = ++currentStylistRequestIdRef.current;
           setOutfitContextVisible(false);
+          setActiveCritique(null);
           setUserFeedback(null);
           let profile = null;
           if (session?.user?.id) {
@@ -1019,7 +1022,13 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               // fallback gracefully
             }
           }
+          if (requestId !== currentStylistRequestIdRef.current) {
+            return;
+          }
           const critique = gradeOutfit(canvasItems, wardrobeLookup, ctx, profile);
+          if (requestId !== currentStylistRequestIdRef.current) {
+            return;
+          }
           setActiveCritique(critique);
           setActiveStylistContext(ctx);
           setStylistModalVisible(true);

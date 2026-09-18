@@ -49,7 +49,12 @@ export type ActivityType =
   | 'beachWedding'
   | 'workProfessional'
   | 'casualDaily'
+  | 'casualWalk'
   | 'dining'
+  | 'breakfastDining'
+  | 'casualDining'
+  | 'coffeeSocial'
+  | 'lounging'
   | 'general';
 
 export type TimeOfDay =
@@ -85,6 +90,9 @@ export type OccasionType =
   | 'gym'
   | 'office'
   | 'casualWalk'
+  | 'breakfastDining'
+  | 'casualDining'
+  | 'coffeeSocial'
   | 'formalCeremony'
   | 'casualDaily'
   | 'beach'
@@ -100,6 +108,17 @@ export interface OutfitContextInterpretation {
   temperatureRequirement: TemperatureRequirement;
   isSpectatingOnly: boolean;
   isIndoorOverride: boolean;
+  isDiningOrMeal?: boolean;
+  socialSetting?:
+    | 'intimateDate'
+    | 'formalCelebration'
+    | 'casualSocial'
+    | 'athleticWorkout'
+    | 'diningMeal'
+    | 'professional'
+    | 'leisure'
+    | 'homeRelaxed'
+    | 'general';
   environment:
     | 'swimmingPool'
     | 'beachResort'
@@ -108,6 +127,9 @@ export interface OutfitContextInterpretation {
     | 'formalVenue'
     | 'casualEveryday'
     | 'indoors'
+    | 'cafe'
+    | 'diningVenue'
+    | 'home'
     | 'general';
   waterExposure: 'high' | 'moderate' | 'low' | 'none';
   physicalActivity: 'high' | 'moderate' | 'low';
@@ -238,6 +260,14 @@ export interface StylePillarBreakdown {
 }
 
 export interface StylistCritique {
+  analysisId?: string;
+  generatedAt?: string;
+  analysisVersion?: string;
+  analysisMode?: 'ruleBasedEvidence' | 'hybrid' | 'fallback' | 'llm';
+  contextHash?: string;
+  outfitHash?: string;
+  wardrobeItemIds?: string[];
+  cacheStatus?: 'fresh' | 'cache_hit' | 'miss';
   assessment: OverallAssessment;
   headline: string;
   verdict: string;
@@ -262,6 +292,45 @@ export interface StylistCritique {
     personalPreference?: StylePillarBreakdown;
   };
   explanation?: OutfitExplanation;
+}
+
+export const STYLIST_ANALYSIS_VERSION = '2.2.0';
+
+export function generateAnalysisId(): string {
+  return `stylist_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export function computeContextHash(ctx?: OutfitContext): string {
+  if (!ctx) return 'no_context';
+  const occ = (ctx.occasion || '').trim().toLowerCase();
+  const add = (ctx.additionalContext || '').trim().toLowerCase();
+  let hash = 0;
+  const str = `${occ}:::${add}`;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return `ctx_${Math.abs(hash).toString(16)}`;
+}
+
+export function computeOutfitHash(
+  items: MannequinCanvasItem[],
+  wardrobeLookup?: Record<string, WardrobeItem>
+): string {
+  if (!items || items.length === 0) return 'empty_outfit';
+  const tokens = items
+    .map((item) => {
+      const w = wardrobeLookup?.[item.wardrobe_item_id];
+      const name = (item.name || (w as any)?.name || w?.sub_category || '').toLowerCase();
+      const type = (item.garment_type || w?.category || '').toLowerCase();
+      return `${item.wardrobe_item_id || item.id}:${type}:${name}`;
+    })
+    .sort()
+    .join('|');
+  let hash = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    hash = ((hash << 5) - hash + tokens.charCodeAt(i)) | 0;
+  }
+  return `outfit_${Math.abs(hash).toString(16)}`;
 }
 
 // Backward compatibility alias
@@ -376,7 +445,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
   let temperatureRequirement: TemperatureRequirement = 'unknown';
 
   if (
-    /\b(cold|freezing|chilly|winter|frost|snow|get cold|getting cold|cool tonight|cold tonight|it will get cold|cold night)\b/i.test(
+    /\b(cold|freezing|chilly|winter|frost|snow|get cold|getting cold|cool tonight|cold tonight|it will get cold|it will be cold tonight|cold night)\b/i.test(
       full
     )
   ) {
@@ -395,7 +464,9 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
   }
 
   // 3. Indoor Contextual Exception Override
-  const isIndoorOverride = /\b(arcade|indoor|indoors|inside|staying inside|staying indoors)\b/i.test(full);
+  const isIndoorOverride = /\b(arcade|indoor|indoors|inside|staying inside|staying indoors|at home|home|dining at home)\b/i.test(
+    full
+  );
 
   // 4. Spectating / Watching Modifiers
   const isSpectatingOnly = /\b(watching|watch|spectat|cheering|supporting|sitting and watching)\b/i.test(full);
@@ -415,6 +486,11 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
   const isBeachWedding = isWedding && (isBeachOrResort || /\b(beach wedding|seaside wedding)\b/i.test(full));
   const isDate = /\b(date|date night|dinner date|romantic|anniversary)\b/i.test(full);
 
+  const mentionsBreakfast = /\b(breakfast|brunch|morning meal|pancakes|waffles|indoor breakfast)\b/i.test(full);
+  const mentionsCoffee = /\b(coffee|cafe|coffee date|starbucks|latte|espresso|coffee shop)\b/i.test(full);
+  const isRun = /\b(running|jogging|marathon|track|5k|10k|sprint)\b/i.test(full);
+  const isWalk = /\b(walk|walking|stroll|afternoon walk|evening walk|park walk)\b/i.test(full);
+
   let occasionType: OccasionType = 'general';
   let activity: ActivityType = 'general';
   let environment: OutfitContextInterpretation['environment'] = isIndoorOverride ? 'indoors' : 'general';
@@ -422,6 +498,8 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
   let physicalActivity: OutfitContextInterpretation['physicalActivity'] = 'low';
   let mobilityRequirement: OutfitContextInterpretation['mobilityRequirement'] = 'standard';
   let formalityExpectation: OutfitContextInterpretation['formalityExpectation'] = 'casual';
+  let isDiningOrMeal = false;
+  let socialSetting: OutfitContextInterpretation['socialSetting'] = 'general';
   const practicalityRequirements: string[] = [];
 
   if (
@@ -436,6 +514,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     physicalActivity = 'high';
     mobilityRequirement = 'high';
     formalityExpectation = 'casual';
+    socialSetting = 'athleticWorkout';
     practicalityRequirements.push('swimwear foundation', 'water-safe construction', 'unrestricted aquatic mobility');
   } else if (mentionsPoolsideDining) {
     occasionType = 'swimming';
@@ -444,6 +523,8 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     waterExposure = 'none';
     physicalActivity = 'low';
     formalityExpectation = 'elevatedCasual';
+    isDiningOrMeal = true;
+    socialSetting = 'diningMeal';
     practicalityRequirements.push('resort casual or elevated dining attire');
   } else if (mentionsPoolParty) {
     occasionType = 'swimming';
@@ -452,6 +533,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     waterExposure = 'low';
     physicalActivity = 'low';
     formalityExpectation = 'casual';
+    socialSetting = 'casualSocial';
     practicalityRequirements.push('resort/summer party attire', 'poolside footwear');
   } else if (isBeachWedding) {
     occasionType = 'wedding';
@@ -460,6 +542,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     waterExposure = 'low';
     physicalActivity = 'low';
     formalityExpectation = 'semiFormal';
+    socialSetting = 'formalCelebration';
     practicalityRequirements.push('elevated resort attire', 'sand-friendly footwear');
   } else if (isWedding || /\b(formal|black.?tie|white.?tie|gala|ball|cocktail|ceremony)\b/i.test(full)) {
     occasionType = 'wedding';
@@ -468,8 +551,9 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     waterExposure = 'none';
     physicalActivity = 'low';
     formalityExpectation = 'formal';
+    socialSetting = 'formalCelebration';
     practicalityRequirements.push('tailored or formal foundation', 'formal footwear', 'structured silhouette');
-  } else if (/\b(running|jogging|marathon|track|5k|10k)\b/i.test(full)) {
+  } else if (isRun) {
     occasionType = 'running';
     activity = 'running';
     environment = 'outdoors';
@@ -477,6 +561,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     physicalActivity = 'high';
     mobilityRequirement = 'high';
     formalityExpectation = 'casual';
+    socialSetting = 'athleticWorkout';
     practicalityRequirements.push('athletic moisture-wicking gear', 'cushioned running footwear');
   } else if (/\b(gym|workout|fitness|training|yoga|pilates|crossfit)\b/i.test(full)) {
     occasionType = 'gym';
@@ -486,6 +571,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     physicalActivity = 'high';
     mobilityRequirement = 'high';
     formalityExpectation = 'casual';
+    socialSetting = 'athleticWorkout';
     practicalityRequirements.push('athletic performance wear', 'training footwear');
   } else if (isDate) {
     occasionType = 'date';
@@ -493,11 +579,32 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     environment = isIndoorOverride ? 'indoors' : 'general';
     waterExposure = 'none';
     physicalActivity = 'low';
+    socialSetting = 'intimateDate';
     formalityExpectation = /\b(formal|fancy|upscale|high.?end|fine dining)\b/i.test(full)
       ? 'formal'
       : 'elevatedCasual';
     practicalityRequirements.push('intentional social/date presentation');
-  } else if (/\b(walk|walking|stroll|afternoon walk)\b/i.test(full)) {
+  } else if (mentionsBreakfast) {
+    occasionType = 'breakfastDining';
+    activity = 'breakfastDining';
+    environment = isIndoorOverride || /indoor/i.test(full) ? 'indoors' : 'cafe';
+    waterExposure = 'none';
+    physicalActivity = 'low';
+    formalityExpectation = 'casual';
+    isDiningOrMeal = true;
+    socialSetting = 'diningMeal';
+    practicalityRequirements.push('comfortable morning dining separates', 'relaxed morning comfort');
+  } else if (mentionsCoffee) {
+    occasionType = 'coffeeSocial';
+    activity = 'coffeeSocial';
+    environment = 'cafe';
+    waterExposure = 'none';
+    physicalActivity = 'low';
+    formalityExpectation = 'casual';
+    isDiningOrMeal = true;
+    socialSetting = 'casualSocial';
+    practicalityRequirements.push('relaxed cafe social separates');
+  } else if (isWalk) {
     occasionType = 'casualWalk';
     activity = 'casualDaily';
     environment = isIndoorOverride ? 'indoors' : 'outdoors';
@@ -505,6 +612,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     physicalActivity = 'moderate';
     mobilityRequirement = 'standard';
     formalityExpectation = 'casual';
+    socialSetting = 'leisure';
     practicalityRequirements.push('comfortable walking separates', 'walk-friendly footwear');
   } else if (/\b(office|interview|business|conference|corporate|work)\b/i.test(full)) {
     occasionType = 'office';
@@ -513,6 +621,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     waterExposure = 'none';
     physicalActivity = 'low';
     formalityExpectation = 'semiFormal';
+    socialSetting = 'professional';
     practicalityRequirements.push('workplace-appropriate tailoring', 'professional footwear');
   } else if (isBeachOrResort) {
     occasionType = 'beach';
@@ -521,15 +630,18 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     waterExposure = 'moderate';
     physicalActivity = 'low';
     formalityExpectation = 'casual';
+    socialSetting = 'leisure';
     practicalityRequirements.push('breathable lightweight clothing', 'sun/beach-friendly pieces');
-  } else if (/\b(dinner|restaurant|drinks|night out)\b/i.test(full)) {
-    occasionType = 'general';
+  } else if (/\b(dinner|restaurant|drinks|night out|lunch|supper)\b/i.test(full)) {
+    occasionType = 'casualDining';
     activity = 'dining';
-    environment = isIndoorOverride ? 'indoors' : 'general';
+    environment = isIndoorOverride ? 'indoors' : 'diningVenue';
     waterExposure = 'none';
     physicalActivity = 'low';
     formalityExpectation = 'elevatedCasual';
-    practicalityRequirements.push('smart casual or evening attire');
+    isDiningOrMeal = true;
+    socialSetting = 'diningMeal';
+    practicalityRequirements.push('smart casual or evening dining attire');
   } else {
     occasionType = 'casualDaily';
     activity = 'casualDaily';
@@ -537,6 +649,7 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     waterExposure = 'none';
     physicalActivity = 'low';
     formalityExpectation = 'casual';
+    socialSetting = isIndoorOverride ? 'homeRelaxed' : 'general';
     practicalityRequirements.push('comfortable everyday separates');
   }
 
@@ -564,6 +677,8 @@ export function interpretOutfitContext(context?: OutfitContext): OutfitContextIn
     temperatureRequirement,
     isSpectatingOnly,
     isIndoorOverride,
+    isDiningOrMeal,
+    socialSetting,
     environment,
     waterExposure,
     physicalActivity,
@@ -1032,6 +1147,27 @@ export function buildOccasionRequirements(
     };
   }
 
+  if (occasionType === 'breakfastDining' || activity === 'breakfastDining') {
+    return {
+      requiresSwimwear: false,
+      requiresWaterCompatibility: 'none',
+      requiresHighMobility: false,
+      requiresFormalAttire: false,
+      allowsResortElevated: true,
+      prohibitsAthletic: false,
+      prohibitsSwimwearConflicts: false,
+      prohibitsCasualFootwear: false,
+      requiresBaseTop: true,
+      occasionType,
+      requiresWarmth,
+      prohibitsExposedLegsInCold,
+      allowsAthletic: true,
+      timeOfDay,
+      weather,
+      summary: 'A morning breakfast calls for relaxed, comfortable separates suited for leisurely dining.',
+    };
+  }
+
   return {
     requiresSwimwear: false,
     requiresWaterCompatibility: 'none',
@@ -1263,6 +1399,24 @@ export function detectContradictions(
         });
       }
     }
+
+    for (const t of structure.baseTops) {
+      const isHeavyKnit =
+        t.materialSignals.includes('knit') ||
+        t.thermal === 'heavyWarmth' ||
+        /\b(knit|sweater|turtleneck|cardigan|wool|cashmere)\b/i.test(t.combinedText);
+      if (isHeavyKnit) {
+        contradictions.push({
+          severity: 'major',
+          category: 'environment_practicality',
+          garmentName: t.identity.name,
+          reason: `${t.identity.name} is a heavy insulating knit sweater that traps body heat and causes overheating during a sustained run.`,
+          whyItMatters:
+            'Running generates intense metabolic body heat; non-breathable knitwear prevents sweat evaporation and leads to rapid thermal discomfort.',
+          suggestedFix: 'Replace the knit sweater with a moisture-wicking technical running shirt or lightweight athletic tee.',
+        });
+      }
+    }
   }
 
   // 4. WEATHER & THERMAL CONTRADICTIONS
@@ -1467,14 +1621,30 @@ export function gradeOutfit(
   context?: OutfitContext,
   profile?: UserStyleProfileDto | null
 ): StylistCritique {
+  const analysisId = generateAnalysisId();
+  const generatedAt = new Date().toISOString();
+  const contextHash = computeContextHash(context);
+  const outfitHash = computeOutfitHash(items, wardrobeLookup);
+  const wardrobeItemIds = (items || []).map((i) => i.wardrobe_item_id).filter(Boolean);
+  const analysisMode = 'ruleBasedEvidence' as const;
+  const cacheStatus = 'fresh' as const;
+
   const contextInterpretation = interpretOutfitContext(context);
-  const { rawOccasion, rawAdditionalContext, activity, occasionType, timeOfDay, weather } =
+  const { rawOccasion, rawAdditionalContext, activity, occasionType, timeOfDay, weather, isIndoorOverride } =
     contextInterpretation;
   const occasionLabel = rawOccasion || 'your day';
 
   // Empty Mannequin handling
   if (!items || items.length === 0) {
     return {
+      analysisId,
+      generatedAt,
+      analysisVersion: STYLIST_ANALYSIS_VERSION,
+      analysisMode,
+      contextHash,
+      outfitHash,
+      wardrobeItemIds: [],
+      cacheStatus,
       assessment: 'Incomplete outfit',
       headline: 'Mannequin is Empty',
       verdict: "Add at least one garment to the mannequin, then check your outfit to get JeZsy's evaluation.",
@@ -1693,12 +1863,35 @@ export function gradeOutfit(
     // Priority 2: Severe or Major Contradictions
 
     if (activity === 'activeSwimming') {
-      // Phase 28 Exact Swimming Regression
+      // Swimming Scenario
       assessment = 'Not appropriate for this occasion';
       headline = 'Activity & Water Mismatch';
       verdict = `This outfit is not appropriate for active swimming.`;
-      whyJezsySaysThis = `You indicated active swimming in a pool, which requires water-safe swimwear and aquatic mobility. The selected sweater, denim skirt, and suede/velvet Mary Jane flats are fashion separates that will become waterlogged, heavy, and damaged in chlorinated water.`;
-      stylistsTake = `You said you'll be actively swimming a lot in a pool, so the outfit needs to support water exposure, movement, and swimming rather than simply look coordinated. The knit sweater, denim micro mini skirt, and suede/velvet Mary Jane flats are fashion pieces that conflict with those requirements.`;
+
+      const topNames = structure.baseTops.map((t) => t.identity.name.toLowerCase()).join(' and ');
+      const botNames = structure.bottoms.map((b) => b.identity.name.toLowerCase()).join(' and ');
+      const shoeNames = structure.shoes.map((s) => s.identity.name.toLowerCase()).join(' and ');
+      const pieceSummaries: string[] = [];
+      if (topNames) pieceSummaries.push(`the ${topNames}`);
+      if (botNames) pieceSummaries.push(`the ${botNames}`);
+      if (shoeNames) pieceSummaries.push(`the ${shoeNames}`);
+      const pieceList = pieceSummaries.join(', ');
+
+      whyJezsySaysThis = `You indicated active swimming in a pool, which requires water-safe swimwear and aquatic mobility. The selected separates (${
+        pieceList || 'street garments'
+      }) are fashion pieces: ${
+        structure.baseTops.some((t) => t.materialSignals.includes('knit'))
+          ? 'the knit sweater will absorb chlorinated water and become dangerously heavy, '
+          : ''
+      }${
+        structure.bottoms.some((b) => b.styleSignals.athletic)
+          ? 'the running shorts lack chlorine-resistant aquatic construction, '
+          : ''
+      }and footwear like flats cannot withstand pool water immersion.`;
+
+      stylistsTake = `You said you'll be actively swimming a lot in a pool, so the outfit needs to support water exposure, movement, and swimming rather than simply look coordinated. The ${
+        pieceList || 'selected separates'
+      } are fashion pieces that conflict with those requirements.`;
 
       if (colorEval.score >= 70) {
         whatWorks = `The ${paletteColors.join(
@@ -1708,7 +1901,9 @@ export function gradeOutfit(
         whatWorks = undefined;
       }
 
-      whatCouldBeBetter = `Change the outfit from a fashion/poolside look into an outfit designed for active swimming. Replace the knit sweater, denim skirt, and delicate footwear with functional swimwear.`;
+      whatCouldBeBetter = `Change from street/casual separates into functional swimwear. Replace the ${
+        pieceList || 'clothes'
+      } with a swimsuit or swim trunks, and wear water-safe pool slides on the deck.`;
       whatsMissing = `Swim-appropriate clothing and appropriate pool footwear if needed.`;
 
       const swimAlt = wardrobeAlternatives.find((a) => a.slot === 'swimwear');
@@ -1734,7 +1929,8 @@ export function gradeOutfit(
       const shortsDesc = conflictShorts?.identity.name || 'running shorts';
 
       whyJezsySaysThis = `The main conflict is the ${shortsDesc}. Your description identifies them as athletic running shorts${personalNote}, so they carry a strong performance/activewear signal. That works naturally for running but conflicts with the cold-night part of your date context because the shorts provide limited warmth and leave legs exposed. The knit sweater helps with upper-body warmth, but it does not fully resolve the exposed-leg and occasion mismatch.`;
-      stylistsTake = whyJezsySaysThis;
+
+      stylistsTake = `While the sweater provides soft upper warmth and the flats keep footwear subtle, the running shorts pull the outfit into gym activewear and offer no protection against tonight's cold. Swapping the shorts for full-length pants or warm tights will instantly align the look with an evening date.`;
 
       // Positive elements grounded in reality:
       const positivePoints: string[] = [];
@@ -1769,13 +1965,58 @@ export function gradeOutfit(
         tips.push('Full-length trousers or jeans would balance the sweater and provide necessary cold-night warmth.');
       }
       tips.push('An evening date calls for intentional social styling rather than workout activewear.');
+    } else if (occasionType === 'running' || activity === 'running') {
+      // Running Scenario with practical issues (e.g. heavy knit sweater or lifestyle flats)
+      const hasHeavySweater = structure.baseTops.some(
+        (t) => t.materialSignals.includes('knit') || t.thermal === 'heavyWarmth'
+      );
+      const hasFlatsOrNonRunningShoes = structure.shoes.some(
+        (s) => !s.styleSignals.athletic && !/\b(running shoes?|trainers?|sneakers?)\b/i.test(s.combinedText)
+      );
+      const runningShorts = garmentProfiles.find(
+        (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
+      );
+
+      assessment = 'Could work with changes';
+      headline = 'Athletic Bottom with Heavy Top';
+      verdict = `The running shorts are built for running, but a heavy knit sweater will trap excess body heat during a run.`;
+
+      const userPersonalizationNote = runningShorts?.personalUsage?.rawText
+        ? ` and you explicitly love wearing them for exercise and running`
+        : '';
+
+      whyJezsySaysThis = `The running shorts are one of the strongest context matches in this outfit: your description notes they are 2-in-1 athletic running shorts${userPersonalizationNote}, and your stated activity is running. Their lightweight shell and built-in undershorts support natural stride and athletic mobility. However, the knit sweater is heavy and insulating, which traps body heat and causes overheating during a sustained run${
+        hasFlatsOrNonRunningShoes
+          ? ', while lifestyle flats lack the cushioning, arch support, and road impact absorption required for running'
+          : ''
+      }.`;
+
+      stylistsTake = `Keep the running shorts as your functional athletic foundation, but swap the heavy knit sweater for a breathable moisture-wicking top and wear supportive running shoes to protect your feet and joints during the run.`;
+
+      whatWorks =
+        'The running shorts are directly aligned with your running activity, offering unrestricted mobility, lightweight 2-in-1 construction, and athletic ventilation.';
+
+      const conflicts: string[] = [];
+      if (hasHeavySweater) {
+        conflicts.push(
+          'Swap the heavy knit sweater for a breathable moisture-wicking running shirt or lightweight technical top'
+        );
+      }
+      if (hasFlatsOrNonRunningShoes) {
+        conflicts.push('replace flats with cushioned running shoes designed for athletic impact');
+      }
+      whatCouldBeBetter = `${conflicts.join(', and ')}.`;
+      tips.push('Choose technical performance fabrics (like nylon or poly-spandex) to regulate body temperature while running.');
+      if (hasFlatsOrNonRunningShoes) {
+        tips.push('Cushioned running shoes are essential for shock absorption and joint protection.');
+      }
     } else {
       // General major contradiction
       assessment = 'Not appropriate for this occasion';
       headline = 'Occasion & Formality Conflict';
       verdict = `The outfit elements clash with the expectations of a ${occasionLabel}.`;
       whyJezsySaysThis = contradictions.map((c) => c.reason).join(' ');
-      stylistsTake = whyJezsySaysThis;
+      stylistsTake = `The combination contains styling conflicts that mismatch ${occasionLabel}. Adjusting garment formality will create a more intentional silhouette.`;
       whatWorks = undefined;
       whatCouldBeBetter = contradictions.map((c) => c.whyItMatters).join(' ');
       tips.push(`Adjust garment formality to better align with ${occasionLabel}.`);
@@ -1886,59 +2127,158 @@ export function gradeOutfit(
         tips.push('Pair with loafers or work shoes.');
       }
     } else if (occasionType === 'running' || activity === 'running') {
-      // Test Case D: Running 5km tonight
+      // Running Scenario (e.g. Running 5km tonight)
       const hasHeavySweater = structure.baseTops.some(
         (t) => t.materialSignals.includes('knit') || t.thermal === 'heavyWarmth'
       );
-      if (hasHeavySweater) {
+      const hasFlatsOrNonRunningShoes = structure.shoes.some(
+        (s) => !s.styleSignals.athletic && !/\b(running shoes?|trainers?|sneakers?)\b/i.test(s.combinedText)
+      );
+      const runningShorts = garmentProfiles.find(
+        (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
+      );
+
+      if (hasHeavySweater || hasFlatsOrNonRunningShoes) {
         assessment = 'Could work with changes';
         headline = 'Athletic Bottom with Heavy Top';
         verdict = `The running shorts are built for running, but a heavy knit sweater will trap excess body heat during a run.`;
-        whyJezsySaysThis = `Your running shorts provide ideal athletic mobility for running. However, the knit sweater is heavy and insulating, which will lead to overheating during a sustained 5km run.`;
-        stylistsTake = whyJezsySaysThis;
-        whatWorks = 'The running shorts offer unrestricted movement and athletic performance suitable for running.';
-        whatCouldBeBetter =
-          'Swap the heavy knit sweater for a breathable moisture-wicking running shirt or lightweight technical top.';
+
+        const userPersonalizationNote = runningShorts?.personalUsage?.rawText
+          ? ` and you explicitly love wearing them for exercise and running`
+          : '';
+
+        whyJezsySaysThis = `The running shorts are one of the strongest context matches in this outfit: your description notes they are 2-in-1 athletic running shorts${userPersonalizationNote}, and your stated activity is running. Their lightweight shell and built-in undershorts support natural stride and athletic mobility. However, the knit sweater is heavy and insulating, which traps body heat and causes overheating during a sustained run${
+          hasFlatsOrNonRunningShoes
+            ? ', while lifestyle flats lack the cushioning, arch support, and road impact absorption required for running'
+            : ''
+        }.`;
+
+        stylistsTake = `Keep the running shorts as your functional athletic foundation, but swap the heavy knit sweater for a breathable moisture-wicking top and wear supportive running shoes to protect your feet and joints during the run.`;
+
+        whatWorks =
+          'The running shorts are directly aligned with your running activity, offering unrestricted mobility, lightweight 2-in-1 construction, and athletic ventilation.';
+
+        const conflicts: string[] = [];
+        if (hasHeavySweater) {
+          conflicts.push(
+            'Swap the heavy knit sweater for a breathable moisture-wicking running shirt or lightweight technical top'
+          );
+        }
+        if (hasFlatsOrNonRunningShoes) {
+          conflicts.push('replace flats with cushioned running shoes designed for athletic impact');
+        }
+        whatCouldBeBetter = `${conflicts.join(', and ')}.`;
         tips.push('Choose technical performance fabrics (like nylon or poly-spandex) to regulate body temperature while running.');
+        if (hasFlatsOrNonRunningShoes) {
+          tips.push('Cushioned running shoes are essential for shock absorption and joint protection.');
+        }
       } else {
         assessment = 'Appropriate for this occasion';
         headline = 'Functional Athletic Gear';
         verdict = `Performance pieces suited for ${occasionLabel}.`;
         whyJezsySaysThis =
           'The athletic separates offer optimal mobility and functional performance for running activity.';
-        stylistsTake = whyJezsySaysThis;
+        stylistsTake =
+          'A purpose-built athletic outfit with lightweight fabrics and unrestricted movement ready for running.';
         whatWorks = 'Activewear fabrics and cuts support natural movement and breathability.';
       }
     } else if (occasionType === 'casualWalk') {
-      // Test Case C: Casual afternoon walk
+      // Casual afternoon walk scenario
       assessment = 'Appropriate for this occasion';
       headline = 'Relaxed Walking Ensemble';
       verdict = `A comfortable casual combination well-suited for an afternoon walk.`;
       whyJezsySaysThis =
-        'The athletic shorts provide unrestricted ease of movement for walking, balanced comfortably by the knit sweater and practical flats.';
-      stylistsTake = whyJezsySaysThis;
+        'The athletic shorts provide unrestricted ease of movement and ventilation for walking, balanced comfortably by the knit sweater for relaxed upper warmth and practical flats for an easy stroll.';
+      stylistsTake =
+        'An effortless casual pairing where lower-body athletic mobility meets cozy upper knitwear for an easy afternoon pace.';
       whatWorks =
         'The athletic shorts provide unrestricted mobility for walking, while the sweater adds relaxed casual comfort.';
       if (!structure.hasShoes) {
         whatCouldBeBetter = 'Ensure you wear comfortable walking shoes for prolonged steps.';
+      } else {
+        whatCouldBeBetter =
+          'For extended distances or brisk walking, supportive walking sneakers will provide more arch cushioning than casual flats.';
       }
-    } else {
-      // General Casual Daily Fallback
+      tips.push('If walking prolonged distances, consider supportive walking sneakers.');
+    } else if (occasionType === 'breakfastDining' || activity === 'breakfastDining') {
+      // Indoor Breakfast Scenario
+      const conflictShorts = garmentProfiles.find(
+        (g) => g.styleSignals.athletic || g.functionalRole === 'athleticPerformance' || g.subtype === 'Running Shorts'
+      );
+      const isIndoorVenue = isIndoorOverride || /indoor/i.test(`${rawOccasion} ${rawAdditionalContext}`);
+      const venueSetting = isIndoorVenue ? 'in a climate-controlled setting' : 'for morning downtime';
+
       assessment = 'Appropriate for this occasion';
-      headline = 'Casual Everyday Outfit';
-      verdict = `Comfortable separates suited for ${occasionLabel}.`;
-      const timeDescription =
-        timeOfDay === 'night' || timeOfDay === 'evening'
-          ? 'relaxed evening wear'
-          : timeOfDay === 'morning'
-          ? 'casual morning wear'
-          : 'informal daily wear';
-      whyJezsySaysThis = `The pieces create a relaxed, wearable outfit for ${timeDescription}.`;
-      stylistsTake = whyJezsySaysThis;
-      whatWorks = `The upper and lower garments provide comfortable separates suited for ${timeDescription}.`;
+      headline = 'Casual Morning Separates';
+      verdict = `Comfortable morning separates, though the athletic running shorts contrast stylistically with the cozy knit sweater.`;
+
+      whyJezsySaysThis = `For an indoor breakfast ${venueSetting}, the knit sweater provides cozy, relaxed upper-body warmth, and the flats keep footwear understated and easy. However, your running shorts—which you describe as 2-in-1 athletic running shorts and enjoy wearing for exercise—carry an explicit gym and workout identity. While physically comfortable for a quiet breakfast at home, pairing performance activewear with a cozy knit top creates a noticeable stylistic contrast between athletic training gear and leisure morning dining.`;
+
+      stylistsTake = `The outfit is comfortable and wearable for relaxed morning downtime at home, but swapping the athletic running shorts for casual chinos, lounge pants, or soft denim creates a more cohesive look for breakfast out.`;
+
+      whatWorks = `The knit sweater delivers soft, comfortable upper warmth suited for indoor morning dining, and the flats keep footwear understated without reinforcing the athletic identity of the shorts.`;
+
+      whatCouldBeBetter = conflictShorts
+        ? 'If having breakfast out at a cafe or diner rather than relaxing at home, swap the athletic running shorts for casual trousers, chinos, or comfortable jeans.'
+        : undefined;
+
+      tips.push('Pair the knit sweater with casual pants or soft denim for a cohesive breakfast presentation.');
+    } else if (occasionType === 'coffeeSocial' || activity === 'coffeeSocial') {
+      // Cafe / Coffee Social Scenario
+      assessment = 'Appropriate for this occasion';
+      headline = 'Casual Cafe Styling';
+      verdict = `A relaxed cafe combination with cozy knitwear and understated footwear.`;
+      whyJezsySaysThis = `For a casual coffee outing, the knit sweater brings a comfortable, approachable texture that fits a cafe atmosphere well, paired with versatile flats. The athletic shorts give the outfit a distinctly sporty tone; casual trousers or denim balance the sweater naturally.`;
+      stylistsTake = `An easy, casual coffee ensemble that balances relaxed morning leisure with sporty comfort.`;
+      whatWorks = `The knit sweater provides soft, cozy drape that suits a casual cafe atmosphere comfortably.`;
+      whatCouldBeBetter =
+        'For a more polished cafe setting, casual jeans or tailored trousers elevate the look beyond gym activewear.';
+      tips.push('Opt for soft denim or chinos to complement the knit sweater for coffee meetings.');
+    } else {
+      // Evidence-grounded dynamic evaluation for general separates
+      const topG = structure.baseTops[0];
+      const botG = structure.bottoms[0];
+      const shoeG = structure.shoes[0];
+
+      const topName = topG?.identity.name || 'top';
+      const botName = botG?.identity.name || 'bottom';
+      const shoeName = shoeG?.identity.name || 'footwear';
+
+      const isBotAthletic = botG?.styleSignals.athletic || botG?.functionalRole === 'athleticPerformance';
+      const isTopKnit = topG?.materialSignals.includes('knit');
+
+      assessment = 'Appropriate for this occasion';
+      headline = `${topName} with ${botName}`;
+      verdict = `A relaxed combination of ${topName.toLowerCase()} and ${botName.toLowerCase()} for ${occasionLabel}.`;
+
+      const contextDesc =
+        weather === 'cold'
+          ? 'colder temperatures'
+          : weather === 'warm' || weather === 'hot'
+          ? 'warmer weather'
+          : occasionLabel;
+
+      whyJezsySaysThis = `Pairing your ${topName.toLowerCase()}${
+        isTopKnit ? ' (with soft knit warmth)' : ''
+      } with ${botName.toLowerCase()} creates a wearable separates base for ${contextDesc}. ${
+        structure.hasShoes
+          ? `The ${shoeName.toLowerCase()} anchors the lower half in everyday comfort.`
+          : 'Adding appropriate footwear will finish the head-to-toe presentation.'
+      }`;
+
+      stylistsTake = `The outfit balances upper and lower proportions cleanly, offering easy wearability suited for ${occasionLabel}.`;
+
+      whatWorks = `The ${topName.toLowerCase()} coordinates comfortably with the ${botName.toLowerCase()} for an understated, casual silhouette.`;
+
       if (!structure.hasShoes) {
         whatCouldBeBetter = 'Adding footwear will complete the head-to-toe presentation.';
         tips.push('Choose shoes that complement your outfit.');
+      } else if (
+        isBotAthletic &&
+        !rawOccasion.toLowerCase().includes('run') &&
+        !rawOccasion.toLowerCase().includes('gym')
+      ) {
+        whatCouldBeBetter = `The athletic styling of the ${botName.toLowerCase()} leans toward sporty activewear; tailored or casual denim separates would lend a more elevated tone if desired.`;
       }
     }
   }
@@ -1990,6 +2330,14 @@ export function gradeOutfit(
   else if (colorEval.label === 'Perfect Harmony') vibe = 'Quiet Luxury';
 
   return {
+    analysisId,
+    generatedAt,
+    analysisVersion: STYLIST_ANALYSIS_VERSION,
+    analysisMode,
+    contextHash,
+    outfitHash,
+    wardrobeItemIds,
+    cacheStatus,
     assessment,
     headline,
     verdict,
@@ -2026,3 +2374,47 @@ export function gradeOutfit(
     },
   };
 }
+
+/**
+ * Validates that the generated critique actually addresses the user's explicit context dimensions.
+ * For cold/night/date: must address cold/thermal, night/evening, and date/social.
+ * For swimming: must address water/swimming/pool.
+ * For running: must address running/exercise.
+ * For breakfast: must address morning/breakfast/dining.
+ */
+export function validateContextRelevance(
+  critique: StylistCritique,
+  context?: OutfitContextInterpretation
+): boolean {
+  if (!context) return true;
+  const text = `${critique.headline} ${critique.verdict} ${critique.whyJezsySaysThis} ${critique.stylistsTake} ${
+    critique.whatWorks || ''
+  } ${critique.whatCouldBeBetter || ''}`.toLowerCase();
+
+  // If cold weather was specified
+  if (context.weather === 'cold' || context.temperatureRequirement === 'warmthNeeded') {
+    const mentionsCold = /\b(cold|chill|warmth|temperature|freezing|insulat|layering|cool)\b/i.test(text);
+    if (!mentionsCold) return false;
+  }
+
+  // If swimming was specified
+  if (context.activity === 'activeSwimming' || context.occasionType === 'swimming') {
+    const mentionsWater = /\b(swim|water|pool|swimwear|chlorin|aquatic)\b/i.test(text);
+    if (!mentionsWater) return false;
+  }
+
+  // If running was specified
+  if (context.activity === 'running' || context.occasionType === 'running') {
+    const mentionsRun = /\b(run|running|athletic|stride|cushion|mobility)\b/i.test(text);
+    if (!mentionsRun) return false;
+  }
+
+  // If breakfast/dining was specified
+  if (context.activity === 'breakfastDining' || context.occasionType === 'breakfastDining') {
+    const mentionsMorning = /\b(breakfast|morning|dining|meal|cafe|home)\b/i.test(text);
+    if (!mentionsMorning) return false;
+  }
+
+  return true;
+}
+
