@@ -62,6 +62,10 @@ export function ProductCard({
     ? `Only ${stock} left`
     : null;
 
+  const restockDateStr = outOfStock && (product as any).restock_date
+    ? `Restock Expected: ${new Date((product as any).restock_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+    : null;
+
   const stockColor = outOfStock ? colors.error : lowStock ? colors.warning : colors.secondaryText;
 
   const accessibilityLabel = [
@@ -188,7 +192,9 @@ export function ProductCard({
           ) : null}
 
           {showStock && outOfStock ? (
-            <Text style={styles.notifyText}>Notify me when available</Text>
+            <Text style={styles.notifyText}>
+              {restockDateStr || 'Notify me when available'}
+            </Text>
           ) : showStock && stockLabel ? (
             <Text style={[styles.stock, { color: stockColor }]}>{stockLabel}</Text>
           ) : null}

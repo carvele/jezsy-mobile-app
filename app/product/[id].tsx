@@ -644,6 +644,14 @@ export default function ProductDetailScreen() {
             )}
           </View>
 
+          {(product as any).restock_date && selectedSizeOutOfStock && (
+            <View style={{ marginBottom: 20 }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: colors.warning }}>
+                Restock Expected: {new Date((product as any).restock_date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </View>
+          )}
+
           {/* Colour is a variant selection, not merely a product attribute. */}
           {colorsList.length > 0 && (
             <View style={styles.section} accessibilityRole="radiogroup" accessibilityLabel="Colour options">
