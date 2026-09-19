@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -380,19 +380,19 @@ export default function ReservationsScreen() {
           zero matches must keep showing the row, or switching back to "all"
           becomes impossible once a tab comes up empty. */}
       {statusCounts.all > 0 && (
-        <FlatList
+        <ScrollView
           horizontal
-          data={STATUS_FILTERS}
-          keyExtractor={(f) => f}
           showsHorizontalScrollIndicator={false}
           style={styles.filterRow}
           contentContainerStyle={styles.filterRowContent}
-          renderItem={({ item: filter }) => {
+        >
+          {STATUS_FILTERS.map((filter) => {
             const isActive = activeFilter === filter;
             const label = filterLabel(filter);
             const count = statusCounts[filter] ?? 0;
             return (
               <TouchableOpacity
+                key={filter}
                 onPress={() => handleFilterChange(filter)}
                 style={[
                   styles.filterChip,
@@ -432,8 +432,8 @@ export default function ReservationsScreen() {
                 )}
               </TouchableOpacity>
             );
-          }}
-        />
+          })}
+        </ScrollView>
       )}
 
       {loading && !refreshing && reservations.length === 0 ? (

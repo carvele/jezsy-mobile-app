@@ -42,7 +42,7 @@ export default function PaymentScreen() {
         showAlert(
           'Payment received',
           'Your payment has been received and your reservation has been updated.',
-          [{ text: 'OK', onPress: () => router.replace('/reservations') }],
+          [{ text: 'OK', onPress: () => router.replace('/reservations?status=toPay') }],
         );
         return;
       }
@@ -52,7 +52,7 @@ export default function PaymentScreen() {
         finalStatus === 'failed'
           ? 'Your payment did not go through. You can try again from the reservation.'
           : 'We have not seen the payment yet. If you completed it, it will appear on the reservation shortly.',
-        [{ text: 'OK', onPress: () => router.replace('/reservations') }],
+        [{ text: 'OK', onPress: () => router.replace('/reservations?status=toPay') }],
       );
     },
     [router],

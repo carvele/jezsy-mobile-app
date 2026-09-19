@@ -38,7 +38,7 @@ export default function PaymentReturnScreen() {
         Alert.alert(
           'Payment received',
           'Your payment has been received and your reservation has been updated.',
-          [{ text: 'OK', onPress: () => router.replace('/reservations') }],
+          [{ text: 'OK', onPress: () => router.replace('/reservations?status=toPay') }],
         );
         return;
       }
@@ -48,7 +48,7 @@ export default function PaymentReturnScreen() {
         finalStatus === 'failed'
           ? 'Your payment did not go through. You can try again from the reservation.'
           : 'We have not seen the payment yet. If you completed it, it will appear on the reservation shortly.',
-        [{ text: 'OK', onPress: () => router.replace('/reservations') }],
+        [{ text: 'OK', onPress: () => router.replace('/reservations?status=toPay') }],
       );
     },
     [router],
@@ -107,7 +107,7 @@ export default function PaymentReturnScreen() {
 
     (async () => {
       if (!paymentId || !/^[0-9a-f-]{36}$/i.test(paymentId)) {
-        router.replace('/reservations');
+        router.replace('/reservations?status=toPay');
         return;
       }
 
@@ -120,7 +120,7 @@ export default function PaymentReturnScreen() {
       }
       if (cancelled) return;
       if (!current) {
-        router.replace('/reservations');
+        router.replace('/reservations?status=toPay');
         return;
       }
 
