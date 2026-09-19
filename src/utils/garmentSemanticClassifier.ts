@@ -237,6 +237,7 @@ const STYLE_SIGNALS: { pattern: RegExp; label: string }[] = [
 ];
 
 const ACTIVITY_SIGNALS: { pattern: RegExp; label: string }[] = [
+  // Physical / Athletic (preserved)
   { pattern: /\brunning\b/i,   label: 'Running' },
   { pattern: /\bjogging\b/i,   label: 'Running' },
   { pattern: /\bmarathon\b/i,  label: 'Running' },
@@ -253,7 +254,19 @@ const ACTIVITY_SIGNALS: { pattern: RegExp; label: string }[] = [
   { pattern: /\btennis\b/i,    label: 'Tennis' },
   { pattern: /\byoga\b/i,      label: 'Yoga' },
   { pattern: /\bcycling\b/i,   label: 'Cycling' },
+  { pattern: /\bbiking\b/i,    label: 'Cycling' },
   { pattern: /\bloung(?:ing|e)?\b/i, label: 'Lounging' },
+
+  // Everyday / Lifestyle / Professional (enhanced)
+  { pattern: /\b(?:team|client|office|business|staff|board|conference)?\s*meetings?\b/i, label: 'Meetings' },
+  { pattern: /\bpresentation\b/i,  label: 'Meetings' },
+  { pattern: /\bconference\b/i,    label: 'Meetings' },
+  { pattern: /\b(?:office\s+work|at\s+work|for\s+work|working)\b/i, label: 'Work' },
+  { pattern: /\b(?:travel(?:ing|ling)?|airport\s+travel|going\s+on\s+a\s+trip|business\s+travel)\b/i, label: 'Travel' },
+  { pattern: /\b(?:dining|dinner|going\s+to\s+dinner|restaurants?|going\s+out\s+to\s+eat)\b/i, label: 'Dining' },
+  { pattern: /\b(?:school|classes?|studying|university|college)\b/i, label: 'School' },
+  { pattern: /\b(?:errands?|grocery\s+shopping|shopping)\b/i, label: 'Errands' },
+  { pattern: /\b(?:social\s+gathering|gala|party)\b/i, label: 'Events' },
 ];
 
 const MATERIAL_SIGNALS: { pattern: RegExp; label: string }[] = [
@@ -299,6 +312,71 @@ function matchSubtypeInTable(text: string, table: SubtypeRow[]): { type: string;
     }
   }
   return null;
+}
+
+function sanitizeDescriptionForActivities(description: string): string {
+  return description
+    .replace(/\b(?:graphic|print|picture|image|photo|illustration|drawing)?\s*(?:shirt|tee|top|garment|clothing)?\s*(?:showing|depicting|featuring)\s+[^,.]*/gi, '')
+    .replace(/\b(?:movie|film|book|show|documentary|song)\s+(?:about|featuring)\s+[^,.]*/gi, '')
+    .replace(/\b(?:this\s+)?(?:shirt|tee|top|hoodie|sweater|garment)?\s*(?:says?|saying|text|words?|slogan|quote)\s+["']?[^,.]*["']?/gi, '')
+    .replace(/\b(?:art\s*work|patch\s*work|needle\s*work)\b/gi, '');
+}
+
+export function extractActivitiesFromWearSources(
+  whereWornOften: string,
+  userNotes: string | undefined,
+  subCategory: string,
+  description: string,
+  uniq: <T>(arr: T[]) => T[]
+): string[] {
+  const results: string[] = [];
+
+  // 1. Direct user wear statement: Where I Wear This (authoritative primary input)
+  const whereWorn = (whereWornOften || '').trim();
+  if (whereWorn) {
+    for (const s of ACTIVITY_SIGNALS) {
+      if (s.pattern.test(whereWorn)) results.push(s.label);
+    }
+    if (/\bwork\b/i.test(whereWorn) && !/\bworkwear\b/i.test(whereWorn)) {
+      results.push('Work');
+    }
+  }
+
+  // 2. Personal Notes (direct user statement on wear habits)
+  const notes = (userNotes || '').trim();
+  if (notes) {
+    for (const s of ACTIVITY_SIGNALS) {
+      if (s.pattern.test(notes)) results.push(s.label);
+    }
+    if (
+      /\b(?:wear|wear(?:ing)?|use|use(?:d)?)\s+.*(?:for|to|at)\s+work\b/i.test(notes) ||
+      /\b(?:for|to|at)\s+work\b/i.test(notes)
+    ) {
+      results.push('Work');
+    }
+  }
+
+  // 3. Subcategory (concrete athletic / functional garment type)
+  const sub = (subCategory || '').trim();
+  if (sub) {
+    for (const s of ACTIVITY_SIGNALS) {
+      if (s.pattern.test(sub)) results.push(s.label);
+    }
+  }
+
+  // 4. Description with false-positive protection
+  const rawDesc = (description || '').trim();
+  if (rawDesc) {
+    const cleanDesc = sanitizeDescriptionForActivities(rawDesc);
+    for (const s of ACTIVITY_SIGNALS) {
+      if (s.pattern.test(cleanDesc)) results.push(s.label);
+    }
+    if (/\b(?:office\s+work|working|for\s+work|wear\s+to\s+work|wear\s+for\s+work)\b/i.test(cleanDesc)) {
+      results.push('Work');
+    }
+  }
+
+  return uniq(results);
 }
 
 /**
@@ -418,14 +496,17 @@ export function extractGarmentEvidence(
   if (family !== 'Unknown' && !type) {
     type = family === 'Footwear' ? 'Shoes' : family;
   }
-
   const uniq = <T>(arr: T[]): T[] => [...new Set(arr)];
 
   const style = uniq(
     STYLE_SIGNALS.filter((s) => s.pattern.test(combined)).map((s) => s.label)
   );
-  const activity = uniq(
-    ACTIVITY_SIGNALS.filter((s) => s.pattern.test(combined)).map((s) => s.label)
+  const activity = extractActivitiesFromWearSources(
+    whereWornOften,
+    userNotes,
+    subCategory,
+    description,
+    uniq
   );
   const material = uniq(
     MATERIAL_SIGNALS.filter((s) => s.pattern.test(combined)).map((s) => s.label)
@@ -548,9 +629,7 @@ function extractPersonalUsage(
   uniq: <T>(arr: T[]) => T[]
 ): PersonalUsageSignal {
   const text = [whereWornOften, userNotes ?? ''].filter(Boolean).join(' ');
-  const activities = uniq(
-    ACTIVITY_SIGNALS.filter((s) => s.pattern.test(text)).map((s) => s.label)
-  );
+  const activities = extractActivitiesFromWearSources(whereWornOften, userNotes, '', '', uniq);
   return {
     activities,
     rawText: text.trim(),

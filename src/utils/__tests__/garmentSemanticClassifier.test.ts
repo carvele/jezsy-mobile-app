@@ -588,5 +588,135 @@ describe('garmentSemanticClassifier', () => {
       });
     });
   });
+
+  // =========================================================================
+  // ENHANCED ACTIVITY TAXONOMY & FALSE-POSITIVE GUARDRAILS
+  // =========================================================================
+  describe('Enhanced Activity Taxonomy & False-Positive Guardrails', () => {
+    test('Exact User Case: Office / Meetings produces Style: Office, Smart Casual and Activity: Meetings', () => {
+      const norm = normalizeGarment(
+        'Workwear / Smart Casual',
+        'Blouse',
+        'Navy Blue',
+        'Office / Meetings',
+        'Short-sleeve fitted button-down shirt with a collar and pleated front details.',
+        'I like to wear this with a jeans or denim skirt'
+      );
+
+      // Semantic structure is preserved
+      expect(norm.family).toBe('Top');
+      expect(norm.type).toBe('Blouse');
+
+      // Style classification remains intact
+      expect(norm.style).toContain('Office');
+      expect(norm.style).toContain('Smart Casual');
+
+      // Activity now properly captures Meetings
+      expect(norm.activity).toContain('Meetings');
+
+      // Personal usage rawText preserved verbatim
+      expect(norm.personalUsage.rawText).toContain('Office / Meetings');
+      expect(norm.personalUsage.rawText).toContain('I like to wear this with a jeans or denim skirt');
+      expect(norm.personalUsage.activities).toContain('Meetings');
+    });
+
+    test('Meeting single whereWornOften infers Meetings activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Shirt', '', 'Meeting', '');
+      expect(ev.activity).toContain('Meetings');
+    });
+
+    test('Team meetings whereWornOften infers Meetings activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Shirt', '', 'Team meetings', '');
+      expect(ev.activity).toContain('Meetings');
+    });
+
+    test('Client meeting whereWornOften infers Meetings activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Shirt', '', 'Client meeting', '');
+      expect(ev.activity).toContain('Meetings');
+    });
+
+    test('Office / Meetings provides both Office style and Meetings activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Shirt', '', 'Office / Meetings', '');
+      expect(ev.style).toContain('Office');
+      expect(ev.activity).toContain('Meetings');
+    });
+
+    test('Work in whereWornOften infers Work activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Shirt', '', 'Work', '');
+      expect(ev.activity).toContain('Work');
+    });
+
+    test('Work and meetings in whereWornOften infers both Work and Meetings', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Shirt', '', 'Work and meetings', '');
+      expect(ev.activity).toContain('Work');
+      expect(ev.activity).toContain('Meetings');
+    });
+
+    test('I wear this for work in Personal Notes infers Work activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Shirt', '', '', '', 'I wear this for work');
+      expect(ev.activity).toContain('Work');
+    });
+
+    test('Business travel in whereWornOften infers Travel activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Pants', '', 'Business travel', '');
+      expect(ev.activity).toContain('Travel');
+    });
+
+    test('Going out to dinner in whereWornOften infers Dining activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Dress', '', 'Going out to dinner', '');
+      expect(ev.activity).toContain('Dining');
+    });
+
+    test('School / classes in whereWornOften infers School activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Hoodie', '', 'School / classes', '');
+      expect(ev.activity).toContain('School');
+    });
+
+    test('I wear this for running in Personal Notes infers Running activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Tops', '', '', '', 'I wear this for running');
+      expect(ev.activity).toContain('Running');
+    });
+
+    test('I wear this for the gym in Personal Notes infers Gym activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Tops', '', '', '', 'I wear this for the gym');
+      expect(ev.activity).toContain('Gym');
+    });
+
+    test('I wear this when swimming in Personal Notes infers Swimming activity', () => {
+      const ev = extractGarmentEvidence('Clothing', 'Swimwear', '', '', '', 'I wear this when swimming');
+      expect(ev.activity).toContain('Swimming');
+    });
+
+    // Negative / False-Positive Tests
+    test('Negative Test: Graphic shirt showing a person running does NOT infer Running', () => {
+      const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', '', 'Graphic shirt showing a person running.');
+      expect(ev.activity).toEqual([]);
+    });
+
+    test('Negative Test: Movie about traveling in description does NOT infer Travel', () => {
+      const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', '', 'Movie about traveling.');
+      expect(ev.activity).toEqual([]);
+    });
+
+    test('Negative Test: This shirt says WORK in description does NOT infer Work', () => {
+      const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', '', 'This shirt says WORK.');
+      expect(ev.activity).toEqual([]);
+    });
+
+    test('Contextual Support: This shirt says WORK with Work in whereWornOften correctly infers Work', () => {
+      const ev = extractGarmentEvidence('Tops', 'T-Shirt', '', 'Work', 'This shirt says WORK.');
+      expect(ev.activity).toContain('Work');
+    });
+
+    test('Preserves all existing athletic and outdoor activities without regression', () => {
+      expect(extractGarmentEvidence('Clothing', 'Shorts', '', 'Running', '').activity).toContain('Running');
+      expect(extractGarmentEvidence('Clothing', 'Shorts', '', 'Gym', '').activity).toContain('Gym');
+      expect(extractGarmentEvidence('Clothing', 'Shorts', '', 'Yoga', '').activity).toContain('Yoga');
+      expect(extractGarmentEvidence('Clothing', 'Shorts', '', 'Swimming', '').activity).toContain('Swimming');
+      expect(extractGarmentEvidence('Clothing', 'Shorts', '', 'Hiking', '').activity).toContain('Hiking');
+      expect(extractGarmentEvidence('Clothing', 'Shorts', '', 'Cycling', '').activity).toContain('Cycling');
+      expect(extractGarmentEvidence('Clothing', 'Shorts', '', 'Lounging', '').activity).toContain('Lounging');
+    });
+  });
 });
 
