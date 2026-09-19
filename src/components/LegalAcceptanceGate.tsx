@@ -16,6 +16,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/src/context/AuthContext';
 import { LegalAcceptanceStatus, legalService } from '../services/legalService';
 import { LegalReaderModal } from './LegalReaderModal';
+import { showAlert } from '../utils/alert';
 
 interface LegalAcceptanceGateProps {
   status: LegalAcceptanceStatus | null;
@@ -55,6 +56,27 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
   const handleSupportNavigation = () => {
     // Navigate internally to customer support messages
     router.push('/messages' as any);
+  };
+
+  const handleConfirmSignOut = () => {
+    showAlert(
+      'Sign Out',
+      'Are you sure you want to sign out of your account?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await signOut();
+            } catch (err) {
+              console.error('Sign out failed:', err);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleAccept = async () => {
@@ -129,7 +151,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
 
             <TouchableOpacity
               style={styles.signOutLink}
-              onPress={() => signOut()}
+              onPress={handleConfirmSignOut}
               accessibilityRole="button"
               accessibilityLabel="Sign out"
             >
@@ -365,7 +387,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => signOut()}
+              onPress={handleConfirmSignOut}
               accessibilityRole="button"
               accessibilityLabel="Sign out"
             >
