@@ -34,6 +34,22 @@ const CREDITS: CreditItem[] = [
     license: 'CC BY 4.0',
     licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
   },
+  {
+    id: 'basic-shoulder-bag',
+    title: 'Basic shoulder bag',
+    author: 'Hall1tsija',
+    authorUrl: 'https://sketchfab.com/Hall1tsija',
+    license: 'CC BY 4.0',
+    licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
+  },
+  {
+    id: 'pearl-necklace',
+    title: 'Pearl Necklace',
+    author: 'C.U.V',
+    authorUrl: 'https://sketchfab.com/C.U.V',
+    license: 'CC BY 4.0',
+    licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
+  },
 ];
 
 export default function CreditsScreen() {
