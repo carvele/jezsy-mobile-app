@@ -1566,8 +1566,6 @@ export default function ExploreScreen() {
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
                   contentContainerStyle={[styles.productList, { paddingBottom: bottomInset }]}
-                  onEndReached={loadMore}
-                  onEndReachedThreshold={0.5}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderCategorySwitcher()}

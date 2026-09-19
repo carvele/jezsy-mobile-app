@@ -1785,6 +1785,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           discount_percentage: number | null
+          fabric: string | null
           fit_and_sizing: string | null
           garment_metadata: Json | null
           id: string
@@ -1803,6 +1804,7 @@ export type Database = {
           pattern: string | null
           price: number | null
           rating: number | null
+          restock_date: string | null
           review_count: number | null
           sale_price: number | null
           season: string | null
@@ -1832,6 +1834,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           discount_percentage?: number | null
+          fabric?: string | null
           fit_and_sizing?: string | null
           garment_metadata?: Json | null
           id?: string
@@ -1850,6 +1853,7 @@ export type Database = {
           pattern?: string | null
           price?: number | null
           rating?: number | null
+          restock_date?: string | null
           review_count?: number | null
           sale_price?: number | null
           season?: string | null
@@ -1879,6 +1883,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           discount_percentage?: number | null
+          fabric?: string | null
           fit_and_sizing?: string | null
           garment_metadata?: Json | null
           id?: string
@@ -1897,6 +1902,7 @@ export type Database = {
           pattern?: string | null
           price?: number | null
           rating?: number | null
+          restock_date?: string | null
           review_count?: number | null
           sale_price?: number | null
           season?: string | null
@@ -3591,6 +3597,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           discount_percentage: number | null
+          fabric: string | null
           fit_and_sizing: string | null
           garment_metadata: Json | null
           id: string
@@ -3609,6 +3616,7 @@ export type Database = {
           pattern: string | null
           price: number | null
           rating: number | null
+          restock_date: string | null
           review_count: number | null
           sale_price: number | null
           season: string | null
@@ -3945,6 +3953,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           discount_percentage: number | null
+          fabric: string | null
           fit_and_sizing: string | null
           garment_metadata: Json | null
           id: string
@@ -3963,6 +3972,7 @@ export type Database = {
           pattern: string | null
           price: number | null
           rating: number | null
+          restock_date: string | null
           review_count: number | null
           sale_price: number | null
           season: string | null
