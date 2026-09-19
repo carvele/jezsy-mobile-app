@@ -16,6 +16,7 @@ import { getMyUnratedItems } from '@/src/services/reservationService';
 import { SystemTourModal } from '@/src/features/systemTour/SystemTourModal';
 import { useMessages } from '@/src/context/MessagesContext';
 import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
+import { ConfirmModal } from '@/src/components/ConfirmModal';
 
 export default function ProfileScreen() {
   const bottomInset = useSharedBottomInset();
@@ -97,14 +98,24 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSignOut = async () => {
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOutPress = () => {
+    setShowSignOutModal(true);
+  };
+
+  const handleConfirmSignOut = async () => {
+    setIsSigningOut(true);
     try {
+      setShowSignOutModal(false);
       await signOut();
+      showToast('You have been signed out successfully.', 'success');
     } catch (error: any) {
-      // Raw Supabase errors ("AuthApiError: ...") are not customer copy, and
-      // sign-out has no failure the customer can act on differently.
       console.error('Error signing out:', error);
       showToast('Could not sign you out. Please try again.', 'error');
+    } finally {
+      setIsSigningOut(false);
     }
   };
 
@@ -478,7 +489,7 @@ export default function ProfileScreen() {
 
           <TouchableOpacity 
           style={[styles.signOutButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={handleSignOut}
+          onPress={handleSignOutPress}
           accessibilityRole="button"
           accessibilityLabel="Sign out of your account"
         >
@@ -486,6 +497,19 @@ export default function ProfileScreen() {
           <Text style={[styles.signOutText, { color: colors.error }]}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <ConfirmModal
+        visible={showSignOutModal}
+        title="Sign Out"
+        message="Are you sure you want to sign out of your account?"
+        confirmLabel="Sign Out"
+        cancelLabel="Cancel"
+        isDestructive={true}
+        severity="LOW"
+        isLoading={isSigningOut}
+        onCancel={() => setShowSignOutModal(false)}
+        onConfirm={handleConfirmSignOut}
+      />
 
       <SystemTourModal visible={showTour} onClose={() => setShowTour(false)} isReplay={true} />
     </SafeAreaView>
