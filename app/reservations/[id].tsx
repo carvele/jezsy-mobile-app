@@ -89,7 +89,7 @@ export default function ReservationDetailScreen() {
 
   const [reservation, setReservation] = useState<Reservation | null>(null);
   const [items, setItems] = useState<ReservationItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState<Date>(() => manilaCalendarDay(new Date()));
   const [rescheduleSlot, setRescheduleSlot] = useState<string | undefined>();
@@ -690,30 +690,25 @@ export default function ReservationDetailScreen() {
             and still unpaid, so this was showing a pickup pass to customers who
             owed money and hiding it from the ones who had paid. */}
         {reservationState === 'ready' && (
-          <View style={[styles.pickupCard, { backgroundColor: colors.tint }, !isPickupPassExpanded && styles.pickupCardCollapsed]}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={togglePickupPass}
-              style={[styles.pickupHeader, !isPickupPassExpanded && styles.pickupHeaderCollapsed]}
-              accessibilityRole="button"
-              accessibilityLabel={isPickupPassExpanded ? 'Collapse pickup pass' : 'Expand pickup pass'}
-              accessibilityState={{ expanded: isPickupPassExpanded }}
-            >
-              <View style={styles.pickupHeaderLeft}>
-                <IconSymbol name="checkmark.circle.fill" size={18} color={colors.onTint} />
-                <Text style={[styles.pickupTitle, { color: colors.onTint }]}>PICKUP PASS</Text>
-              </View>
-              <View style={styles.pickupHeaderRight}>
-                <Text style={[styles.pickupToggleText, { color: colors.onTint }]}>
-                  {isPickupPassExpanded ? 'Hide' : 'Show'}
-                </Text>
-                <IconSymbol
-                  name={isPickupPassExpanded ? 'chevron.up' : 'chevron.down'}
-                  size={16}
-                  color={colors.onTint}
-                />
-              </View>
-            </TouchableOpacity>
+          <View style={[styles.pickupCard, { backgroundColor: colors.tint, overflow: 'hidden' }, !isPickupPassExpanded && styles.pickupCardCollapsed]}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={togglePickupPass}
+                style={[styles.pickupHeader, { justifyContent: 'space-between', paddingVertical: 16 }]}
+                accessibilityRole="button"
+                accessibilityLabel={isPickupPassExpanded ? 'Hide pickup pass' : 'Show pickup pass'}
+                accessibilityState={{ expanded: isPickupPassExpanded }}
+              >
+                <View style={styles.pickupHeaderLeft}>
+                  <IconSymbol name={isPickupPassExpanded ? 'chevron.up' : 'checkmark'} size={18} color={colors.onTint} />
+                  <Text style={[styles.pickupTitle, { color: colors.onTint }]}>
+                    {isPickupPassExpanded ? 'Hide Pickup Pass' : 'Show Pickup Pass'}
+                  </Text>
+                </View>
+                <View style={styles.pickupHeaderRight}>
+                  {!isPickupPassExpanded && <IconSymbol name="chevron.right" size={18} color={colors.onTint} />}
+                </View>
+              </TouchableOpacity>
             {isPickupPassExpanded && (
               <>
                 {reservation.pickup_token && (
@@ -736,44 +731,56 @@ export default function ReservationDetailScreen() {
           </Text>
         )}
 
-        {displayItems.map((item, index) => (
-          <View
-            key={item.id ?? `${item.product_id}-${index}`}
-            style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-          >
-            <Image
-              source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
-              style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]}
-              contentFit="cover"
-            />
-            <View style={styles.productInfo}>
-              <Text style={[styles.productName, { color: colors.text }]} numberOfLines={2}>
-                {item.product_name}
-              </Text>
-              <Text style={[styles.productDetails, { color: colors.secondaryText }]}>
-                Size: {item.size || 'Standard'} • Color: {item.color || 'Default'}
-                {(item.quantity ?? 1) > 1 ? ` • Qty ${item.quantity}` : ''}
-              </Text>
-              {item.product_id && (
-                <Link href={`/product/${item.product_id}`} asChild>
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`View ${item.product_name}`}>
-                    <Text style={[styles.viewProductLink, { color: colors.tint }]}>View Product</Text>
-                  </TouchableOpacity>
-                </Link>
-              )}
-            </View>
-          </View>
-        ))}
+        {displayItems.map((item, index) => {
+            const cardContent = (
+              <View
+                style={[styles.productCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              >
+                <Image
+                  source={item.image_url ? { uri: item.image_url } : require('@/assets/images/partial-react-logo.png')}
+                  style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]}
+                  contentFit="cover"
+                />
+                <View style={styles.productInfo}>
+                  <Text style={[styles.productName, { color: colors.text }]} numberOfLines={2}>
+                    {item.product_name}
+                  </Text>
+                  <Text style={[styles.productDetails, { color: colors.secondaryText }]}>
+                    Size {item.size || 'One Size'} &middot; {item.color || 'Default'}
+                    {(item.quantity ?? 1) > 1 ? ` &middot; Qty ${item.quantity}` : ''}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+                    <Text style={[styles.viewProductLink, { color: colors.tint, marginTop: 0 }]}>View product</Text>
+                    <IconSymbol name="chevron.right" size={14} color={colors.tint} style={{ marginLeft: 4 }} />
+                  </View>
+                </View>
+              </View>
+            );
+
+            return item.product_id ? (
+              <Link key={item.id ?? `${item.product_id}-${index}`} href={`/product/${item.product_id}`} asChild>
+                <TouchableOpacity activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`View ${item.product_name}`}>
+                  {cardContent}
+                </TouchableOpacity>
+              </Link>
+            ) : (
+              <View key={item.id ?? `${item.product_id}-${index}`}>
+                {cardContent}
+              </View>
+            );
+          })}
 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.lg }}>
           <TouchableOpacity
-            onPress={handleAskAboutReservation}
-            accessibilityRole="button"
-            accessibilityLabel="Ask the shop owner about this reservation"
-            style={{ paddingVertical: Spacing.xs }}
-          >
-            <Text style={[styles.viewProductLink, { color: colors.tint, marginTop: 0 }]}>Ask about this reservation</Text>
-          </TouchableOpacity>
+              onPress={handleAskAboutReservation}
+              accessibilityRole="button"
+              accessibilityLabel="Ask the shop owner about this reservation"
+              style={{ paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+            >
+              <IconSymbol name="bubble.left.and.bubble.right" size={20} color={colors.tint} />
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', flex: 1 }}>Ask about this reservation</Text>
+              <IconSymbol name="chevron.right" size={16} color={colors.secondaryText} />
+            </TouchableOpacity>
 
           {reservationState === 'completed' &&
             (!refundRequest || refundRequest.status === 'rejected') &&
@@ -847,17 +854,24 @@ export default function ReservationDetailScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Request a new appointment time"
                 accessibilityHint="Suggests a new date and time for the shop to approve"
+                style={{ flexDirection: 'row', alignItems: 'center' }}
               >
                 <Text style={[styles.rescheduleLink, { color: colors.tint }]}>Request new time</Text>
+                  <IconSymbol name="chevron.right" size={14} color={colors.tint} style={{ marginLeft: 4 }} />
               </TouchableOpacity>
             )}
           </View>
-          <View style={[styles.infoRow, { marginTop: Spacing.md }]}>
-            <IconSymbol name="calendar" size={18} color={colors.tint} />
-            <Text style={[styles.infoText, { color: colors.text }]}>
-              {dateStr} at {formatTimeLabel(reservation.appointment_time)}
-            </Text>
-          </View>
+          <View style={[styles.infoRow, { marginTop: Spacing.md, alignItems: 'flex-start' }]}>
+              <IconSymbol name="calendar" size={20} color={colors.tint} />
+              <View>
+                <Text style={{ color: colors.text, fontSize: 15 }}>
+                  {dateStr}
+                </Text>
+                <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: 2 }}>
+                  {formatTimeLabel(reservation.appointment_time)}
+                </Text>
+              </View>
+            </View>
 
           {reschedulePending && (
             <View style={[styles.pendingRequest, { borderColor: colors.border }]}>
@@ -1588,7 +1602,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
   },
-  pickupTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1 },
+  pickupTitle: { fontSize: 15, fontWeight: '700', letterSpacing: 0.5 },
   pickupToggleText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
   pickupQrWrap: { alignSelf: 'center', padding: Spacing.md, borderRadius: Radius.md, backgroundColor: '#FFFFFF', marginBottom: Spacing.lg },
   pickupRef: { fontSize: 28, fontWeight: '900', letterSpacing: 2, marginBottom: Spacing.sm, textAlign: 'center' },
@@ -1602,9 +1616,9 @@ const styles = StyleSheet.create({
   },
   productImage: { width: 100, height: 120 },
   productInfo: { flex: 1, padding: Spacing.lg, justifyContent: 'center', gap: Spacing.xs },
-  productName: { ...Type.bodyLargeStrong },
-  productDetails: { ...Type.caption },
-  viewProductLink: { fontSize: 13, fontWeight: '600', marginTop: Spacing.xs },
+  productName: { ...Type.bodyLargeStrong, fontSize: 17 },
+  productDetails: { fontSize: 15, marginTop: 4 },
+  viewProductLink: { fontSize: 15, fontWeight: '600', marginTop: Spacing.xs },
   itemsHeading: { fontSize: 13, fontWeight: '600', marginBottom: 10 },
   askRow: { marginBottom: Spacing.lg },
   sectionCard: {
@@ -1621,7 +1635,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  rescheduleLink: { fontSize: 14, fontWeight: '700' },
+  rescheduleLink: { fontSize: 15, fontWeight: '700' },
   pendingRequest: {
     flexDirection: 'row',
     // flex-start, not centre: this wraps to two or three lines and centring
@@ -1706,8 +1720,8 @@ const styles = StyleSheet.create({
   // rowText is an exact Type.body match but rowValue is 14/600, which the scale
   // has no slot for. Converting only the label would give it a lineHeight its
   // amount does not have and pull the two off a shared baseline.
-  rowText: { fontSize: 14 },
-  rowValue: { fontSize: 14, fontWeight: '600' },
+  rowText: { fontSize: 15 },
+  rowValue: { fontSize: 15, fontWeight: '600' },
   paymentStatusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
