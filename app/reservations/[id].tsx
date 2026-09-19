@@ -562,6 +562,10 @@ export default function ReservationDetailScreen() {
     }
   };
 
+  const refundPayment = useMemo(() => {
+    return payments.find((p: any) => p.refund_disbursed_at || p.refund_reference_number || p.status === 'refunded');
+  }, [payments]);
+
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
@@ -607,10 +611,6 @@ export default function ReservationDetailScreen() {
     (reservation.status || '').toLowerCase() === 'cancelled' ||
     paymentState === 'cancelled';
   const balanceDue = isBalanceSettled || isReservationCancelled ? 0 : rawBalanceDue;
-
-  const refundPayment = useMemo(() => {
-    return payments.find((p: any) => p.refund_disbursed_at || p.refund_reference_number || p.status === 'refunded');
-  }, [payments]);
 
   // Matches the dashboard's CAN_RESCHEDULE_STATUSES. The old list stopped at
   // 'confirmed', so a customer whose item was already waiting for collection
