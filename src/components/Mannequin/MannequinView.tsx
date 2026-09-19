@@ -386,7 +386,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
 
       setSaveModalVisible(false);
       setLookName('');
-      showToast(`Saved "${name}" ✨`, 'success');
+      showToast(`Saved "${name}" `, 'success');
       onRefreshWardrobe();
     } catch (err: any) {
       if (myGeneration !== saveGenerationRef.current) return;
@@ -633,7 +633,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               }
               if (sizingReady && bodyParams.isCustomProportioned) {
                 setSilhouetteMode('proportions');
-                showToast('Applied your real body measurements ✨', 'info');
+                showToast('Applied your real body measurements ', 'info');
               } else {
                 // Alert.alert is a no-op on web; navigate directly instead.
                 showToast('Set up your measurements to enable custom proportions', 'info');
@@ -649,7 +649,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               style={{ marginRight: 3 }}
             />
             <Text style={[styles.silhouettePillText, { color: silhouetteMode === 'proportions' ? colors.onTint : colors.text }]}>
-              My Body {sizingReady ? '✨' : ''}
+              My Body {sizingReady ? '' : ''}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1074,7 +1074,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               await styleProfileService.saveProfile(updatedProfile);
               showToast(
                 feedbackType === 'liked'
-                  ? 'Saved to your style preferences! ✨'
+                  ? 'Saved to your style preferences! '
                   : feedbackType === 'passed'
                   ? 'Noted! We will avoid similar pairings.'
                   : 'Great! Saved as worn outfit.',

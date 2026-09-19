@@ -1110,13 +1110,13 @@ export default function ARTryOnScreen() {
           alt="A 3D model of ${safeName}">
         </model-viewer>
         <div id="controls-bar">
-          <button onclick="adjustExposure(0.2)">☀️ Light +</button>
-          <button onclick="adjustExposure(-0.2)">🌙 Light -</button>
-          <button onclick="resetCamera()">🔄 Reset View</button>
+          <button onclick="adjustExposure(0.2)">️ Light +</button>
+          <button onclick="adjustExposure(-0.2)"> Light -</button>
+          <button onclick="resetCamera()"> Reset View</button>
         </div>
         <div id="hint">Drag to rotate &nbsp;·&nbsp; Pinch to zoom</div>
         <div id="error-state">
-          <span>📦</span>
+          <span></span>
           3D model unavailable offline.<br/>Switch to 2D overlay to preview the item.
         </div>
         <script>
@@ -1155,7 +1155,7 @@ export default function ARTryOnScreen() {
           <Text style={[styles.headerTitle, { color: '#FFF' }]}>AR Try-On</Text>
           {isDemoRig && (
             <View style={{ backgroundColor: '#FFCC00', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-              <Text style={{ color: 'black', fontSize: 10, fontWeight: 'bold' }}>⚠️ Demo rig</Text>
+              <Text style={{ color: 'black', fontSize: 10, fontWeight: 'bold' }}>️ Demo rig</Text>
             </View>
           )}
         </View>

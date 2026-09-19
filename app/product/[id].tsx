@@ -776,7 +776,7 @@ export default function ProductDetailScreen() {
                         </Text>
                       )}
                       {isRecommended && !isOutOfStock && (
-                        <Text style={[Type.caption, { color: colors.tint, marginTop: Spacing.xs, fontWeight: '700' }]}>Best fit ✨</Text>
+                        <Text style={[Type.caption, { color: colors.tint, marginTop: Spacing.xs, fontWeight: '700' }]}>Best fit </Text>
                       )}
                       {stock !== null && stock > 0 && stock <= 5 && !isRecommended && (
                         <Text style={[Type.caption, { color: colors.warning, marginTop: Spacing.xs }]}>Only {stock} left</Text>
@@ -844,7 +844,7 @@ export default function ProductDetailScreen() {
             >
               <IconSymbol name={notifyRequested ? "checkmark.circle.fill" : "bell.fill"} size={18} color={notifyRequested ? colors.secondaryText : colors.tint} />
               <Text style={[styles.notifyBtnText, { color: notifyRequested ? colors.secondaryText : colors.tint }]}>
-                {notifyRequested ? "Notification Set ✓ (Tap to cancel)" : "Notify Me When Available"}
+                {notifyRequested ? "Notification Set  (Tap to cancel)" : "Notify Me When Available"}
               </Text>
             </TouchableOpacity>
           )}
@@ -1014,7 +1014,7 @@ export default function ProductDetailScreen() {
                   color={notifyRequested ? colors.secondaryText : colors.onTint}
                 />
                 <Text style={[styles.primaryActionText, { color: notifyRequested ? colors.secondaryText : colors.onTint }]}>
-                  {notifyRequested ? "Notification Set ✓" : "Notify Me When Available"}
+                  {notifyRequested ? "Notification Set " : "Notify Me When Available"}
                 </Text>
               </View>
             </TouchableOpacity>

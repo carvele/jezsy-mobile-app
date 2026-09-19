@@ -421,7 +421,7 @@ export default function WardrobeScreen() {
             <Text style={[styles.outfitName, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
             {isMannequinStyled && (
               <Text style={{ fontSize: 10, color: colors.tint, fontWeight: '700', marginTop: 1 }}>
-                Styled on Mannequin ✨
+                Styled on Mannequin 
               </Text>
             )}
           </View>

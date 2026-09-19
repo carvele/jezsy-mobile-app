@@ -467,19 +467,19 @@ describe('chatService', () => {
   describe('toggleReaction', () => {
     test('calls merge_message_reaction with exact live parameters', async () => {
       (supabase.rpc as jest.Mock).mockResolvedValue({
-        data: { 'user-1': '❤️' },
+        data: { 'user-1': '️' },
         error: null,
       });
 
-      const result = await toggleReaction('msg-1', '❤️');
+      const result = await toggleReaction('msg-1', '️');
 
       expect(supabase.rpc).toHaveBeenCalledWith('merge_message_reaction', {
         p_message_id: 'msg-1',
-        p_emoji: '❤️',
+        p_emoji: '️',
       });
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.data).toEqual({ 'user-1': '❤️' });
+        expect(result.data).toEqual({ 'user-1': '️' });
       }
     });
 
@@ -489,7 +489,7 @@ describe('chatService', () => {
         error: new Error('RPC failure'),
       });
 
-      const result = await toggleReaction('msg-1', '❤️');
+      const result = await toggleReaction('msg-1', '️');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

@@ -158,7 +158,7 @@ export function useBodyAlignment({ onCaptureReady, onLock, context, requestedPos
     let nextInstruction = evaluation.instruction;
     if (nextState === 'SEARCHING' && !nextInstruction) nextInstruction = requestedPose === 'front' ? 'Face the camera' : 'Turn sideways';
     if (nextState === 'STABILIZING') nextInstruction = 'Hold still';
-    if (nextState === 'LOCKED') nextInstruction = '✓ Perfect — hold still';
+    if (nextState === 'LOCKED') nextInstruction = ' Perfect — hold still';
 
     const nextResult: BodyAlignmentResult = {
       state: nextState,

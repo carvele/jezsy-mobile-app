@@ -122,15 +122,15 @@ export function MeasurementGuideModal({ visible, onClose, unit }: Props) {
         {/* Quick Tips Banner */}
         <View style={[styles.tipsBanner, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.tipItem}>
-            <Text style={styles.tipIcon}>📏</Text>
+            <Text style={styles.tipIcon}></Text>
             <Text style={[styles.tipBannerText, { color: colors.text }]}>Use a soft, flexible tape measure</Text>
           </View>
           <View style={styles.tipItem}>
-            <Text style={styles.tipIcon}>✨</Text>
+            <Text style={styles.tipIcon}></Text>
             <Text style={[styles.tipBannerText, { color: colors.text }]}>Keep the tape snug but not tight</Text>
           </View>
           <View style={styles.tipItem}>
-            <Text style={styles.tipIcon}>👗</Text>
+            <Text style={styles.tipIcon}></Text>
             <Text style={[styles.tipBannerText, { color: colors.text }]}>Wear fitted undergarments</Text>
           </View>
         </View>

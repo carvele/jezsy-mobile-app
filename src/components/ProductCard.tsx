@@ -92,7 +92,15 @@ export function ProductCard({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint="Opens product details"
       >
-        <View style={[styles.imageWrap, { backgroundColor: colors.imagePlaceholder }, aspectRatio ? { aspectRatio } : undefined]}>
+        <View style={[
+          styles.imageWrap,
+          { 
+            backgroundColor: theme === 'dark' ? colors.surface : '#F7F7F7',
+            borderColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+            borderWidth: 1
+          }, 
+          aspectRatio ? { aspectRatio } : undefined
+        ]}>
           {/* An imageless product shows the tinted placeholder colour rather
               than the Expo template's React logo, which looked like a bug. */}
           {product.image_url ? (

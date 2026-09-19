@@ -314,7 +314,7 @@ export default function AccountSettingsScreen() {
                     onPress={() => setDeletionReason(r)}
                   >
                     <Text style={{ fontSize: 13, color: deletionReason === r ? colors.tint : colors.text, fontWeight: deletionReason === r ? '600' : '400' }}>
-                      {deletionReason === r ? '✓ ' : ''}{r}
+                      {deletionReason === r ? ' ' : ''}{r}
                     </Text>
                   </TouchableOpacity>
                 ))}

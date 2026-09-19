@@ -324,7 +324,7 @@ export default function OutfitBuilderScreen() {
       }
 
       setSlots(Object.fromEntries(picks) as Slots);
-      showToast('Shuffled your outfit ✨', 'success');
+      showToast('Shuffled your outfit ', 'success');
     } finally {
       setShuffling(false);
     }

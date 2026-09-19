@@ -1453,7 +1453,13 @@ export default function ReservationDetailScreen() {
         )}
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Payment</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: Spacing.lg }}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Payment</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[{ fontSize: 16, fontWeight: '700', color: paymentDisplayStatus === 'Paid in full' ? colors.success : colors.text }]}>{paymentDisplayStatus}</Text>
+              {paymentDisplayStatus === 'Paid in full' && <IconSymbol name="checkmark" size={16} color={colors.success} />}
+            </View>
+          </View>
           <View style={styles.row}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>Item Price</Text>
             <Text style={[styles.rowValue, { color: colors.text }]}>₱{(reservation.rental_price || 0).toFixed(2)}</Text>
@@ -1462,29 +1468,23 @@ export default function ReservationDetailScreen() {
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
               {(reservation.payment_type || 'Deposit') === 'Full' ? 'Amount to pay (full)' : 'Reservation Fee (50%)'}
             </Text>
-            <Text style={[styles.rowValue, { color: colors.success }]}>₱{(reservation.deposit || 0).toFixed(2)}</Text>
+            <Text style={[styles.rowValue, { color: colors.text }]}>₱{(reservation.deposit || 0).toFixed(2)}</Text>
           </View>
           <View style={[styles.row, { marginBottom: 0 }]}>
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              {isBalanceSettled ? 'Balance' : (isReservationCancelled ? 'Balance Due' : 'Balance Due at Pickup')}
+              {isBalanceSettled ? 'Balance payment' : (isReservationCancelled ? 'Balance Due' : 'Remaining balance')}
             </Text>
             {isReservationCancelled ? (
-              <Text style={[styles.rowValue, { color: colors.secondaryText }]}>—</Text>
-            ) : isBalanceSettled ? (
-              <Text style={[styles.rowValue, { color: colors.success }]}>Collected ✓</Text>
+              <Text style={[styles.rowValue, { color: colors.secondaryText }]}>-</Text>
             ) : (
-              <Text style={[styles.rowValue, { color: colors.tint }]}>₱{balanceDue.toFixed(2)}</Text>
+              <Text style={[styles.rowValue, { color: isBalanceSettled ? colors.success : colors.tint }]}>₱{balanceDue.toFixed(2)}</Text>
             )}
           </View>
           {isBalanceSettled && reservation.balance_settled_at && (
-            <Text style={[styles.rowText, { color: colors.secondaryText, fontSize: 12, marginTop: 2 }]}>
-              Collected {formatPHDate(reservation.balance_settled_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            <Text style={[styles.rowText, { color: colors.secondaryText, fontSize: 14, marginTop: 4 }]}>
+              Paid {formatPHDate(reservation.balance_settled_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </Text>
           )}
-          <View style={[styles.paymentStatusRow, { borderTopColor: colors.border }]}>
-            <Text style={[styles.rowText, { color: colors.secondaryText }]}>Payment Status</Text>
-            <Text style={[styles.rowValue, { color: colors.text }]}>{paymentDisplayStatus}</Text>
-          </View>
         </View>
 
         {reservation.receipt_url && (
