@@ -2,6 +2,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { TimeSlotPicker } from "@/src/components/TimeSlotPicker";
+import { CalendarPicker } from "@/src/components/CalendarPicker";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
 import { supabase } from "@/src/lib/supabase";
@@ -534,51 +535,11 @@ export default function ReservationScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
             Select Date
           </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.dateScroll}
-          >
-            {days.map((d, index) => {
-              const isSelected = isSameManilaDay(d, selectedDate);
-              const dayName = manilaWeekdayLabel(d);
-              const dateNum = manilaDayNumber(d);
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.dateBox,
-                    { borderColor: isSelected ? colors.tint : colors.border },
-                    isSelected && { backgroundColor: colors.card },
-                  ]}
-                  onPress={() => selectDate(d)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${dayName} ${dateNum}`}
-                  accessibilityHint={isSelected ? 'Currently selected date' : 'Select this date for your reservation'}
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <Text
-                    style={[
-                      styles.dayName,
-                      {
-                        color: isSelected ? colors.tint : colors.secondaryText,
-                      },
-                    ]}
-                  >
-                    {dayName}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.dateNum,
-                      { color: isSelected ? colors.tint : colors.text },
-                    ]}
-                  >
-                    {dateNum}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          <CalendarPicker
+            selectedDate={selectedDate}
+            onSelectDate={selectDate}
+            minDate={manilaCalendarDay(new Date())}
+          />
         </View>
 
         <View style={styles.section}>

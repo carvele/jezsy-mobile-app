@@ -1,0 +1,8 @@
+-- Rollback product catalog expansion
+DROP INDEX IF EXISTS public.products_name_trgm_idx;
+DROP INDEX IF EXISTS public.products_tags_idx;
+
+ALTER TABLE public.products
+DROP COLUMN IF EXISTS fabric,
+DROP COLUMN IF EXISTS tags,
+DROP COLUMN IF EXISTS restock_date;
