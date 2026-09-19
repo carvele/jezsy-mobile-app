@@ -58,6 +58,14 @@ export function calculateGarmentFit(
   const leftAnchorPoint = useHipAnchor ? L[23] : L[11];
   const rightAnchorPoint = useHipAnchor ? L[24] : L[12];
 
+  // A bag hangs from one shoulder, not the shoulder midpoint -- but the
+  // apparentShoulderWidthPx/scale math below still needs a real two-point
+  // span (collapsing left/right to the same point would zero the scale out
+  // to nothing), so only the position midpoint is overridden here, not
+  // leftAnchorPoint/rightAnchorPoint themselves.
+  const isBag = metadata?.category === 'bag';
+  const bagAnchorPoint = isBag && L[11] ? L[11] : null;
+
   // Calculate apparent 2D pixel width of the anchor pair (shoulders, or hips for bottoms)
   const apparentShoulderWidthPx = Math.abs(leftAnchorPoint.x - rightAnchorPoint.x);
 
@@ -67,8 +75,8 @@ export function calculateGarmentFit(
   const correctedShoulderWidthPx = apparentShoulderWidthPx / cosYaw;
 
   // 1. Anchoring Logic driven by GarmentFitProfile (2D pixel coordinates for HUD)
-  let anchorX = (leftAnchorPoint.x + rightAnchorPoint.x) / 2;
-  let anchorY = (leftAnchorPoint.y + rightAnchorPoint.y) / 2;
+  let anchorX = bagAnchorPoint ? bagAnchorPoint.x : (leftAnchorPoint.x + rightAnchorPoint.x) / 2;
+  let anchorY = bagAnchorPoint ? bagAnchorPoint.y : (leftAnchorPoint.y + rightAnchorPoint.y) / 2;
 
   if (profile.anchors.neck) {
      // example override if rig provides specific attachment offsets

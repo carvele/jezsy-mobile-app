@@ -1,6 +1,13 @@
 import type { Vec3 } from './pose';
 
-export type GarmentCategory = 'shirt' | 'dress' | 'jacket' | 'pants' | 'skirt';
+// 'necklace' | 'bag' | 'earrings' are rigid, boneless accessories -- GarmentRenderer.tsx
+// already has a rigid-only render path (gated on an empty boneMap), and
+// garmentFitter.ts anchors 'bag' to a single shoulder point rather than the
+// shoulder midpoint. 'earrings' has no anchor-selection support yet -- a pair
+// needs two independently-positioned anchors, which the current single-group
+// transform model doesn't support; it's listed here so `category` stays
+// accurate, not because rendering is wired up for it.
+export type GarmentCategory = 'shirt' | 'dress' | 'jacket' | 'pants' | 'skirt' | 'necklace' | 'bag' | 'earrings';
 
 export interface GarmentFitProfile {
   category: GarmentCategory;
