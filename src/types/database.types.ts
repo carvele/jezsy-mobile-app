@@ -4178,6 +4178,14 @@ export type Database = {
         Args: { p_review_id: string; p_vote_type?: string }
         Returns: Json
       }
+      ensure_my_welcome_conversation: {
+        Args: Record<PropertyKey, never>
+        Returns: string | null
+      }
+      provision_customer_welcome: {
+        Args: { p_customer_id: string }
+        Returns: string | null
+      }
     }
     Enums: {
       mfa_reset_reservation_status: "pending_delete" | "awaiting_reenrollment"
