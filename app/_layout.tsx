@@ -26,6 +26,7 @@ import { getPendingDeletionRequest } from '@/src/utils/accountDeletion';
 import { PendingDeletionNoticeModal } from '@/src/components/PendingDeletionNoticeModal';
 import { initWebUpdateChecker } from '@/src/utils/webUpdateChecker';
 import { setupNotificationResponseHandler } from '@/src/utils/pushNotifications';
+import { showAlert } from '@/src/utils/alert';
 import NetInfo from '@react-native-community/netinfo';
 import {
   savePendingEntryTarget,
@@ -409,8 +410,11 @@ function InitialLayout() {
       return;
     }
 
-    // 2. Profile Deletion
-    if (profile?.deleted) {
+    // 2. Profile Deletion or Restricted Roles
+    if (profile?.deleted || (profile?.role && ['staff', 'admin', 'owner'].includes(profile.role))) {
+      if (!profile?.deleted) {
+        showAlert('Access Denied', 'Staff and Admin accounts must use the web dashboard.');
+      }
       signOut();
       return;
     }
