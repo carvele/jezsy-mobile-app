@@ -324,6 +324,7 @@ export default function ProductDetailScreen() {
 
     const isStaff = profile?.role === 'staff' || profile?.role === 'owner' || profile?.role === 'admin';
     if (isStaff) {
+      showToast('Staff accounts cannot open customer inquiries. Use a customer account.', 'error');
       Alert.alert(
         'Staff Account Restriction',
         'Staff and boutique accounts cannot open customer support inquiries. Please use a personal customer account.',
@@ -1039,6 +1040,7 @@ export default function ProductDetailScreen() {
                 }
                 const isStaff = profile?.role === 'staff' || profile?.role === 'owner' || profile?.role === 'admin';
                 if (isStaff) {
+                  showToast('Staff accounts cannot create reservations. Use a customer account.', 'error');
                   Alert.alert(
                     'Staff Account Restriction',
                     'Staff accounts cannot create customer reservations. Please use a personal customer account.',
