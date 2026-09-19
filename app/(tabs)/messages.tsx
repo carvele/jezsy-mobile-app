@@ -340,24 +340,6 @@ export default function InboxScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: colors.text }]}>Inbox</Text>
-        {!isStaff && activeTab === 'shop' && (
-          <TouchableOpacity
-            style={[styles.headerSupportButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={handleStartShopChat}
-            disabled={startingShopChat}
-            accessibilityRole="button"
-            accessibilityLabel="Chat with Boutique Staff"
-          >
-            {startingShopChat ? (
-              <ActivityIndicator size="small" color={colors.tint} />
-            ) : (
-              <>
-                <IconSymbol name="bubble.left.and.bubble.right" size={13} color={colors.tint} style={{ marginRight: 6 }} />
-                <Text style={[styles.headerSupportText, { color: colors.tint }]}>Chat with Staff</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
         {activeTab === 'notifications' && notifications.length > 0 && (
           <TouchableOpacity
             style={[styles.headerSupportButton, { backgroundColor: colors.card, borderColor: colors.border }]}
