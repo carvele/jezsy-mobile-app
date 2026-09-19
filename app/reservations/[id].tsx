@@ -113,6 +113,7 @@ export default function ReservationDetailScreen() {
   // staff structured context (method/amount/reference) before a receipt
   // image is judged in isolation. See src/services/... audit notes.
   const [paymentInstructions, setPaymentInstructions] = useState<PaymentInstructions | null>(null);
+  const [boutiqueProfile, setBoutiqueProfile] = useState<{ address?: string }>({});
   const [showManualPayment, setShowManualPayment] = useState(false);
   const [manualMethod, setManualMethod] = useState<ManualMethod | null>(null);
   const [manualAmount, setManualAmount] = useState('');
@@ -133,14 +134,16 @@ export default function ReservationDetailScreen() {
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [cancellingReservation, setCancellingReservation] = useState(false);
 
-  const fetchPaymentInstructions = useCallback(async () => {
+  const fetchSettings = useCallback(async () => {
     const { data, error } = await supabase
       .from('settings')
-      .select('value')
-      .eq('key', 'paymentInstructions')
-      .maybeSingle();
+      .select('key, value')
+      .in('key', ['paymentInstructions', 'profile']);
     if (error || !data) return;
-    setPaymentInstructions(data.value as unknown as PaymentInstructions);
+    for (const row of data) {
+      if (row.key === 'paymentInstructions') setPaymentInstructions(row.value as unknown as PaymentInstructions);
+      if (row.key === 'profile') setBoutiqueProfile(row.value as { address?: string });
+    }
   }, []);
 
   const fetchReservation = useCallback(async () => {
@@ -223,7 +226,7 @@ export default function ReservationDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchReservation();
-      fetchPaymentInstructions();
+      fetchSettings();
       if (!id) return;
 
       let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -245,7 +248,7 @@ export default function ReservationDetailScreen() {
           supabase.removeChannel(channel);
         }
       };
-    }, [fetchReservation, fetchPaymentInstructions, id]),
+    }, [fetchReservation, fetchSettings, id]),
   );
 
   const [returnWindowDays, setReturnWindowDays] = useState(7);
@@ -828,7 +831,7 @@ export default function ReservationDetailScreen() {
             <View style={{ flex: 1 }}>
               <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>JezSy Boutique</Text>
               <Text style={{ color: colors.secondaryText, fontSize: 15, marginTop: 4, lineHeight: 22 }}>
-                123 Fashion Street, Makati City, Philippines
+                {boutiqueProfile.address || '123 Fashion Street, Makati City, Philippines'}
               </Text>
             </View>
           </View>
