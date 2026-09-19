@@ -73,7 +73,7 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
         accessibilityLabel="Open Complete the Look"
       >
         <View>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>✨ Complete the Look</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}> Complete the Look</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>Pieces that pair well with this item</Text>
         </View>
         <IconSymbol name="chevron.right" size={18} color={colors.icon} />
