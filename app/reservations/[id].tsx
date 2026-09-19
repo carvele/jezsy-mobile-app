@@ -725,6 +725,114 @@ export default function ReservationDetailScreen() {
           </View>
         )}
 
+        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Appointment</Text>
+            {canRescheduleNow && !showReschedule && !reschedulePending && (
+              <TouchableOpacity
+                onPress={() => {
+                  setRescheduleDate(manilaCalendarDay(reservation.date ? new Date(reservation.date) : new Date()));
+                  setRescheduleSlot(undefined);
+                  setShowReschedule(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Request a new appointment time"
+                accessibilityHint="Suggests a new date and time for the shop to approve"
+                style={{ flexDirection: 'row', alignItems: 'center' }}
+              >
+                <Text style={[styles.rescheduleLink, { color: colors.tint }]}>Request new time</Text>
+                  <IconSymbol name="chevron.right" size={14} color={colors.tint} style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={[styles.infoRow, { marginTop: Spacing.md, alignItems: 'flex-start' }]}>
+              <IconSymbol name="calendar" size={20} color={colors.tint} />
+              <View>
+                <Text style={{ color: colors.text, fontSize: 15 }}>
+                  {dateStr}
+                </Text>
+                <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: 2 }}>
+                  {formatTimeLabel(reservation.appointment_time)}
+                </Text>
+              </View>
+            </View>
+
+          {reschedulePending && (
+            <View style={[styles.pendingRequest, { borderColor: colors.border }]}>
+              <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.warning} />
+              <Text style={[styles.pendingRequestText, { color: colors.secondaryText }]}>
+                You asked to move this to{' '}
+                <Text style={{ color: colors.text, fontWeight: '700' }}>
+                  {formatManilaDate(new Date(reservation.reschedule_requested_date as string))} at{' '}
+                  {formatTimeLabel(reservation.reschedule_requested_at_time)}
+                </Text>
+                . The time above still stands until the shop confirms.
+              </Text>
+            </View>
+          )}
+
+          {showReschedule && (
+            <View style={[styles.reschedulePanel, { borderTopColor: colors.border }]}>
+              <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new date</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.lg }}>
+                {generateManilaDates(14).map((d, index) => {
+                  const isSelected = isSameManilaDay(d, rescheduleDate);
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[styles.dateBox, { borderColor: isSelected ? colors.tint : colors.border }, isSelected && { backgroundColor: colors.background }]}
+                      onPress={() => { setRescheduleDate(d); setRescheduleSlot(undefined); }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${manilaWeekdayLabel(d)} ${manilaDayNumber(d)}`}
+                      accessibilityState={{ selected: isSelected }}
+                    >
+                      <Text style={[styles.dayName, { color: isSelected ? colors.tint : colors.secondaryText }]}>
+                        {manilaWeekdayLabel(d)}
+                      </Text>
+                      <Text style={[styles.dateNum, { color: isSelected ? colors.tint : colors.text }]}>{manilaDayNumber(d)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new time</Text>
+              <TimeSlotPicker selectedDate={rescheduleDate} selectedSlot={rescheduleSlot} onSelectSlot={setRescheduleSlot} />
+              <View style={styles.rescheduleActions}>
+                <TouchableOpacity
+                  style={[styles.rescheduleCancel, { borderColor: colors.border }]}
+                  onPress={() => { setShowReschedule(false); setRescheduleSlot(undefined); }}
+                  disabled={submitting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel reschedule"
+                >
+                  <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.rescheduleConfirm, { backgroundColor: (!rescheduleSlot || submitting) ? colors.border : colors.tint }]}
+                  onPress={handleReschedule}
+                  disabled={!rescheduleSlot || submitting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Confirm new appointment"
+                  accessibilityState={{ disabled: !rescheduleSlot || submitting }}
+                >
+                  {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={{ fontWeight: '700' }}>Confirm</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
+          <View style={[styles.infoRow, { alignItems: 'flex-start' }]}>
+            <IconSymbol name="mappin.and.ellipse" size={20} color={colors.tint} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>JezSy Boutique</Text>
+              <Text style={{ color: colors.secondaryText, fontSize: 15, marginTop: 4, lineHeight: 22 }}>
+                123 Fashion Street, Makati City, Philippines
+              </Text>
+            </View>
+          </View>
+        </View>
         {displayItems.length > 1 && (
           <Text style={[styles.itemsHeading, { color: colors.secondaryText }]}>
             {displayItems.length} items in this reservation
@@ -841,114 +949,6 @@ export default function ReservationDetailScreen() {
           </View>
         )}
 
-        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Appointment</Text>
-            {canRescheduleNow && !showReschedule && !reschedulePending && (
-              <TouchableOpacity
-                onPress={() => {
-                  setRescheduleDate(manilaCalendarDay(reservation.date ? new Date(reservation.date) : new Date()));
-                  setRescheduleSlot(undefined);
-                  setShowReschedule(true);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Request a new appointment time"
-                accessibilityHint="Suggests a new date and time for the shop to approve"
-                style={{ flexDirection: 'row', alignItems: 'center' }}
-              >
-                <Text style={[styles.rescheduleLink, { color: colors.tint }]}>Request new time</Text>
-                  <IconSymbol name="chevron.right" size={14} color={colors.tint} style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={[styles.infoRow, { marginTop: Spacing.md, alignItems: 'flex-start' }]}>
-              <IconSymbol name="calendar" size={20} color={colors.tint} />
-              <View>
-                <Text style={{ color: colors.text, fontSize: 15 }}>
-                  {dateStr}
-                </Text>
-                <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: 2 }}>
-                  {formatTimeLabel(reservation.appointment_time)}
-                </Text>
-              </View>
-            </View>
-
-          {reschedulePending && (
-            <View style={[styles.pendingRequest, { borderColor: colors.border }]}>
-              <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.warning} />
-              <Text style={[styles.pendingRequestText, { color: colors.secondaryText }]}>
-                You asked to move this to{' '}
-                <Text style={{ color: colors.text, fontWeight: '700' }}>
-                  {formatManilaDate(new Date(reservation.reschedule_requested_date as string))} at{' '}
-                  {formatTimeLabel(reservation.reschedule_requested_at_time)}
-                </Text>
-                . The time above still stands until the shop confirms.
-              </Text>
-            </View>
-          )}
-
-          {showReschedule && (
-            <View style={[styles.reschedulePanel, { borderTopColor: colors.border }]}>
-              <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new date</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.lg }}>
-                {generateManilaDates(14).map((d, index) => {
-                  const isSelected = isSameManilaDay(d, rescheduleDate);
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      style={[styles.dateBox, { borderColor: isSelected ? colors.tint : colors.border }, isSelected && { backgroundColor: colors.background }]}
-                      onPress={() => { setRescheduleDate(d); setRescheduleSlot(undefined); }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${manilaWeekdayLabel(d)} ${manilaDayNumber(d)}`}
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      <Text style={[styles.dayName, { color: isSelected ? colors.tint : colors.secondaryText }]}>
-                        {manilaWeekdayLabel(d)}
-                      </Text>
-                      <Text style={[styles.dateNum, { color: isSelected ? colors.tint : colors.text }]}>{manilaDayNumber(d)}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-              <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new time</Text>
-              <TimeSlotPicker selectedDate={rescheduleDate} selectedSlot={rescheduleSlot} onSelectSlot={setRescheduleSlot} />
-              <View style={styles.rescheduleActions}>
-                <TouchableOpacity
-                  style={[styles.rescheduleCancel, { borderColor: colors.border }]}
-                  onPress={() => { setShowReschedule(false); setRescheduleSlot(undefined); }}
-                  disabled={submitting}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel reschedule"
-                >
-                  <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.rescheduleConfirm, { backgroundColor: (!rescheduleSlot || submitting) ? colors.border : colors.tint }]}
-                  onPress={handleReschedule}
-                  disabled={!rescheduleSlot || submitting}
-                  accessibilityRole="button"
-                  accessibilityLabel="Confirm new appointment"
-                  accessibilityState={{ disabled: !rescheduleSlot || submitting }}
-                >
-                  {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={{ fontWeight: '700' }}>Confirm</Text>}
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
-          <View style={[styles.infoRow, { alignItems: 'flex-start' }]}>
-            <IconSymbol name="mappin.and.ellipse" size={20} color={colors.tint} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>JezSy Boutique</Text>
-              <Text style={{ color: colors.secondaryText, fontSize: 15, marginTop: 4, lineHeight: 22 }}>
-                123 Fashion Street, Makati City, Philippines
-              </Text>
-            </View>
-          </View>
-        </View>
 
         {paymentState === 'refund required' && (
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.warning }]}>
