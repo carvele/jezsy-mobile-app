@@ -415,7 +415,7 @@ export default function MeasurementsScreen() {
 
       if (!result.ok) throw result.error;
 
-      showToast('Measurements saved successfully ✨', 'success');
+      showToast('Measurements saved successfully ', 'success');
       // canGoBack()/back() is unreliable here: after a page reload, Expo
       // Router's web linking reconstructs a synthetic history stack from
       // the URL alone, so canGoBack() can report true with no real "came

@@ -22,7 +22,7 @@ export const CaptureTransitionOverlay: React.FC<CaptureTransitionOverlayProps> =
 
   switch (mode) {
     case 'front_complete':
-      checkmark = '✓';
+      checkmark = '';
       title = 'FRONT COMPLETE';
       subtitle = 'TURN SIDEWAYS';
       showRotationIcon = true;
@@ -32,7 +32,7 @@ export const CaptureTransitionOverlay: React.FC<CaptureTransitionOverlayProps> =
       showRotationIcon = true;
       break;
     case 'side_complete':
-      checkmark = '✓';
+      checkmark = '';
       title = 'SIDE COMPLETE';
       subtitle = 'PROCESSING SCAN...';
       break;

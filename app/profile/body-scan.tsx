@@ -213,7 +213,7 @@ export default function BodyScanScreen() {
 
   const speakIfNew = useCallback((text: string, forceImmediate = false) => {
     // Strip UI adornments (checkmarks, dashes) so TTS receives natural imperative speech
-    const speechText = text.replace(/^[✓✔]\s*/, '').replace(/—/g, '. ').trim();
+    const speechText = text.replace(/^[]\s*/, '').replace(/—/g, '. ').trim();
     if (!speechText) return;
     if (!forceImmediate && lastSpokenRef.current === speechText) return;
     Speech.stop();

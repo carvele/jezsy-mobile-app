@@ -196,7 +196,7 @@ export default function StylePoseDetailScreen() {
 
         {/* Linked Products Section */}
         <View style={styles.productsSection}>
-          <Text style={[styles.productsSectionTitle, { color: colors.text }]}>👗 Featured Garments in this Look</Text>
+          <Text style={[styles.productsSectionTitle, { color: colors.text }]}> Featured Garments in this Look</Text>
           <Text style={[styles.productsSectionSub, { color: colors.secondaryText }]}>
             Reserve any item from this styled look directly below
           </Text>
@@ -213,7 +213,7 @@ export default function StylePoseDetailScreen() {
                     <Image source={{ uri: prod.image_url }} style={[styles.productImage, { backgroundColor: colors.imagePlaceholder }]} />
                   ) : (
                     <View style={[styles.productImagePlaceholder, { backgroundColor: colors.imagePlaceholder }]}>
-                      <Text style={{ fontSize: 20 }}>👔</Text>
+                      <Text style={{ fontSize: 20 }}></Text>
                     </View>
                   )}
 

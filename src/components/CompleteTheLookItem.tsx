@@ -132,7 +132,7 @@ export function CompleteTheLookItem({ item }: Props) {
           accessibilityState={{ disabled: !canAdd }}
         >
           <Text style={[styles.addButtonText, { color: colors.onTint }]}>
-            {justAdded ? 'Added ✓' : hasRequiredSelection ? 'Add to Bag' : 'Select options'}
+            {justAdded ? 'Added ' : hasRequiredSelection ? 'Add to Bag' : 'Select options'}
           </Text>
         </TouchableOpacity>
       </View>

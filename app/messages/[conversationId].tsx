@@ -30,7 +30,7 @@ import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 
 // One reaction per person per message, so this is a shortlist rather than a
 // full picker -- matching the set the admin dashboard already offers.
-const REACTION_EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const REACTION_EMOJI = ['', '️', '', '', '', ''];
 
 type ProductPreview = {
   id: string;

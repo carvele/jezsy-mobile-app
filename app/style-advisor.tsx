@@ -350,7 +350,7 @@ export default function StyleAdvisorScreen() {
                         </View>
                         <View style={[styles.proTipBox, { backgroundColor: colors.background }]}>
                           <Text style={[styles.proTipText, { color: colors.tint }]}>
-                            💡 Pro Tip: {current.explanation.proTip}
+                             Pro Tip: {current.explanation.proTip}
                           </Text>
                         </View>
                       </View>

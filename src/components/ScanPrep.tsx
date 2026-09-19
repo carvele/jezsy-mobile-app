@@ -193,7 +193,7 @@ export function ScanPrep({ onDone, onCancel }: Props) {
               ]}
             >
               {isCalibrated
-                ? '✓ Phone positioned correctly'
+                ? ' Phone positioned correctly'
                 : isLevel
                 ? 'Hold steady...'
                 : 'Not upright yet — tilt phone'}
