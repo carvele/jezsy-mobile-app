@@ -8,7 +8,6 @@ import {
   Dimensions,
   ActivityIndicator,
   Platform,
-  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -16,7 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
-import { WebView } from 'react-native-webview';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
@@ -29,8 +27,6 @@ const { height } = Dimensions.get('window');
 
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1469334031218-e382a71b716b?q=85&w=1200&auto=format&fit=crop';
-const TERMS_URL = process.env.EXPO_PUBLIC_TERMS_URL;
-const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL;
 
 // Official Google "G" logo with correct brand colors
 const GoogleLogo = () => (
@@ -53,16 +49,6 @@ export default function WelcomeScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = React.useState(false);
-  const [legalDoc, setLegalDoc] = React.useState<{ label: string; url: string } | null>(null);
-
-  const openLegalDocument = async (label: string, url?: string) => {
-    if (!url) {
-      showToast(`${label} link is not configured yet.`, 'info');
-      return;
-    }
-    setLegalDoc({ label, url });
-  };
-
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
@@ -213,6 +199,13 @@ export default function WelcomeScreen() {
         >
           <Text style={styles.guestButtonText}>Continue Browsing</Text>
         </TouchableOpacity>
+
+        <Text style={styles.termsText}>
+          By continuing, you agree to our{' '}
+          <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>Terms & Conditions</Text>
+          {' '}and{' '}
+          <Text style={styles.termsLink} onPress={() => router.push('/legal/privacy')}>Privacy Policy</Text>.
+        </Text>
 
       </View>
     </View>

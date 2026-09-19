@@ -1,0 +1,8 @@
+REVOKE ALL ON FUNCTION public.record_signup_legal_acceptance(text, text) FROM PUBLIC, anon, authenticated;
+DROP FUNCTION IF EXISTS public.record_signup_legal_acceptance(text, text);
+
+ALTER TABLE public.profiles
+  DROP COLUMN IF EXISTS privacy_version,
+  DROP COLUMN IF EXISTS privacy_accepted_at,
+  DROP COLUMN IF EXISTS terms_version,
+  DROP COLUMN IF EXISTS terms_accepted_at;
