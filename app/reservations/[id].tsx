@@ -79,6 +79,11 @@ type PaymentInstructions = {
   manual_payment_reference_instructions: string;
 };
 
+type StoreInfo = {
+  storeName?: string;
+  address?: string;
+};
+
 export default function ReservationDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -114,7 +119,7 @@ export default function ReservationDetailScreen() {
   // staff structured context (method/amount/reference) before a receipt
   // image is judged in isolation. See src/services/... audit notes.
   const [paymentInstructions, setPaymentInstructions] = useState<PaymentInstructions | null>(null);
-  const [boutiqueProfile, setBoutiqueProfile] = useState<{ address?: string }>({});
+  const [storeInfo, setStoreInfo] = useState<StoreInfo>({});
   const [showManualPayment, setShowManualPayment] = useState(false);
   const [manualMethod, setManualMethod] = useState<ManualMethod | null>(null);
   const [manualAmount, setManualAmount] = useState('');
@@ -139,11 +144,14 @@ export default function ReservationDetailScreen() {
     const { data, error } = await supabase
       .from('settings')
       .select('key, value')
-      .in('key', ['paymentInstructions', 'profile']);
-    if (error || !data) return;
+      .in('key', ['paymentInstructions', 'storeInfo']);
+    if (error || !data) {
+      if (error) console.warn('Failed to load reservation settings:', error.message);
+      return;
+    }
     for (const row of data) {
       if (row.key === 'paymentInstructions') setPaymentInstructions(row.value as unknown as PaymentInstructions);
-      if (row.key === 'profile') setBoutiqueProfile(row.value as { address?: string });
+      if (row.key === 'storeInfo') setStoreInfo(row.value as unknown as StoreInfo);
     }
   }, []);
 
@@ -237,9 +245,10 @@ export default function ReservationDetailScreen() {
       fetchSettings();
       if (!id) return;
 
-      let channel: ReturnType<typeof supabase.channel> | null = null;
+      let reservationChannel: ReturnType<typeof supabase.channel> | null = null;
+      let settingsChannel: ReturnType<typeof supabase.channel> | null = null;
       try {
-        channel = supabase
+        reservationChannel = supabase
           .channel(`reservation-detail:${id}:${Date.now()}`)
           .on(
             'postgres_changes',
@@ -247,14 +256,21 @@ export default function ReservationDetailScreen() {
             (payload) => setReservation(payload.new as Reservation),
           )
           .subscribe();
+        settingsChannel = supabase
+          .channel(`reservation-settings:${id}:${Date.now()}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'settings', filter: 'key=eq.storeInfo' },
+            () => { void fetchSettings(); },
+          )
+          .subscribe();
       } catch (err) {
-        console.warn('Failed to subscribe to reservation channel:', err);
+        console.warn('Failed to subscribe to reservation detail updates:', err);
       }
 
       return () => {
-        if (channel) {
-          supabase.removeChannel(channel);
-        }
+        if (reservationChannel) supabase.removeChannel(reservationChannel);
+        if (settingsChannel) supabase.removeChannel(settingsChannel);
       };
     }, [fetchReservation, fetchSettings, id]),
   );
@@ -838,9 +854,11 @@ export default function ReservationDetailScreen() {
           <View style={[styles.infoRow, { alignItems: 'flex-start' }]}>
             <IconSymbol name="mappin.and.ellipse" size={20} color={colors.tint} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>JezSy Boutique</Text>
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
+                {storeInfo.storeName || 'JezSy Boutique'}
+              </Text>
               <Text style={{ color: colors.secondaryText, fontSize: 15, marginTop: 4, lineHeight: 22 }}>
-                {boutiqueProfile.address || '123 Fashion Street, Makati City, Philippines'}
+                {storeInfo.address || '123 Fashion Street, Makati City, Philippines'}
               </Text>
             </View>
           </View>
