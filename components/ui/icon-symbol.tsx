@@ -99,7 +99,9 @@ const MAPPING = {
   // Calendar & Time
   'calendar': 'calendar-today',
   'calendar.badge.exclamationmark': 'event-busy',
-  'clock.arrow.circlepath': 'history',
+  'clock.fill': 'access-time',
+  'clock.arrow.circlepath': 'update',
+  'mappin.and.ellipse': 'location-on',
   'arrow.clockwise': 'refresh',
   'shuffle': 'shuffle',
 

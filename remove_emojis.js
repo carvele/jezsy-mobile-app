@@ -14,7 +14,6 @@ function walk(dir) {
       let content = fs.readFileSync(file, 'utf8');
       if (emojiRegex.test(content)) {
         console.log('Removing emojis from ' + file);
-        // Special case: ✓ is often used, let's just remove the emojis but keep non-emoji text.
         content = content.replace(emojiRegex, '');
         fs.writeFileSync(file, content);
       }
@@ -22,6 +21,5 @@ function walk(dir) {
   });
 }
 
-walk('app');
-walk('src');
+walk('components');
 console.log('Done');

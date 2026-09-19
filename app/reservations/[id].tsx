@@ -662,17 +662,17 @@ export default function ReservationDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Go back">
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Reservation Details</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.statusRow}>
-          <Text style={[styles.displayId, { color: colors.secondaryText }]}>
-            {reservation.display_id || reservation.id.substring(0, 8)}
-          </Text>
+        <Text style={{ fontSize: 30, fontWeight: '800', color: colors.text, marginBottom: 4 }}>Reservation Details</Text>
+        <Text style={[styles.displayId, { color: colors.secondaryText, marginBottom: 16, fontSize: 16 }]}>
+          {reservation.display_id || reservation.id.substring(0, 8)}
+        </Text>
+        <View style={{ alignSelf: 'flex-start', marginBottom: Spacing.xl }}>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
-            <Text style={[styles.statusText, { color: statusColor }]}>{displayState.label}</Text>
+            <Text style={[styles.statusText, { color: statusColor, fontSize: 13, fontWeight: '700' }]}>{displayState.label}</Text>
           </View>
         </View>
 
@@ -694,7 +694,7 @@ export default function ReservationDetailScreen() {
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={togglePickupPass}
-                style={[styles.pickupHeader, { justifyContent: 'space-between', paddingVertical: 16 }]}
+                style={[styles.pickupHeader, { justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: isPickupPassExpanded ? 0 : 20 }]}
                 accessibilityRole="button"
                 accessibilityLabel={isPickupPassExpanded ? 'Hide pickup pass' : 'Show pickup pass'}
                 accessibilityState={{ expanded: isPickupPassExpanded }}
@@ -935,6 +935,19 @@ export default function ReservationDetailScreen() {
               </View>
             </View>
           )}
+        </View>
+
+        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
+          <View style={[styles.infoRow, { alignItems: 'flex-start' }]}>
+            <IconSymbol name="mappin.and.ellipse" size={20} color={colors.tint} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>JezSy Boutique</Text>
+              <Text style={{ color: colors.secondaryText, fontSize: 15, marginTop: 4, lineHeight: 22 }}>
+                123 Fashion Street, Makati City, Philippines
+              </Text>
+            </View>
+          </View>
         </View>
 
         {paymentState === 'refund required' && (
@@ -1581,7 +1594,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   pickupCardCollapsed: {
-    paddingVertical: Spacing.lg,
+    padding: 0,
   },
   pickupHeader: {
     flexDirection: 'row',

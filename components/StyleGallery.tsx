@@ -107,7 +107,7 @@ export function StyleGallery() {
       {/* Header */}
       <View style={styles.headerRow}>
         <View>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>✨ Style Inspiration</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}> Style Inspiration</Text>
           <Text style={[styles.sectionSubtitle, { color: colors.tabIconDefault }]}>Recreate styled poses & try the look</Text>
         </View>
       </View>
