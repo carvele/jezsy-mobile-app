@@ -59,6 +59,7 @@ type Category = {
 const FILTER_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 const FILTER_FITS = ['Regular Fit', 'Slim Fit', 'Oversized', 'Relaxed', 'Tailored'];
 const FILTER_MATERIALS = ['Cotton', 'Silk', 'Linen', 'Wool', 'Cashmere', 'Denim', 'Leather', 'Satin', 'Polyester'];
+const FILTER_TAGS = ['featured', 'new arrival', 'formal', 'casual', 'wedding', 'business', 'party', 'summer', 'winter', 'vacation', 'elegant'];
 
 const SORT_OPTIONS = [
   { id: 'recommended', label: 'Recommended' },
@@ -933,10 +934,35 @@ export default function ExploreScreen() {
     );
   };
 
+  const toggleTempTag = (tag: string) => {
+    setTempTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
   // Memoised because activeFilterChips depends on them; as plain functions they
   // were rebuilt every render and the memo never held.
+  const [displayLimit, setDisplayLimit] = useState(20);
+
+  // Reset display limit when filters/search change
+  useEffect(() => {
+    setDisplayLimit(20);
+  }, [processedProducts]);
+
+  const displayedProducts = useMemo(() => {
+    return processedProducts.slice(0, displayLimit);
+  }, [processedProducts, displayLimit]);
+
+  const loadMore = useCallback(() => {
+    setDisplayLimit(prev => Math.min(prev + 20, processedProducts.length));
+  }, [processedProducts.length]);
+
   const removeSizeFilter = useCallback((size: string) => {
     setSelectedSizes((prev) => prev.filter((s) => s !== size));
+  }, []);
+
+  const removeTagFilter = useCallback((tag: string) => {
+    setSelectedTags((prev) => prev.filter((t) => t !== tag));
   }, []);
 
   const removeColorFilter = useCallback((color: string) => {
@@ -1021,6 +1047,7 @@ export default function ExploreScreen() {
     selectedColors.forEach((color) => chips.push({ key: `color-${color}`, label: `Color: ${color}`, a11y: `Remove Color ${color} filter`, onRemove: () => removeColorFilter(color) }));
     selectedFits.forEach((fit) => chips.push({ key: `fit-${fit}`, label: `Fit: ${fit}`, a11y: `Remove Fit ${fit} filter`, onRemove: () => removeFitFilter(fit) }));
     selectedMaterials.forEach((mat) => chips.push({ key: `material-${mat}`, label: `Material: ${mat}`, a11y: `Remove Material ${mat} filter`, onRemove: () => removeMaterialFilter(mat) }));
+    selectedTags.forEach((tag) => chips.push({ key: `tag-${tag}`, label: `Tag: ${tag}`, a11y: `Remove Tag ${tag} filter`, onRemove: () => removeTagFilter(tag) }));
     if (selectedPriceRange) {
       const label = selectedPriceRange === 'under1000' ? 'Under ₱1k' : selectedPriceRange === '1000to2000' ? '₱1k - ₱2k' : selectedPriceRange === '2000to4000' ? '₱2k - ₱4k' : '₱4k+';
       chips.push({ key: 'price-range', label: `Price: ${label}`, a11y: 'Remove price range filter', onRemove: () => setSelectedPriceRange(null) });
@@ -1331,13 +1358,15 @@ export default function ExploreScreen() {
                 </View>
               ) : (
                 <FlatList
-                  data={processedProducts}
+                  data={displayedProducts}
                   renderItem={renderProductItem}
                   keyExtractor={(item) => item.id}
                   key={`grid-${columns}`}
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
                   contentContainerStyle={[styles.productList, { paddingBottom: bottomInset }]}
+                  onEndReached={loadMore}
+                  onEndReachedThreshold={0.5}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderGridHeader(
@@ -1547,13 +1576,15 @@ export default function ExploreScreen() {
                 </View>
               ) : (
                 <FlatList
-                  data={processedProducts}
+                  data={displayedProducts}
                   renderItem={renderProductItem}
                   keyExtractor={(item) => item.id}
                   key={`grid-${columns}`}
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
                   contentContainerStyle={[styles.productList, { paddingBottom: bottomInset }]}
+                  onEndReached={loadMore}
+                  onEndReachedThreshold={0.5}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderCategorySwitcher()}
@@ -1808,6 +1839,36 @@ export default function ExploreScreen() {
                     >
                       <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text }]}>
                         {mat}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Tags / Keywords */}
+            <View style={styles.filterSection}>
+              <Text style={[styles.filterSectionTitle, { color: colors.text }]}>Tags & Keywords</Text>
+              <View style={styles.filterOptionsRow}>
+                {FILTER_TAGS.map((tag) => {
+                  // tag logic might be case insensitive
+                  const isSelected = tempTags.some(t => t.toLowerCase() === tag.toLowerCase());
+                  return (
+                    <TouchableOpacity
+                      key={tag}
+                      style={[
+                        styles.sizeChip,
+                        {
+                          backgroundColor: isSelected ? colors.tint : colors.card,
+                          borderColor: isSelected ? colors.tint : colors.border,
+                        },
+                      ]}
+                      onPress={() => toggleTempTag(tag)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: isSelected }}
+                    >
+                      <Text style={[styles.sizeChipText, { color: isSelected ? colors.onTint : colors.text, textTransform: 'capitalize' }]}>
+                        {tag}
                       </Text>
                     </TouchableOpacity>
                   );
