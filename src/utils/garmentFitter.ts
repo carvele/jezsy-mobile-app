@@ -64,7 +64,7 @@ export function calculateGarmentFit(
   // to nothing), so only the position midpoint is overridden here, not
   // leftAnchorPoint/rightAnchorPoint themselves.
   const isBag = metadata?.category === 'bag';
-  const bagAnchorPoint = isBag && L[11] ? L[11] : null;
+  const bagAnchorPoint = isBag && L[12] ? L[12] : null;
 
   // Calculate apparent 2D pixel width of the anchor pair (shoulders, or hips for bottoms)
   const apparentShoulderWidthPx = Math.abs(leftAnchorPoint.x - rightAnchorPoint.x);
@@ -146,7 +146,29 @@ export function calculateGarmentFit(
   // or low-visibility, which is common at try-on framing distance -- degrade to the
   // roll-only orientation the 3D path used before rather than to identity. Never worse
   // than the previous behaviour, just no pitch/yaw until the hips come back.
-  const orientation3D = canonicalPose.torso.valid ? canonicalPose.torso.quaternion : rollQuat3D;
+  const fullTorsoOrientation = canonicalPose.torso.valid ? canonicalPose.torso.quaternion : rollQuat3D;
+
+  // A hanging accessory (bag strap, necklace chain) isn't rigidly welded to the
+  // torso the way clothing is -- gravity keeps it roughly vertical regardless of
+  // how far the wearer leans forward or sideways. Applying the FULL torso
+  // orientation (pitch+roll included, as clothing correctly does) made both
+  // look like they were tipping/swinging unnaturally with every lean -- confirmed
+  // live. Yaw only (turning left/right) still follows the body, since a
+  // strap/chain anchored at the shoulder or neck genuinely does turn with you.
+  // Reuses pose.orientation.yawRad -- already trusted for real (non-diagnostic)
+  // math above at correctedShoulderWidthPx -- rather than decomposing
+  // canonicalPose.torso's own basis, which poseNormalizer.ts's
+  // torsoEulerDegrees explicitly documents as "for diagnostics only -- never
+  // for math."
+  // Sign NOT verified on a physical device: if the accessory turns opposite
+  // to the wearer, flip this to -1, the same kind of live-tested correction
+  // CANONICAL_Y_UP_ROLL_SIGN above needed for roll.
+  const HANGING_ACCESSORY_YAW_SIGN = 1;
+  const isHangingAccessory = metadata?.category === 'bag' || metadata?.category === 'necklace';
+  const yawRad3D = HANGING_ACCESSORY_YAW_SIGN * pose.orientation.yawRad;
+  const yawOnlyQuat = { x: 0, y: Math.sin(yawRad3D / 2), z: 0, w: Math.cos(yawRad3D / 2) };
+
+  const orientation3D = isHangingAccessory ? yawOnlyQuat : fullTorsoOrientation;
 
   return {
     anchor: {
