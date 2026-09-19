@@ -59,14 +59,14 @@ export const Colors = {
   },
   dark: {
     text: '#F5F5F5',
-    background: '#0D0D0D', // Spotify-like Rich Black
+    background: '#121212', // Dark charcoal background
     tint: tintColorDark,
     onTint: '#0D0D0D', // 8.70:1 on the brighter dark-mode gold
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
-    card: '#1A1A2E', // Deep Navy card bg
-    border: '#2D2D44',
+    card: '#1C1C1E', // Elevated charcoal card bg
+    border: '#2C2C2E',
     // Deepened from #F72585, which measured 3.78:1 against the white badge text
     // it carries and so failed AA in both schemes. This passes at 5.03:1 while
     // staying the closest vivid magenta to the original.
@@ -78,7 +78,7 @@ export const Colors = {
     // this is the palette the brand mark itself sits in.
     blush: blushFill,
     blushFill,
-    surface: '#16213E', // Elevated surfaces
+    surface: '#2C2C2E', // Elevated surfaces
     glass: 'rgba(255,255,255,0.06)',
     hairline: 'rgba(255,255,255,0.12)',
     // Semantic status colors (tuned for contrast on dark backgrounds)
