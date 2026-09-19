@@ -548,10 +548,6 @@ export default function ReservationDetailScreen() {
     }
   };
 
-  const refundPayment = useMemo(() => {
-    return payments.find((p: any) => p.refund_disbursed_at || p.refund_reference_number || p.status === 'refunded');
-  }, [payments]);
-
   const getStatusColor = (colorType: CustomerBadgeColorType | string | null) => {
     switch (colorType) {
       case 'toPay': return colors.notification;
