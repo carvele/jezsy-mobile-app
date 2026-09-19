@@ -60,7 +60,7 @@ export function ProductCard({
     ? 'Out of stock'
     : lowStock
     ? `Only ${stock} left`
-    : null;
+    : `${stock} in stock`;
 
   const restockDateStr = outOfStock && (product as any).restock_date
     ? `Restock Expected: ${new Date((product as any).restock_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
