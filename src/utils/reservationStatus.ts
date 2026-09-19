@@ -158,7 +158,8 @@ export type CustomerBadgeColorType =
   | 'preparing'
   | 'ready'
   | 'completed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'refunded';
 
 export interface CustomerReservationDisplayInput {
   status: string | null;
@@ -227,7 +228,7 @@ export function getCustomerReservationDisplayState(
       label: 'Refunded',
       bucket: 'returnRefund',
       filterBucket: 'cancelled',
-      badgeColorType: 'cancelled',
+      badgeColorType: 'refunded',
       showCountdown: false,
       showToPayAction: false,
     };
@@ -301,7 +302,24 @@ export function getCustomerReservationDisplayState(
     };
   }
 
-  // 6. Genuine unpaid To Pay
+  // 6. Payment Window Expired
+  // If the deadline passed and payment wasn't submitted, it's expired.
+  // The backend cron will sweep it shortly, but the frontend state must immediately
+  // revoke payment controls to prevent contradictions.
+  const isExpired = reservation.payment_due_at ? new Date(reservation.payment_due_at).getTime() < Date.now() : false;
+  
+  if (isExpired && bucket === 'toPay') {
+    return {
+      label: 'Expired',
+      bucket: 'cancelled',
+      filterBucket: 'cancelled',
+      badgeColorType: 'cancelled',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+
+  // 7. Genuine unpaid To Pay
   return {
     label: 'To pay',
     bucket: 'toPay',

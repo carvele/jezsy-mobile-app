@@ -104,7 +104,7 @@ export function CalendarPicker({ selectedDate, onSelectDate, minDate }: Props) {
       <View style={styles.grid}>
         {calendarDays.map((d, index) => {
           if (!d) {
-            return <View key={`empty-${index}`} style={styles.dayCell} />;
+            return <View key={`empty-${index}`} style={styles.dayCellContainer} />;
           }
           
           // Disable if the date is strictly before minDate
@@ -114,20 +114,23 @@ export function CalendarPicker({ selectedDate, onSelectDate, minDate }: Props) {
           return (
             <TouchableOpacity
               key={index}
-              style={[
-                styles.dayCell,
-                isSelected && { backgroundColor: colors.tint },
-              ]}
+              style={styles.dayCellContainer}
               disabled={isPast}
               onPress={() => onSelectDate(d)}
             >
-              <Text style={[
-                styles.dayText,
-                { color: isPast ? colors.border : (isSelected ? colors.onTint : colors.text) },
-                isSelected && { fontWeight: '700' }
+              <View style={[
+                styles.dayCell,
+                isSelected && { backgroundColor: colors.tint }
               ]}>
-                {d.getUTCDate()}
-              </Text>
+                <Text style={[
+                  styles.dayText,
+                  { color: isPast ? colors.secondaryText : (isSelected ? colors.onTint : colors.text) },
+                  isPast && { opacity: 0.5 },
+                  isSelected && { fontWeight: '700' }
+                ]}>
+                  {d.getUTCDate()}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -170,15 +173,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
-  dayCell: {
+  dayCellContainer: {
     width: '14.28%', // 100 / 7
     aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
+  },
+  dayCell: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 18,
   },
   dayText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '500',
   },
 });

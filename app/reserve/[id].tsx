@@ -571,7 +571,7 @@ export default function ReservationScreen() {
 
           <View style={styles.payMethodRow}>
             {([
-              { key: 'deposit', label: 'Pay 50% now' },
+              { key: 'deposit', label: 'Pay 50% deposit' },
               { key: 'full', label: 'Pay in full' },
             ] as const).map((option) => {
               const isSelected = payOption === option.key;
@@ -631,7 +631,7 @@ export default function ReservationScreen() {
           <View style={styles.receiptStatus}>
             <IconSymbol name="checkmark.circle.fill" size={16} color={colors.tint} />
             <Text style={[styles.receiptStatusText, { color: colors.secondaryText }]}>
-              Nothing is charged now. Your items are held until the payment deadline.
+              No payment is taken on this screen. After reserving, complete your ₱{amountDueNow.toFixed(2)} payment before the deadline.
             </Text>
           </View>
         </View>
