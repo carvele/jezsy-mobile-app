@@ -942,21 +942,6 @@ export default function ExploreScreen() {
 
   // Memoised because activeFilterChips depends on them; as plain functions they
   // were rebuilt every render and the memo never held.
-  const [displayLimit, setDisplayLimit] = useState(20);
-
-  // Reset display limit when filters/search change
-  useEffect(() => {
-    setDisplayLimit(20);
-  }, [processedProducts]);
-
-  const displayedProducts = useMemo(() => {
-    return processedProducts.slice(0, displayLimit);
-  }, [processedProducts, displayLimit]);
-
-  const loadMore = useCallback(() => {
-    setDisplayLimit(prev => Math.min(prev + 20, processedProducts.length));
-  }, [processedProducts.length]);
-
   const removeSizeFilter = useCallback((size: string) => {
     setSelectedSizes((prev) => prev.filter((s) => s !== size));
   }, []);
@@ -1358,15 +1343,13 @@ export default function ExploreScreen() {
                 </View>
               ) : (
                 <FlatList
-                  data={displayedProducts}
+                  data={processedProducts}
                   renderItem={renderProductItem}
                   keyExtractor={(item) => item.id}
                   key={`grid-${columns}`}
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
                   contentContainerStyle={[styles.productList, { paddingBottom: bottomInset }]}
-                  onEndReached={loadMore}
-                  onEndReachedThreshold={0.5}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderGridHeader(
@@ -1576,7 +1559,7 @@ export default function ExploreScreen() {
                 </View>
               ) : (
                 <FlatList
-                  data={displayedProducts}
+                  data={processedProducts}
                   renderItem={renderProductItem}
                   keyExtractor={(item) => item.id}
                   key={`grid-${columns}`}

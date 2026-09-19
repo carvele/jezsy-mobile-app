@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors, Spacing, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { manilaCalendarDay, formatManilaDate, isSameManilaDay } from '@/src/utils/dateTime';
-import { IconSymbol } from './ui/icon-symbol';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 interface Props {
   selectedDate: Date;
