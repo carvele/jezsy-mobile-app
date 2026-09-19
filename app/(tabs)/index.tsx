@@ -783,7 +783,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: GRID_COLUMN_GAP,
     paddingHorizontal: GRID_GUTTER,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
   },
   sectionTitle: {
     ...Type.title,
