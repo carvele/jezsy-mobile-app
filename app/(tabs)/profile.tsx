@@ -431,6 +431,24 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Legal</Text>
+          <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
+            {renderSettingItem(
+              'doc.text',
+              'Terms & Conditions',
+              'Read the current terms of service',
+              () => router.push('/legal/terms' as any),
+            )}
+            {renderSettingItem(
+              'hand.raised.fill',
+              'Privacy Policy',
+              'How JezSy collects and uses your data',
+              () => router.push('/legal/privacy' as any),
+            )}
+          </View>
+        </View>
+
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>App Preferences</Text>
             <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>

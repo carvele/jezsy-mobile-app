@@ -24,6 +24,7 @@ import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
+import { legalService } from '@/src/services/legalService';
 
 // Enable LayoutAnimation on Android (Legacy Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
@@ -53,6 +54,7 @@ export default function AuthScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [timer, setTimer] = useState(0);
   const [inputFocused, setInputFocused] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   const otpInputRef = useRef<TextInput>(null);
 
@@ -110,6 +112,10 @@ export default function AuthScreen() {
     }
     if (password !== confirmPassword) {
       showToast('Passwords do not match.', 'error');
+      return;
+    }
+    if (!legalAccepted) {
+      showToast('Please agree to the Terms & Conditions and Privacy Policy to create an account.', 'error');
       return;
     }
 
@@ -260,13 +266,22 @@ export default function AuthScreen() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({
+      const { data, error } = await supabase.auth.verifyOtp({
         email: email.trim().toLowerCase(),
         token: code.trim(),
         type: verificationType === 'signup' ? 'signup' : 'email',
       });
 
       if (error) throw error;
+
+      if (verificationType === 'signup' && data.session) {
+        try {
+          await legalService.recordSignupLegalAcceptance();
+        } catch (legalError) {
+          console.error('Sign-up legal acceptance error:', legalError);
+          showToast('Your account is verified. Please complete legal acceptance before continuing.', 'info');
+        }
+      }
 
       // AuthState change listener in root layout will automatically handle routing
     } catch (err: any) {
@@ -379,6 +394,7 @@ export default function AuthScreen() {
     } else if (mode === 'otp_verify') {
       transitionMode(verificationType === 'signup' ? 'signup' : 'otp_request');
     } else {
+      if (mode === 'signup') setLegalAccepted(false);
       transitionMode('login');
     }
   };
@@ -587,6 +603,26 @@ export default function AuthScreen() {
               </View>
             )}
 
+            {mode === 'signup' && (
+              <View style={styles.legalConsentRow}>
+                <TouchableOpacity
+                  style={[styles.legalCheckbox, legalAccepted && styles.legalCheckboxChecked]}
+                  onPress={() => setLegalAccepted((accepted) => !accepted)}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel="I agree to the Terms and Conditions and Privacy Policy"
+                  accessibilityState={{ checked: legalAccepted }}
+                >
+                  {legalAccepted && <Text style={styles.legalCheckboxMark}>✓</Text>}
+                </TouchableOpacity>
+                <Text style={styles.legalConsentText}>
+                  I agree to the{' '}
+                  <Text style={styles.legalConsentLink} onPress={() => router.push('/legal/terms')}>Terms & Conditions</Text>
+                  {' '}and{' '}
+                  <Text style={styles.legalConsentLink} onPress={() => router.push('/legal/privacy')}>Privacy Policy</Text>.
+                </Text>
+              </View>
+            )}
+
             {/* OTP Verification Steps (only in otp_verify screen) */}
             {mode === 'otp_verify' && (
               <View style={styles.fieldGroup}>
@@ -682,6 +718,7 @@ export default function AuthScreen() {
             <PrimaryButton
               label={getButtonText()}
               onPress={handleSubmit}
+              disabled={mode === 'signup' && !legalAccepted}
               loading={loading}
               dark
               style={styles.primaryBtnGlow}
@@ -694,7 +731,10 @@ export default function AuthScreen() {
                   {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => transitionMode(mode === 'login' ? 'signup' : 'login')}
+                  onPress={() => {
+                    if (mode === 'login') setLegalAccepted(false);
+                    transitionMode(mode === 'login' ? 'signup' : 'login');
+                  }}
                   hitSlop={10}
                   accessibilityRole="button"
                   accessibilityLabel={mode === 'login' ? 'Create an account' : 'Log in'}
@@ -846,6 +886,41 @@ const styles = StyleSheet.create({
   },
   eyeBtn: {
     padding: Spacing.sm,
+  },
+  legalConsentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  legalCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  legalCheckboxChecked: {
+    backgroundColor: c.tint,
+    borderColor: c.tint,
+  },
+  legalCheckboxMark: {
+    color: c.onTint,
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  legalConsentText: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  legalConsentLink: {
+    color: c.tint,
+    fontWeight: '700',
   },
   linksRow: {
     flexDirection: 'row',

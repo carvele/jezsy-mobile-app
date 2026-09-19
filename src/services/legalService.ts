@@ -74,6 +74,20 @@ export const legalService = {
     }
   },
 
+  /** Persists sign-up checkbox consent after OTP verification creates an authenticated identity. */
+  async recordSignupLegalAcceptance(): Promise<void> {
+    const platform = getClientPlatform();
+    const userAgent = `${Platform.OS} JezSy-Mobile-App`;
+    const { error } = await supabase.rpc('record_signup_legal_acceptance' as any, {
+      _client_platform: platform,
+      _user_agent: userAgent,
+    });
+    if (error) {
+      console.error('[legalService] recordSignupLegalAcceptance error:', error);
+      throw error;
+    }
+  },
+
   /**
    * Fetches the current active legal document of a specific type (e.g. for reading in Profile/FAQ).
    */
