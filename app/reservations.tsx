@@ -159,6 +159,7 @@ export default function ReservationsScreen() {
       case 'ready': return colors.info;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
+      case 'refunded': return colors.info;
       default: return colors.secondaryText;
     }
   };
@@ -212,16 +213,16 @@ export default function ReservationsScreen() {
       // inside a plain, non-interactive View carrying the card's visual
       // border/background, removes the DOM nesting instead of just working
       // around its side effect.
-      <View style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <TouchableOpacity
-          accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel={`Reservation ${item.display_id || item.id.substring(0,8)}, ${item.product_name}, status ${displayState.label}${hasRefundPending ? ', refund in progress' : ''}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
-        accessibilityHint="View reservation details"
-        onPress={() => router.push(`/reservations/${item.id}` as any)}
-      >
-        <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.reservationId, { color: colors.secondaryText }]}>ID: {item.display_id || item.id.substring(0,8)}</Text>
+        <View style={[styles.reservationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <TouchableOpacity
+            accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={`Reservation ${item.display_id ? item.display_id.split('-').pop() : item.id.substring(0,8)}, ${item.product_name}, status ${displayState.label}${hasRefundPending ? ', refund in progress' : ''}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
+          accessibilityHint="View reservation details"
+          onPress={() => router.push(`/reservations/${item.id}` as any)}
+        >
+          <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.reservationId, { color: colors.secondaryText }]}>Reservation #{item.display_id ? item.display_id.split('-').pop() : item.id.substring(0,8)}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.xs }}>
             {deadline && (
               <View style={[styles.deadlineBadge, { borderColor: deadline.urgent ? colors.error : colors.warning }]}>

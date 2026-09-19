@@ -403,15 +403,11 @@ export default function ReservationDetailScreen() {
       if (bankEnabled && !gcashEnabled) return 'Upload another bank transfer receipt';
       return 'Upload another receipt';
     }
-    if (gcashEnabled && !bankEnabled) return 'Pay via GCash transfer / Upload receipt';
-    if (bankEnabled && !gcashEnabled) return 'Pay via bank transfer / Upload receipt';
-    return 'Pay by transfer / Upload receipt';
+    return 'Upload payment receipt';
   }, [gcashEnabled, bankEnabled, isDepositRejected]);
 
   const balanceManualPaymentButtonLabel = useMemo(() => {
-    if (gcashEnabled && !bankEnabled) return 'Pay balance via GCash / Upload receipt';
-    if (bankEnabled && !gcashEnabled) return 'Pay balance via bank / Upload receipt';
-    return 'Pay balance by transfer / Upload receipt';
+    return 'Upload balance receipt';
   }, [gcashEnabled, bankEnabled]);
 
   const openManualPayment = () => {
@@ -553,6 +549,7 @@ export default function ReservationDetailScreen() {
       case 'ready': return colors.info;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
+      case 'refunded': return colors.info;
       default: return colors.secondaryText;
     }
   };
@@ -962,6 +959,26 @@ export default function ReservationDetailScreen() {
           </View>
         )}
 
+        {displayState.label === 'Expired' && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.error }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              <IconSymbol name="xmark.circle" size={18} color={colors.error} />
+              <Text style={[styles.sectionTitle, { color: colors.error, marginBottom: 0 }]}>
+                Payment window expired
+              </Text>
+            </View>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.lg }]}>
+              The payment deadline for this reservation has passed.
+            </Text>
+            <TouchableOpacity
+              style={[styles.payPrimary, { backgroundColor: colors.border }]}
+              onPress={() => router.replace('/(tabs)')}
+            >
+              <Text style={[styles.payPrimaryText, { color: colors.text }]}>Make a new reservation</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {awaitingPayment && (
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: isDepositRejected ? colors.error : colors.tint }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
@@ -970,24 +987,22 @@ export default function ReservationDetailScreen() {
                 {isDepositRejected ? 'Payment proof needs attention' : 'Payment needed'}
               </Text>
             </View>
-            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
-              {isDepositRejected
-                ? depositRejectionReasonText
-                : `Pay ₱${(reservation.deposit || 0).toFixed(2)} before the deadline to keep this item reserved for you.`}
+            <Text style={[styles.rowText, { color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: Spacing.md }]}>
+              ₱{(reservation.deposit || 0).toFixed(2)} due
             </Text>
 
-            {/* The deadline was previously invisible -- the customer was on a
-                countdown nobody had told them about. */}
-            <View style={[styles.payDeadline, { borderColor: timeLeft ? colors.warning : colors.error }]}>
-              <IconSymbol
-                name={timeLeft ? 'exclamationmark.circle' : 'xmark'}
-                size={16}
-                color={timeLeft ? colors.warning : colors.error}
-              />
-              <Text style={[styles.payDeadlineText, { color: timeLeft ? colors.warning : colors.error }]}>
-                {timeLeft ?? 'The payment window has closed.'}
+            {isDepositRejected ? (
+              <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
+                {depositRejectionReasonText}
               </Text>
-            </View>
+            ) : reservation.payment_due_at ? (
+              <View style={[styles.payDeadline, { borderColor: colors.border, marginBottom: Spacing.lg, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md }]}>
+                <Text style={{ color: colors.secondaryText, fontSize: 13, marginBottom: 2 }}>Pay before:</Text>
+                <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+                  {formatPHDate(reservation.payment_due_at, { month: 'long', day: 'numeric', year: 'numeric' })} &middot; {formatPHDate(reservation.payment_due_at, { hour: 'numeric', minute: '2-digit' })}
+                </Text>
+              </View>
+            ) : null}
 
             <TouchableOpacity
               style={[styles.payPrimary, { backgroundColor: colors.tint, opacity: payBusy || uploadingReceipt || isPaymentProcessing ? 0.6 : 1 }]}
