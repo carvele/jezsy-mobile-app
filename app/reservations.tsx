@@ -379,7 +379,7 @@ export default function ReservationsScreen() {
       {/* Keyed on the unfiltered total, not the current page: a filter with
           zero matches must keep showing the row, or switching back to "all"
           becomes impossible once a tab comes up empty. */}
-      {!loading && statusCounts.all > 0 && (
+      {statusCounts.all > 0 && (
         <FlatList
           horizontal
           data={STATUS_FILTERS}

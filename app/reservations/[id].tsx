@@ -101,7 +101,7 @@ export default function ReservationDetailScreen() {
   const payBusyRef = useRef(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
-  const [isPickupPassExpanded, setIsPickupPassExpanded] = useState(true);
+  const [isPickupPassExpanded, setIsPickupPassExpanded] = useState(false);
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
 
   const togglePickupPass = useCallback(() => {

@@ -386,7 +386,7 @@ export default function ReservationScreen() {
         'success',
       );
       reservationAttemptRef.current = null;
-      router.replace("/reservations");
+      router.replace("/reservations?status=toPay");
     } catch (error: any) {
       console.error("Reservation error:", error);
       // Map known server-side guards to user-friendly messages.

@@ -2305,7 +2305,8 @@ const styles = StyleSheet.create({
   skeletonGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: GRID_COLUMN_GAP,
     paddingHorizontal: Spacing.lg,
   },
   loadMoreFooter: {
@@ -2496,7 +2497,7 @@ const styles = StyleSheet.create({
   pricePresetsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     gap: Spacing.sm,
   },
   pricePresetCard: {

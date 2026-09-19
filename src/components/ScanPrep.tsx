@@ -297,9 +297,11 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
     width: '100%',
     rowGap: Spacing.md,
+    columnGap: Spacing.md,
     marginTop: Spacing.sm,
   },
   gridCard: {
