@@ -103,6 +103,7 @@ export default function ReservationDetailScreen() {
   const { session } = useAuth();
   const [isPickupPassExpanded, setIsPickupPassExpanded] = useState(false);
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
+  const [payments, setPayments] = useState<any[]>([]);
 
   const togglePickupPass = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -150,7 +151,7 @@ export default function ReservationDetailScreen() {
     if (!id) return;
     setLoading(true);
     try {
-      const [resResult, itemsResult, refundReq] = await Promise.all([
+      const [resResult, itemsResult, refundReq, paymentsResult] = await Promise.all([
         supabase.from('reservations').select('*').eq('id', id).single(),
         supabase
           .from('reservation_items')
@@ -158,11 +159,17 @@ export default function ReservationDetailScreen() {
           .eq('reservation_id', id)
           .order('created_at', { ascending: true }),
         getActiveRefundRequest(id),
+        supabase
+          .from('payments')
+          .select('*')
+          .eq('reservation_id', id)
+          .order('created_at', { ascending: false }),
       ]);
 
       if (resResult.error) throw resResult.error;
       setReservation(resResult.data);
       setRefundRequest(refundReq);
+      setPayments(paymentsResult.data ?? []);
 
       if (itemsResult.error) throw itemsResult.error;
       setItems(itemsResult.data ?? []);
@@ -171,6 +178,7 @@ export default function ReservationDetailScreen() {
       setReservation(null);
       setItems([]);
       setRefundRequest(null);
+      setPayments([]);
     } finally {
       setLoading(false);
     }
@@ -600,6 +608,10 @@ export default function ReservationDetailScreen() {
     paymentState === 'cancelled';
   const balanceDue = isBalanceSettled || isReservationCancelled ? 0 : rawBalanceDue;
 
+  const refundPayment = useMemo(() => {
+    return payments.find((p: any) => p.refund_disbursed_at || p.refund_reference_number || p.status === 'refunded');
+  }, [payments]);
+
   // Matches the dashboard's CAN_RESCHEDULE_STATUSES. The old list stopped at
   // 'confirmed', so a customer whose item was already waiting for collection
   // could not move the appointment even though staff could.
@@ -935,10 +947,10 @@ export default function ReservationDetailScreen() {
           </View>
         )}
 
-        {(paymentState === 'refund required' || refundRequest?.status === 'approved') && (
-          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.error }]}>
+        {(paymentState === 'refund required' || refundRequest?.status === 'approved') && paymentState !== 'refunded' && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.tint }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
-              <IconSymbol name="exclamationmark.circle" size={18} color={colors.error} />
+              <IconSymbol name="checkmark.circle" size={18} color={colors.tint} />
               <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
                 Refund Approved
               </Text>
@@ -946,16 +958,91 @@ export default function ReservationDetailScreen() {
             <Text style={[styles.rowText, { color: colors.secondaryText }]}>
               Your return/refund request has been approved by boutique staff. Staff are preparing your refund disbursement.
             </Text>
+            {refundRequest?.resolution_notes ? (
+              <View style={{ marginTop: Spacing.sm, padding: Spacing.md, backgroundColor: colors.background, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border }}>
+                <Text style={[styles.rowText, { color: colors.secondaryText, fontSize: 13 }]}>
+                  <Text style={{ fontWeight: '600', color: colors.text }}>Staff Note: </Text>
+                  &ldquo;{refundRequest.resolution_notes}&rdquo;
+                </Text>
+              </View>
+            ) : null}
           </View>
         )}
 
-
-        {paymentState === 'refund required' && (
-          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.warning }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Refund review required</Text>
-            <Text style={[styles.rowText, { color: colors.secondaryText }]}>
-              Your payment arrived after this reservation ended. The boutique has been alerted and will arrange the refund.
+        {refundRequest?.status === 'rejected' && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.error }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              <IconSymbol name="xmark.circle" size={18} color={colors.error} />
+              <Text style={[styles.sectionTitle, { color: colors.error, marginBottom: 0 }]}>
+                Return Request Declined
+              </Text>
+            </View>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.xs }]}>
+              Your return/refund request was reviewed and could not be approved.
             </Text>
+            {refundRequest.resolution_notes ? (
+              <View style={{ marginTop: Spacing.xs, padding: Spacing.md, backgroundColor: colors.background, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border }}>
+                <Text style={[styles.rowText, { color: colors.secondaryText, fontSize: 13 }]}>
+                  <Text style={{ fontWeight: '600', color: colors.text }}>Reason: </Text>
+                  &ldquo;{refundRequest.resolution_notes}&rdquo;
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        {(paymentState === 'refunded' || refundPayment) && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.tint }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs }}>
+              <IconSymbol name="checkmark.circle" size={18} color={colors.tint} />
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                Refund Disbursed
+              </Text>
+            </View>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.sm }]}>
+              Your refund has been disbursed by boutique staff.
+            </Text>
+            <View style={{ padding: Spacing.md, backgroundColor: colors.background, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border, gap: 6 }}>
+              {refundPayment?.amount_centavos ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 13, color: colors.secondaryText }}>Amount Refunded</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                    ₱{(refundPayment.amount_centavos / 100).toFixed(2)}
+                  </Text>
+                </View>
+              ) : null}
+              {refundPayment?.refund_method ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 13, color: colors.secondaryText }}>Method</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text, textTransform: 'capitalize' }}>
+                    {refundPayment.refund_method.replace(/_/g, ' ')}
+                  </Text>
+                </View>
+              ) : null}
+              {refundPayment?.refund_reference_number ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 13, color: colors.secondaryText }}>Reference No.</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: colors.text }}>
+                    {refundPayment.refund_reference_number}
+                  </Text>
+                </View>
+              ) : null}
+              {refundPayment?.refund_disbursed_at ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 13, color: colors.secondaryText }}>Disbursed On</Text>
+                  <Text style={{ fontSize: 13, color: colors.secondaryText }}>
+                    {formatPHDate(refundPayment.refund_disbursed_at, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </Text>
+                </View>
+              ) : null}
+              {refundPayment?.refund_notes ? (
+                <View style={{ marginTop: 4, paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                  <Text style={{ fontSize: 12, color: colors.secondaryText, fontStyle: 'italic' }}>
+                    Note: &ldquo;{refundPayment.refund_notes}&rdquo;
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         )}
 
