@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { Database } from '@/src/types/database.types';
 import { chatService } from '@/src/services';
@@ -41,6 +41,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const onlineUsers = usePresence(session?.user?.id, profile?.role);
+  const hasCheckedRecoveryRef = useRef<string | null>(null);
 
   const isStaff = profile?.role === 'staff' || profile?.role === 'owner';
   const unreadCount = conversations.reduce(
@@ -77,10 +78,29 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     if (!session?.user.id) {
       setConversations([]);
       setLoading(false);
+      hasCheckedRecoveryRef.current = null;
       return;
     }
 
-    refreshConversations();
+    let isMounted = true;
+
+    const initConversations = async () => {
+      // Design B: Resilient self-service welcome recovery on authenticated mount
+      if (profile?.role === 'customer' && hasCheckedRecoveryRef.current !== session.user.id) {
+        hasCheckedRecoveryRef.current = session.user.id;
+        try {
+          await supabase.rpc('ensure_my_welcome_conversation');
+        } catch (err) {
+          console.warn('Welcome conversation recovery non-fatal error:', err);
+        }
+      }
+
+      if (isMounted) {
+        await refreshConversations();
+      }
+    };
+
+    initConversations();
 
     // Realtime subscription for conversation updates, scoped strictly to the current user's conversation
     let subscription: ReturnType<typeof supabase.channel> | null = null;
@@ -105,11 +125,12 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
     }
 
     return () => {
+      isMounted = false;
       if (subscription) {
         supabase.removeChannel(subscription);
       }
     };
-  }, [session?.user.id, refreshConversations]);
+  }, [session?.user.id, profile?.role, refreshConversations]);
 
   const sendMessage = useCallback(async (
     conversationId: string,

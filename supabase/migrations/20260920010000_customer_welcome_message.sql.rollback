@@ -1,0 +1,72 @@
+-- Rollback Migration: 20260920010000_customer_welcome_message.sql.rollback
+-- Description:
+-- 1. Drops profile signup trigger trg_profile_welcome_conversation and trigger function.
+-- 2. Drops public customer recovery RPC ensure_my_welcome_conversation().
+-- 3. Drops private provisioning engine provision_customer_welcome(uuid).
+-- 4. Restores notify_customer_on_support_message() to immediate pre-migration definition.
+-- 5. Drops partial unique index idx_messages_welcome_single_greeting.
+-- 6. Deletes default welcomeMessage row from public.settings.
+-- Data Preservation: Delivered messages with sender_type = 'welcome' are historical customer domain data and are preserved.
+
+-- 1. Drop trigger and trigger function on profiles
+DROP TRIGGER IF EXISTS trg_profile_welcome_conversation ON public.profiles;
+DROP FUNCTION IF EXISTS public.handle_profile_welcome_conversation();
+
+-- 2. Drop public recovery RPC
+DROP FUNCTION IF EXISTS public.ensure_my_welcome_conversation();
+
+-- 3. Drop private canonical provisioning engine
+DROP FUNCTION IF EXISTS public.provision_customer_welcome(uuid);
+
+-- 4. Restore notify_customer_on_support_message to pre-feature definition (auto-ack only)
+CREATE OR REPLACE FUNCTION public.notify_customer_on_support_message()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_customer_id uuid;
+BEGIN
+  -- Suppress automated responses from notifying/badging customer
+  IF coalesce(NEW.is_auto_response, false) = true OR coalesce(NEW.sender_type, '') = 'auto_response' THEN
+    RETURN NEW;
+  END IF;
+
+  -- Only genuine replies from boutique staff/admin/owner
+  IF coalesce(NEW.sender_role, '') NOT IN ('staff', 'admin', 'owner') THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT customer_id INTO v_customer_id
+  FROM public.conversations
+  WHERE id = NEW.conversation_id;
+
+  IF v_customer_id IS NOT NULL AND v_customer_id <> coalesce(NEW.sender_id, '00000000-0000-0000-0000-000000000000'::uuid) THEN
+    PERFORM public.enqueue_customer_notification(
+      _user_id => v_customer_id,
+      _title   => 'New Message from Boutique Support',
+      _body    => substring(coalesce(NEW.text, 'You have a new message from Boutique Support') from 1 for 120),
+      _type    => 'conversation',
+      _data    => jsonb_build_object(
+        'entity_type', 'conversation',
+        'entity_id', NEW.conversation_id,
+        'action', 'new_message',
+        'conversation_id', NEW.conversation_id,
+        'actor_id', NEW.sender_id,
+        'actor_name', coalesce(NEW.sender_name, 'Boutique Support'),
+        'deep_link', '/messages/' || NEW.conversation_id
+      ),
+      _is_read => true -- Push transport row; is_read starts true to avoid duplicate badge
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+-- 5. Drop partial unique index on messages
+DROP INDEX IF EXISTS public.idx_messages_welcome_single_greeting;
+
+-- 6. Remove default settings row
+DELETE FROM public.settings WHERE key = 'welcomeMessage';

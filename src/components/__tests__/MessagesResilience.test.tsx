@@ -23,6 +23,7 @@ jest.mock('@/src/hooks/usePresence', () => ({
 jest.mock('@/src/lib/supabase', () => ({
   supabase: {
     from: jest.fn(),
+    rpc: jest.fn().mockResolvedValue({ data: 'conv-welcome-id', error: null }),
     channel: jest.fn().mockReturnValue({
       on: jest.fn().mockReturnThis(),
       subscribe: jest.fn(),
@@ -116,4 +117,73 @@ describe('Inbox Resilience (HCI-003, HCI-008)', () => {
     const recoveredCount = instance.findByProps({ testID: 'conversation-count' });
     expect(recoveredCount.props.children).toBe('Conversations: 1');
   }, 15000);
+
+  it('invokes ensure_my_welcome_conversation on mount for customer role', async () => {
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        order: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue({
+            data: [
+              {
+                id: 'conv-1',
+                customer_id: 'test-user-123',
+                last_message: 'Welcome to Jezsy Boutique Support!',
+                last_message_time: new Date().toISOString(),
+                unread_customer: 1,
+                unread_staff: 0,
+              },
+            ],
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    await ReactTestRenderer.act(async () => {
+      ReactTestRenderer.create(
+        <MessagesProvider>
+          <TestInboxConsumer />
+        </MessagesProvider>
+      );
+    });
+
+    expect(supabase.rpc).toHaveBeenCalledWith('ensure_my_welcome_conversation');
+  });
+
+  it('ensures welcome recovery failure is non-fatal and conversation list loads normally', async () => {
+    (supabase.rpc as jest.Mock).mockRejectedValueOnce(new Error('Network offline'));
+
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        order: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue({
+            data: [
+              {
+                id: 'conv-1',
+                customer_id: 'test-user-123',
+                last_message: 'Prior support text',
+                last_message_time: new Date().toISOString(),
+                unread_customer: 0,
+                unread_staff: 0,
+              },
+            ],
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    let root: ReactTestRenderer.ReactTestRenderer;
+    await ReactTestRenderer.act(async () => {
+      root = ReactTestRenderer.create(
+        <MessagesProvider>
+          <TestInboxConsumer />
+        </MessagesProvider>
+      );
+    });
+
+    const instance = root!.root;
+    const count = instance.findByProps({ testID: 'conversation-count' });
+    expect(count.props.children).toBe('Conversations: 1');
+  });
 });
