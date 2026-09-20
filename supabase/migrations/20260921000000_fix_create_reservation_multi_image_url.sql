@@ -2,12 +2,18 @@
 -- 20260921000000_fix_create_reservation_multi_image_url.sql
 --
 -- Fixes a runtime error in create_reservation_multi introduced by
--- 20260920140105_pickup_policy_hardening.sql.
+-- 20260920140105_pickup_policy_hardening.sql:
 --
--- The items loop at line 170 of that migration references
--- public.product_images (non-existent table) to populate image_url.
--- The products table is already JOINed in the same FOR loop query as alias p;
--- using p.image_url is correct and sufficient.
+-- 1. In 20260920140105, the items loop used `FOR v_item IN WITH raw AS ... SELECT r.*, p.name ...`
+--    where `v_item` was declared as `jsonb`. Postgres attempted to coerce the record
+--    tuple starting with product_id (a UUID) into jsonb, throwing:
+--    `22P02: invalid input syntax for type json (Token "b0000009" is invalid)`.
+--    Fixed by using `v_line record;` for the SQL FOR loop.
+--
+-- 2. Uses `p.image_url` directly from the joined `products` table instead of
+--    querying the non-existent `public.product_images` table.
+--
+-- 3. Supports catalog product status 'In Boutique' and 'active'.
 --
 -- No schema changes. Function signature is unchanged.
 -- Idempotent: CREATE OR REPLACE.
@@ -41,6 +47,7 @@ DECLARE
   v_option text := lower(coalesce(_payment_option, 'deposit'));
   v_payment_type text;
   v_item jsonb;
+  v_line record;
   v_quantity integer;
   v_total numeric := 0;
   v_deposit numeric;
@@ -126,7 +133,7 @@ BEGIN
     v_payment_due_at := now() + make_interval(mins => v_manual_max_minutes);
   END IF;
 
-  FOR v_item IN
+  FOR v_line IN
     WITH raw AS (
       SELECT
         (entry.value->>'product_id')::uuid AS product_id,
@@ -139,22 +146,22 @@ BEGIN
     FROM raw r
     JOIN public.products p ON p.id = r.product_id
   LOOP
-    IF v_item.p_status <> 'active' THEN
-      RAISE EXCEPTION 'Product % is not available.', v_item.name;
+    IF v_line.p_status NOT IN ('In Boutique', 'active') THEN
+      RAISE EXCEPTION 'Product % is not available.', v_line.name;
     END IF;
-    IF coalesce(v_item.stock, 0) < v_item.qty THEN
-      RAISE EXCEPTION 'Insufficient stock for %.', v_item.name;
+    IF coalesce(v_line.stock, 0) < v_line.qty THEN
+      RAISE EXCEPTION 'Insufficient stock for %.', v_line.name;
     END IF;
 
-    v_total := v_total + (v_item.price * v_item.qty);
+    v_total := v_total + (v_line.price * v_line.qty);
     v_items_resolved := v_items_resolved || jsonb_build_object(
-      'product_id', v_item.product_id,
-      'product_name', v_item.name,
-      'size', v_item.size,
-      'color', v_item.color,
-      'quantity', v_item.qty,
-      'unit_price', v_item.price,
-      'image_url', v_item.image_url
+      'product_id', v_line.product_id,
+      'product_name', v_line.name,
+      'size', v_line.size,
+      'color', v_line.color,
+      'quantity', v_line.qty,
+      'unit_price', v_line.price,
+      'image_url', v_line.image_url
     );
   END LOOP;
 
