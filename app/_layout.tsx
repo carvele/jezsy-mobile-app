@@ -364,10 +364,12 @@ function InitialLayout() {
       hasAuthenticated.current = false;
     }
     const pathSegments = segments as string[];
-    const AUTH_SCREENS = ['(auth)', 'welcome', 'auth', 'onboarding', 'profile-setup', 'reset-password'];
+    const AUTH_SCREENS = ['(auth)', 'welcome', 'auth', 'onboarding', 'profile-setup', 'reset-password', 'account-created'];
     const inAuthGroup = pathSegments.some((s) => AUTH_SCREENS.includes(s));
     const onProfileSetup = pathSegments.includes('profile-setup');
     const onResetPassword = pathSegments.includes('reset-password');
+    const onAccountCreated = pathSegments.includes('account-created');
+    const pendingSignupPhone = Boolean(session?.user?.user_metadata?.signup_phone) && !session?.user?.phone;
     // PayMongo's redirect target on web -- it must render with no session,
     // since a customer's tab can lose one between opening checkout and
     // finishing payment (expired token, cleared storage, private window).
@@ -407,6 +409,12 @@ function InitialLayout() {
         lastRedirectTargetRef.current = null;
         setRouteSettled(true);
       }
+      return;
+    }
+
+    if (onAccountCreated || pendingSignupPhone) {
+      lastRedirectTargetRef.current = null;
+      setRouteSettled(true);
       return;
     }
 
@@ -550,6 +558,7 @@ function InitialLayout() {
       <Stack initialRouteName="(tabs)" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(auth)/account-created" />
         <Stack.Screen name="legal/terms" />
         <Stack.Screen name="legal/privacy" />
         <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />

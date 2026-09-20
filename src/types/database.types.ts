@@ -1973,9 +1973,13 @@ export type Database = {
           last_name: string | null
           outfit_privacy: string
           phone: string | null
+          privacy_accepted_at: string | null
+          privacy_version: string | null
           profile_visibility: string
           province: string | null
           role: string
+          terms_accepted_at: string | null
+          terms_version: string | null
           updated_at: string
           username: string | null
           wardrobe_privacy: string | null
@@ -2005,9 +2009,13 @@ export type Database = {
           last_name?: string | null
           outfit_privacy?: string
           phone?: string | null
+          privacy_accepted_at?: string | null
+          privacy_version?: string | null
           profile_visibility?: string
           province?: string | null
           role?: string
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           updated_at?: string
           username?: string | null
           wardrobe_privacy?: string | null
@@ -2037,9 +2045,13 @@ export type Database = {
           last_name?: string | null
           outfit_privacy?: string
           phone?: string | null
+          privacy_accepted_at?: string | null
+          privacy_version?: string | null
           profile_visibility?: string
           province?: string | null
           role?: string
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           updated_at?: string
           username?: string | null
           wardrobe_privacy?: string | null
@@ -3419,6 +3431,7 @@ export type Database = {
         }
         Returns: string
       }
+      ensure_my_welcome_conversation: { Args: never; Returns: string }
       expire_all_stale_reservations: { Args: never; Returns: number }
       expire_stale_payments: { Args: never; Returns: number }
       find_duplicate_payment_reference: {
@@ -3759,6 +3772,10 @@ export type Database = {
         }
         Returns: Json
       }
+      provision_customer_welcome: {
+        Args: { p_customer_id: string }
+        Returns: string
+      }
       publish_legal_document_version: {
         Args: {
           _content_markdown: string
@@ -3806,6 +3823,10 @@ export type Database = {
       }
       record_reservation_balance: {
         Args: { _method?: string; _reservation_id: string }
+        Returns: Json
+      }
+      record_signup_legal_acceptance: {
+        Args: { _client_platform: string; _user_agent?: string }
         Returns: Json
       }
       register_device: {
@@ -4192,14 +4213,6 @@ export type Database = {
       vote_on_review: {
         Args: { p_review_id: string; p_vote_type?: string }
         Returns: Json
-      }
-      ensure_my_welcome_conversation: {
-        Args: Record<PropertyKey, never>
-        Returns: string | null
-      }
-      provision_customer_welcome: {
-        Args: { p_customer_id: string }
-        Returns: string | null
       }
     }
     Enums: {

@@ -62,7 +62,6 @@ export default function ProfileSetupScreen() {
 
   const [data, setData] = useState<ProfileData>({
     firstName: '',
-    username: '',
     lastName: '',
     phone: '',
     gender: '',
@@ -101,7 +100,6 @@ export default function ProfileSetupScreen() {
 
     setData(prev => ({
       firstName:   prev.firstName   || profile?.first_name || nameParts[0] || '',
-        username:    prev.username    || profile?.username || '',
       lastName:    prev.lastName    || profile?.last_name  || nameParts.slice(1).join(' ') || '',
       phone:       prev.phone       || (localPhone ? formatPhoneForCountry(localPhone, fmtCountry) : ''),
       gender:      prev.gender      || profile?.gender || '',
@@ -224,7 +222,6 @@ export default function ProfileSetupScreen() {
 
       const updatePayload = {
         first_name:    data.firstName.trim(),
-        username:      data.username.trim() || null,
         last_name:     data.lastName.trim(),
         phone:         fullPhone,
         gender:        data.gender || null,
@@ -243,12 +240,7 @@ export default function ProfileSetupScreen() {
         .eq('id', user.id)
         .select('id');
 
-      if (updateError) {
-        if (updateError.code === '23505') {
-          throw new Error('This username is already taken. Please choose another.');
-        }
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
       if (!updatedRows || updatedRows.length === 0) {
         const { error: insertError } = await supabase
@@ -259,26 +251,7 @@ export default function ProfileSetupScreen() {
             ...updatePayload,
           });
 
-        if (insertError) {
-          if (insertError.code === '23505') {
-            const isUsernameConflict = insertError.message?.includes('username') || insertError.details?.includes('username');
-            if (isUsernameConflict) {
-              throw new Error('This username is already taken. Please choose another.');
-            }
-            const { error: retryError } = await supabase
-              .from('profiles')
-              .update(updatePayload)
-              .eq('id', user.id);
-            if (retryError) {
-              if (retryError.code === '23505') {
-                throw new Error('This username is already taken. Please choose another.');
-              }
-              throw retryError;
-            }
-          } else {
-            throw insertError;
-          }
-        }
+        if (insertError) throw insertError;
       }
 
       // Refresh profile in context so root layout knows profile is complete
@@ -326,19 +299,6 @@ export default function ProfileSetupScreen() {
             autoFocus
             returnKeyType="next"
             accessibilityLabel="First name"
-          />
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={[styles.label, { color: colors.secondaryText }]}>Username (optional)</Text>
-          <TextInput keyboardAppearance={theme}
-            style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
-            placeholder="e.g. mariasantos"
-            placeholderTextColor={colors.secondaryText}
-            value={data.username}
-            onChangeText={v => set('username', v)}
-            autoCapitalize="none"
-            returnKeyType="next"
-            accessibilityLabel="Username (optional)"
           />
         </View>
         <View style={styles.fieldGroup}>
