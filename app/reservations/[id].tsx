@@ -694,9 +694,12 @@ export default function ReservationDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={{ fontSize: 30, fontWeight: '800', color: colors.text, marginBottom: 4 }}>Reservation Details</Text>
+        <Text style={{ fontSize: 30, fontWeight: '800', color: colors.text, marginBottom: 4 }}>Your reservation</Text>
+        <Text style={{ color: colors.secondaryText, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 8 }}>
+          Booking reference
+        </Text>
         <Text style={[styles.displayId, { color: colors.secondaryText, marginBottom: 16, fontSize: 16 }]}>
-          {reservation.display_id || reservation.id.substring(0, 8)}
+          {reservation.display_id || 'Available after confirmation'}
         </Text>
         <View style={{ alignSelf: 'flex-start', marginBottom: Spacing.xl }}>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
@@ -744,7 +747,7 @@ export default function ReservationDetailScreen() {
                     <QRCode value={`jezsy-pickup:${reservation.pickup_token}`} size={140} backgroundColor="#FFFFFF" color="#0D0D0D" />
                   </View>
                 )}
-                <Text style={[styles.pickupRef, { color: colors.onTint }]}>{reservation.display_id || reservation.id.substring(0, 8)}</Text>
+                <Text style={[styles.pickupRef, { color: colors.onTint }]}>{reservation.display_id || 'Booking reference pending'}</Text>
                 <Text style={[styles.pickupHint, { color: colors.onTint }]}>
                   Show this code at the boutique to collect your item. Bring a valid ID and your remaining balance.
                 </Text>
