@@ -228,30 +228,6 @@ export default function ExploreScreen() {
     return map;
   }, [subCategoriesByParent]);
 
-  const subCategoryIdsMatching = useCallback((text: string) => {
-    const lower = text.toLowerCase().trim();
-    if (lower.length < 2) return [];
-    const isShort = lower.length === 2;
-    const ids = new Set<string>();
-
-    const matches = (name: string) => {
-      const n = name.toLowerCase();
-      if (isShort) {
-        return n.startsWith(lower) || n.split(/\s+/).some((w) => w.startsWith(lower));
-      }
-      return n.includes(lower);
-    };
-
-    topCategories
-      .filter((c) => matches(c.name))
-      .forEach((top) => (subCategoriesByParent[top.name] || []).forEach((s) => ids.add(s.id)));
-    Object.values(subCategoriesByParent)
-      .flat()
-      .filter((s) => matches(s.name))
-      .forEach((s) => ids.add(s.id));
-    return Array.from(ids);
-  }, [topCategories, subCategoriesByParent]);
-
   // Quick category navigation suggestions for the active search query
   const matchingNavOptions = useMemo(() => {
     const raw = searchQuery.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -400,13 +376,11 @@ export default function ExploreScreen() {
     setIsSearching(true);
     setSearchError(null);
     try {
-      // Expand category-name matches to their subcategory IDs server-side.
-      const matchingCategoryIds = subCategoryIdsMatching(safeText);
       const categoryIds = selectedCategory
         ? selectedSubCategory && selectedSubCategory !== ALL_SUBCATEGORY && selectedSubCategory !== 'View All'
           ? [subCategoryIdByName[selectedCategory]?.[selectedSubCategory]].filter(Boolean)
           : (subCategoriesByParent[selectedCategory] || []).map((subcategory) => subcategory.id)
-        : matchingCategoryIds.length > 0 ? matchingCategoryIds : null;
+        : null;
 
       let minPrice: number | null = customMinPrice ? parseFloat(customMinPrice) : null;
       let maxPrice: number | null = customMaxPrice ? parseFloat(customMaxPrice) : null;
@@ -486,7 +460,7 @@ export default function ExploreScreen() {
       setIsSearching(false);
     }
   }, [
-    subCategoryIdsMatching, subCategoriesByParent, subCategoryIdByName, selectedCategory, selectedSubCategory, showToast,
+    subCategoriesByParent, subCategoryIdByName, selectedCategory, selectedSubCategory, showToast,
     selectedSizes, selectedColors, selectedFits, selectedMaterials, selectedTags,
     selectedSaleOnly, selectedNewArrivalsOnly, selectedArOnly,
     customMinPrice, customMaxPrice, selectedPriceRange, selectedSort, selectedMySizeOnly, sizingMeasurements,
