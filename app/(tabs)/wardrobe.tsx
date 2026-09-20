@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Dimensions, RefreshControl, ActivityIndicator, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -10,7 +10,6 @@ import { outfitService } from '@/src/services';
 import { outfitFeedbackService } from '@/src/services/outfitFeedbackService';
 import { useAuth } from '@/src/context/AuthContext';
 import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
 import { CapsuleCard } from '@/src/components/CapsuleCard';
 import {
   getWardrobeItemsPage,
@@ -127,6 +126,7 @@ export default function WardrobeScreen() {
   const [wearFilter, setWearFilter] = useState<WearFilter>('all');
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [createOutfitSheetVisible, setCreateOutfitSheetVisible] = useState(false);
   const hasLoadedOnce = useRef(false);
 
   const fetchWardrobeData = useCallback(async (isRefresh = false) => {
@@ -501,24 +501,6 @@ export default function WardrobeScreen() {
       </ScrollView>
 
       <GapAnalysis items={items} />
-
-      <TouchableOpacity
-        style={[styles.advisorCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/style-advisor' as any); }}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel="Open Style Advisor"
-        accessibilityHint="Get an outfit recommendation for a chosen occasion"
-      >
-        <View style={[styles.advisorIcon, { backgroundColor: colors.tint }]}>
-          <IconSymbol name="sparkles" size={20} color={colors.onTint} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.advisorTitle, { color: colors.text }]}>Ask the Style Advisor</Text>
-          <Text style={[styles.advisorSub, { color: colors.secondaryText }]}>Get a look styled for the occasion</Text>
-        </View>
-        <IconSymbol name="chevron.right" size={18} color={colors.secondaryText} />
-      </TouchableOpacity>
     </View>
   );
 
@@ -604,7 +586,7 @@ export default function WardrobeScreen() {
               activeTab === 'capsules'
                 ? router.push('/wardrobe/create-capsule' as any)
                 : activeTab === 'outfits'
-                  ? router.push('/outfit-builder')
+                  ? setCreateOutfitSheetVisible(true)
                   : router.push('/wardrobe/add-item')
             }
             accessibilityRole="button"
@@ -766,15 +748,27 @@ export default function WardrobeScreen() {
               </Text>
             )}
 
-            <TouchableOpacity
-              style={[styles.createOutfitBtn, { backgroundColor: colors.tint }]}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/outfit-builder'); }}
-              accessibilityRole="button"
-              accessibilityLabel="Create new outfit"
-            >
-              <IconSymbol name="plus" size={20} color={colors.onTint} />
-              <Text style={[styles.createOutfitBtnText, { color: colors.onTint }]}>Create New Outfit</Text>
-            </TouchableOpacity>
+            {/* Create Outfit — two clear choices */}
+            <View style={[styles.createOutfitRow, { borderTopColor: colors.border }]}>
+              <TouchableOpacity
+                style={[styles.createChoice, { backgroundColor: colors.tint }]}
+                onPress={() => { tapLight(); setActiveTab('mannequin'); }}
+                accessibilityRole="button"
+                accessibilityLabel="Build outfit yourself on the mannequin"
+              >
+                <IconSymbol name="person.fill" size={16} color={colors.onTint} />
+                <Text style={[styles.createChoiceText, { color: colors.onTint }]}>Build Yourself</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createChoice, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.tint }]}
+                onPress={() => { tapLight(); router.push('/style-advisor' as any); }}
+                accessibilityRole="button"
+                accessibilityLabel="Style It For Me — JeZsy picks a look from your wardrobe"
+              >
+                <IconSymbol name="sparkles" size={16} color={colors.tint} />
+                <Text style={[styles.createChoiceText, { color: colors.tint }]}>Style It For Me</Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         ) : (
           <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}>
@@ -783,7 +777,7 @@ export default function WardrobeScreen() {
               title="No Saved Outfits"
               message="Add a few more items and suggestions will appear here automatically, or style a look yourself."
               actionLabel="Create First Outfit"
-              onAction={() => router.push('/outfit-builder')}
+              onAction={() => setCreateOutfitSheetVisible(true)}
             />
           </ScrollView>
         )
@@ -849,6 +843,78 @@ export default function WardrobeScreen() {
           onDismiss={tourCoachmark.dismiss}
         />
       )}
+
+      {/* ── Create Outfit Choice Sheet ── */}
+      <Modal
+        visible={createOutfitSheetVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateOutfitSheetVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.sheetOverlay}
+          activeOpacity={1}
+          onPress={() => setCreateOutfitSheetVisible(false)}
+        >
+          <View style={[styles.sheetCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>Create Outfit</Text>
+            <Text style={[styles.sheetSub, { color: colors.secondaryText }]}>
+              Choose how you want to put your look together
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.sheetOption, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={() => {
+                tapLight();
+                setCreateOutfitSheetVisible(false);
+                setActiveTab('mannequin');
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Build Yourself"
+            >
+              <View style={[styles.sheetOptionIcon, { backgroundColor: colors.tint + '18' }]}>
+                <IconSymbol name="person.fill" size={20} color={colors.tint} />
+              </View>
+              <View style={styles.sheetOptionTextWrap}>
+                <Text style={[styles.sheetOptionTitle, { color: colors.text }]}>Build Yourself</Text>
+                <Text style={[styles.sheetOptionDesc, { color: colors.secondaryText }]}>
+                  Compose garments on the 2D mannequin canvas
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sheetOption, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={() => {
+                tapLight();
+                setCreateOutfitSheetVisible(false);
+                router.push('/style-advisor' as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Style It For Me"
+            >
+              <View style={[styles.sheetOptionIcon, { backgroundColor: colors.tint + '18' }]}>
+                <IconSymbol name="sparkles" size={20} color={colors.tint} />
+              </View>
+              <View style={styles.sheetOptionTextWrap}>
+                <Text style={[styles.sheetOptionTitle, { color: colors.text }]}>Style It For Me</Text>
+                <Text style={[styles.sheetOptionDesc, { color: colors.secondaryText }]}>
+                  JeZsy AI styles a personalized look from your wardrobe
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sheetCancelBtn, { borderColor: colors.border }]}
+              onPress={() => setCreateOutfitSheetVisible(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text style={[styles.sheetCancelText, { color: colors.secondaryText }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1119,5 +1185,86 @@ const styles = StyleSheet.create({
   advisorSub: {
     fontSize: 12,
     marginTop: 2,
+  },
+  createOutfitRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+  },
+  createChoice: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: 14,
+    borderRadius: Radius.lg,
+  },
+  createChoiceText: {
+    ...Type.bodyStrong,
+    fontSize: 14,
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheetCard: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    padding: Spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? 36 : Spacing.xl,
+  },
+  sheetTitle: {
+    ...Type.subtitle,
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  sheetSub: {
+    ...Type.body,
+    fontSize: 13,
+    marginBottom: Spacing.lg,
+  },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    gap: Spacing.md,
+  },
+  sheetOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetOptionTextWrap: {
+    flex: 1,
+  },
+  sheetOptionTitle: {
+    ...Type.bodyStrong,
+    fontSize: 15,
+  },
+  sheetOptionDesc: {
+    ...Type.caption,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  sheetCancelBtn: {
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    marginTop: Spacing.xs,
+  },
+  sheetCancelText: {
+    ...Type.bodyStrong,
+    fontSize: 14,
   },
 });

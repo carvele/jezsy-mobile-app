@@ -320,11 +320,99 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
     }
   };
 
-  // Share — screenshot capture is not supported on web; guide users to save instead
+  // Share — capture canvas view and open native share sheet, with safe web fallback
   const handleShareLook = async () => {
-    if (canvasItems.length === 0) { showToast('Add items first.', 'info'); return; }
-    showToast('Save your look first, then share from Saved Outfits!', 'info');
+    if (canvasItems.length === 0) {
+      showToast('Add items to the mannequin first.', 'info');
+      return;
+    }
+    if (Platform.OS === 'web') {
+      showToast('Save your look first, then share from Saved Outfits!', 'info');
+      return;
+    }
+    try {
+      const { captureRef } = await import('react-native-view-shot');
+      const Sharing = await import('expo-sharing');
+      if (canvasRef.current) {
+        const uri = await captureRef(canvasRef.current, { format: 'png', quality: 0.9 });
+        if (Sharing && typeof Sharing.shareAsync === 'function') {
+          await Sharing.shareAsync(uri, { dialogTitle: 'Share my outfit' });
+        } else {
+          showToast('Sharing is not available on this device.', 'info');
+        }
+      }
+    } catch (err: any) {
+      console.error('Error sharing outfit:', err);
+      showToast('Could not share outfit image.', 'error');
+    }
   };
+
+  // Shuffle — randomly compose a look from available wardrobe items
+  const handleShuffle = useCallback(() => {
+    if (wardrobeItems.length === 0) {
+      showToast('Add items to your wardrobe first to shuffle.', 'info');
+      return;
+    }
+
+    const bucketMap: Record<string, WardrobeItem[]> = {
+      Top: [],
+      Bottom: [],
+      Dress: [],
+      Outerwear: [],
+      Shoes: [],
+      Accessory: [],
+    };
+
+    for (const item of wardrobeItems) {
+      const b = resolveEffectiveGarmentBucket(item);
+      if (b && bucketMap[b]) {
+        bucketMap[b].push(item);
+      }
+    }
+
+    const picks: WardrobeItem[] = [];
+    const hasDress = bucketMap.Dress.length > 0;
+    const hasTop = bucketMap.Top.length > 0;
+    const hasBottom = bucketMap.Bottom.length > 0;
+
+    const chooseDress = hasDress && (!hasTop || !hasBottom || Math.random() < 0.25);
+
+    if (chooseDress) {
+      picks.push(bucketMap.Dress[Math.floor(Math.random() * bucketMap.Dress.length)]);
+    } else {
+      if (hasTop) {
+        picks.push(bucketMap.Top[Math.floor(Math.random() * bucketMap.Top.length)]);
+      }
+      if (hasBottom) {
+        picks.push(bucketMap.Bottom[Math.floor(Math.random() * bucketMap.Bottom.length)]);
+      }
+    }
+
+    if (bucketMap.Shoes.length > 0) {
+      picks.push(bucketMap.Shoes[Math.floor(Math.random() * bucketMap.Shoes.length)]);
+    }
+
+    if (bucketMap.Outerwear.length > 0 && Math.random() < 0.4) {
+      picks.push(bucketMap.Outerwear[Math.floor(Math.random() * bucketMap.Outerwear.length)]);
+    }
+
+    if (bucketMap.Accessory.length > 0 && Math.random() < 0.4) {
+      picks.push(bucketMap.Accessory[Math.floor(Math.random() * bucketMap.Accessory.length)]);
+    }
+
+    if (picks.length === 0) {
+      const shuffled = [...wardrobeItems].sort(() => Math.random() - 0.5);
+      picks.push(...shuffled.slice(0, Math.min(3, shuffled.length)));
+    }
+
+    const newCanvasItems: CanvasItemType[] = picks.map((item, idx) =>
+      createMannequinItem(item, idx)
+    );
+
+    setCanvasItems(newCanvasItems);
+    setSelectedItemId(null);
+    showToast('Shuffled your outfit!', 'success');
+  }, [wardrobeItems, showToast]);
 
   // Save
   const handleSaveLook = async () => {
@@ -519,6 +607,20 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
           >
             <IconSymbol name="ellipsis" size={14} color={colors.text} />
             <Text style={[styles.toolBtnText, { color: colors.text }]}>More</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.toolBtn,
+              { backgroundColor: colors.card, borderColor: colors.border, opacity: wardrobeItems.length === 0 ? 0.4 : 1 },
+            ]}
+            onPress={handleShuffle}
+            disabled={wardrobeItems.length === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Shuffle outfit from wardrobe"
+          >
+            <IconSymbol name="shuffle" size={14} color={colors.tint} />
+            <Text style={[styles.toolBtnText, { color: colors.text }]}>Shuffle</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

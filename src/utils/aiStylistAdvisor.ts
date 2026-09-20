@@ -32,8 +32,10 @@ import {
   StylistEvidencePacketItem,
   StructuredAIResponse,
   StylistAnalysisMode,
+  VisualItemEvidence,
 } from '../types/aiStylist';
 import { IAIStylistProvider, defaultAIStylistProvider } from '../services/aiStylistProvider';
+import { getBatchVisualEvidence } from '../services/garmentVisualCache';
 
 export type OverallAssessment =
   | 'Appropriate for this occasion'
@@ -2831,7 +2833,7 @@ export async function gradeOutfitWithAI(
     return gradeOutfit(items, wardrobeLookup, context, profile);
   }
 
-  const packet = buildStylistEvidencePacket(items, wardrobeLookup, context, profile);
+  const packet = await buildStylistEvidencePacketWithVisual(items, wardrobeLookup, context, profile);
   const activeProvider = provider || defaultAIStylistProvider;
 
   let result;
@@ -2869,4 +2871,106 @@ export async function gradeOutfitWithAI(
   };
 }
 
+/**
+ * Builds the evidence packet and then enriches each item with visual analysis
+ * from the shared garmentVisualCache.  The cache key includes the image URL and
+ * the item's updated_at timestamp so stale analysis is never reused.
+ *
+ * Visual evidence is ONE input among many.  It never overwrites user-entered data.
+ * If analysis fails for any item the packet is returned without that item's visual
+ * fields -- the deterministic reasoning still runs normally.
+ */
+export async function buildStylistEvidencePacketWithVisual(
+  items: MannequinCanvasItem[],
+  wardrobeLookup?: Record<string, WardrobeItem>,
+  context?: OutfitContext,
+  _profile?: UserStyleProfileDto | null
+): Promise<StylistEvidencePacket> {
+  // Build the synchronous packet first so deterministic reasoning is never blocked
+  const packet = buildStylistEvidencePacket(items, wardrobeLookup, context, _profile);
 
+  // Gather image URLs + version tokens for batch visual analysis
+  const batchInputs = (items || []).flatMap((canvasItem) => {
+    const imageUrl = canvasItem.image_url;
+    if (!imageUrl) return [];
+    const w = wardrobeLookup?.[canvasItem.wardrobe_item_id];
+    const versionToken = (w as any)?.updated_at || canvasItem.wardrobe_item_id;
+    return [{ imageUrl, versionToken }];
+  });
+
+  if (batchInputs.length === 0) return packet;
+
+  // Visual analysis runs concurrently with an 8s overall timeout
+  const visualMap = await (async () => {
+    try {
+      const timeout = new Promise<Map<string, VisualItemEvidence>>((resolve) =>
+        setTimeout(() => resolve(new Map()), 8000)
+      );
+      return await Promise.race([getBatchVisualEvidence(batchInputs), timeout]);
+    } catch {
+      return new Map<string, VisualItemEvidence>();
+    }
+  })();
+
+  if (visualMap.size === 0) return packet;
+
+  // Enrich each StylistEvidencePacketItem with its visual evidence
+  const itemEvidenceRecord: Record<string, VisualItemEvidence> = {};
+  for (const packetItem of packet.outfit.items) {
+    const canvasItem = (items || []).find((ci) => ci.wardrobe_item_id === packetItem.wardrobeItemId);
+    if (!canvasItem?.image_url) continue;
+    const ev = visualMap.get(canvasItem.image_url);
+    if (!ev) continue;
+    (packetItem as any).visualEvidence = ev;
+    itemEvidenceRecord[packetItem.wardrobeItemId] = ev;
+  }
+
+  const allEvidence = Object.values(itemEvidenceRecord);
+  if (allEvidence.length === 0) return packet;
+
+  // Aggregate dominant colours across all items
+  const allDominantColors = allEvidence.flatMap((e) =>
+    e.dominantColors.filter((c) => c.role === 'dominant' || c.role === 'secondary')
+  );
+  const uniqueColorMap = new Map<string, { name: string; hex: string }>();
+  for (const c of allDominantColors) {
+    if (!uniqueColorMap.has(c.name)) uniqueColorMap.set(c.name, { name: c.name, hex: c.hex });
+  }
+
+  // Average formality signal across all outfit items with visual evidence
+  const avgFormality =
+    allEvidence.reduce((sum, e) => sum + e.formalitySignal, 0) / allEvidence.length;
+
+  const hasRealMl = allEvidence.some((e) => e.isRealMl);
+  const analysisMode: 'realMl' | 'fallback' | 'unavailable' =
+    hasRealMl ? 'realMl' : allEvidence.length > 0 ? 'fallback' : 'unavailable';
+
+  // Supplement palette with image-extracted colours; user-entered colours remain primary
+  const existingPaletteSet = new Set(
+    (packet.visualEvidence?.paletteColors ?? []).map((c) => c.toLowerCase())
+  );
+  const supplementalColors = [...uniqueColorMap.keys()].filter(
+    (n) => !existingPaletteSet.has(n.toLowerCase())
+  );
+  const mergedPalette = [...(packet.visualEvidence?.paletteColors ?? []), ...supplementalColors];
+
+  // Compute a colour harmony note from image-extracted dominant colours
+  let colorHarmonyNote: string | undefined;
+  const imageColorNames = [...uniqueColorMap.keys()];
+  if (imageColorNames.length >= 2) {
+    const imageHarmony = evaluateColors(imageColorNames);
+    colorHarmonyNote = `Visual palette (${imageColorNames.slice(0, 3).join(', ')}): ${imageHarmony.feedback}`;
+  }
+
+  return {
+    ...packet,
+    visualEvidence: {
+      paletteColors: mergedPalette,
+      dominantColors: [...uniqueColorMap.values()],
+      itemEvidence: itemEvidenceRecord,
+      colorHarmonyNote,
+      overallFormalitySignal: Math.round(avgFormality * 100) / 100,
+      visualAnalysisMode: analysisMode,
+    },
+  };
+}

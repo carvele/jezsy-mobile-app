@@ -40,6 +40,19 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
+interface VisualItemEvidence {
+  visualGarmentFamily: string;
+  formalitySignal: number;
+  athleticSignal: boolean;
+  swimwearSignal: boolean;
+  visualPattern: string | null;
+  dominantColors: Array<{ name: string; hex: string; role: string; confidence: number }>;
+  isRealMl: boolean;
+  modelName: string;
+  confidence: number;
+  lowConfidence: boolean;
+}
+
 interface StylistEvidencePacket {
   request: {
     analysisId: string;
@@ -59,6 +72,7 @@ interface StylistEvidencePacket {
       thermalLevel?: string;
       functionalRole?: string;
       styleSignals?: Record<string, boolean>;
+      visualEvidence?: VisualItemEvidence;
     }>;
   };
   structure: {
@@ -86,6 +100,10 @@ interface StylistEvidencePacket {
   visualEvidence?: {
     paletteColors: string[];
     dominantColors?: Array<{ name: string; hex: string }>;
+    itemEvidence?: Record<string, VisualItemEvidence>;
+    colorHarmonyNote?: string;
+    overallFormalitySignal?: number;
+    visualAnalysisMode?: string;
   };
 }
 
@@ -107,9 +125,67 @@ STRICT OPERATING RULES:
 7. ACTIONABLE RECOMMENDATIONS: When suggesting alternative pieces, reference real items or state that none exist in the user's wardrobe.
 8. RETURN PURE JSON: Return ONLY a valid JSON object matching the requested schema.`;
 
+function buildVisualEvidenceSummary(packet: StylistEvidencePacket): string {
+  const ve = packet.visualEvidence;
+  if (!ve || ((!ve.dominantColors || ve.dominantColors.length === 0) && !ve.colorHarmonyNote)) {
+    return 'Visual analysis: unavailable. Rely on user-entered colour data and semantic classification.';
+  }
+
+  const lines: string[] = [];
+  lines.push(`Visual analysis mode: ${ve.visualAnalysisMode ?? 'fallback'}`);
+
+  if (ve.dominantColors && ve.dominantColors.length > 0) {
+    lines.push(`Outfit-level dominant colours from image pixels: ${ve.dominantColors.map((c) => c.name).join(', ')}`);
+  }
+
+  if (ve.colorHarmonyNote) {
+    lines.push(ve.colorHarmonyNote);
+  }
+
+  if (typeof ve.overallFormalitySignal === 'number') {
+    const f = ve.overallFormalitySignal;
+    const fLabel = f >= 0.75 ? 'formal' : f >= 0.50 ? 'semi-formal' : f >= 0.30 ? 'casual' : 'very casual';
+    lines.push(`Visual formality signal: ${f.toFixed(2)} (${fLabel})`);
+  }
+
+  // Per-item visual details
+  const itemLines: string[] = [];
+  for (const item of packet.outfit.items) {
+    const ev = item.visualEvidence;
+    if (!ev || ev.lowConfidence) continue;
+    const colorStr = ev.dominantColors
+      .filter((c) => c.role === 'dominant' || c.role === 'secondary')
+      .map((c) => c.name)
+      .join(', ');
+    const signals = [
+      ev.athleticSignal ? 'athletic visual cues' : null,
+      ev.swimwearSignal ? 'swimwear visual cues' : null,
+      ev.visualPattern ? `${ev.visualPattern.toLowerCase()} pattern` : null,
+    ].filter(Boolean).join(', ');
+    const line = [
+      `Item ${item.wardrobeItemId} (${item.category}/${item.subCategory}):`,
+      colorStr ? `image colours: ${colorStr}` : null,
+      signals ? signals : null,
+      ev.isRealMl ? null : '(geometric fallback)',
+    ].filter(Boolean).join(' ');
+    if (line) itemLines.push(line);
+  }
+  if (itemLines.length > 0) {
+    lines.push('Per-item visual observations:');
+    lines.push(...itemLines);
+  }
+
+  lines.push(
+    'IMPORTANT: These are observations from image pixel analysis. User-entered Category, Sub Category, and Color data remain authoritative. Visual evidence supplements but never overwrites user facts.'
+  );
+
+  return lines.join('\n');
+}
+
 Deno.serve(async (req) => {
   const preflight = handleCors(req);
   if (preflight) return preflight;
+
 
   if (req.method !== 'POST') {
     return jsonResponse(req, { error: 'Method not allowed' }, 405);
@@ -156,6 +232,9 @@ Deno.serve(async (req) => {
 
   const promptContent = `EVIDENCE PACKET:
 ${JSON.stringify(packet, null, 2)}
+
+VISUAL FASHION EVIDENCE:
+${buildVisualEvidenceSummary(packet)}
 
 Produce a structured JSON critique with this exact schema:
 {

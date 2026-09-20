@@ -1,5 +1,22 @@
 export type StylistAnalysisMode = 'hybridLLM' | 'ruleBasedFallback' | 'ruleBasedEvidence';
 
+/** Structured visual evidence produced by garmentVisualCache for a single wardrobe item. */
+export interface VisualItemEvidence {
+  /** Never overwrites user Category — supporting evidence only */
+  visualGarmentFamily: string;
+  /** 0 = casual, 1 = fully formal */
+  formalitySignal: number;
+  athleticSignal: boolean;
+  swimwearSignal: boolean;
+  /** Pattern detected from image pixels, null if uncertain */
+  visualPattern: string | null;
+  dominantColors: { name: string; hex: string; role: 'dominant' | 'secondary' | 'accent'; confidence: number }[];
+  isRealMl: boolean;
+  modelName: string;
+  confidence: number;
+  lowConfidence: boolean;
+}
+
 export interface StylistEvidencePacketItem {
   wardrobeItemId: string;
   category: string;
@@ -23,6 +40,8 @@ export interface StylistEvidencePacketItem {
     rawText?: string;
   };
   styleSignals?: Record<string, boolean>;
+  /** Visual evidence for this item — absent when image analysis unavailable */
+  visualEvidence?: VisualItemEvidence;
 }
 
 export interface StylistEvidencePacket {
@@ -77,6 +96,11 @@ export interface StylistEvidencePacket {
   visualEvidence?: {
     paletteColors: string[];
     dominantColors?: { name: string; hex: string }[];
+    /** Per-item visual evidence, keyed by wardrobeItemId */
+    itemEvidence?: Record<string, VisualItemEvidence>;
+    colorHarmonyNote?: string;
+    overallFormalitySignal?: number;
+    visualAnalysisMode?: 'realMl' | 'fallback' | 'unavailable';
   };
 }
 

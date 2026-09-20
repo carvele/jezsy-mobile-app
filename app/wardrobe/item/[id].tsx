@@ -580,16 +580,6 @@ export default function WardrobeItemDetailScreen() {
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
-            style={[styles.styleBtn, { borderColor: colors.tint }]}
-            onPress={() => router.push('/style-advisor' as any)}
-            accessibilityRole="button"
-            accessibilityLabel="Style this piece with AI"
-          >
-            <IconSymbol name="sparkles" size={16} color={colors.tint} />
-            <Text style={[styles.styleBtnText, { color: colors.tint }]}>Style This Piece with AI</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={[styles.logButton, { backgroundColor: colors.tint, opacity: logging ? 0.6 : 1 }]}
             onPress={handleLogWear}
             disabled={logging}

@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   storefrontCampaignImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   storefrontCampaignOverlay: {
     minHeight: 230,
