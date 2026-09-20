@@ -170,7 +170,7 @@ export default function HomeScreen() {
           if (reviewDiff !== 0) return reviewDiff;
           return (b.rating || 0) - (a.rating || 0);
         });
-        setTrendingProducts(byPopularity.slice(0, 8));
+        setTrendingProducts(byPopularity.slice(0, 4));
         setAllProducts(data);
         setLoading(false);
         return; // Don't hit network if we seeded from a valid cache
@@ -216,7 +216,7 @@ export default function HomeScreen() {
         setFeaturedProducts(heroPool.slice(0, HERO_MAX_CARDS));
 
         if (trendingRes.data) {
-          setTrendingProducts(trendingRes.data as any[]);
+          setTrendingProducts((trendingRes.data as any[]).slice(0, 4));
         }
       }
       if (categoriesRes.data) {
@@ -379,6 +379,15 @@ export default function HomeScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={styles.header}>
           <Text style={[styles.brandLogo, { color: colors.text }]}>JezSy</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/explore' as any)}
+            style={[styles.exploreShortcut, { borderColor: colors.border, backgroundColor: colors.card }]}
+            accessibilityRole="button"
+            accessibilityLabel="Explore and search products"
+          >
+            <IconSymbol name="magnifyingglass" size={16} color={colors.text} />
+            <Text style={[styles.exploreShortcutText, { color: colors.text }]}>Explore</Text>
+          </TouchableOpacity>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
           <ErrorRetryState
@@ -419,6 +428,15 @@ export default function HomeScreen() {
         {/* Top Header */}
         <View style={styles.header}>
           <Text style={[styles.brandLogo, { color: colors.text }]}>JezSy</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/explore' as any)}
+            style={[styles.exploreShortcut, { borderColor: colors.border, backgroundColor: colors.card }]}
+            accessibilityRole="button"
+            accessibilityLabel="Explore and search products"
+          >
+            <IconSymbol name="magnifyingglass" size={16} color={colors.text} />
+            <Text style={[styles.exploreShortcutText, { color: colors.text }]}>Explore</Text>
+          </TouchableOpacity>
         </View>
 
         {tourProgress && !tourCardDismissed && !showTour && (
@@ -466,6 +484,18 @@ export default function HomeScreen() {
             </TouchableOpacity>
           );
         })}
+
+        {/* A concise, persistent explanation of JezSy's core fulfillment
+            promise. Home inspires; Explore finds; orders are collected in store. */}
+        <View style={[styles.collectPromise, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.collectPromiseIcon, { backgroundColor: colors.tint }]}>
+            <IconSymbol name="bag" size={16} color={colors.onTint} />
+          </View>
+          <View style={styles.collectPromiseCopy}>
+            <Text style={[styles.collectPromiseTitle, { color: colors.text }]}>Order online, collect in store</Text>
+            <Text style={[styles.collectPromiseBody, { color: colors.secondaryText }]}>Reserve your pieces, then collect using your Pickup Pass.</Text>
+          </View>
+        </View>
 
         {/* 1. Featured Carousel */}
         {featuredProducts.length > 0 && (
@@ -634,6 +664,9 @@ export default function HomeScreen() {
                             {stockLabel}
                           </Text>
                         )}
+                        {!outOfStock && (
+                          <Text style={[styles.collectionLabel, { color: colors.tint }]}>Available for collection</Text>
+                        )}
                       </View>
                     </Animated.View>
                   </TouchableOpacity>
@@ -658,10 +691,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Style Inspiration Feed (StyleHint-inspired Pose Discovery) */}
-        <StyleGallery />
-
-        {/* 2. Shop by Category (real categories, deep-links into Explore) */}
+        {/* 2. Shop by Category is the intentional bridge into Explore, which
+            owns the full search, filter, sort, and catalog experience. */}
         {topCategories.length > 0 && (
           <View style={styles.sectionContainer}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Shop by Category</Text>
@@ -681,12 +712,16 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Style Inspiration is a distinct try-on discovery experience, not a
+            second product catalog, so it follows the shopping entry points. */}
+        <StyleGallery />
+
         {/* 3. Trending Grid -- sorted by real popularity (review_count/rating),
             not just newest, so the "Trending" label is actually accurate. */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0, paddingHorizontal: 0 }]}>Trending Now</Text>
-            {allProducts.length > 6 && (
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0, paddingHorizontal: 0 }]}>Trending Picks</Text>
+            {allProducts.length > 4 && (
               <TouchableOpacity
                 onPress={() => router.push('/(tabs)/explore?all=1' as any)}
                 hitSlop={10}
@@ -747,6 +782,19 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textTransform: 'uppercase',
   },
+  exploreShortcut: {
+    minHeight: 36,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  exploreShortcutText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
   storefrontCampaign: {
     minHeight: 230,
     marginHorizontal: Spacing.xl,
@@ -756,7 +804,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   storefrontCampaignImage: {
-    ...StyleSheet.absoluteFill,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   storefrontCampaignOverlay: {
     minHeight: 230,
@@ -791,6 +843,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     marginTop: Spacing.md,
+  },
+  collectPromise: {
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.xl,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  collectPromiseIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collectPromiseCopy: {
+    flex: 1,
+  },
+  collectPromiseTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  collectPromiseBody: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
   },
   
   // Editorial Section
@@ -827,6 +908,11 @@ const styles = StyleSheet.create({
   },
   heroCardTextContainer: {
     marginTop: Spacing.md,
+  },
+  collectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: Spacing.xs,
   },
   // Hierarchy: category label is the smallest, mutedest text (secondaryText
   // color, applied at the call site) -- purely context, never competes for

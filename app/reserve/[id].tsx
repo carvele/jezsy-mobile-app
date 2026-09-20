@@ -1,22 +1,12 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { TimeSlotPicker } from "@/src/components/TimeSlotPicker";
-import { CalendarPicker } from "@/src/components/CalendarPicker";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCart } from "@/src/context/CartContext";
 import { supabase } from "@/src/lib/supabase";
 import { reservationService } from "@/src/services";
 import { Database } from "@/src/types/database.types";
-import {
-    formatManilaDate,
-    generateManilaDates,
-    isSameManilaDay,
-    manilaCalendarDay,
-    manilaDayNumber,
-    manilaWeekdayLabel,
-} from "@/src/utils/dateTime";
-import { scheduleReservationReminder } from "@/src/utils/pushNotifications";
+
 import {
     getReservationAttempt,
     ReservationAttempt,
@@ -89,38 +79,9 @@ export default function ReservationScreen() {
   // non-Philippine timezone previously landed on the wrong "today" and could
   // submit a reservation date the server's own Manila-anchored slot checks
   // disagreed with.
-  const [selectedDate, setSelectedDate] = useState<Date>(() => manilaCalendarDay(new Date()));
-  const [appointmentTime, setAppointmentTime] = useState<string | undefined>();
-  // Opening on today is wrong whenever today is unbookable -- past closing, or
-  // a day the boutique is shut. That left the picker disabled and Confirm dead
-  // with nothing on screen saying to try another date. Skip ahead until a date
-  // has slots, and stop the moment the customer picks a date themselves.
-  const [autoAdvanceDate, setAutoAdvanceDate] = useState(true);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const termsVersion = 'v2026-09-pickup';
 
-  const handleAvailabilityResolved = useCallback(
-    (hasAvailable: boolean) => {
-      if (hasAvailable || !autoAdvanceDate) return;
-      setSelectedDate((prev) => {
-        // prev is always a Manila-midnight-anchored Date (manilaCalendarDay),
-        // so advance it with the UTC setters -- the local setters would
-        // reapply the device's own offset on top and could skip or repeat a
-        // day depending on the device's timezone.
-        const next = new Date(prev);
-        next.setUTCDate(next.getUTCDate() + 1);
-        // Stay inside the 14-day window the date strip offers.
-        const lastOffered = manilaCalendarDay(new Date());
-        lastOffered.setUTCDate(lastOffered.getUTCDate() + 13);
-        return next > lastOffered ? prev : next;
-      });
-    },
-    [autoAdvanceDate],
-  );
-
-  const selectDate = useCallback((d: Date) => {
-    setAutoAdvanceDate(false);
-    setSelectedDate(d);
-    setAppointmentTime(undefined); // Reset time when date changes
-  }, []);
 
   // Which payment plan the customer is committing to. The figure is never sent
   // to the server -- only the choice -- so the amount stays resolved from the
@@ -284,8 +245,8 @@ export default function ReservationScreen() {
       return;
     }
 
-    if (!appointmentTime) {
-      showToast("Select a valid appointment time.", 'info');
+    if (!termsAccepted) {
+      showToast("You must agree to the pickup terms.", 'info');
       return;
     }
 
@@ -298,10 +259,7 @@ export default function ReservationScreen() {
   };
 
   const submitReservation = async () => {
-    // Re-checked here, not just in the handleReserve gate: TS can't carry the
-    // narrowing across the async gap the step-up modal introduces, and it's
-    // a real guard against appointmentTime clearing while that modal is open.
-    if (!appointmentTime) return;
+    if (!termsAccepted) return;
     // Synchronous latch: prevents a second invocation from a fast double-tap
     // before setSubmitting(true) has propagated through the render cycle.
     if (submittingRef.current) return;
@@ -309,8 +267,6 @@ export default function ReservationScreen() {
 
     setSubmitting(true);
     try {
-      const reservationDate = formatManilaDate(selectedDate);
-
       const request = {
         items: lines.map((line) => ({
           product_id: line.product.id,
@@ -318,10 +274,11 @@ export default function ReservationScreen() {
           color: normalizeVariantValue(line.color),
           quantity: line.quantity,
         })),
-        date: reservationDate,
-        appointmentTime,
+        date: null,
+        appointmentTime: null,
         paymentOption: payOption,
         customerId: session?.user.id,
+        pickupTermsVersion: termsVersion,
       };
       const attempt = getReservationAttempt(reservationAttemptRef.current, request);
       reservationAttemptRef.current = attempt;
@@ -333,6 +290,7 @@ export default function ReservationScreen() {
         appointmentTime: request.appointmentTime,
         paymentOption: request.paymentOption,
         customerId: request.customerId,
+        pickupTermsVersion: request.pickupTermsVersion,
       });
 
       if (!result.ok) {
@@ -340,8 +298,6 @@ export default function ReservationScreen() {
       }
 
       const data = result.data;
-
-      const displayId = (data as any)?.display_id;
 
       // The server re-resolves every price at submit time, so a sale ending
       // while this screen was open means the customer agreed to one figure and
@@ -370,14 +326,6 @@ export default function ReservationScreen() {
           await removeItems([expectedCartItemId]);
         }
       }
-
-      const reservationId = (data as any)?.id;
-      await scheduleReservationReminder(
-        displayId,
-        reservationDate,
-        appointmentTime,
-        reservationId,
-      );
 
       showToast(
         priceChanged
@@ -410,7 +358,7 @@ export default function ReservationScreen() {
     }
   };
 
-  const canSubmit = !!appointmentTime && !submitting;
+  const canSubmit = termsAccepted && !submitting;
 
   if (loading) {
     return (
@@ -446,7 +394,6 @@ export default function ReservationScreen() {
     );
   }
 
-  const days = generateManilaDates(14);
   // Mirrors the server-side create_reservation_multi price resolution --
   // both must agree, or the deposit shown here would misrepresent what
   // actually gets charged. Per line: effective price x quantity.
@@ -533,25 +480,25 @@ export default function ReservationScreen() {
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Select Date
+            Pickup Policy
           </Text>
-          <CalendarPicker
-            selectedDate={selectedDate}
-            onSelectDate={selectDate}
-            minDate={manilaCalendarDay(new Date())}
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Pickup Time
-          </Text>
-          <TimeSlotPicker
-            selectedDate={selectedDate}
-            selectedSlot={appointmentTime}
-            onSelectSlot={setAppointmentTime}
-            onAvailabilityResolved={handleAvailabilityResolved}
-          />
+          <TouchableOpacity
+            style={styles.termsContainer}
+            onPress={() => setTermsAccepted(!termsAccepted)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, termsAccepted && { backgroundColor: colors.tint, borderColor: colors.tint }]}>
+              {termsAccepted && <IconSymbol name="checkmark" size={14} color="#fff" />}
+            </View>
+            <View style={styles.termsTextContainer}>
+              <Text style={[styles.termsText, { color: colors.text }]}>
+                I agree to collect this order within exactly <Text style={{ fontWeight: 'bold' }}>3 Open Days</Text> after it is marked Ready.
+              </Text>
+              <Text style={[styles.termsSubtext, { color: colors.secondaryText }]}>
+                If your order is not fully paid and is not collected by the pickup deadline, the reservation may be cancelled and amounts already paid will be retained. If your order is fully paid, it will be marked <Text style={{ fontWeight: 'bold' }}>Unclaimed</Text> and held at the boutique for later collection.
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View
@@ -645,7 +592,7 @@ export default function ReservationScreen() {
       >
         {!canSubmit && (
           <Text style={[styles.ctaHelperText, { color: colors.secondaryText }]}>
-            Select a pickup time above to continue
+            Accept the pickup policy to continue
           </Text>
         )}
         <TouchableOpacity
@@ -658,8 +605,8 @@ export default function ReservationScreen() {
           accessibilityRole="button"
           accessibilityLabel="Reserve items"
           accessibilityHint={
-            !appointmentTime
-              ? 'Select a pickup time to enable'
+            !termsAccepted
+              ? 'Accept the pickup policy to enable'
               : 'Reserves the selected items and starts the payment window.'
           }
           accessibilityState={{ disabled: !canSubmit }}
@@ -794,4 +741,32 @@ const styles = StyleSheet.create({
     }),
   },
   primaryActionText: { ...Type.bodyLargeStrong },
+  termsContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.light.border,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: Spacing.md,
+    marginTop: 2,
+  },
+  termsTextContainer: {
+    flex: 1,
+  },
+  termsText: {
+    ...Type.body,
+    fontSize: 15,
+    marginBottom: 4,
+  },
+  termsSubtext: {
+    ...Type.caption,
+  },
 });

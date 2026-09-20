@@ -34,6 +34,7 @@ export const RESERVATION_STATUSES = [
   'To Pickup',
   'Active',
   'Ready',
+  'Unclaimed',
   'Completed',
   'Cancelled',
 ] as const;
@@ -44,6 +45,7 @@ export const STATUS_FILTERS = [
   'toPay',
   'preparing',
   'ready',
+  'unclaimed',
   'completed',
   'returnRefund',
   'cancelled',
@@ -63,6 +65,7 @@ const BUCKET: Record<string, Exclude<StatusFilter, 'all' | 'returnRefund'>> = {
   'to pickup': 'ready',
   active: 'completed',
   ready: 'ready',
+  unclaimed: 'unclaimed',
   completed: 'completed',
   cancelled: 'cancelled',
 };
@@ -81,6 +84,7 @@ const FILTER_LABEL: Record<StatusFilter, string> = {
   toPay: 'To pay',
   preparing: 'Preparing',
   ready: 'Ready',
+  unclaimed: 'Unclaimed',
   completed: 'Completed',
   returnRefund: 'Return / Refund',
   cancelled: 'Cancelled',
@@ -92,6 +96,7 @@ const BADGE_LABEL: Record<Exclude<StatusFilter, 'all' | 'returnRefund'>, string>
   toPay: 'To pay',
   preparing: 'Preparing your item',
   ready: 'Ready to collect',
+  unclaimed: 'Unclaimed',
   completed: 'Completed',
   cancelled: 'Cancelled',
 };
@@ -147,6 +152,7 @@ export type CustomerDisplayBucket =
   | 'paymentReceived'
   | 'preparing'
   | 'ready'
+  | 'unclaimed'
   | 'completed'
   | 'returnRefund'
   | 'cancelled';
@@ -157,6 +163,7 @@ export type CustomerBadgeColorType =
   | 'paymentReceived'
   | 'preparing'
   | 'ready'
+  | 'unclaimed'
   | 'completed'
   | 'cancelled'
   | 'refunded';
@@ -273,6 +280,19 @@ export function getCustomerReservationDisplayState(
       bucket: 'preparing',
       filterBucket: 'preparing',
       badgeColorType: 'preparing',
+      showCountdown: false,
+      showToPayAction: false,
+    };
+  }
+
+  // 3b. Unclaimed — fully paid but not collected by the deadline.
+  // Inventory remains allocated; item is still collectible. No payment action.
+  if (bucket === 'unclaimed' || rawStatus === 'unclaimed') {
+    return {
+      label: 'Unclaimed',
+      bucket: 'unclaimed',
+      filterBucket: 'unclaimed',
+      badgeColorType: 'unclaimed',
       showCountdown: false,
       showToPayAction: false,
     };
@@ -422,13 +442,14 @@ export function getReservationCardActions(
     return ['toPay', 'cancelReservation'];
   }
 
-  // 5. Active holds in progress (paid, under review, preparing, ready)
+  // 5. Active holds in progress (paid, under review, preparing, ready, unclaimed)
   if (
     displayState.bucket === 'toPay' ||
     displayState.bucket === 'paymentUnderReview' ||
     displayState.bucket === 'paymentReceived' ||
     displayState.bucket === 'preparing' ||
-    displayState.bucket === 'ready'
+    displayState.bucket === 'ready' ||
+    displayState.bucket === 'unclaimed'
   ) {
     return [];
   }

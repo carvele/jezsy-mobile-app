@@ -46,7 +46,6 @@ export default function EditProfileScreen() {
 
   const [data, setData] = useState<ProfileData>({
     firstName: '',
-    username: '',
     lastName: '',
     phone: '',
     gender: '',
@@ -69,7 +68,6 @@ export default function EditProfileScreen() {
 
     setData({
       firstName: profile.first_name || '',
-        username: profile.username || '',
       lastName: profile.last_name || '',
       phone: localPhone ? formatPhoneForCountry(localPhone, fmtCountry) : '',
       gender: profile.gender || '',
@@ -131,7 +129,6 @@ export default function EditProfileScreen() {
         .from('profiles')
         .update({
           first_name: data.firstName.trim(),
-          username: data.username.trim() || null,
           last_name: data.lastName.trim(),
           phone: fullPhone,
           gender: data.gender || null,
@@ -145,12 +142,7 @@ export default function EditProfileScreen() {
         })
         .eq('id', user.id);
 
-      if (error) {
-        if (error.code === '23505') {
-          throw new Error('This username is already taken. Please choose another.');
-        }
-        throw error;
-      }
+      if (error) throw error;
 
       await refreshProfile();
       if (router.canGoBack()) router.back();
@@ -203,20 +195,6 @@ export default function EditProfileScreen() {
                 placeholderTextColor={colors.secondaryText}
               />
             </View>
-          </View>
-
-          <View style={[styles.fieldGroup, { marginTop: Spacing.lg }]}>
-            <Text style={[styles.label, { color: colors.secondaryText }]}>Username</Text>
-            <TextInput keyboardAppearance={theme}
-              style={[styles.input, { color: colors.text, borderBottomColor: colors.border }]}
-              value={data.username}
-              onChangeText={(v) => set('username', v)}
-              placeholder="e.g. mariasantos"
-              placeholderTextColor={colors.secondaryText}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
-            />
           </View>
 
           <Text style={[styles.sectionLabel, { color: colors.secondaryText, marginTop: Spacing.xxl }]}>Personal info</Text>

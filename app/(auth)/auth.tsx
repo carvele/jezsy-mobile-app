@@ -20,11 +20,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
-import { ArrowLeft, Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
+import { ArrowLeft, Eye, EyeOff, Mail, Lock, Phone, User } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
 import { legalService } from '@/src/services/legalService';
+import { normalizeMobileNumber } from '@/src/utils/profileFields';
 
 // Enable LayoutAnimation on Android (Legacy Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
@@ -35,7 +36,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const BG_IMAGE =
   'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=85&w=1200&auto=format&fit=crop';
 
-type Mode = 'login' | 'signup' | 'otp_request' | 'otp_verify' | 'forgot';
+type Mode = 'login' | 'signup' | 'otp_request' | 'otp_verify' | 'phone_verify' | 'forgot';
 type VerificationType = 'signup' | 'login';
 
 export default function AuthScreen() {
@@ -46,6 +47,11 @@ export default function AuthScreen() {
   const [mode, setMode] = useState<Mode>('login');
   const [verificationType, setVerificationType] = useState<VerificationType>('login');
   const [email, setEmail] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [signupPhone, setSignupPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -78,7 +84,7 @@ export default function AuthScreen() {
 
   // Focus the hidden OTP input when transitioning to 'otp_verify' step
   useEffect(() => {
-    if (mode === 'otp_verify') {
+    if (mode === 'otp_verify' || mode === 'phone_verify') {
       setTimeout(() => {
         otpInputRef.current?.focus();
       }, 250);
@@ -100,9 +106,18 @@ export default function AuthScreen() {
   // ─── Sign Up (Email + Password) ──────────────────────
   const handleSignUp = async () => {
     const trimmedEmail = email.trim().toLowerCase();
+    const normalizedPhone = normalizeMobileNumber(mobileNumber);
 
+    if (!firstName.trim() || !lastName.trim()) {
+      showToast('Enter your first and last name.', 'error');
+      return;
+    }
     if (!trimmedEmail || !validateEmail(trimmedEmail)) {
       showToast('Enter a valid email address.', 'error');
+      return;
+    }
+    if (!normalizedPhone) {
+      showToast('Enter a valid mobile number, such as 09123456789 or +639123456789.', 'error');
       return;
     }
     const policyError = passwordPolicyError(password);
@@ -124,13 +139,16 @@ export default function AuthScreen() {
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
+        options: { data: { first_name: firstName.trim(), last_name: lastName.trim(), signup_phone: normalizedPhone } },
       });
 
       if (error) throw error;
 
       // If user is already logged in (confirm email was turned off)
       if (data?.session) {
-        // Auth state change listener will handle routing automatically
+        await legalService.recordSignupLegalAcceptance();
+        setSignupPhone(normalizedPhone);
+        transitionMode('phone_verify');
         return;
       }
 
@@ -151,6 +169,7 @@ export default function AuthScreen() {
       }
 
       setVerificationType('signup');
+      setSignupPhone(normalizedPhone);
       setTimer(60);
       transitionMode('otp_verify');
     } catch (err: any) {
@@ -171,10 +190,12 @@ export default function AuthScreen() {
 
   // ─── Log In (Email + Password) ───────────────────────
   const handlePasswordLogin = async () => {
-    const trimmedEmail = email.trim().toLowerCase();
+    const identifier = loginIdentifier.trim();
+    const trimmedEmail = identifier.toLowerCase();
+    const normalizedPhone = normalizeMobileNumber(identifier);
 
-    if (!trimmedEmail || !validateEmail(trimmedEmail)) {
-      showToast('Please enter a valid email address.', 'error');
+    if (!validateEmail(trimmedEmail) && !normalizedPhone) {
+      showToast('Enter a valid email address or mobile number.', 'error');
       return;
     }
     if (!password) {
@@ -187,10 +208,9 @@ export default function AuthScreen() {
       // No pre-flight existence check: signInWithPassword already rejects both
       // an unknown address and a wrong password, so the check enforced nothing
       // and only disclosed which addresses are registered.
-      const { error } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password,
-      });
+      const { error } = await supabase.auth.signInWithPassword(
+        validateEmail(trimmedEmail) ? { email: trimmedEmail, password } : { phone: normalizedPhone!, password }
+      );
 
       if (error) throw error;
 
@@ -199,8 +219,8 @@ export default function AuthScreen() {
       console.error('Login error:', err);
       let msg = err.message ?? 'Could not sign in.';
       if (msg.includes('Invalid login credentials')) {
-        msg = 'Incorrect email or password. Please try again.';
-      } else if (msg.includes('Email not confirmed')) {
+        msg = 'Incorrect email or mobile number, or password. Please try again.';
+      } else if (validateEmail(trimmedEmail) && msg.includes('Email not confirmed')) {
         // signInWithPassword failing never dispatches a code, so send one
         // explicitly before arming the resend timer
         const { error: resendError } = await supabase.auth.resend({
@@ -281,6 +301,8 @@ export default function AuthScreen() {
           console.error('Sign-up legal acceptance error:', legalError);
           showToast('Your account is verified. Please complete legal acceptance before continuing.', 'info');
         }
+        transitionMode('phone_verify');
+        return;
       }
 
       // AuthState change listener in root layout will automatically handle routing
@@ -292,11 +314,45 @@ export default function AuthScreen() {
     }
   };
 
+  const sendPhoneVerification = async () => {
+    if (!signupPhone) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.updateUser({ phone: signupPhone });
+      if (error) throw error;
+      if (data.user.phone === signupPhone) {
+        router.replace('/(auth)/account-created' as any);
+        return;
+      }
+      setTimer(60);
+      setOtpCode('');
+      showToast('A verification code was sent to your mobile number.', 'success');
+    } catch (err: any) {
+      showToast(err.message ?? 'Could not verify this mobile number.', 'error');
+    } finally { setLoading(false); }
+  };
+
+  const verifyPhone = async () => {
+    if (otpCode.length !== 6 || !signupPhone) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ phone: signupPhone, token: otpCode, type: 'phone_change' });
+      if (error) throw error;
+      router.replace('/(auth)/account-created' as any);
+    } catch (err: any) {
+      showToast(err.message ?? 'The mobile verification code is invalid or expired.', 'error');
+    } finally { setLoading(false); }
+  };
+
   // ─── Resend Code ─────────────────────────────────────
   const handleResendCode = async () => {
     if (timer > 0) return;
     setLoading(true);
     try {
+      if (mode === 'phone_verify') {
+        await sendPhoneVerification();
+        return;
+      }
       // Both branches previously gated on an existence check that disclosed
       // whether the address was registered. Supabase's own responses here are
       // deliberately non-disclosing, so let them through unchanged.
@@ -384,6 +440,7 @@ export default function AuthScreen() {
       case 'signup':      return 'Join Jezsy and explore your personal style.';
       case 'otp_request': return 'Enter your email to receive a 6-digit login code.';
       case 'otp_verify':  return `We sent a 6-digit verification code to ${email}`;
+      case 'phone_verify': return 'Verify your mobile number to enable phone login.';
       case 'forgot':      return 'Enter your email and we\'ll send a reset link.';
     }
   };
@@ -393,6 +450,8 @@ export default function AuthScreen() {
       router.back();
     } else if (mode === 'otp_verify') {
       transitionMode(verificationType === 'signup' ? 'signup' : 'otp_request');
+    } else if (mode === 'phone_verify') {
+      return;
     } else {
       if (mode === 'signup') setLegalAccepted(false);
       transitionMode('login');
@@ -405,6 +464,7 @@ export default function AuthScreen() {
       case 'signup':      return handleSignUp();
       case 'otp_request': return handleRequestOtp();
       case 'otp_verify':  return handleVerifyOtp();
+      case 'phone_verify': return timer > 0 ? verifyPhone() : sendPhoneVerification();
       case 'forgot':      return handleForgotPassword();
     }
   };
@@ -415,6 +475,7 @@ export default function AuthScreen() {
       case 'signup':      return 'Continue to Verification';
       case 'otp_request': return 'Send Verification Code';
       case 'otp_verify':  return 'Verify & Login';
+      case 'phone_verify': return timer > 0 ? 'Verify Mobile Number' : 'Send Mobile Verification Code';
       case 'forgot':      return 'Send Reset Link';
     }
   };
@@ -504,17 +565,17 @@ export default function AuthScreen() {
           <View style={styles.glassCard}>
             
             {/* Email Field (visible on all screens except otp_verify) */}
-            {mode !== 'otp_verify' && (
+            {mode !== 'otp_verify' && mode !== 'phone_verify' && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>{mode === 'login' ? 'Email address or mobile number' : 'Email address'}</Text>
                 <View style={styles.inputRow}>
                   <Mail size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
                   <TextInput keyboardAppearance="dark"
                     style={styles.input}
                     placeholder={mode === 'forgot' ? 'Enter your registered email' : 'Enter your email'}
                     placeholderTextColor="rgba(255,255,255,0.45)"
-                    value={email}
-                    onChangeText={setEmail}
+                    value={mode === 'login' ? loginIdentifier : email}
+                    onChangeText={mode === 'login' ? setLoginIdentifier : setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
                     autoComplete="email"
@@ -525,6 +586,14 @@ export default function AuthScreen() {
                   />
                 </View>
               </View>
+            )}
+
+            {mode === 'signup' && (
+              <>
+                <View style={styles.fieldGroup}><Text style={styles.label}>First name</Text><View style={styles.inputRow}><User size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} /><TextInput style={styles.input} placeholder="Enter your first name" placeholderTextColor="rgba(255,255,255,0.45)" value={firstName} onChangeText={setFirstName} accessibilityLabel="First name" /></View></View>
+                <View style={styles.fieldGroup}><Text style={styles.label}>Last name</Text><View style={styles.inputRow}><User size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} /><TextInput style={styles.input} placeholder="Enter your last name" placeholderTextColor="rgba(255,255,255,0.45)" value={lastName} onChangeText={setLastName} accessibilityLabel="Last name" /></View></View>
+                <View style={styles.fieldGroup}><Text style={styles.label}>Mobile number</Text><View style={styles.inputRow}><Phone size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} /><TextInput style={styles.input} placeholder="09123456789" placeholderTextColor="rgba(255,255,255,0.45)" value={mobileNumber} onChangeText={setMobileNumber} keyboardType="phone-pad" accessibilityLabel="Mobile number" /></View></View>
+              </>
             )}
 
             {/* Password Field (login & signup) */}
@@ -624,7 +693,7 @@ export default function AuthScreen() {
             )}
 
             {/* OTP Verification Steps (only in otp_verify screen) */}
-            {mode === 'otp_verify' && (
+            {(mode === 'otp_verify' || mode === 'phone_verify') && (
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>6-DIGIT CODE</Text>
 
@@ -669,7 +738,7 @@ export default function AuthScreen() {
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
                   accessibilityLabel="Six digit verification code"
-                  accessibilityHint="Enter the code sent to your email"
+                  accessibilityHint={`Enter the code sent to your ${mode === 'phone_verify' ? 'mobile number' : 'email'}`}
                 />
 
                 {/* Resend Code row */}
