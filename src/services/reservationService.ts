@@ -45,6 +45,7 @@ const STATUS_BUCKET_MAP: Record<Exclude<StatusFilter, 'all' | 'returnRefund'>, s
   toPay: ['confirmed', 'approved', 'to pay', 'Confirmed', 'Approved', 'To Pay'],
   preparing: ['preparing', 'Preparing'],
   ready: ['to pickup', 'active', 'ready', 'To Pickup', 'Active', 'Ready'],
+  unclaimed: ['unclaimed', 'Unclaimed'],
   completed: ['completed', 'Completed'],
   cancelled: ['cancelled', 'Cancelled'],
 };
@@ -186,6 +187,7 @@ export async function getMyReservationStatusCounts(
     toPay: 0,
     preparing: 0,
     ready: 0,
+    unclaimed: 0,
     completed: 0,
     returnRefund: 0,
     cancelled: 0,
@@ -280,6 +282,7 @@ export async function getMyUnratedItems(userId: string): Promise<UnratedItem[]> 
 export interface ReserveParams extends CreateReservationInput {
   idempotencyKey: string;
   customerId?: string | null;
+  pickupTermsVersion?: string;
 }
 
 /**
@@ -291,11 +294,12 @@ export async function reserve(input: ReserveParams): Promise<DomainResult<Reserv
     const { data, error } = await supabase.rpc('create_reservation_multi_idempotent', {
       _idempotency_key: input.idempotencyKey,
       _items: input.items as any,
-      _date: input.date,
-      _appointment_time: input.appointmentTime,
+      _date: input.date as any,
+      _appointment_time: input.appointmentTime as any,
       _receipt_path: input.receiptPath ?? undefined,
       _payment_option: input.paymentOption,
       _customer_id: input.customerId ?? undefined,
+      _pickup_terms_version: input.pickupTermsVersion ?? undefined,
     });
 
     if (error) {
@@ -464,12 +468,60 @@ export async function getActiveRefundRequest(reservationId: string) {
   }
 }
 
+/**
+ * Voluntary customer cancellation for a Ready reservation before the pickup deadline.
+ * All settled payments are forfeited; no refund is created. Backend enforces eligibility.
+ */
+export async function cancelReservationAfterReady(
+  reservationId: string
+): Promise<DomainResult<{ reservation_id: string; total_forfeited_centavos: number }>> {
+  try {
+    const { data, error } = await supabase.rpc('cancel_reservation_after_ready', {
+      _reservation_id: reservationId,
+    });
+    if (error) {
+      const domainError = new DomainError({
+        code: 'CANCEL_AFTER_READY_FAILED',
+        message: error.message,
+        domain: 'reservation',
+        context: { operation: 'cancelReservationAfterReady', reservationId },
+        cause: error,
+      });
+      errorReporting.capture(domainError, { domain: 'reservation', operation: 'cancelReservationAfterReady' });
+      return domainFail(domainError);
+    }
+    return domainOk(data as { reservation_id: string; total_forfeited_centavos: number });
+  } catch (err: any) {
+    const domainError = new DomainError({
+      code: 'CANCEL_AFTER_READY_EXCEPTION',
+      message: err?.message || 'Failed to cancel reservation.',
+      domain: 'reservation',
+      context: { operation: 'cancelReservationAfterReady', reservationId },
+      cause: err,
+    });
+    errorReporting.capture(domainError, { domain: 'reservation', operation: 'cancelReservationAfterReady' });
+    return domainFail(domainError);
+  }
+}
+
 export const reservationService = {
+  requestPickupExtension,
   getMyReservationsPage,
   getMyReservationStatusCounts,
   getMyUnratedItems,
   reserve,
   cancelCustomerReservation,
+  cancelReservationAfterReady,
   requestCustomerRefund,
   getActiveRefundRequest,
 };
+
+export async function requestPickupExtension(reservationId: string, reason: string): Promise<DomainResult<void>> {
+  try {
+    const { error } = await supabase.rpc('request_pickup_extension', { _reservation_id: reservationId, _reason: reason });
+    if (error) return domainFail({ message: error.message, code: error.code } as any);
+    return domainOk(undefined);
+  } catch (err: any) {
+    return domainFail(err);
+  }
+}

@@ -1,10 +1,11 @@
 import React, { useRef, useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Modal, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import { supabase } from '@/src/lib/supabase';
+import { reservationService } from '@/src/services';
 import { Database } from '@/src/types/database.types';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import {
@@ -36,7 +37,7 @@ import { startReservationPayment, submitReservationBalanceReceipt } from '@/src/
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
 import { getReturnRequestWindowDays } from '@/src/services/settingsService';
-import { cancelCustomerReservation, getActiveRefundRequest } from '@/src/services/reservationService';
+import { cancelCustomerReservation, cancelReservationAfterReady, getActiveRefundRequest } from '@/src/services/reservationService';
 import { ReturnRefundModal } from '@/src/components/reservations/ReturnRefundModal';
 import type { PaymentPurpose } from '@/src/utils/reservationPayment';
 
@@ -107,6 +108,33 @@ export default function ReservationDetailScreen() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const { session } = useAuth();
   const [isPickupPassExpanded, setIsPickupPassExpanded] = useState(false);
+
+  const [requestingExtension, setRequestingExtension] = useState(false);
+  const [extensionModalVisible, setExtensionModalVisible] = useState(false);
+  const [extensionReason, setExtensionReason] = useState('');
+  const handleRequestExtension = async () => {
+    if (requestingExtension || !reservation || !reservation.id || !extensionReason.trim()) return;
+    setRequestingExtension(true);
+    try {
+      const res = await reservationService.requestPickupExtension(reservation.id, extensionReason.trim());
+      if (!res.ok) throw res.error;
+      showToast('Extension requested', 'success');
+      setReservation({
+        ...reservation,
+        extension_status: 'pending',
+        extension_reason: extensionReason.trim(),
+        extension_requested_at: new Date().toISOString(),
+      } as any);
+      setExtensionModalVisible(false);
+      setExtensionReason('');
+      await fetchReservation();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to request extension', 'error');
+    } finally {
+      setRequestingExtension(false);
+    }
+  };
+
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
 
@@ -139,6 +167,7 @@ export default function ReservationDetailScreen() {
   const [refundRequest, setRefundRequest] = useState<any>(null);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [cancellingReservation, setCancellingReservation] = useState(false);
+  const [cancellingAfterReady, setCancellingAfterReady] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     const { data, error } = await supabase
@@ -310,6 +339,35 @@ export default function ReservationDetailScreen() {
               }
             } finally {
               setCancellingReservation(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [fetchReservation, reservation, showToast]);
+
+  const handleCancelAfterReady = useCallback(() => {
+    if (!reservation) return;
+    showAlert(
+      'Cancel & Forfeit Payment',
+      'You are about to voluntarily cancel a Ready reservation.\n\nAll amounts you have paid will be retained by the boutique — no refund will be issued. The item will be released from your reservation.',
+      [
+        { text: 'Keep Reservation', style: 'cancel' },
+        {
+          text: 'Cancel & Forfeit',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingAfterReady(true);
+            try {
+              const res = await cancelReservationAfterReady(reservation.id);
+              if (res.ok) {
+                showToast('Reservation cancelled. All payments forfeited.', 'success');
+                await fetchReservation();
+              } else {
+                showToast(res.error?.message || 'Could not cancel. Please try again.', 'error');
+              }
+            } finally {
+              setCancellingAfterReady(false);
             }
           },
         },
@@ -571,6 +629,7 @@ export default function ReservationDetailScreen() {
       case 'paymentReceived': return colors.success;
       case 'preparing': return colors.info;
       case 'ready': return colors.info;
+      case 'unclaimed': return colors.warning;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
       case 'refunded': return colors.info;
@@ -637,9 +696,21 @@ export default function ReservationDetailScreen() {
   // replacing it -- the customer has not moved anything yet.
   const reschedulePending = Boolean(reservation.reschedule_requested_at);
 
+  const isDeadlineFuture = reservation?.pickup_deadline_at
+    ? new Date(reservation.pickup_deadline_at).getTime() > Date.now()
+    : false;
+
+  const canRequestExtension =
+    reservationState === 'ready' &&
+    Boolean(reservation?.pickup_deadline_at) &&
+    isDeadlineFuture &&
+    !reservation?.extension_requested_at &&
+    !reservation?.extension_status;
+
+  const extensionStatus = (reservation?.extension_status || '').toLowerCase();
+
   const awaitingPayment = Boolean(displayState.showToPayAction) && !isReservationCancelled;
   const receiptUnderReview = paymentState === 'submitted' || displayState.badgeColorType === 'paymentUnderReview';
-  const timeLeft = displayState.showCountdown && reservation.payment_due_at ? formatRemaining(reservation.payment_due_at) : null;
   const initialPaymentPurpose: PaymentPurpose =
     (reservation.payment_type || '').toLowerCase() === 'full' ? 'full_payment' : 'initial_deposit';
   const canUpgradeToFullPayment = initialPaymentPurpose === 'initial_deposit' && rawBalanceDue > 0 && !isReservationCancelled;
@@ -720,7 +791,20 @@ export default function ReservationDetailScreen() {
         {/* Gated on 'ready', not 'confirmed'. Stored 'Confirmed' means approved
             and still unpaid, so this was showing a pickup pass to customers who
             owed money and hiding it from the ones who had paid. */}
-        {reservationState === 'ready' && (
+        {/* Pickup Pass: available for both 'ready' and 'unclaimed' so customer can present at boutique. */}
+        {reservationState === 'unclaimed' && (
+          <View style={[styles.overdueBanner, { backgroundColor: colors.warning + '20', borderColor: colors.warning }]}>
+            <IconSymbol name="exclamationmark.triangle.fill" size={18} color={colors.warning} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.overdueBannerTitle, { color: colors.warning }]}>Collection Deadline Expired</Text>
+              <Text style={[styles.overdueBannerText, { color: colors.text }]}>
+                This order is marked Unclaimed. Your item is held at the boutique — please present this Pickup Pass to staff as soon as possible to complete collection.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {(reservationState === 'ready' || reservationState === 'unclaimed') && (
           <View style={[styles.pickupCard, { backgroundColor: colors.tint, overflow: 'hidden' }, !isPickupPassExpanded && styles.pickupCardCollapsed]}>
               <TouchableOpacity
                 activeOpacity={0.7}
@@ -757,100 +841,215 @@ export default function ReservationDetailScreen() {
         )}
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Appointment</Text>
-            {canRescheduleNow && !showReschedule && !reschedulePending && (
-              <TouchableOpacity
-                onPress={() => {
-                  setRescheduleDate(manilaCalendarDay(reservation.date ? new Date(reservation.date) : new Date()));
-                  setRescheduleSlot(undefined);
-                  setShowReschedule(true);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Request a new appointment time"
-                accessibilityHint="Suggests a new date and time for the shop to approve"
-                style={{ flexDirection: 'row', alignItems: 'center' }}
-              >
-                <Text style={[styles.rescheduleLink, { color: colors.tint }]}>Request new time</Text>
-                  <IconSymbol name="chevron.right" size={14} color={colors.tint} style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={[styles.infoRow, { marginTop: Spacing.md, alignItems: 'flex-start' }]}>
-              <IconSymbol name="calendar" size={20} color={colors.tint} />
-              <View>
-                <Text style={{ color: colors.text, fontSize: 15 }}>
-                  {dateStr}
-                </Text>
-                <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: 2 }}>
-                  {formatTimeLabel(reservation.appointment_time)}
+          {reservation.pickup_deadline_at ? (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                  {reservationState === 'unclaimed' ? 'Original Collect By' : 'Collect By'}
                 </Text>
               </View>
-            </View>
+              <View style={[styles.infoRow, { marginTop: Spacing.md, alignItems: 'flex-start' }]}>
+                <IconSymbol name="clock.fill" size={20} color={colors.tint} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
+                    {formatPHDate(reservation.pickup_deadline_at, {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                  <Text style={{ color: colors.secondaryText, fontSize: 13, marginTop: 4 }}>
+                    {reservationState === 'unclaimed'
+                      ? 'The deadline has passed. Item remains held for collection.'
+                      : 'Orders must be collected at the boutique by this deadline.'}
+                  </Text>
+                </View>
+              </View>
 
-          {reschedulePending && (
-            <View style={[styles.pendingRequest, { borderColor: colors.border }]}>
-              <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.warning} />
-              <Text style={[styles.pendingRequestText, { color: colors.secondaryText }]}>
-                You asked to move this to{' '}
-                <Text style={{ color: colors.text, fontWeight: '700' }}>
-                  {formatManilaDate(new Date(reservation.reschedule_requested_date as string))} at{' '}
-                  {formatTimeLabel(reservation.reschedule_requested_at_time)}
-                </Text>
-                . The time above still stands until the shop confirms.
-              </Text>
-            </View>
-          )}
+              {/* Extension CTA (when eligible) */}
+              {canRequestExtension && (
+                <TouchableOpacity
+                  style={[styles.extensionCtaBtn, { borderColor: colors.tint }]}
+                  onPress={() => setExtensionModalVisible(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Request pickup extension"
+                >
+                  <IconSymbol name="calendar" size={16} color={colors.tint} />
+                  <Text style={[styles.extensionCtaBtnText, { color: colors.tint }]}>Request 1-Day Extension</Text>
+                </TouchableOpacity>
+              )}
 
-          {showReschedule && (
-            <View style={[styles.reschedulePanel, { borderTopColor: colors.border }]}>
-              <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new date</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.lg }}>
-                {generateManilaDates(14).map((d, index) => {
-                  const isSelected = isSameManilaDay(d, rescheduleDate);
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      style={[styles.dateBox, { borderColor: isSelected ? colors.tint : colors.border }, isSelected && { backgroundColor: colors.background }]}
-                      onPress={() => { setRescheduleDate(d); setRescheduleSlot(undefined); }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${manilaWeekdayLabel(d)} ${manilaDayNumber(d)}`}
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      <Text style={[styles.dayName, { color: isSelected ? colors.tint : colors.secondaryText }]}>
-                        {manilaWeekdayLabel(d)}
+              {/* Extension Status Banners */}
+              {extensionStatus === 'pending' && (
+                <View style={[styles.extensionBanner, { backgroundColor: colors.warning + '15', borderColor: colors.warning }]}>
+                  <IconSymbol name="clock.fill" size={16} color={colors.warning} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.extensionBannerTitle, { color: colors.warning }]}>Extension Requested</Text>
+                    <Text style={[styles.extensionBannerText, { color: colors.text }]}>
+                      Staff are reviewing your request for an additional open day. Your current collect-by deadline remains active.
+                    </Text>
+                    {reservation.extension_reason ? (
+                      <Text style={[styles.extensionBannerReason, { color: colors.secondaryText }]}>
+                        Reason: {reservation.extension_reason}
                       </Text>
-                      <Text style={[styles.dateNum, { color: isSelected ? colors.tint : colors.text }]}>{manilaDayNumber(d)}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-              <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new time</Text>
-              <TimeSlotPicker selectedDate={rescheduleDate} selectedSlot={rescheduleSlot} onSelectSlot={setRescheduleSlot} />
-              <View style={styles.rescheduleActions}>
-                <TouchableOpacity
-                  style={[styles.rescheduleCancel, { borderColor: colors.border }]}
-                  onPress={() => { setShowReschedule(false); setRescheduleSlot(undefined); }}
-                  disabled={submitting}
-                  accessibilityRole="button"
-                  accessibilityLabel="Cancel reschedule"
-                >
-                  <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.rescheduleConfirm, { backgroundColor: (!rescheduleSlot || submitting) ? colors.border : colors.tint }]}
-                  onPress={handleReschedule}
-                  disabled={!rescheduleSlot || submitting}
-                  accessibilityRole="button"
-                  accessibilityLabel="Confirm new appointment"
-                  accessibilityState={{ disabled: !rescheduleSlot || submitting }}
-                >
-                  {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={{ fontWeight: '700' }}>Confirm</Text>}
-                </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
+              )}
+
+              {extensionStatus === 'approved' && (
+                <View style={[styles.extensionBanner, { backgroundColor: colors.success + '15', borderColor: colors.success }]}>
+                  <IconSymbol name="checkmark.circle" size={16} color={colors.success} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.extensionBannerTitle, { color: colors.success }]}>Extension Approved</Text>
+                    <Text style={[styles.extensionBannerText, { color: colors.text }]}>
+                      Your pickup deadline has been extended to{' '}
+                      <Text style={{ fontWeight: '700' }}>
+                        {formatPHDate(reservation.pickup_deadline_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </Text>.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {extensionStatus === 'denied' && (
+                <View style={[styles.extensionBanner, { backgroundColor: colors.error + '15', borderColor: colors.error }]}>
+                  <IconSymbol name="xmark.circle" size={16} color={colors.error} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.extensionBannerTitle, { color: colors.error }]}>Extension Denied</Text>
+                    <Text style={[styles.extensionBannerText, { color: colors.text }]}>
+                      Collect-by deadline: {formatPHDate(reservation.pickup_deadline_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </>
+          ) : (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Appointment</Text>
+                {canRescheduleNow && !showReschedule && !reschedulePending && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setRescheduleDate(manilaCalendarDay(reservation.date ? new Date(reservation.date) : new Date()));
+                      setRescheduleSlot(undefined);
+                      setShowReschedule(true);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Request a new appointment time"
+                    accessibilityHint="Suggests a new date and time for the shop to approve"
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Text style={[styles.rescheduleLink, { color: colors.tint }]}>Request new time</Text>
+                    <IconSymbol name="chevron.right" size={14} color={colors.tint} style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
+                )}
               </View>
-            </View>
+              <View style={[styles.infoRow, { marginTop: Spacing.md, alignItems: 'flex-start' }]}>
+                <IconSymbol name="calendar" size={20} color={colors.tint} />
+                <View>
+                  <Text style={{ color: colors.text, fontSize: 15 }}>
+                    {dateStr}
+                  </Text>
+                  <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: 2 }}>
+                    {formatTimeLabel(reservation.appointment_time)}
+                  </Text>
+                </View>
+              </View>
+
+              {reschedulePending && (
+                <View style={[styles.pendingRequest, { borderColor: colors.border }]}>
+                  <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.warning} />
+                  <Text style={[styles.pendingRequestText, { color: colors.secondaryText }]}>
+                    You asked to move this to{' '}
+                    <Text style={{ color: colors.text, fontWeight: '700' }}>
+                      {formatManilaDate(new Date(reservation.reschedule_requested_date as string))} at{' '}
+                      {formatTimeLabel(reservation.reschedule_requested_at_time)}
+                    </Text>
+                    . The time above still stands until the shop confirms.
+                  </Text>
+                </View>
+              )}
+
+              {showReschedule && (
+                <View style={[styles.reschedulePanel, { borderTopColor: colors.border }]}>
+                  <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new date</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.lg }}>
+                    {generateManilaDates(14).map((d, index) => {
+                      const isSelected = isSameManilaDay(d, rescheduleDate);
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          style={[styles.dateBox, { borderColor: isSelected ? colors.tint : colors.border }, isSelected && { backgroundColor: colors.background }]}
+                          onPress={() => { setRescheduleDate(d); setRescheduleSlot(undefined); }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${manilaWeekdayLabel(d)} ${manilaDayNumber(d)}`}
+                          accessibilityState={{ selected: isSelected }}
+                        >
+                          <Text style={[styles.dayName, { color: isSelected ? colors.tint : colors.secondaryText }]}>
+                            {manilaWeekdayLabel(d)}
+                          </Text>
+                          <Text style={[styles.dateNum, { color: isSelected ? colors.tint : colors.text }]}>{manilaDayNumber(d)}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                  <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new time</Text>
+                  <TimeSlotPicker selectedDate={rescheduleDate} selectedSlot={rescheduleSlot} onSelectSlot={setRescheduleSlot} />
+                  <View style={styles.rescheduleActions}>
+                    <TouchableOpacity
+                      style={[styles.rescheduleCancel, { borderColor: colors.border }]}
+                      onPress={() => { setShowReschedule(false); setRescheduleSlot(undefined); }}
+                      disabled={submitting}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel reschedule"
+                    >
+                      <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.rescheduleConfirm, { backgroundColor: (!rescheduleSlot || submitting) ? colors.border : colors.tint }]}
+                      onPress={handleReschedule}
+                      disabled={!rescheduleSlot || submitting}
+                      accessibilityRole="button"
+                      accessibilityLabel="Confirm new appointment"
+                      accessibilityState={{ disabled: !rescheduleSlot || submitting }}
+                    >
+                      {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={{ fontWeight: '700' }}>Confirm</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </>
           )}
         </View>
+
+        {/* Voluntary forfeiture cancellation: only shown while Ready and deadline is still future. */}
+        {reservationState === 'ready' && isDeadlineFuture && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginBottom: Spacing.xs }]}>
+              Need to cancel?
+            </Text>
+            <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
+              You may cancel this reservation before the pickup deadline. All amounts you have paid will be forfeited — no refund will be issued.
+            </Text>
+            <TouchableOpacity
+              style={[styles.paySecondary, { borderColor: colors.error, opacity: cancellingAfterReady ? 0.6 : 1 }]}
+              onPress={handleCancelAfterReady}
+              disabled={cancellingAfterReady}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel reservation and forfeit payment"
+            >
+              {cancellingAfterReady ? (
+                <ActivityIndicator color={colors.error} />
+              ) : (
+                <Text style={[styles.paySecondaryText, { color: colors.error }]}>Cancel & Forfeit Payment</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Location</Text>
@@ -1645,6 +1844,32 @@ export default function ReservationDetailScreen() {
             )}
           </View>
         )}
+        <Modal visible={extensionModalVisible} transparent animationType="fade" onRequestClose={() => setExtensionModalVisible(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: colors.background, padding: 20, borderRadius: 12, width: '100%', maxWidth: 400 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: colors.text }}>Request Extension</Text>
+              <Text style={{ fontSize: 14, color: colors.secondaryText, marginBottom: 12 }}>Please provide a reason for the extension request. Staff will review this.</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 16, textAlignVertical: 'top', color: colors.text }}
+                multiline
+                numberOfLines={3}
+                placeholder="Reason (e.g. sick, traveling, bad weather)..."
+                placeholderTextColor={colors.secondaryText}
+                value={extensionReason}
+                onChangeText={setExtensionReason}
+                editable={!requestingExtension}
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+                <TouchableOpacity onPress={() => setExtensionModalVisible(false)} disabled={requestingExtension} style={{ padding: 10 }}>
+                  <Text style={{ color: colors.secondaryText, fontWeight: 'bold' }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleRequestExtension} disabled={requestingExtension || !extensionReason.trim()} style={{ backgroundColor: colors.tint, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, opacity: (!extensionReason.trim() || requestingExtension) ? 0.5 : 1 }}>
+                  <Text style={{ color: colors.onTint, fontWeight: 'bold' }}>{requestingExtension ? 'Requesting...' : 'Submit Request'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
 
       <ReturnRefundModal
@@ -1878,5 +2103,60 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
+  },
+  overdueBanner: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
+    alignItems: 'flex-start',
+  },
+  overdueBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  overdueBannerText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  extensionCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  extensionCtaBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  extensionBanner: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginTop: Spacing.lg,
+    alignItems: 'flex-start',
+  },
+  extensionBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  extensionBannerText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  extensionBannerReason: {
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });
