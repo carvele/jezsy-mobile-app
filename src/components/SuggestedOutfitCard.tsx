@@ -27,7 +27,18 @@ const LABEL_COLOR: Record<GeneratedOutfit['label'], string> = {
 export function SuggestedOutfitCard({ outfit, onSave, saving = false, alreadySaved = false, onPass }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
-  const accent = LABEL_COLOR[outfit.label];
+  const accent = LABEL_COLOR[outfit.label] || '#2563EB';
+  const assessmentColor = outfit.assessment
+    ? outfit.assessment === 'Appropriate for this occasion'
+      ? '#047857'
+      : outfit.assessment === 'Could work with changes'
+      ? '#CA8A04'
+      : '#DC2626'
+    : accent;
+
+  const badgeText = outfit.assessment
+    ? `${outfit.assessment} · ${outfit.label}`
+    : outfit.label;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -40,9 +51,9 @@ export function SuggestedOutfitCard({ outfit, onSave, saving = false, alreadySav
       </View>
 
       <View style={styles.headerRow}>
-        <View style={[styles.badge, { backgroundColor: accent + '22', borderColor: accent }]}>
-          <Text style={[styles.badgeText, { color: accent }]}>
-            {outfit.label} · {outfit.score}%
+        <View style={[styles.badge, { backgroundColor: assessmentColor + '22', borderColor: assessmentColor }]}>
+          <Text style={[styles.badgeText, { color: assessmentColor }]}>
+            {badgeText}
           </Text>
         </View>
       </View>

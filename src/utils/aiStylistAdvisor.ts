@@ -15,7 +15,7 @@
  */
 
 import { evaluateColors, ColorMatchResult } from './colorMatcher';
-import { MannequinCanvasItem, WardrobeItem } from './mannequinConfig';
+import { MannequinCanvasItem, WardrobeItem, createMannequinItem } from './mannequinConfig';
 import { OutfitExplanation } from './outfitExplainer';
 import { UserStyleProfileDto } from '../types/dto/styleProfile';
 import { computePersonalAffinity } from './personalStyleEngine';
@@ -308,6 +308,7 @@ export interface StylistCritique {
   context?: OutfitContext;
   contextInterpretation?: OutfitContextInterpretation;
   contradictions?: string[];
+  rawContradictions?: Contradiction[];
   pillars?: {
     colorHarmony: StylePillarBreakdown;
     compositionAndLayers: StylePillarBreakdown;
@@ -345,7 +346,11 @@ export function computeOutfitHash(
       const w = wardrobeLookup?.[item.wardrobe_item_id];
       const name = (item.name || (w as any)?.name || w?.sub_category || '').toLowerCase();
       const type = (item.garment_type || w?.category || '').toLowerCase();
-      return `${item.wardrobe_item_id || item.id}:${type}:${name}`;
+      const desc = (w?.description || '').toLowerCase();
+      const whereWorn = ((w as any)?.where_worn_often || '').toLowerCase();
+      const color = (((w as any)?.color || (w?.color_tags || []).join(',')) as string).toLowerCase();
+      const updated = (w as any)?.updated_at || '';
+      return `${item.wardrobe_item_id || item.id}:${type}:${name}:${color}:${desc}:${whereWorn}:${updated}`;
     })
     .sort()
     .join('|');
@@ -354,6 +359,23 @@ export function computeOutfitHash(
     hash = ((hash << 5) - hash + tokens.charCodeAt(i)) | 0;
   }
   return `outfit_${Math.abs(hash).toString(16)}`;
+}
+
+/**
+ * Directly evaluates an outfit of WardrobeItems using the full Stylist reasoning pipeline.
+ * Ensures Style Advisor and other consumers share the exact same evidence-based engine.
+ */
+export function evaluateWardrobeOutfit(
+  wardrobeItems: WardrobeItem[],
+  wardrobeLookup?: Record<string, WardrobeItem>,
+  context?: OutfitContext,
+  profile?: UserStyleProfileDto | null
+): StylistCritique {
+  const canvasItems: MannequinCanvasItem[] = (wardrobeItems || []).map((item, idx) =>
+    createMannequinItem(item, idx)
+  );
+  const lookup = wardrobeLookup || Object.fromEntries((wardrobeItems || []).map((i) => [i.id, i]));
+  return gradeOutfit(canvasItems, lookup, context, profile);
 }
 
 // Backward compatibility alias
@@ -1748,6 +1770,7 @@ export function gradeOutfit(
       context,
       contextInterpretation,
       contradictions: [],
+      rawContradictions: [],
       pillars: {
         colorHarmony: {
           status: 'alert',
@@ -1923,7 +1946,11 @@ export function gradeOutfit(
       } else {
         tips.push('Your current wardrobe does not contain an obvious formal bottom for this occasion.');
       }
-    } else if (activity === 'casualDaily' || occasionType === 'casualWalk') {
+    } else if (
+      (activity === 'casualDaily' || occasionType === 'casualWalk') &&
+      garmentProfiles.some((g) => g.styleSignals.athletic) &&
+      garmentProfiles.some((g) => g.identity.name.toLowerCase().includes('blazer'))
+    ) {
       assessment = 'Could work with changes';
       headline = 'High-Low Streetwear Concept';
       verdict = `An interesting high-low contrast that could work for ${occasionLabel}, but needs an inner top.`;
@@ -2490,6 +2517,7 @@ export function gradeOutfit(
     context,
     contextInterpretation,
     contradictions: contradictions.map((c) => c.reason),
+    rawContradictions: contradictions,
     pillars: {
       colorHarmony: {
         status: colorEval.score >= 85 ? 'excellent' : colorEval.score >= 70 ? 'good' : 'warning',

@@ -10,6 +10,13 @@ import { evaluateColors, ColorMatchResult } from './colorMatcher';
 import { UserStyleProfileDto } from '../types/dto/styleProfile';
 import { computePersonalAffinity } from './personalStyleEngine';
 import { explainOutfit, OutfitExplanation } from './outfitExplainer';
+import { resolveEffectiveGarmentBucket } from './garmentSemanticClassifier';
+import {
+  evaluateWardrobeOutfit,
+  OverallAssessment,
+  Contradiction,
+  StylistCritique,
+} from './aiStylistAdvisor';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
@@ -22,6 +29,10 @@ export interface GeneratedOutfit {
   explanation?: OutfitExplanation;
   personalScore?: number;
   occasion?: string | null;
+  assessment?: OverallAssessment;
+  critique?: StylistCritique;
+  contradictions?: string[];
+  rawContradictions?: Contradiction[];
 }
 
 export interface GenerateOutfitsOptions {
@@ -36,7 +47,7 @@ const NEGLECT_DAYS = 60;
 
 function bySlot(items: WardrobeItem[], type: string): WardrobeItem[] {
   return items
-    .filter((i) => i.garment_type === type)
+    .filter((i) => resolveEffectiveGarmentBucket(i) === type)
     .sort((a, b) => neglect(b) - neglect(a))
     .slice(0, PER_SLOT);
 }
@@ -63,9 +74,13 @@ function build(
 
   const personal = computePersonalAffinity(items, options?.profile, options?.occasion);
 
+  // Run the shared deterministic Stylist reasoning engine
+  const context = options?.occasion ? { occasion: options.occasion } : undefined;
+  const critique = evaluateWardrobeOutfit(items, undefined, context, options?.profile);
+
   // 1. Composition Score
   let compScore = 85;
-  const types = items.map((i) => i.garment_type);
+  const types = items.map((i) => resolveEffectiveGarmentBucket(i));
   const hasDress = types.includes('Dress');
   const hasShoes = types.includes('Shoes');
   const hasOuter = types.includes('Outerwear');
@@ -88,17 +103,28 @@ function build(
     compScore -= 15; // penalize clashing loud patterns
   }
 
-  // 3. Occasion Suitability
+  // 3. Occasion Suitability & Contradiction Penalization
   let occasionBonus = 0;
+  const severeContradictions = (critique.rawContradictions || []).filter((c) => c.severity === 'severe');
+  const majorContradictions = (critique.rawContradictions || []).filter((c) => c.severity === 'major');
+
   if (options?.occasion) {
-    const target = options.occasion.toLowerCase();
-    for (const item of items) {
-      const occs: string[] = (item as any).occasions || [];
-      if (occs.some((o) => o.toLowerCase().includes(target) || target.includes(o.toLowerCase()))) {
-        occasionBonus += 6;
+    if (severeContradictions.length > 0) {
+      occasionBonus -= 60;
+    } else if (majorContradictions.length > 0) {
+      occasionBonus -= 25;
+    } else if (critique.assessment === 'Appropriate for this occasion') {
+      occasionBonus += 15;
+    } else {
+      const target = options.occasion.toLowerCase();
+      for (const item of items) {
+        const occs: string[] = (item as any).occasions || [];
+        if (occs.some((o) => o.toLowerCase().includes(target) || target.includes(o.toLowerCase()))) {
+          occasionBonus += 6;
+        }
       }
+      occasionBonus = Math.min(15, occasionBonus);
     }
-    occasionBonus = Math.min(15, occasionBonus);
   }
 
   const NEUTRALS = new Set(['black', 'white', 'charcoal', 'grey', 'gray', 'navy', 'beige', 'cream', 'brown', 'tan', 'camel', 'khaki']);
@@ -110,7 +136,7 @@ function build(
     return pat.includes('graphic') || pat.includes('floral') || pat.includes('plaid') || sub.includes('graphic') || desc.includes('graphic') || tags.length >= 3;
   });
   const hasNeutralOuter = items.some((i) => {
-    if (i.garment_type !== 'Outerwear') return false;
+    if (resolveEffectiveGarmentBucket(i) !== 'Outerwear') return false;
     const name = (i.sub_category || i.category || '').toLowerCase();
     const isBlazer = name.includes('blazer') || name.includes('jacket') || name.includes('coat');
     const tags = (i.color_tags || []).map((c) => c.toLowerCase());
@@ -141,7 +167,7 @@ function build(
   // 5. Stylist Explanation
   const explanation = explainOutfit(items, match, personal, options?.occasion);
 
-  let reason = explanation.summary;
+  let reason = (options?.occasion && critique.whyJezsySaysThis) ? critique.whyJezsySaysThis : explanation.summary;
   if (neverWorn.length === 1) {
     reason += ` Includes a piece you have never worn.`;
   } else if (neverWorn.length > 1) {
@@ -157,6 +183,10 @@ function build(
     explanation,
     personalScore: personal.score,
     occasion: options?.occasion,
+    assessment: critique.assessment,
+    critique,
+    contradictions: critique.contradictions,
+    rawContradictions: critique.rawContradictions,
   };
 }
 
@@ -181,8 +211,9 @@ export function generateOutfits(
   if (options.requiredItemId) {
     const targetItem = items.find((i) => i.id === options.requiredItemId);
     if (targetItem) {
+      const targetBucket = resolveEffectiveGarmentBucket(targetItem);
       eligibleItems = items.filter(
-        (i) => i.id === options.requiredItemId || i.garment_type !== targetItem.garment_type
+        (i) => i.id === options.requiredItemId || resolveEffectiveGarmentBucket(i) !== targetBucket
       );
     }
   }
@@ -201,7 +232,6 @@ export function generateOutfits(
 
   const candidates: GeneratedOutfit[] = [];
   for (const base of bases) {
-    // If requiredItemId specified, verify it's in this base or layer
     const withShoes = shoes.length ? shoes.map((s) => [...base, s]) : [base];
     for (const combo of withShoes) {
       if (!options.requiredItemId || combo.some((i) => i.id === options.requiredItemId)) {
@@ -216,8 +246,20 @@ export function generateOutfits(
     }
   }
 
+  // STEP 10: Generation after validation — filter candidates with severe contradictions
+  let viableCandidates = candidates;
+  if (options.occasion) {
+    const unconflicted = candidates.filter((c) => {
+      const severe = (c.rawContradictions || []).some((con) => con.severity === 'severe');
+      return !severe && c.assessment !== 'Not appropriate for this occasion';
+    });
+    if (unconflicted.length > 0) {
+      viableCandidates = unconflicted;
+    }
+  }
+
   const seen = new Set<string>();
-  return candidates
+  return viableCandidates
     .sort((a, b) => b.score - a.score)
     .filter((o) => {
       if (seen.has(o.key)) return false;

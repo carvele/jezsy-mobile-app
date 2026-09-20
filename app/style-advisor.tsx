@@ -15,6 +15,7 @@ import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
 import { styleProfileService } from '@/src/services/styleProfileService';
 import { outfitFeedbackService } from '@/src/services/outfitFeedbackService';
 import { UserStyleProfileDto } from '@/src/types/dto/styleProfile';
+import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
@@ -108,7 +109,7 @@ export default function StyleAdvisorScreen() {
   const tips = useMemo(() => {
     if (!activeOccasion) return [];
     const list: string[] = [activeOccasion.tip];
-    const types = new Set(items.map((i) => i.garment_type));
+    const types = new Set(items.map((i) => resolveEffectiveGarmentBucket(i)));
     if (!types.has('Shoes')) list.push('Add shoes to your wardrobe to complete full looks.');
     if (occasion === 'work' && !types.has('Outerwear')) {
       list.push('A blazer or cardigan would round this out for work.');
@@ -130,11 +131,11 @@ export default function StyleAdvisorScreen() {
       setSavingKey(outfit.key);
       try {
         const payload = outfit.items.map((i) => ({
-          slot: (i.garment_type || 'accessory').toLowerCase(),
+          slot: (resolveEffectiveGarmentBucket(i) || i.garment_type || 'accessory').toLowerCase(),
           product_id: i.product_id,
           wardrobe_item_id: i.id,
           image_url: i.image_url,
-          name: i.garment_type || i.category || 'Item',
+          name: i.sub_category || resolveEffectiveGarmentBucket(i) || i.category || 'Item',
           color_tags: i.color_tags,
         }));
 
@@ -221,11 +222,11 @@ export default function StyleAdvisorScreen() {
     setSavingKey(current.key);
     try {
       const payload = current.items.map((i) => ({
-        slot: (i.garment_type || 'accessory').toLowerCase(),
+        slot: (resolveEffectiveGarmentBucket(i) || i.garment_type || 'accessory').toLowerCase(),
         product_id: i.product_id,
         wardrobe_item_id: i.id,
         image_url: i.image_url,
-        name: i.garment_type || i.category || 'Item',
+        name: i.sub_category || resolveEffectiveGarmentBucket(i) || i.category || 'Item',
         color_tags: i.color_tags,
       }));
 
