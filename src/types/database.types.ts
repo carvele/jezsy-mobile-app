@@ -234,11 +234,11 @@ export type Database = {
       announcements: {
         Row: {
           body: string
+          created_at: string
+          created_by: string | null
           cta_label: string | null
           cta_target_type: string
           cta_target_value: string | null
-          created_at: string
-          created_by: string | null
           expires_at: string | null
           id: string
           placement: string
@@ -249,11 +249,11 @@ export type Database = {
         }
         Insert: {
           body: string
+          created_at?: string
+          created_by?: string | null
           cta_label?: string | null
           cta_target_type?: string
           cta_target_value?: string | null
-          created_at?: string
-          created_by?: string | null
           expires_at?: string | null
           id?: string
           placement?: string
@@ -264,11 +264,11 @@ export type Database = {
         }
         Update: {
           body?: string
+          created_at?: string
+          created_by?: string | null
           cta_label?: string | null
           cta_target_type?: string
           cta_target_value?: string | null
-          created_at?: string
-          created_by?: string | null
           expires_at?: string | null
           id?: string
           placement?: string
@@ -1286,6 +1286,21 @@ export type Database = {
           },
         ]
       }
+      notification_events_dedup: {
+        Row: {
+          created_at: string
+          event_key: string
+        }
+        Insert: {
+          created_at?: string
+          event_key: string
+        }
+        Update: {
+          created_at?: string
+          event_key?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           body: string
@@ -1414,6 +1429,7 @@ export type Database = {
           attempt_started_at: string
           created_at: string
           currency: string
+          forfeited_centavos: number | null
           id: string
           last_event: Json | null
           last_event_id: string | null
@@ -1431,6 +1447,7 @@ export type Database = {
           refund_disbursement_method: string | null
           refund_reference_number: string | null
           refund_required_at: string | null
+          refund_required_centavos: number | null
           requires_refund: boolean
           reservation_id: string
           status: string
@@ -1442,6 +1459,7 @@ export type Database = {
           attempt_started_at?: string
           created_at?: string
           currency?: string
+          forfeited_centavos?: number | null
           id?: string
           last_event?: Json | null
           last_event_id?: string | null
@@ -1459,6 +1477,7 @@ export type Database = {
           refund_disbursement_method?: string | null
           refund_reference_number?: string | null
           refund_required_at?: string | null
+          refund_required_centavos?: number | null
           requires_refund?: boolean
           reservation_id: string
           status?: string
@@ -1470,6 +1489,7 @@ export type Database = {
           attempt_started_at?: string
           created_at?: string
           currency?: string
+          forfeited_centavos?: number | null
           id?: string
           last_event?: Json | null
           last_event_id?: string | null
@@ -1487,6 +1507,7 @@ export type Database = {
           refund_disbursement_method?: string | null
           refund_reference_number?: string | null
           refund_required_at?: string | null
+          refund_required_centavos?: number | null
           requires_refund?: boolean
           reservation_id?: string
           status?: string
@@ -1973,9 +1994,13 @@ export type Database = {
           last_name: string | null
           outfit_privacy: string
           phone: string | null
+          privacy_accepted_at: string | null
+          privacy_version: string | null
           profile_visibility: string
           province: string | null
           role: string
+          terms_accepted_at: string | null
+          terms_version: string | null
           updated_at: string
           username: string | null
           wardrobe_privacy: string | null
@@ -2005,9 +2030,13 @@ export type Database = {
           last_name?: string | null
           outfit_privacy?: string
           phone?: string | null
+          privacy_accepted_at?: string | null
+          privacy_version?: string | null
           profile_visibility?: string
           province?: string | null
           role?: string
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           updated_at?: string
           username?: string | null
           wardrobe_privacy?: string | null
@@ -2037,9 +2066,13 @@ export type Database = {
           last_name?: string | null
           outfit_privacy?: string
           phone?: string | null
+          privacy_accepted_at?: string | null
+          privacy_version?: string | null
           profile_visibility?: string
           province?: string | null
           role?: string
+          terms_accepted_at?: string | null
+          terms_version?: string | null
           updated_at?: string
           username?: string | null
           wardrobe_privacy?: string | null
@@ -2170,6 +2203,14 @@ export type Database = {
           deposit: number | null
           deposit_submission_id: string | null
           display_id: string | null
+          extension_deadline_at: string | null
+          extension_evidence_path: string | null
+          extension_reason: string | null
+          extension_requested_at: string | null
+          extension_resolution_notes: string | null
+          extension_resolved_at: string | null
+          extension_resolved_by: string | null
+          extension_status: string | null
           hidden_in_cancelled: boolean | null
           hidden_in_history: boolean | null
           id: string
@@ -2186,8 +2227,12 @@ export type Database = {
           payment_reminder_sent_at: string | null
           payment_status: string | null
           payment_type: string | null
+          pickup_deadline_at: string | null
+          pickup_ready_at: string | null
           pickup_reminder_1h_sent_for: string | null
           pickup_reminder_24h_sent_for: string | null
+          pickup_terms_accepted_at: string | null
+          pickup_terms_version: string | null
           pickup_token: string | null
           product_id: string | null
           product_name: string | null
@@ -2237,6 +2282,14 @@ export type Database = {
           deposit?: number | null
           deposit_submission_id?: string | null
           display_id?: string | null
+          extension_deadline_at?: string | null
+          extension_evidence_path?: string | null
+          extension_reason?: string | null
+          extension_requested_at?: string | null
+          extension_resolution_notes?: string | null
+          extension_resolved_at?: string | null
+          extension_resolved_by?: string | null
+          extension_status?: string | null
           hidden_in_cancelled?: boolean | null
           hidden_in_history?: boolean | null
           id?: string
@@ -2253,8 +2306,12 @@ export type Database = {
           payment_reminder_sent_at?: string | null
           payment_status?: string | null
           payment_type?: string | null
+          pickup_deadline_at?: string | null
+          pickup_ready_at?: string | null
           pickup_reminder_1h_sent_for?: string | null
           pickup_reminder_24h_sent_for?: string | null
+          pickup_terms_accepted_at?: string | null
+          pickup_terms_version?: string | null
           pickup_token?: string | null
           product_id?: string | null
           product_name?: string | null
@@ -2304,6 +2361,14 @@ export type Database = {
           deposit?: number | null
           deposit_submission_id?: string | null
           display_id?: string | null
+          extension_deadline_at?: string | null
+          extension_evidence_path?: string | null
+          extension_reason?: string | null
+          extension_requested_at?: string | null
+          extension_resolution_notes?: string | null
+          extension_resolved_at?: string | null
+          extension_resolved_by?: string | null
+          extension_status?: string | null
           hidden_in_cancelled?: boolean | null
           hidden_in_history?: boolean | null
           id?: string
@@ -2320,8 +2385,12 @@ export type Database = {
           payment_reminder_sent_at?: string | null
           payment_status?: string | null
           payment_type?: string | null
+          pickup_deadline_at?: string | null
+          pickup_ready_at?: string | null
           pickup_reminder_1h_sent_for?: string | null
           pickup_reminder_24h_sent_for?: string | null
+          pickup_terms_accepted_at?: string | null
+          pickup_terms_version?: string | null
           pickup_token?: string | null
           product_id?: string | null
           product_name?: string | null
@@ -2376,6 +2445,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "reservations_extension_resolved_by_fkey"
+            columns: ["extension_resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "reservations_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
@@ -2397,10 +2473,14 @@ export type Database = {
           customer_id: string
           details: string | null
           id: string
+          inspection_verified_at: string | null
+          inspection_verified_by: string | null
           photo_path: string | null
           reason_category: string
           reservation_id: string
           resolution_notes: string | null
+          return_received_at: string | null
+          return_received_by: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: string
@@ -2414,10 +2494,14 @@ export type Database = {
           customer_id: string
           details?: string | null
           id?: string
+          inspection_verified_at?: string | null
+          inspection_verified_by?: string | null
           photo_path?: string | null
           reason_category: string
           reservation_id: string
           resolution_notes?: string | null
+          return_received_at?: string | null
+          return_received_by?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -2431,10 +2515,14 @@ export type Database = {
           customer_id?: string
           details?: string | null
           id?: string
+          inspection_verified_at?: string | null
+          inspection_verified_by?: string | null
           photo_path?: string | null
           reason_category?: string
           reservation_id?: string
           resolution_notes?: string | null
+          return_received_at?: string | null
+          return_received_by?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -2452,10 +2540,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "return_refund_requests_inspection_verified_by_fkey"
+            columns: ["inspection_verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "return_refund_requests_reservation_id_fkey"
             columns: ["reservation_id"]
             isOneToOne: false
             referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_refund_requests_return_received_by_fkey"
+            columns: ["return_received_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -3297,6 +3399,14 @@ export type Database = {
         Args: { _reason?: string; _reservation_id: string }
         Returns: Json
       }
+      cancel_no_show_reservation: {
+        Args: { _reservation_id: string }
+        Returns: Json
+      }
+      cancel_reservation_after_ready: {
+        Args: { _reservation_id: string }
+        Returns: Json
+      }
       cancel_reservation_as_manager: {
         Args: {
           _expected_status: string
@@ -3344,6 +3454,14 @@ export type Database = {
       complete_reservation_handover:
         | { Args: { _reservation_id: string }; Returns: Json }
         | { Args: { _method?: string; _reservation_id: string }; Returns: Json }
+      compute_extension_deadline: {
+        Args: { _existing_deadline: string }
+        Returns: string
+      }
+      compute_pickup_deadline: {
+        Args: { _start_at: string; _window_days?: number }
+        Returns: string
+      }
       create_reservation: {
         Args: {
           _appointment_time: string
@@ -3357,29 +3475,56 @@ export type Database = {
         }
         Returns: Json
       }
-      create_reservation_multi: {
-        Args: {
-          _appointment_time: string
-          _customer_id?: string
-          _date: string
-          _items: Json
-          _payment_option?: string
-          _receipt_path?: string
-        }
-        Returns: Json
-      }
-      create_reservation_multi_idempotent: {
-        Args: {
-          _appointment_time: string
-          _customer_id?: string
-          _date: string
-          _idempotency_key: string
-          _items: Json
-          _payment_option?: string
-          _receipt_path?: string
-        }
-        Returns: Json
-      }
+      create_reservation_multi:
+        | {
+            Args: {
+              _appointment_time?: string
+              _customer_id?: string
+              _date?: string
+              _items: Json
+              _payment_option?: string
+              _pickup_terms_version?: string
+              _receipt_path?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _appointment_time: string
+              _customer_id?: string
+              _date: string
+              _items: Json
+              _payment_option?: string
+              _receipt_path?: string
+            }
+            Returns: Json
+          }
+      create_reservation_multi_idempotent:
+        | {
+            Args: {
+              _appointment_time?: string
+              _customer_id?: string
+              _date?: string
+              _idempotency_key: string
+              _items: Json
+              _payment_option?: string
+              _pickup_terms_version?: string
+              _receipt_path?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              _appointment_time: string
+              _customer_id?: string
+              _date: string
+              _idempotency_key: string
+              _items: Json
+              _payment_option?: string
+              _receipt_path?: string
+            }
+            Returns: Json
+          }
       create_step_up_receipt: {
         Args: {
           p_action_class: string
@@ -3419,6 +3564,7 @@ export type Database = {
         }
         Returns: string
       }
+      ensure_my_welcome_conversation: { Args: never; Returns: string }
       expire_all_stale_reservations: { Args: never; Returns: number }
       expire_stale_payments: { Args: never; Returns: number }
       find_duplicate_payment_reference: {
@@ -3731,6 +3877,10 @@ export type Database = {
         Args: { p_conversation_id?: string; p_message_ids?: string[] }
         Returns: undefined
       }
+      mark_unclaimed_reservation: {
+        Args: { _reservation_id: string }
+        Returns: Json
+      }
       merge_message_reaction: {
         Args: { p_emoji: string; p_message_id: string }
         Returns: Json
@@ -3758,6 +3908,10 @@ export type Database = {
           p_target_id: string
         }
         Returns: Json
+      }
+      provision_customer_welcome: {
+        Args: { p_customer_id: string }
+        Returns: string
       }
       publish_legal_document_version: {
         Args: {
@@ -3808,6 +3962,10 @@ export type Database = {
         Args: { _method?: string; _reservation_id: string }
         Returns: Json
       }
+      record_signup_legal_acceptance: {
+        Args: { _client_platform: string; _user_agent?: string }
+        Returns: Json
+      }
       register_device: {
         Args: { _fingerprint: string; _user_agent?: string }
         Returns: {
@@ -3848,6 +4006,14 @@ export type Database = {
         }
         Returns: Json
       }
+      request_pickup_extension: {
+        Args: {
+          _evidence_path?: string
+          _reason: string
+          _reservation_id: string
+        }
+        Returns: Json
+      }
       request_reschedule:
         | {
             Args: {
@@ -3880,6 +4046,10 @@ export type Database = {
       reservation_holds_stock: {
         Args: { _deleted: boolean; _status: string }
         Returns: boolean
+      }
+      resolve_pickup_extension: {
+        Args: { _approve: boolean; _notes?: string; _reservation_id: string }
+        Returns: Json
       }
       resolve_reschedule: {
         Args: { _approve: boolean; _reservation_id: string }
@@ -4124,6 +4294,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      sweep_pickup_deadlines: { Args: never; Returns: Json }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
       terminate_owner: {
         Args: {
@@ -4192,14 +4363,6 @@ export type Database = {
       vote_on_review: {
         Args: { p_review_id: string; p_vote_type?: string }
         Returns: Json
-      }
-      ensure_my_welcome_conversation: {
-        Args: Record<PropertyKey, never>
-        Returns: string | null
-      }
-      provision_customer_welcome: {
-        Args: { p_customer_id: string }
-        Returns: string | null
       }
     }
     Enums: {
@@ -4335,3 +4498,4 @@ export const Constants = {
     },
   },
 } as const
+

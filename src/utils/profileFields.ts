@@ -4,7 +4,6 @@
 
 export type ProfileData = {
   firstName: string;
-  username: string;
   lastName: string;
   phone: string;
   gender: string;
@@ -14,6 +13,19 @@ export type ProfileData = {
   city: string;
   province: string;
   zipCode: string;
+};
+
+/** Normalizes supported local Philippine and international inputs to E.164. */
+export const normalizeMobileNumber = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const digits = trimmed.replace(/[^\d+]/g, '');
+  if (/^09\d{9}$/.test(digits)) return `+63${digits.slice(1)}`;
+  if (/^9\d{9}$/.test(digits)) return `+63${digits}`;
+  if (/^639\d{9}$/.test(digits)) return `+${digits}`;
+  if (/^\+[1-9]\d{7,14}$/.test(digits)) return digits;
+  return null;
 };
 
 export type Country = {
