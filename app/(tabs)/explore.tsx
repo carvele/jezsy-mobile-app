@@ -228,30 +228,6 @@ export default function ExploreScreen() {
     return map;
   }, [subCategoriesByParent]);
 
-  const subCategoryIdsMatching = useCallback((text: string) => {
-    const lower = text.toLowerCase().trim();
-    if (lower.length < 2) return [];
-    const isShort = lower.length === 2;
-    const ids = new Set<string>();
-
-    const matches = (name: string) => {
-      const n = name.toLowerCase();
-      if (isShort) {
-        return n.startsWith(lower) || n.split(/\s+/).some((w) => w.startsWith(lower));
-      }
-      return n.includes(lower);
-    };
-
-    topCategories
-      .filter((c) => matches(c.name))
-      .forEach((top) => (subCategoriesByParent[top.name] || []).forEach((s) => ids.add(s.id)));
-    Object.values(subCategoriesByParent)
-      .flat()
-      .filter((s) => matches(s.name))
-      .forEach((s) => ids.add(s.id));
-    return Array.from(ids);
-  }, [topCategories, subCategoriesByParent]);
-
   // Quick category navigation suggestions for the active search query
   const matchingNavOptions = useMemo(() => {
     const raw = searchQuery.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -400,9 +376,11 @@ export default function ExploreScreen() {
     setIsSearching(true);
     setSearchError(null);
     try {
-      // Expand category-name matches to their subcategory IDs server-side.
-      const matchingCategoryIds = subCategoryIdsMatching(safeText);
-      const categoryIds = matchingCategoryIds.length > 0 ? matchingCategoryIds : null;
+      const categoryIds = selectedCategory
+        ? selectedSubCategory && selectedSubCategory !== ALL_SUBCATEGORY && selectedSubCategory !== 'View All'
+          ? [subCategoryIdByName[selectedCategory]?.[selectedSubCategory]].filter(Boolean)
+          : (subCategoriesByParent[selectedCategory] || []).map((subcategory) => subcategory.id)
+        : null;
 
       let minPrice: number | null = customMinPrice ? parseFloat(customMinPrice) : null;
       let maxPrice: number | null = customMaxPrice ? parseFloat(customMaxPrice) : null;
@@ -437,10 +415,20 @@ export default function ExploreScreen() {
           .eq('deleted', false)
           .eq('visibility', 'public');
 
-        if (matchingCategoryIds.length > 0) {
-          fbQuery = fbQuery.or(`name.ilike.%${safeText}%,category_id.in.(${matchingCategoryIds.join(',')})`);
-        } else {
-          fbQuery = fbQuery.ilike('name', `%${safeText}%`);
+        fbQuery = fbQuery.ilike('name', `%${safeText}%`);
+        if (selectedCategory && selectedSubCategory && selectedSubCategory !== ALL_SUBCATEGORY && selectedSubCategory !== 'View All') {
+          const subCategoryId = subCategoryIdByName[selectedCategory]?.[selectedSubCategory];
+          if (subCategoryId) {
+            fbQuery = fbQuery.or(`category_id.eq.${subCategoryId},and(category_id.is.null,sub_category.eq.${selectedSubCategory},category.eq.${selectedCategory})`);
+          } else {
+            fbQuery = fbQuery.eq('category', selectedCategory).eq('sub_category', selectedSubCategory);
+          }
+        } else if (selectedCategory && categoryIds && categoryIds.length > 0) {
+          fbQuery = fbQuery.or(`category_id.in.(${categoryIds.join(',')}),and(category_id.is.null,category.eq.${selectedCategory})`);
+        } else if (selectedCategory) {
+          fbQuery = fbQuery.eq('category', selectedCategory);
+        } else if (categoryIds && categoryIds.length > 0) {
+          fbQuery = fbQuery.in('category_id', categoryIds);
         }
 
         const { data: fbData, error: fbError } = await fbQuery
@@ -472,7 +460,7 @@ export default function ExploreScreen() {
       setIsSearching(false);
     }
   }, [
-    subCategoryIdsMatching, showToast,
+    subCategoriesByParent, subCategoryIdByName, selectedCategory, selectedSubCategory, showToast,
     selectedSizes, selectedColors, selectedFits, selectedMaterials, selectedTags,
     selectedSaleOnly, selectedNewArrivalsOnly, selectedArOnly,
     customMinPrice, customMaxPrice, selectedPriceRange, selectedSort, selectedMySizeOnly, sizingMeasurements,
