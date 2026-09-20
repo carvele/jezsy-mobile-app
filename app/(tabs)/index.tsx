@@ -52,6 +52,7 @@ import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 type Category = Database['public']['Tables']['categories']['Row'];
+type StorefrontCampaign = Database['public']['Tables']['announcements']['Row'];
 
 // The card occupies 1/phi of the screen (~61.8%) rather than a hand-picked
 // fraction -- golden-ratio framing that also reads noticeably less dominant
@@ -72,6 +73,7 @@ export default function HomeScreen() {
   const [trendingProducts, setTrendingProducts] = useState<Product[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [topCategories, setTopCategories] = useState<Category[]>([]);
+  const [storefrontCampaigns, setStorefrontCampaigns] = useState<StorefrontCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -241,6 +243,21 @@ export default function HomeScreen() {
     }
   }, [showToast]);
 
+  const fetchStorefrontCampaigns = useCallback(async () => {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .in('placement', ['storefront', 'both'])
+      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+      .order('created_at', { ascending: false })
+      .limit(3);
+
+    // Storefront campaigns are an enhancement, not a dependency for shopping.
+    // A temporary permission or network failure must never hide the catalog.
+    if (!error) setStorefrontCampaigns(data ?? []);
+  }, []);
+
   // Focus, not mount-only: Shop by Category's order depends on affinity
   // counts that recordCategoryVisit writes when the user taps into a
   // category, so coming back from Explore needs a re-sort, not just the
@@ -259,7 +276,8 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchProducts(true);
     fetchProducts(false);
-  }, [fetchProducts]);
+    fetchStorefrontCampaigns();
+  }, [fetchProducts, fetchStorefrontCampaigns]);
 
   // Lands on a clone (extended index 0 or >= featuredProducts.length + 1) and
   // instantly, unanimatedly repositions onto the identical real card at the
@@ -410,6 +428,44 @@ export default function HomeScreen() {
             onDismiss={handleDismissTourCard}
           />
         )}
+
+        {/* Staff-curated campaign cards are managed with Broadcasts in Admin.
+            They add an editorial entry point without duplicating product data. */}
+        {storefrontCampaigns.map((campaign) => {
+          const canNavigate = campaign.cta_target_type !== 'none' && !!campaign.cta_target_value;
+          const openCampaign = () => {
+            if (!canNavigate) return;
+            if (campaign.cta_target_type === 'product') {
+              router.push(`/product/${campaign.cta_target_value}` as any);
+            } else if (campaign.cta_target_type === 'category') {
+              router.push(`/(tabs)/explore?category=${encodeURIComponent(campaign.cta_target_value ?? '')}` as any);
+            } else if (campaign.cta_target_type === 'catalog') {
+              router.push('/(tabs)/explore?all=1' as any);
+            }
+          };
+
+          return (
+            <TouchableOpacity
+              key={campaign.id}
+              activeOpacity={canNavigate ? 0.9 : 1}
+              disabled={!canNavigate}
+              onPress={openCampaign}
+              style={[styles.storefrontCampaign, { backgroundColor: colors.tint }]}
+              accessibilityRole={canNavigate ? 'button' : undefined}
+              accessibilityLabel={canNavigate ? `${campaign.title}. ${campaign.cta_label || 'Open campaign'}` : campaign.title}
+            >
+              {campaign.storefront_image_url && (
+                <Image source={{ uri: campaign.storefront_image_url }} style={styles.storefrontCampaignImage} contentFit="cover" />
+              )}
+              <View style={[styles.storefrontCampaignOverlay, !campaign.storefront_image_url && styles.storefrontCampaignSolid]}>
+                <Text style={styles.storefrontCampaignEyebrow}>JEZSY EDIT</Text>
+                <Text style={styles.storefrontCampaignTitle}>{campaign.title}</Text>
+                <Text style={styles.storefrontCampaignBody} numberOfLines={3}>{campaign.body}</Text>
+                {canNavigate && <Text style={styles.storefrontCampaignCta}>{campaign.cta_label || 'Shop collection'} →</Text>}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
 
         {/* 1. Featured Carousel */}
         {featuredProducts.length > 0 && (
@@ -690,6 +746,51 @@ const styles = StyleSheet.create({
     ...Type.headline,
     letterSpacing: 3,
     textTransform: 'uppercase',
+  },
+  storefrontCampaign: {
+    minHeight: 230,
+    marginHorizontal: Spacing.xl,
+    marginBottom: Spacing.xl,
+    borderRadius: Radius.md,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  storefrontCampaignImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  storefrontCampaignOverlay: {
+    minHeight: 230,
+    justifyContent: 'flex-end',
+    padding: Spacing.xl,
+    backgroundColor: 'rgba(0,0,0,0.34)',
+  },
+  storefrontCampaignSolid: {
+    backgroundColor: 'transparent',
+  },
+  storefrontCampaignEyebrow: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.8,
+    marginBottom: Spacing.sm,
+  },
+  storefrontCampaignTitle: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '800',
+    lineHeight: 33,
+  },
+  storefrontCampaignBody: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: Spacing.sm,
+  },
+  storefrontCampaignCta: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: Spacing.md,
   },
   
   // Editorial Section
