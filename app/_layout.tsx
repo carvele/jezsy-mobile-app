@@ -558,7 +558,6 @@ function InitialLayout() {
       <Stack initialRouteName="(tabs)" screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(auth)/account-created" />
         <Stack.Screen name="legal/terms" />
         <Stack.Screen name="legal/privacy" />
         <Stack.Screen name="+not-found" options={{ title: 'Not Found' }} />

@@ -785,7 +785,7 @@ const styles = StyleSheet.create({
   exploreShortcut: {
     minHeight: 36,
     paddingHorizontal: Spacing.md,
-    borderRadius: Radius.full,
+    borderRadius: Radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
