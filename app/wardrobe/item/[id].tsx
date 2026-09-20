@@ -491,7 +491,7 @@ export default function WardrobeItemDetailScreen() {
             <View style={styles.attrItem}>
               <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Material</Text>
               <Text style={[styles.attrValue, { color: colors.text }]}>
-                {normalized.material.length > 0 ? normalized.material.join(' · ') : ((item as any).material || 'Not specified')}
+                {normalized.material.length > 0 ? normalized.material.join(' · ') : (aiAttrs.material ? String(aiAttrs.material) : 'Not specified')}
               </Text>
             </View>
           </View>
