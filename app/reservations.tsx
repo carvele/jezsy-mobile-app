@@ -60,6 +60,7 @@ export default function ReservationsScreen() {
     toPay: 0,
     preparing: 0,
     ready: 0,
+    unclaimed: 0,
     completed: 0,
     returnRefund: 0,
     cancelled: 0,
@@ -157,6 +158,7 @@ export default function ReservationsScreen() {
       case 'paymentReceived': return colors.success;
       case 'preparing': return colors.info;
       case 'ready': return colors.info;
+      case 'unclaimed': return colors.warning;
       case 'completed': return colors.success;
       case 'cancelled': return colors.error;
       case 'refunded': return colors.info;

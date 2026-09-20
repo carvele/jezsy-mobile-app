@@ -101,6 +101,26 @@ describe('getCustomerReservationDisplayState & getReservationCardActions regress
     expect(getReservationCardActions(resPreparing)).toEqual([]);
   });
 
+  test('4b. Unclaimed: displays Unclaimed label, suppresses Pay and Cancel, retains unclaimed bucket', () => {
+    const resUnclaimed = {
+      status: 'Unclaimed',
+      payment_status: 'Paid',
+      countdown: false,
+    };
+    const state = getCustomerReservationDisplayState(resUnclaimed);
+    expect(state.label).toBe('Unclaimed');
+    expect(state.bucket).toBe('unclaimed');
+    expect(state.filterBucket).toBe('unclaimed');
+    expect(state.badgeColorType).toBe('unclaimed');
+    expect(state.showCountdown).toBe(false);
+    expect(state.showToPayAction).toBe(false);
+    // No Pay or Cancel actions for an Unclaimed reservation
+    const actions = getReservationCardActions(resUnclaimed);
+    expect(actions).toEqual([]);
+    expect(actions).not.toContain('toPay');
+    expect(actions).not.toContain('cancelReservation');
+  });
+
   test('5. Refund Required: prioritizes refund in progress and offers viewRefund action', () => {
     const resRefundRequired = {
       status: 'Cancelled',

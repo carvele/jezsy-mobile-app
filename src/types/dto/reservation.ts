@@ -7,8 +7,8 @@ export interface ReservationItemInput {
 
 export interface CreateReservationInput {
   items: ReservationItemInput[];
-  date: string;
-  appointmentTime: string;
+  date: string | null;
+  appointmentTime: string | null;
   paymentOption: string;
   receiptPath?: string | null;
 }

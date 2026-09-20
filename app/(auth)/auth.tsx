@@ -321,7 +321,7 @@ export default function AuthScreen() {
       const { data, error } = await supabase.auth.updateUser({ phone: signupPhone });
       if (error) throw error;
       if (data.user.phone === signupPhone) {
-        router.replace('/(auth)/account-created');
+        router.replace('/(auth)/account-created' as any);
         return;
       }
       setTimer(60);
@@ -338,7 +338,7 @@ export default function AuthScreen() {
     try {
       const { error } = await supabase.auth.verifyOtp({ phone: signupPhone, token: otpCode, type: 'phone_change' });
       if (error) throw error;
-      router.replace('/(auth)/account-created');
+      router.replace('/(auth)/account-created' as any);
     } catch (err: any) {
       showToast(err.message ?? 'The mobile verification code is invalid or expired.', 'error');
     } finally { setLoading(false); }
