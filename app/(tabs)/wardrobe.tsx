@@ -35,6 +35,7 @@ import { MannequinView } from '@/src/components/Mannequin/MannequinView';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
+import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
 
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
@@ -335,11 +336,11 @@ export default function WardrobeScreen() {
       // Matches the shape outfit-builder writes, so both sources render
       // identically on the outfit detail screen.
       const payload = outfit.items.map((i) => ({
-        slot: (i.garment_type || 'accessory').toLowerCase(),
+        slot: (resolveEffectiveGarmentBucket(i) || i.garment_type || 'accessory').toLowerCase(),
         product_id: i.product_id,
         wardrobe_item_id: i.id,
         image_url: i.image_url,
-        name: i.garment_type || i.category || 'Item',
+        name: i.sub_category || resolveEffectiveGarmentBucket(i) || i.category || 'Item',
         color_tags: i.color_tags,
       }));
 
@@ -370,6 +371,8 @@ export default function WardrobeScreen() {
   }, [session?.user?.id, showToast, fetchWardrobeData]);
 
   const renderItem = useCallback(({ item, index }: { item: WardrobeItem; index: number }) => {
+    // Use the computed effective bucket so a stale garment_type column never shows wrong info.
+    const displayLabel = item.sub_category || resolveEffectiveGarmentBucket(item) || item.category || 'Clothing';
     return (
       <FadeInView index={index}>
       <TouchableOpacity
@@ -377,7 +380,7 @@ export default function WardrobeScreen() {
         onPress={() => router.push(`/wardrobe/item/${item.id}` as any)}
         activeOpacity={0.8}
         accessibilityRole="button"
-        accessibilityLabel={`${item.garment_type || item.category || 'Item'}, ${item.wear_count > 0 ? `worn ${item.wear_count} times` : 'never worn'}`}
+        accessibilityLabel={`${displayLabel}, ${item.wear_count > 0 ? `worn ${item.wear_count} times` : 'never worn'}`}
       >
         <View>
           <Image
@@ -392,8 +395,8 @@ export default function WardrobeScreen() {
           </View>
         </View>
         <View style={styles.itemInfo}>
-          <Text style={[styles.itemCategory, { color: colors.secondaryText }]}>
-            {item.garment_type || item.category || 'Clothing'}
+          <Text style={[styles.itemCategory, { color: colors.secondaryText }]} numberOfLines={1}>
+            {displayLabel}
           </Text>
         </View>
       </TouchableOpacity>

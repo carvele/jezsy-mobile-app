@@ -264,12 +264,13 @@ export default function WardrobeItemDetailScreen() {
       ? 'Never worn'
       : `Worn ${item.wear_count} time${item.wear_count === 1 ? '' : 's'}${item.last_worn_at ? ` · last worn ${timeAgo(item.last_worn_at)}` : ''}`;
 
+  const aiAttrs = (item.ai_attributes as Record<string, any> | null) ?? {};
   const hasStyleProfile = Boolean(
-    (item as any).pattern ||
-    (item as any).material ||
-    (item as any).fit ||
-    ((item as any).occasions && (item as any).occasions.length > 0) ||
-    ((item as any).seasons && (item as any).seasons.length > 0)
+    aiAttrs.pattern ||
+    aiAttrs.material ||
+    aiAttrs.fit ||
+    (item.occasions && item.occasions.length > 0) ||
+    (item.seasons && item.seasons.length > 0)
   );
 
   return (
@@ -504,31 +505,31 @@ export default function WardrobeItemDetailScreen() {
               <Text style={[styles.cardTitle, { color: colors.text }]}>Style Profile</Text>
             </View>
             <View style={styles.attrGrid}>
-              {(item as any).pattern && (
+              {aiAttrs.pattern && (
                 <View style={styles.attrItem}>
                   <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Pattern</Text>
-                  <Text style={[styles.attrValue, { color: colors.text }]}>{(item as any).pattern}</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{String(aiAttrs.pattern)}</Text>
                 </View>
               )}
-              {(item as any).material && (
+              {aiAttrs.material && (
                 <View style={styles.attrItem}>
                   <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Material</Text>
-                  <Text style={[styles.attrValue, { color: colors.text }]}>{(item as any).material}</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{String(aiAttrs.material)}</Text>
                 </View>
               )}
-              {(item as any).fit && (
+              {aiAttrs.fit && (
                 <View style={styles.attrItem}>
                   <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Fit</Text>
-                  <Text style={[styles.attrValue, { color: colors.text }]}>{(item as any).fit}</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{String(aiAttrs.fit)}</Text>
                 </View>
               )}
             </View>
 
-            {(item as any).occasions && (item as any).occasions.length > 0 && (
+            {item.occasions && item.occasions.length > 0 && (
               <View style={styles.occasionsContainer}>
                 <Text style={[styles.attrLabel, { color: colors.secondaryText, marginBottom: 6 }]}>Occasions</Text>
                 <View style={styles.chipRow}>
-                  {((item as any).occasions as string[]).map((occ: string) => (
+                  {(item.occasions as string[]).map((occ: string) => (
                     <View key={occ} style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border }]}>
                       <Text style={[styles.chipText, { color: colors.text }]}>{occ}</Text>
                     </View>
@@ -537,11 +538,11 @@ export default function WardrobeItemDetailScreen() {
               </View>
             )}
 
-            {(item as any).seasons && (item as any).seasons.length > 0 && (
+            {item.seasons && item.seasons.length > 0 && (
               <View style={styles.occasionsContainer}>
                 <Text style={[styles.attrLabel, { color: colors.secondaryText, marginBottom: 6 }]}>Seasons</Text>
                 <View style={styles.chipRow}>
-                  {((item as any).seasons as string[]).map((season: string) => (
+                  {(item.seasons as string[]).map((season: string) => (
                     <View key={season} style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border }]}>
                       <Text style={[styles.chipText, { color: colors.text }]}>{season}</Text>
                     </View>

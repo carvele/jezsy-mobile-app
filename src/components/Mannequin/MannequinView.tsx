@@ -897,7 +897,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                         contentFit="contain"
                       />
                       <Text style={[styles.garmentLabel, { color: colors.text }]} numberOfLines={1}>
-                        {item.garment_type || item.category || 'Item'}
+                        {item.sub_category || item.category || 'Item'}
                       </Text>
                       {onCanvas && (
                         <View style={[styles.checkBadge, { backgroundColor: colors.tint }]}>
