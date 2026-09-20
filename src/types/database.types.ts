@@ -234,9 +234,6 @@ export type Database = {
       announcements: {
         Row: {
           body: string
-          cta_label: string | null
-          cta_target_type: string
-          cta_target_value: string | null
           created_at: string
           created_by: string | null
           cta_label: string | null
@@ -252,9 +249,6 @@ export type Database = {
         }
         Insert: {
           body: string
-          cta_label?: string | null
-          cta_target_type?: string
-          cta_target_value?: string | null
           created_at?: string
           created_by?: string | null
           cta_label?: string | null
@@ -270,9 +264,6 @@ export type Database = {
         }
         Update: {
           body?: string
-          cta_label?: string | null
-          cta_target_type?: string
-          cta_target_value?: string | null
           created_at?: string
           created_by?: string | null
           cta_label?: string | null
