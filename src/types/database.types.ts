@@ -234,30 +234,45 @@ export type Database = {
       announcements: {
         Row: {
           body: string
+          cta_label: string | null
+          cta_target_type: string
+          cta_target_value: string | null
           created_at: string
           created_by: string | null
           expires_at: string | null
           id: string
+          placement: string
+          storefront_image_url: string | null
           title: string
           type: string
           updated_at: string | null
         }
         Insert: {
           body: string
+          cta_label?: string | null
+          cta_target_type?: string
+          cta_target_value?: string | null
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
           id?: string
+          placement?: string
+          storefront_image_url?: string | null
           title: string
           type?: string
           updated_at?: string | null
         }
         Update: {
           body?: string
+          cta_label?: string | null
+          cta_target_type?: string
+          cta_target_value?: string | null
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
           id?: string
+          placement?: string
+          storefront_image_url?: string | null
           title?: string
           type?: string
           updated_at?: string | null

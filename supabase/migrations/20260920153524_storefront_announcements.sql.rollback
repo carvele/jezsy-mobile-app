@@ -1,0 +1,23 @@
+DROP POLICY IF EXISTS "Admin or owner can insert announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Admin or owner can update announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Admin or owner can delete announcements" ON public.announcements;
+
+CREATE POLICY "Owner can insert announcements"
+  ON public.announcements FOR INSERT TO authenticated
+  WITH CHECK (is_owner());
+CREATE POLICY "Owner can update announcements"
+  ON public.announcements FOR UPDATE TO authenticated
+  USING (is_owner()) WITH CHECK (is_owner());
+CREATE POLICY "Owner can delete announcements"
+  ON public.announcements FOR DELETE TO authenticated
+  USING (is_owner());
+
+DROP INDEX IF EXISTS public.idx_announcements_storefront_active;
+ALTER TABLE public.announcements
+  DROP CONSTRAINT IF EXISTS announcements_placement_check,
+  DROP CONSTRAINT IF EXISTS announcements_cta_target_type_check,
+  DROP COLUMN IF EXISTS cta_target_value,
+  DROP COLUMN IF EXISTS cta_target_type,
+  DROP COLUMN IF EXISTS cta_label,
+  DROP COLUMN IF EXISTS storefront_image_url,
+  DROP COLUMN IF EXISTS placement;
