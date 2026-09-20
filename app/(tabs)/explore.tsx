@@ -45,6 +45,19 @@ const PRODUCT_ROW_INSET = 4;
 // Semantic sentinel for all-subcategory browsing decoupled from display copy.
 export const ALL_SUBCATEGORY = '__all__';
 
+const matchesSearchText = (product: Product, query: string) => {
+  const terms = query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const searchable = [
+    product.name,
+    product.description,
+    product.category,
+    product.sub_category,
+    ...(product.tags ?? []),
+  ].filter(Boolean).join(' ').toLocaleLowerCase();
+  return terms.every((term) => searchable.includes(term));
+};
+
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 type Category = {
@@ -438,7 +451,7 @@ export default function ExploreScreen() {
 
         if (!fbError && fbData) {
           if (currentReqId !== searchReqId.current) return;
-          setSearchResults(fbData);
+          setSearchResults(fbData.filter((product: Product) => matchesSearchText(product, safeText)));
           setSearchError(null);
           return;
         }
@@ -448,7 +461,7 @@ export default function ExploreScreen() {
         showToast('Search encountered an error. Please try again.', 'error');
       } else if (data) {
         if (currentReqId !== searchReqId.current) return;
-        setSearchResults(data);
+        setSearchResults(data.filter((product: Product) => matchesSearchText(product, safeText)));
         setSearchError(null);
       }
     } catch (err) {
@@ -1133,7 +1146,7 @@ export default function ExploreScreen() {
     return (
       <View style={[styles.relatedCategoriesWrapper, { borderBottomColor: colors.border }]}>
         <Text style={[styles.relatedCategoriesHeading, { color: colors.secondaryText }]}>
-          Related Categories
+          Browse matching categories
         </Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.relatedCategoriesScroll}>
           {matchingNavOptions.map((opt) => (
@@ -1141,16 +1154,15 @@ export default function ExploreScreen() {
               key={opt.id}
               style={[styles.relatedCategoryPill, { backgroundColor: colors.card, borderColor: colors.border }]}
               onPress={() => {
-                setIsSearchActive(false);
-                setSearchQuery('');
+                setShowAllProducts(false);
                 setSelectedCategory(opt.category);
                 setSelectedSubCategory(opt.subCategory ?? ALL_SUBCATEGORY);
               }}
               accessibilityRole="button"
-              accessibilityLabel={`Navigate to ${opt.label}`}
+              accessibilityLabel={`Search within ${opt.label}`}
             >
               <IconSymbol name="folder" size={13} color={colors.tint} />
-              <Text style={[styles.relatedCategoryPillText, { color: colors.text }]}>{opt.label}</Text>
+              <Text style={[styles.relatedCategoryPillText, { color: colors.text }]}>Browse {opt.label}</Text>
               <IconSymbol name="chevron.right" size={11} color={colors.secondaryText} />
             </TouchableOpacity>
           ))}
