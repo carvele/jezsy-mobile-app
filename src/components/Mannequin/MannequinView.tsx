@@ -51,25 +51,12 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // CANVAS_WIDTH and GARMENT_CARD_WIDTH are computed reactively inside the component
 // via useWindowDimensions (see component body), so they respond to web viewport resizes.
 const CANVAS_HEIGHT = 450;
-// When the drawer is collapsed, the screen (wrapped in a flex:1 View by the
-// parent tab so it survives tab switches -- see app/(tabs)/wardrobe.tsx)
-// still claims the full tab height, but there's nothing left to fill it:
-// the canvas stayed a fixed 450 regardless, leaving a large empty gap
-// between the drawer toggle and the bottom tab bar. Growing the canvas to
-// use that reclaimed space instead means collapsing the drawer makes the
-// mannequin bigger, not just leaves a void. Item positions are stored as
-// fractions of canvas width/height (see MannequinCanvasItem), so this is
-// safe to change at render time.
-// Kept close to CANVAS_HEIGHT's own aspect ratio rather than maximizing
-// height: MannequinSilhouette's SVG (fixed 300x480 viewBox, "xMidYMid meet")
-// scales oddly elongated at much taller aspect ratios on web, so this is a
-// deliberately modest bump -- enough to absorb the dead space, not a
-// full-screen fill.
-const CANVAS_HEIGHT_EXPANDED = Math.min(CANVAS_HEIGHT + 150, Math.round(SCREEN_HEIGHT * 0.5));
+// Expanded canvas height when drawer is collapsed is computed reactively inside the component
+// to scale properly with orientation and tablet viewports.
 
 // The floating tab bar is ~68px + bottom inset (~10-20px) + 8px offset.
 // We need enough bottom padding so nothing hides behind it.
@@ -115,10 +102,15 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   const { session } = useAuth();
   const { showToast } = useToast();
 
-  // Reactive viewport width so canvas and drawer re-layout when web window resizes.
-  const { width: viewportWidth } = useWindowDimensions();
-  const canvasWidth = viewportWidth - 32;
-  const garmentCardWidth = (viewportWidth - Spacing.lg * 2 - Spacing.sm * (GARMENT_GRID_COLUMNS - 1)) / GARMENT_GRID_COLUMNS;
+  // Reactive viewport dimensions so canvas and drawer re-layout when window resizes or rotates.
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const isTablet = viewportWidth >= 600;
+  const maxContentWidth = 640;
+  const effectiveWidth = Math.min(viewportWidth, maxContentWidth);
+  const MAX_CANVAS_WIDTH = 440;
+  const canvasWidth = Math.min(effectiveWidth - Spacing.lg * 2, MAX_CANVAS_WIDTH);
+  const garmentCardWidth = (effectiveWidth - Spacing.lg * 2 - Spacing.sm * (GARMENT_GRID_COLUMNS - 1)) / GARMENT_GRID_COLUMNS;
+  const moreMenuLeft = Math.max(Spacing.lg, (viewportWidth - maxContentWidth) / 2 + Spacing.lg);
 
   const canvasRef = useRef<View>(null);
 
@@ -135,7 +127,9 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isDrawerMinimized, setIsDrawerMinimized] = useState<boolean>(false);
   const [canvasBgColor, setCanvasBgColor] = useState<string>(isDark ? '#1A1A1C' : '#FFFFFF');
-  const canvasHeight = isDrawerMinimized ? CANVAS_HEIGHT_EXPANDED : CANVAS_HEIGHT;
+  const canvasHeightBase = isTablet ? 520 : CANVAS_HEIGHT;
+  const canvasHeightExpanded = Math.min(canvasHeightBase + 160, Math.round(viewportHeight * 0.58));
+  const canvasHeight = isDrawerMinimized ? canvasHeightExpanded : canvasHeightBase;
 
   // Filter State
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
@@ -602,7 +596,10 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
+      contentContainerStyle={[
+        styles.contentContainer,
+        { paddingBottom: TAB_BAR_CLEARANCE },
+      ]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
@@ -821,7 +818,14 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
 
       {/* ── Mannequin Canvas ── */}
       <View
-        style={[styles.canvasOuter, { borderColor: colors.border, backgroundColor: canvasBgColor }]}
+        style={[
+          styles.canvasOuter,
+          {
+            borderColor: colors.border,
+            backgroundColor: canvasBgColor,
+            width: canvasWidth,
+          },
+        ]}
       >
         <View
           ref={canvasRef}
@@ -1227,7 +1231,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
             activeOpacity={1}
             onPress={() => setMoreMenuVisible(false)}
           >
-            <View style={[styles.moreMenuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.moreMenuCard, { backgroundColor: colors.card, borderColor: colors.border, left: moreMenuLeft }]}>
               <TouchableOpacity
                 style={styles.moreMenuRow}
                 onPress={() => { setMoreMenuVisible(false); handleOpenLoadModal(); }}
@@ -1264,6 +1268,11 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  contentContainer: {
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
   },
 
   /* ── Toolbar ── */
@@ -1535,6 +1544,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
   },
   canvasStage: {
     position: 'relative',
