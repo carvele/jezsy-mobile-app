@@ -135,6 +135,8 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
                 <TouchableOpacity
                   style={[styles.cancelBtn, { borderColor: colors.border }]}
                   onPress={handleCancel}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel"
                 >
                   <Text style={[styles.cancelBtnText, { color: colors.text }]}>Cancel</Text>
                 </TouchableOpacity>
@@ -178,6 +180,9 @@ const styles = StyleSheet.create({
   },
   kavWrapper: {
     width: '100%',
+    // Center and cap on desktop/tablet.
+    maxWidth: Platform.OS === 'web' ? 600 : undefined,
+    alignSelf: Platform.OS === 'web' ? 'center' as const : undefined,
   },
   sheet: {
     borderTopLeftRadius: 24,

@@ -320,6 +320,37 @@ describe('ai-stylist-analyze: zero-cost provider configuration', () => {
     expect(url).not.toContain('key=');
     expect(init.headers['x-goog-api-key']).toBe('gem-key');
   });
+
+  test('openrouter/ model prefix routes to openrouter and includes headers', async () => {
+    const env: Record<string, string> = {
+      GEMINI_API_KEY: 'gem-key',
+      OPENROUTER_API_KEY: 'or-key',
+      AI_STYLING_MODEL: 'openrouter/free',
+    };
+    const deps = makeDeps({
+      env: (k: string) => env[k],
+      fetchImpl: jest.fn(async () => providerResponse(goodModelJson())),
+    });
+    const { body } = await call(deps, request(packet(), authed));
+    expect(body.success).toBe(true);
+    expect(body.provider).toBe('openrouter');
+    expect(body.model).toBe('openrouter/free');
+    const [url, init] = (deps.fetchImpl as jest.Mock).mock.calls[0];
+    expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(init.headers['Authorization']).toBe('Bearer or-key');
+    expect(init.headers['HTTP-Referer']).toBe('https://jezsy.com');
+    expect(init.headers['X-Title']).toBe('JeZsy');
+  });
+
+  test('markdown-fenced JSON from model is cleanly extracted and accepted', async () => {
+    const fenced = `\`\`\`json\n${goodModelJson()}\n\`\`\``;
+    const deps = makeDeps({
+      fetchImpl: jest.fn(async () => providerResponse(fenced)),
+    });
+    const { body } = await call(deps, request(packet(), authed));
+    expect(body.success).toBe(true);
+    expect(body.data.assessment).toBe('Could work with changes');
+  });
 });
 
 describe('ai-stylist-analyze: CORS', () => {

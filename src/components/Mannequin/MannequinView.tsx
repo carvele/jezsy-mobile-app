@@ -15,6 +15,7 @@ import {
   Platform,
   LayoutAnimation,
   UIManager,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 // react-native-view-shot is not available on web — share is handled via showToast guidance
@@ -51,7 +52,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CANVAS_WIDTH = SCREEN_WIDTH - 32;
+// CANVAS_WIDTH and GARMENT_CARD_WIDTH are computed reactively inside the component
+// via useWindowDimensions (see component body), so they respond to web viewport resizes.
 const CANVAS_HEIGHT = 450;
 // When the drawer is collapsed, the screen (wrapped in a flex:1 View by the
 // parent tab so it survives tab switches -- see app/(tabs)/wardrobe.tsx)
@@ -78,7 +80,9 @@ const TAB_BAR_CLEARANCE = 100;
 // Fixed width (not flex) so the last, possibly-partial row doesn't stretch
 // its cards wider than the full rows above it.
 const GARMENT_GRID_COLUMNS = 3;
-const GARMENT_CARD_WIDTH = (SCREEN_WIDTH - Spacing.lg * 2 - Spacing.sm * (GARMENT_GRID_COLUMNS - 1)) / GARMENT_GRID_COLUMNS;
+// GARMENT_CARD_WIDTH is computed reactively inside the component; this module-level
+// value is only used as a fallback for the StyleSheet (which can't access hooks).
+const GARMENT_CARD_WIDTH_FALLBACK = (SCREEN_WIDTH - Spacing.lg * 2 - Spacing.sm * (GARMENT_GRID_COLUMNS - 1)) / GARMENT_GRID_COLUMNS;
 
 const CATEGORIES = ['All', 'Top', 'Bottom', 'Dress', 'Outerwear', 'Shoes', 'Accessory'] as const;
 type CategoryFilter = (typeof CATEGORIES)[number];
@@ -110,6 +114,11 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   const router = useRouter();
   const { session } = useAuth();
   const { showToast } = useToast();
+
+  // Reactive viewport width so canvas and drawer re-layout when web window resizes.
+  const { width: viewportWidth } = useWindowDimensions();
+  const canvasWidth = viewportWidth - 32;
+  const garmentCardWidth = (viewportWidth - Spacing.lg * 2 - Spacing.sm * (GARMENT_GRID_COLUMNS - 1)) / GARMENT_GRID_COLUMNS;
 
   const canvasRef = useRef<View>(null);
 
@@ -856,7 +865,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       >
         <View
           ref={canvasRef}
-          style={[styles.canvasStage, { width: CANVAS_WIDTH, height: canvasHeight }]}
+          style={[styles.canvasStage, { width: canvasWidth, height: canvasHeight }]}
         >
           {/* Backdrop pressable: deselects garment when tapping empty canvas space */}
           <Pressable
@@ -879,7 +888,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
             <MannequinCanvasItem
               key={item.id}
               item={item}
-              canvasWidth={CANVAS_WIDTH}
+              canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
               isSelected={selectedItemId === item.id}
               onSelect={setSelectedItemId}
@@ -988,7 +997,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                     <TouchableOpacity
                       style={[
                         styles.garmentCard,
-                        { backgroundColor: colors.card, borderColor: onCanvas ? colors.tint : colors.border },
+                        { width: garmentCardWidth, backgroundColor: colors.card, borderColor: onCanvas ? colors.tint : colors.border },
                         onCanvas && { borderWidth: 2 },
                       ]}
                       onPress={() => handleAddItemToCanvas(item)}
@@ -1549,7 +1558,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   garmentCard: {
-    width: GARMENT_CARD_WIDTH,
+    width: GARMENT_CARD_WIDTH_FALLBACK,
     height: 112,
     borderRadius: Radius.md,
     borderWidth: 1,

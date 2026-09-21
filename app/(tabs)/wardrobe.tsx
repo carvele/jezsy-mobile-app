@@ -958,10 +958,14 @@ const styles = StyleSheet.create({
     minWidth: '100%',
   },
   tab: {
+    // HIG/Material minimum touch target is 44pt; keep at least that.
+    minHeight: 44,
     paddingVertical: Spacing.md,
     paddingHorizontal: 6,
     borderBottomWidth: 2.5,
     borderBottomColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabInner: {
     flexDirection: 'row',
@@ -1216,7 +1220,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     borderTopWidth: 1,
     padding: Spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 36 : Spacing.xl,
+    // Safe bottom clearance: 36pt on iPhone notch, 20pt on Android, flat on web.
+    paddingBottom: Platform.OS === 'ios' ? 36 : Platform.OS === 'android' ? 20 : Spacing.xl,
+    // Cap width on desktop so the sheet doesn't span the full viewport.
+    maxWidth: Platform.OS === 'web' ? 600 : undefined,
+    alignSelf: Platform.OS === 'web' ? 'center' as const : undefined,
+    width: '100%',
   },
   sheetTitle: {
     ...Type.subtitle,

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -47,6 +48,7 @@ export default function StyleAdvisorScreen() {
   const router = useRouter();
   const { session } = useAuth();
   const { showToast } = useToast();
+  const bottomInset = useSharedBottomInset();
 
   const [items, setItems] = useState<WardrobeItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -264,7 +266,7 @@ export default function StyleAdvisorScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(bottomInset, Spacing.xxxl) }]} showsVerticalScrollIndicator={false}>
         <Text style={[styles.prompt, { color: colors.secondaryText }]}>
           What&apos;s the occasion? I&apos;ll style a look from your own wardrobe.
         </Text>
@@ -427,7 +429,14 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...Type.headline, fontSize: 18 },
-  content: { padding: Spacing.xl, paddingBottom: 60 },
+  // paddingBottom is applied dynamically via bottomInset in the JSX.
+  content: {
+    padding: Spacing.xl,
+    // Center and cap width on large viewports (web/tablet).
+    maxWidth: Platform.OS === 'web' ? 600 : undefined,
+    width: '100%',
+    alignSelf: 'center' as const,
+  },
   prompt: { ...Type.body, marginBottom: Spacing.lg },
   chipRow: {
     flexDirection: 'row',
