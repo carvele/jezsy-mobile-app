@@ -174,6 +174,57 @@ Produce a structured JSON critique with this exact schema:
 }`;
 }
 
+function buildRankingPrompt(intent: any, candidates: any[]): string {
+  const candsText = candidates
+    .slice(0, 10)
+    .map((c: any) => {
+      const itemsText = (c.items || [])
+        .map((it: any) => `  - [${it.wardrobeItemId || 'item'}] ${it.name || 'Garment'} (${it.category || 'Category'}, Colors: ${(it.colors || []).join(', ')}${it.material ? `, Material: ${it.material}` : ''})`)
+        .join('\n');
+      return `Candidate ID: ${c.candidateId}
+Items:
+${itemsText}
+Base Score: ${c.baseScore ?? 80}`;
+    })
+    .join('\n\n');
+
+  return `USER STYLING REQUEST:
+User Request: "${intent?.rawPrompt || 'Curate an outfit'}"
+Occasion Context: "${intent?.selectedOccasion || 'General'}"
+Formality Target: "${intent?.formality || 'balanced'}"
+Weather / Environment: "${intent?.weather || 'mild'}"
+
+CANDIDATE OUTFITS (Grounding Rule: Select ONLY from these Candidate IDs):
+${candsText}
+
+INSTRUCTIONS:
+1. Select the 2-3 strongest candidate outfits that best fulfill the user's styling request and occasion context.
+2. For each selected candidate, provide a contextual label (e.g. "Polished", "Contemporary", "Comfortable", or "Modern Professional").
+3. Provide a concise headline and an intentMatch sentence explaining how it answers the user's specific prompt.
+4. Detail "whyThisWorks" referencing actual colors, silhouette proportions, and layering.
+5. Provide a practical proTip.
+6. RETURN ONLY A VALID JSON OBJECT WITH THIS EXACT SCHEMA:
+{
+  "recommendations": [
+    {
+      "candidateId": "cand_1",
+      "label": "Polished",
+      "headline": "Tailored Blazer & Slacks",
+      "intentMatch": "Directly matches client dinner tailoring with your black blazer.",
+      "whyThisWorks": {
+        "summary": "Clear causal explanation referencing the garments",
+        "palette": "Color harmony explanation",
+        "silhouette": "Proportion explanation",
+        "occasion": "Occasion appropriateness",
+        "layering": "Layering note if outerwear exists",
+        "footwear": "Shoe relationship"
+      },
+      "proTip": "Concrete styling tip"
+    }
+  ]
+}`;
+}
+
 interface LlmConfig {
   provider: 'gemini' | 'openrouter';
   apiKey: string;
@@ -257,10 +308,117 @@ export function createHandler(deps: HandlerDeps) {
       } catch {
         return fallback('INVALID_JSON', 400);
       }
+
+      if (typeof rawPacket === 'object' && rawPacket !== null && (rawPacket as any).mode === 'rank_candidates') {
+        const cands = Array.isArray((rawPacket as any).candidates) ? (rawPacket as any).candidates : [];
+        if (cands.length === 0) return fallback('NO_CANDIDATES', 400);
+
+        // Extract wardrobe item ids for ownership check
+        const itemIds: string[] = [];
+        for (const c of cands) {
+          if (Array.isArray(c.items)) {
+            for (const it of c.items) {
+              if (typeof it.wardrobeItemId === 'string' && isUuid(it.wardrobeItemId)) {
+                itemIds.push(it.wardrobeItemId);
+              }
+            }
+          }
+        }
+        const uniqueIds = Array.from(new Set(itemIds));
+        if (uniqueIds.length === 0) return fallback('PACKET_NO_WARDROBE_ITEMS', 400);
+
+        // Abuse control
+        for (const limit of RATE_LIMITS) {
+          const within = await deps.checkRateLimit(`ai-stylist:${user.id}:${limit.windowSeconds}`, limit.max, limit.windowSeconds);
+          if (within === null) return fallback('RATE_LIMIT_UNAVAILABLE', 503);
+          if (!within) return fallback('RATE_LIMITED', 429);
+        }
+
+        // Ownership check
+        const owned = await deps.findOwnedItemIds(token, uniqueIds);
+        if (!owned) return fallback('OWNERSHIP_CHECK_UNAVAILABLE', 503);
+        if (uniqueIds.some((id) => !owned.has(id))) return fallback('ITEMS_NOT_OWNED', 403);
+
+        const rankingPrompt = buildRankingPrompt((rawPacket as any).intent, cands);
+        let rankingText: string | null = null;
+        if (config.provider === 'gemini') {
+          const res = await fetchWithTimeout(
+            deps.fetchImpl,
+            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.model)}:generateContent`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: `${SYSTEM_PROMPT}\n\n${rankingPrompt}` }] }],
+                generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+              }),
+            },
+            LLM_TIMEOUT_MS
+          );
+          if (!res.ok) return fallback('LLM_PROVIDER_ERROR');
+          const data = await res.json();
+          rankingText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+        } else {
+          const res = await fetchWithTimeout(
+            deps.fetchImpl,
+            'https://openrouter.ai/api/v1/chat/completions',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${config.apiKey}`,
+                'HTTP-Referer': 'https://jezsy.com',
+                'X-Title': 'JeZsy',
+              },
+              body: JSON.stringify({
+                model: config.model,
+                messages: [
+                  { role: 'system', content: SYSTEM_PROMPT },
+                  { role: 'user', content: rankingPrompt },
+                ],
+                temperature: 0.2,
+                response_format: { type: 'json_object' },
+              }),
+            },
+            LLM_TIMEOUT_MS
+          );
+          if (!res.ok) return fallback('LLM_PROVIDER_ERROR');
+          const data = await res.json();
+          rankingText = data?.choices?.[0]?.message?.content ?? null;
+        }
+        if (!rankingText) return fallback('EMPTY_LLM_RESPONSE');
+
+        let parsedRanking: any;
+        try {
+          let cleanRanking = rankingText.trim();
+          const match = cleanRanking.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+          if (match) cleanRanking = match[1].trim();
+          parsedRanking = JSON.parse(cleanRanking);
+        } catch {
+          return fallback('MALFORMED_LLM_RESPONSE');
+        }
+
+        const validCandidateIds = new Set(cands.map((c: any) => c.candidateId));
+        const rawRecs = Array.isArray(parsedRanking.recommendations) ? parsedRanking.recommendations : [];
+        const sanitizedRecs = rawRecs
+          .filter((r: any) => r && typeof r.candidateId === 'string' && validCandidateIds.has(r.candidateId))
+          .slice(0, 3);
+
+        if (sanitizedRecs.length === 0) return fallback('NO_VALID_RECOMMENDATIONS');
+
+        return respond({
+          success: true,
+          recommendations: sanitizedRecs,
+          provider: config.provider,
+          model: config.model,
+        });
+      }
+
       const validation = validateEvidencePacket(rawPacket);
       if (!validation.ok) return fallback(validation.reason, 400);
       const { packet, wardrobeIds } = validation;
       if (wardrobeIds.length === 0) return fallback('PACKET_NO_WARDROBE_ITEMS', 400);
+
 
       // 4. Per-user abuse control (zero cost: the existing Postgres counter). Fails closed.
       for (const limit of RATE_LIMITS) {
