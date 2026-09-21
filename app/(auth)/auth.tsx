@@ -27,6 +27,7 @@ import { LegalReaderModal } from '@/src/components/LegalReaderModal';
 import {
   passwordPolicyError,
   evaluatePasswordRequirements,
+  areAllPasswordRequirementsMet,
   PasswordRequirementCheck,
 } from '@/src/utils/passwordPolicy';
 
@@ -584,23 +585,40 @@ export default function AuthScreen() {
                   </View>
                 </View>
 
-                {/* Live Password Policy Checklist */}
+                {/* Progressive Password Requirements */}
                 {password.length > 0 && (
-                  <View style={styles.passwordChecklist} accessibilityRole="summary" accessibilityLabel="Password requirements">
-                    <Text style={styles.passwordChecklistHeader}>Password requirements:</Text>
-                    {evaluatePasswordRequirements(password).map((req: PasswordRequirementCheck) => (
-                      <View key={req.id} style={styles.passwordChecklistItem}>
-                        {req.met ? (
-                          <Check size={14} color={Colors.dark.tint} style={styles.passwordChecklistIcon} />
-                        ) : (
-                          <Circle size={8} color="rgba(255, 255, 255, 0.35)" style={styles.passwordChecklistIconDot} />
-                        )}
-                        <Text style={[styles.passwordChecklistText, req.met && styles.passwordChecklistTextMet]}>
-                          {req.label}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
+                  areAllPasswordRequirementsMet(password) ? (
+                    <View style={styles.matchRow} accessibilityRole="summary" accessibilityLabel="Password meets all requirements">
+                      <Check size={13} color={Colors.dark.tint} />
+                      <Text style={[styles.matchText, { color: Colors.dark.tint }]}>Password meets all requirements</Text>
+                    </View>
+                  ) : (
+                    <View
+                      style={styles.pillsContainer}
+                      accessibilityRole="summary"
+                      accessibilityLabel="Password requirements"
+                    >
+                      {evaluatePasswordRequirements(password).map((req: PasswordRequirementCheck) => (
+                        <View
+                          key={req.id}
+                          style={[
+                            styles.pillBadge,
+                            req.met ? styles.pillBadgeMet : styles.pillBadgeUnmet,
+                          ]}
+                          accessibilityLabel={`${req.label}: ${req.met ? 'satisfied' : 'not met'}`}
+                        >
+                          {req.met ? (
+                            <Check size={11} color={Colors.dark.tint} style={styles.pillIcon} />
+                          ) : (
+                            <Circle size={6} color="rgba(255, 255, 255, 0.35)" style={styles.pillDot} />
+                          )}
+                          <Text style={[styles.pillText, req.met ? styles.pillTextMet : styles.pillTextUnmet]}>
+                            {req.shortLabel}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )
                 )}
 
 
@@ -1266,44 +1284,48 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Password Checklist
-  passwordChecklist: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: Radius.md,
-    padding: Spacing.sm,
-    paddingHorizontal: Spacing.md,
+  // Progressive Password Requirements Pills
+  pillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
     marginTop: -4,
     marginBottom: Spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingLeft: 2,
   },
-  passwordChecklistHeader: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  passwordChecklistItem: {
+  pillBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 3,
-    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    gap: 4,
   },
-  passwordChecklistIcon: {
-    marginRight: 2,
+  pillBadgeUnmet: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
-  passwordChecklistIconDot: {
-    marginHorizontal: 3,
+  pillBadgeMet: {
+    backgroundColor: 'rgba(201, 169, 110, 0.12)',
+    borderColor: 'rgba(201, 169, 110, 0.35)',
   },
-  passwordChecklistText: {
-    color: 'rgba(255, 255, 255, 0.45)',
-    fontSize: 12,
+  pillIcon: {
+    marginRight: 1,
   },
-  passwordChecklistTextMet: {
-    color: 'rgba(255, 255, 255, 0.95)',
-    fontWeight: '500',
+  pillDot: {
+    marginHorizontal: 2,
+  },
+  pillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  pillTextUnmet: {
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  pillTextMet: {
+    color: Colors.dark.tint,
   },
 
   // Passwords Match
