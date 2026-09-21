@@ -1,0 +1,66 @@
+import type { Vec3, Quaternion, SegmentationFrame } from './pose';
+import type { GarmentMetadata } from './garment';
+
+export interface CameraCalibration {
+  focalLengthPx: number;
+  verticalFovDeg: number;
+  videoWidthPx: number;
+  videoHeightPx: number;
+  wearerShoulderWidthM: number;
+}
+
+/**
+ * Renderer-neutral garment render state passed down from pose/fit/retargeting.
+ */
+export interface GarmentRenderState {
+  position: Vec3;
+  orientationQuaternion: Quaternion;
+  scale: number;
+  boneRotations?: Record<string, Quaternion>;
+  visible: boolean;
+  color?: string | null;
+  opacity?: number;
+  fitModifier?: number;
+  cameraCalibration?: CameraCalibration;
+  cameraDimensions?: { width: number; height: number };
+}
+
+/**
+ * Standard imperative ref interface implemented by ALL garment renderers:
+ * - GarmentRenderer (Three.js / WebView)
+ * - FilamentExperimentRenderer (Native Filament)
+ * - SceneViewExperimentRenderer (Native SceneView)
+ */
+export interface GarmentRendererRef {
+  updateTransform: (
+    position: Vec3,
+    rotation: Quaternion,
+    scale: number,
+    boneRotations?: Record<string, Quaternion>,
+    segmentation?: SegmentationFrame,
+    normalizedLandmarks?: any[],
+    worldLandmarks?: any[]
+  ) => void;
+}
+
+/**
+ * Standard base props accepted by all 3D garment renderers.
+ */
+export interface BaseGarmentRendererProps {
+  modelUrl: string;
+  visible?: boolean;
+  metadata?: GarmentMetadata;
+  fitModifier?: number;
+  cameraCalibration?: CameraCalibration;
+  cameraDimensions?: {
+    width: number;
+    height: number;
+  };
+  stageWidth?: number;
+  stageHeight?: number;
+  hexColor?: string | null;
+  onLoadError?: (error: string | { type: string; message: string }) => void;
+  onLoaded?: () => void;
+}
+
+export type GarmentRendererProps = BaseGarmentRendererProps;

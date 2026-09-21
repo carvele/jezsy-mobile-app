@@ -18,6 +18,7 @@ import { computeLiveLengthFit } from '@/src/utils/liveLengthFit';
 import { useARTrackingSession } from '@/src/hooks/useARTrackingSession';
 import { AR_TRACKING_GUIDANCE } from '@/src/utils/arTrackingSession';
 import { FilamentExperimentRenderer } from '@/src/components/AR/FilamentExperimentRenderer';
+import { SceneViewExperimentRenderer } from '@/src/components/AR/SceneViewExperimentRenderer';
 import { filamentReplayFrame, FILAMENT_REPLAY_INTERVAL_MS } from '@/src/utils/filamentReplay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirstUseHintModal } from '@/src/components/FirstUseHintModal';
@@ -344,10 +345,15 @@ export default function ARTryOnScreen() {
   const [stageLayout, setStageLayout] = useState<{ width: number; height: number }>({ width: 390, height: 600 });
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
   const experimentEnabled = __DEV__ && Platform.OS !== 'web' && process.env.EXPO_PUBLIC_AR_FILAMENT_EXPERIMENT === '1';
-  const [experimentRenderer, setExperimentRenderer] = useState<'three' | 'filament'>('three');
+  const [experimentRenderer, setExperimentRenderer] = useState<'three' | 'sceneview' | 'filament'>('three');
   const [replay, setReplay] = useState(false);
   const replayActive = experimentEnabled && replay;
-  const LiveRenderer = experimentEnabled && experimentRenderer === 'filament' ? FilamentExperimentRenderer : GarmentRenderer;
+  const LiveRenderer =
+    !experimentEnabled || experimentRenderer === 'three'
+      ? GarmentRenderer
+      : experimentRenderer === 'sceneview'
+      ? SceneViewExperimentRenderer
+      : FilamentExperimentRenderer;
   const tourCoachmark = useTourCoachmark('ar-tryon');
 
   useEffect(() => {
@@ -1174,12 +1180,18 @@ export default function ARTryOnScreen() {
 
       {experimentEnabled && mode === '2d' && (
         <View style={{ padding: 8, backgroundColor: '#352b16', gap: 8 }}>
-          <Text style={{ color: 'white' }}>Renderer experiment only. Filament has no body occlusion yet.</Text>
+          <Text style={{ color: 'white' }}>Renderer experiment only. SceneView & Filament prototypes active.</Text>
           <TouchableOpacity accessibilityRole="button" onPress={() => {
-            setExperimentRenderer((current) => current === 'three' ? 'filament' : 'three');
+            setExperimentRenderer((current) => {
+              if (current === 'three') return 'sceneview';
+              if (current === 'sceneview') return 'filament';
+              return 'three';
+            });
             setArLoadError(null);
           }}>
-            <Text style={{ color: 'white' }}>Renderer: {experimentRenderer === 'three' ? 'Three.js reference' : 'Filament prototype'} (switch)</Text>
+            <Text style={{ color: 'white' }}>
+              Renderer: {experimentRenderer === 'three' ? 'Three.js reference' : experimentRenderer === 'sceneview' ? 'SceneView prototype' : 'Filament prototype'} (switch)
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity accessibilityRole="button" onPress={() => setReplay((current) => !current)}>
             <Text style={{ color: 'white' }}>Input: {replayActive ? 'synthetic replay; camera paused' : 'live camera'} (switch)</Text>
