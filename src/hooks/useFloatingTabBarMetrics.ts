@@ -17,7 +17,7 @@ export function useFloatingTabBarMetrics() {
   const isCompact = windowWidth < 360;
 
   const barBottom = Math.max(insets.bottom, Platform.OS === 'ios' ? 16 : 8) + 6;
-  const barHeight = isCompact ? 56 : 60;
+  const barHeight = isCompact ? 60 : 68;
 
   return { barBottom, barHeight, isCompact, clearance: barBottom + barHeight };
 }

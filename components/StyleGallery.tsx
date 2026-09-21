@@ -107,8 +107,7 @@ export function StyleGallery() {
       {/* Header */}
       <View style={styles.headerRow}>
         <View>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}> Style Inspiration</Text>
-          <Text style={[styles.sectionSubtitle, { color: colors.tabIconDefault }]}>Recreate styled poses & try the look</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Style Inspiration</Text>
         </View>
       </View>
 
@@ -167,7 +166,7 @@ export function StyleGallery() {
               )}
               <View style={[styles.tryBadge, { backgroundColor: colors.tint }]}>
                 <IconSymbol name="sparkles" size={12} color={colors.onTint} />
-                <Text style={[styles.tryBadgeText, { color: colors.onTint }]}>Try Look</Text>
+                <Text style={[styles.tryBadgeText, { color: colors.onTint }]}>Try in AR</Text>
               </View>
             </View>
 
@@ -217,11 +216,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
   },
-  sectionSubtitle: {
-    ...Typography.caption,
-    color: colors.tabIconDefault,
-    marginTop: 2,
-  },
   chipsContainer: {
     paddingHorizontal: Spacing.lg,
     gap: Spacing.xs,
@@ -246,6 +240,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   scrollFeed: {
     paddingHorizontal: Spacing.lg,
+    paddingRight: Spacing.xxxl,
     gap: Spacing.md,
   },
   card: {
@@ -311,7 +306,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '700',
   },
   cardBody: {
-    padding: Spacing.sm,
+    padding: Spacing.md,
   },
   poseName: {
     fontSize: 13,

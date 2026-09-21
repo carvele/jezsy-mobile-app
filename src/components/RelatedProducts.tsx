@@ -117,6 +117,7 @@ export function RelatedProducts({
         data={products}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={({ item }: { item: any }) => <ProductCard product={item} variant="rail" />}
       />
     </View>
@@ -135,7 +136,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingLeft: Spacing.xxl,
-    paddingRight: 10,
+    paddingRight: Spacing.xxxl,
     // react-native-web's FlatList content container can default to
     // flexWrap: 'wrap' even with horizontal set, unlike ScrollView --
     // without this override, cards silently stack into a single vertical
@@ -143,4 +144,5 @@ const styles = StyleSheet.create({
     // sideways in one row.
     flexWrap: 'nowrap',
   },
+  separator: { width: Spacing.md },
 });

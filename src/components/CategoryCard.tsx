@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
-  textRowGrid: { paddingHorizontal: 10, paddingBottom: 10 },
+  textRowGrid: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md },
   textRowRail: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.md },
   // Left-aligned at the base, the editorial convention, instead of floated in
   // the dead centre of a dimmed rectangle.
@@ -107,6 +107,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  nameGrid: { fontSize: 12 },
+  nameGrid: { fontSize: 12, letterSpacing: 0.9 },
   nameRail: { fontSize: 14, letterSpacing: 1.2 },
 });
