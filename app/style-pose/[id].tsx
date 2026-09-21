@@ -92,31 +92,6 @@ export default function StylePoseDetailScreen() {
     }
   };
 
-  // The product ar-tryon actually opens matters: routing on products.length
-  // alone (the old check) let "Try This Look in AR" show for every look with
-  // any linked product, but most products have no real model_3d_url --
-  // ar-tryon then silently falls back to a generic demo astronaut model, so
-  // the button promised the look's garment and delivered an unrelated
-  // placeholder. Same model_3d_url gate product/[id].tsx's own AR button
-  // already uses, applied here to whichever linked product actually has one
-  // rather than always products[0].
-  const arProduct = products.find((p) => !!p.model_3d_url);
-
-  const handleTryInAR = () => {
-    // No fallback product id: 'P-001' isn't a real row (products.id is a
-    // uuid), and ar-tryon's non-uuid lookup path queries sku/display_id --
-    // neither exists on products (sku is on inventory, display_id is on
-    // reservations) -- so a look with no AR-eligible product always
-    // dead-ended on "Product not found" or showed the wrong garment. The
-    // button below is hidden in that case instead of routing somewhere
-    // that can't resolve or misrepresents the look.
-    if (!pose || !arProduct) return;
-    router.push({
-      pathname: `/ar-tryon/${arProduct.id}` as any,
-      params: { stylePoseId: pose.id },
-    });
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -244,28 +219,6 @@ export default function StylePoseDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Sticky Bottom CTA Bar */}
-      {arProduct && (
-        <View style={[styles.bottomBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-          <TouchableOpacity
-            style={[
-              styles.ctaButton,
-              {
-                backgroundColor: colors.tint,
-                ...Platform.select({
-                  ios: { shadowColor: colors.tint },
-                  web: { boxShadow: '0 4px 8px rgba(0,0,0,0.3)' },
-                }),
-              },
-            ]}
-            activeOpacity={0.88}
-            onPress={handleTryInAR}
-          >
-            <IconSymbol name="sparkles" size={20} color={colors.onTint} />
-            <Text style={[styles.ctaButtonText, { color: colors.onTint }]}>Try This Look in AR</Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </SafeAreaView>
   );
 }
@@ -454,34 +407,5 @@ const styles = StyleSheet.create({
   },
   noProductsText: {
     fontSize: 13,
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderTopWidth: 1,
-  },
-  ctaButton: {
-    height: 52,
-    borderRadius: 26,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    elevation: 4,
-    ...Platform.select({
-      ios: {
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-    }),
-  },
-  ctaButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
   },
 });
