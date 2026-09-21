@@ -695,7 +695,12 @@ export default function ReservationDetailScreen() {
   // Matches the dashboard's CAN_RESCHEDULE_STATUSES. The old list stopped at
   // 'confirmed', so a customer whose item was already waiting for collection
   // could not move the appointment even though staff could.
-  const canRescheduleNow = canReschedule(reservation.status) && !isReservationCancelled;
+  // Rescheduling applies strictly to legacy reservations with a scheduled date;
+  // new pickup-window reservations have no appointment and use 1-day extensions instead.
+  const canRescheduleNow =
+    canReschedule(reservation.status) &&
+    !isReservationCancelled &&
+    Boolean(reservation.date);
   // One outstanding request at a time. While it is pending the live booking is
   // still the one to show, so the proposal appears beside it rather than
   // replacing it -- the customer has not moved anything yet.
@@ -961,7 +966,9 @@ export default function ReservationDetailScreen() {
           ) : (
             <>
               <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Appointment</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
+                  {appointmentDate || appointmentTime ? 'Appointment' : 'Pickup Information'}
+                </Text>
                 {canRescheduleNow && !showReschedule && !reschedulePending && (
                   <TouchableOpacity
                     onPress={() => {
