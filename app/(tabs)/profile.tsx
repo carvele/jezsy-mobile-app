@@ -106,6 +106,7 @@ export default function ProfileScreen() {
   };
 
   const handleConfirmSignOut = async () => {
+    if (isSigningOut) return;
     setIsSigningOut(true);
     try {
       setShowSignOutModal(false);
@@ -118,6 +119,7 @@ export default function ProfileScreen() {
       setIsSigningOut(false);
     }
   };
+
 
   const renderSettingItem = (icon: any, title: string, subtitle?: string, onPress?: () => void) => (
     <TouchableOpacity
@@ -506,8 +508,9 @@ export default function ProfileScreen() {
 
 
           <TouchableOpacity 
-          style={[styles.signOutButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+          style={[styles.signOutButton, { backgroundColor: colors.card, borderColor: colors.border }, isSigningOut && { opacity: 0.6 }]}
           onPress={handleSignOutPress}
+          disabled={isSigningOut}
           accessibilityRole="button"
           accessibilityLabel="Sign out of your account"
         >
