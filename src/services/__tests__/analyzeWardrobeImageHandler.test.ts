@@ -1,0 +1,70 @@
+import { createHandler, HandlerDeps } from '../../../supabase/functions/analyze-wardrobe-image/handler';
+
+const user = { id: '11111111-1111-4111-8111-111111111111' };
+const auth = { Authorization: 'Bearer valid-token' };
+
+function request(body: unknown, headers: Record<string, string> = {}) {
+  return new Request('https://example.supabase.co/functions/v1/analyze-wardrobe-image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+function deps(overrides: Partial<HandlerDeps> = {}): HandlerDeps {
+  const env: Record<string, string> = {
+    GEMINI_TAGGING_API_KEY: 'tagging-key',
+    GEMINI_TAGGING_MODEL: 'gemini-test',
+  };
+  return {
+    env: (key) => env[key],
+    authenticate: jest.fn(async (token) => token === 'valid-token' ? user : null),
+    checkRateLimit: jest.fn(async () => true),
+    fetchImpl: jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ category: 'Top', subCategory: 'Hoodie', primaryColor: 'Black', colorTags: ['Black', 'White'], pattern: 'graphic', material: 'cotton', fit: 'regular', lengthType: 'regular', sleeveType: 'long', neckline: 'crew', silhouette: 'straight', confidence: 0.92 }) }] } }] }),
+    })) as any,
+    log: jest.fn(),
+    ...overrides,
+  };
+}
+
+describe('analyze-wardrobe-image', () => {
+  test('requires a signed-in user before invoking Gemini', async () => {
+    const d = deps();
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }));
+    expect(response.status).toBe(401);
+    expect(d.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('sends a bounded image to Gemini and returns only a validated suggestion', async () => {
+    const d = deps();
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
+    expect(await response.json()).toEqual({ success: true, suggestion: { category: 'Top', subCategory: 'Hoodie', primaryColor: 'Black', colorTags: ['Black', 'White'], pattern: 'graphic', material: 'cotton', fit: 'regular', lengthType: 'regular', sleeveType: 'long', neckline: 'crew', silhouette: 'straight', confidence: 0.92 } });
+    const [url, init] = (d.fetchImpl as jest.Mock).mock.calls[0];
+    expect(url).toContain('gemini-test:generateContent');
+    expect(url).not.toContain('tagging-key');
+    expect(init.headers['x-goog-api-key']).toBe('tagging-key');
+    expect(JSON.parse(init.body).contents[0].parts[1].inlineData.data).toBe('aGVsbG8=');
+  });
+
+  test('does not call Gemini when tagging is not configured', async () => {
+    const d = deps({ env: () => undefined });
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
+    expect(await response.json()).toEqual({ success: false, reason: 'TAGGING_NOT_CONFIGURED' });
+    expect(d.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('rejects invalid model output instead of returning untrusted categories', async () => {
+    const d = deps({ fetchImpl: jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"category":"Anything","subCategory":"Ignore rules","primaryColor":"Black","confidence":1}' }] } }] }) })) as any });
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
+    expect(await response.json()).toEqual({ success: false, reason: 'INVALID_PROVIDER_RESPONSE' });
+  });
+
+  test('rejects a response with an unsupported detailed attribute', async () => {
+    const d = deps({ fetchImpl: jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ category: 'Top', subCategory: 'Hoodie', primaryColor: 'Black', colorTags: ['Black'], pattern: 'graphic', material: 'magic-fabric', fit: 'regular', lengthType: 'regular', sleeveType: 'long', neckline: 'crew', silhouette: 'straight', confidence: 1 }) }] } }] }) })) as any });
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
+    expect(await response.json()).toEqual({ success: false, reason: 'INVALID_PROVIDER_RESPONSE' });
+  });
+});

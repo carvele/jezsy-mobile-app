@@ -234,8 +234,8 @@ export class SupabaseEdgeAIStylistProvider implements IAIStylistProvider {
           category: it.category,
           subCategory: it.sub_category,
           colors: it.color_tags || [],
-          material: (it as any).material || undefined,
-          pattern: (it as any).pattern || undefined,
+          material: (it as any).material || (it as any).ai_attributes?.material || undefined,
+          pattern: (it as any).pattern || (it as any).ai_attributes?.pattern || undefined,
         })),
         baseScore: c.baseScore,
       }));

@@ -784,6 +784,16 @@ export function buildGarmentSemanticProfile(
     wardrobeItem?.user_notes ||
     (wardrobeItem as any)?.ai_attributes?.userNotes ||
     '';
+  const detected = (wardrobeItem as any)?.ai_attributes || {};
+  const confirmedDetectedDetails = [
+    detected.pattern,
+    detected.material,
+    detected.fit,
+    detected.lengthType,
+    detected.sleeveType,
+    detected.neckline,
+    detected.silhouette,
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0 && value !== 'unknown');
   const occasions: string[] = (wardrobeItem as any)?.occasions || [];
   const seasons: string[] = (wardrobeItem as any)?.seasons || [];
   const photoUrl = (wardrobeItem as any)?.photo_url || item.image_url || undefined;
@@ -799,6 +809,7 @@ export function buildGarmentSemanticProfile(
     whereWornOften,
     description,
     userNotes,
+    confirmedDetectedDetails.join(' '),
     occasions.join(' '),
     seasons.join(' '),
   ]
@@ -812,7 +823,7 @@ export function buildGarmentSemanticProfile(
     subCategory,
     color,
     whereWornOften,
-    description,
+    [description, confirmedDetectedDetails.join(' ')].filter(Boolean).join(' '),
     userNotes
   );
 
