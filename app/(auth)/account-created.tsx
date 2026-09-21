@@ -11,7 +11,9 @@ export default function AccountCreatedScreen() {
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
 
-  const handleStartExploring = async () => {
+  const hasName = Boolean(profile?.first_name);
+
+  const handlePrimaryAction = async () => {
     await refreshProfile().catch(() => {});
     if (!profile?.first_name) {
       router.replace('/(auth)/profile-setup' as any);
@@ -20,7 +22,7 @@ export default function AccountCreatedScreen() {
     }
   };
 
-  const handleCompleteProfile = () => {
+  const handleReviewProfile = () => {
     router.replace('/(auth)/profile-setup' as any);
   };
 
@@ -55,26 +57,28 @@ export default function AccountCreatedScreen() {
         <Text style={styles.title}>Welcome to JezSy</Text>
 
         <Text style={styles.message}>
-          Your account is fully verified. Explore the curated collection, reserve private fitting rooms, and experience digital couture tailored to your measurements.
+          Your account is fully verified. Complete your style profile to reserve private fitting rooms and experience digital couture tailored to your measurements.
         </Text>
 
         <View style={styles.actions}>
           <PrimaryButton
-            label="Start Exploring"
-            onPress={handleStartExploring}
+            label={hasName ? 'Start Exploring' : 'Complete Profile'}
+            onPress={handlePrimaryAction}
             dark
             style={styles.primaryBtn}
           />
 
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={handleCompleteProfile}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Complete Style Profile"
-          >
-            <Text style={styles.secondaryButtonText}>Complete Style Profile</Text>
-          </TouchableOpacity>
+          {hasName && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handleReviewProfile}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Review Style Profile"
+            >
+              <Text style={styles.secondaryButtonText}>Review Style Profile</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>

@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
-import { ArrowLeft, Eye, EyeOff, Mail, Lock, Phone, User, Check, Circle, Edit3 } from 'lucide-react-native';
+import { ArrowLeft, Eye, EyeOff, Mail, Lock, Check, Circle, Edit3 } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { LegalReaderModal } from '@/src/components/LegalReaderModal';
@@ -33,8 +33,6 @@ import {
 import { mapAuthErrorMessage } from '@/src/utils/authErrorMapping';
 import { legalService } from '@/src/services/legalService';
 import { normalizeMobileNumber } from '@/src/utils/profileFields';
-
-
 // Enable LayoutAnimation on Android (Legacy Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -44,7 +42,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const BG_IMAGE =
   'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=85&w=1200&auto=format&fit=crop';
 
-type Mode = 'login' | 'signup' | 'otp_request' | 'otp_verify' | 'phone_verify' | 'forgot';
+type Mode = 'login' | 'signup' | 'otp_request' | 'otp_verify' | 'forgot';
 type VerificationType = 'signup' | 'login';
 
 export default function AuthScreen() {
@@ -57,10 +55,6 @@ export default function AuthScreen() {
   const [verificationType, setVerificationType] = useState<VerificationType>('login');
   const [email, setEmail] = useState('');
   const [loginIdentifier, setLoginIdentifier] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
-  const [signupPhone, setSignupPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -74,19 +68,11 @@ export default function AuthScreen() {
   const [activeLegalModal, setActiveLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
   // Chained input refs for seamless keyboard navigation
-  const firstNameRef = useRef<TextInput>(null);
-  const lastNameRef = useRef<TextInput>(null);
-  const mobileNumberRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const loginIdentifierRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
-  const editPhoneInputRef = useRef<TextInput>(null);
   const otpInputRef = useRef<TextInput>(null);
-
-  // Phone number correction state during mobile verification
-  const [isEditingPhone, setIsEditingPhone] = useState(false);
-  const [editedPhone, setEditedPhone] = useState('');
 
   const transitionMode = useCallback((nextMode: Mode) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -96,7 +82,6 @@ export default function AuthScreen() {
     setOtpCode('');
     setShowPassword(false);
     setShowConfirmPassword(false);
-    setIsEditingPhone(false);
   }, []);
 
   // Sync mode with route parameter if it changes
@@ -126,7 +111,7 @@ export default function AuthScreen() {
 
   // Focus the hidden OTP input when transitioning to 'otp_verify' step
   useEffect(() => {
-    if (mode === 'otp_verify' || mode === 'phone_verify') {
+    if (mode === 'otp_verify') {
       setTimeout(() => {
         otpInputRef.current?.focus();
       }, 250);
@@ -139,18 +124,9 @@ export default function AuthScreen() {
   // ─── Sign Up (Email + Password) ──────────────────────
   const handleSignUp = async () => {
     const trimmedEmail = email.trim().toLowerCase();
-    const normalizedPhone = normalizeMobileNumber(mobileNumber);
 
-    if (!firstName.trim() || !lastName.trim()) {
-      showToast('Enter your first and last name.', 'error');
-      return;
-    }
     if (!trimmedEmail || !validateEmail(trimmedEmail)) {
       showToast('Enter a valid email address.', 'error');
-      return;
-    }
-    if (!normalizedPhone) {
-      showToast('Enter a valid mobile number, such as 09123456789 or +639123456789.', 'error');
       return;
     }
     const policyError = passwordPolicyError(password);
@@ -177,7 +153,6 @@ export default function AuthScreen() {
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
-        options: { data: { first_name: firstName.trim(), last_name: lastName.trim(), signup_phone: normalizedPhone } },
       });
 
       if (error) throw error;
@@ -185,8 +160,7 @@ export default function AuthScreen() {
       // If user is already logged in (confirm email was turned off)
       if (data?.session) {
         await legalService.recordSignupLegalAcceptance();
-        setSignupPhone(normalizedPhone);
-        transitionMode('phone_verify');
+        router.replace('/(auth)/account-created' as any);
         return;
       }
 
@@ -207,7 +181,6 @@ export default function AuthScreen() {
       }
 
       setVerificationType('signup');
-      setSignupPhone(normalizedPhone);
       setTimer(60);
       transitionMode('otp_verify');
     } catch (err: any) {
@@ -327,7 +300,7 @@ export default function AuthScreen() {
           console.error('Sign-up legal acceptance error:', legalError);
           showToast('Your account is verified. Please complete legal acceptance before continuing.', 'info');
         }
-        transitionMode('phone_verify');
+        router.replace('/(auth)/account-created' as any);
         return;
       }
 
@@ -340,47 +313,11 @@ export default function AuthScreen() {
     }
   };
 
-  const sendPhoneVerification = async () => {
-    if (!signupPhone) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.updateUser({ phone: signupPhone });
-      if (error) throw error;
-      if (data.user.phone === signupPhone) {
-        router.replace('/(auth)/account-created' as any);
-        return;
-      }
-      setTimer(60);
-      setOtpCode('');
-      showToast('A verification code was sent to your mobile number.', 'success');
-    } catch (err: any) {
-      console.error('Send phone verification error:', err);
-      showToast(mapAuthErrorMessage(err, 'Could not verify this mobile number. Please check the number and try again.'), 'error');
-    } finally { setLoading(false); }
-  };
-
-  const verifyPhone = async () => {
-    if (otpCode.length !== 6 || !signupPhone) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({ phone: signupPhone, token: otpCode, type: 'phone_change' });
-      if (error) throw error;
-      router.replace('/(auth)/account-created' as any);
-    } catch (err: any) {
-      console.error('Verify phone error:', err);
-      showToast(mapAuthErrorMessage(err, 'The mobile verification code is invalid or expired.'), 'error');
-    } finally { setLoading(false); }
-  };
-
   // ─── Resend Code ─────────────────────────────────────
   const handleResendCode = async () => {
     if (timer > 0) return;
     setLoading(true);
     try {
-      if (mode === 'phone_verify') {
-        await sendPhoneVerification();
-        return;
-      }
       // Both branches previously gated on an existence check that disclosed
       // whether the address was registered. Supabase's own responses here are
       // deliberately non-disclosing, so let them through unchanged.
@@ -450,7 +387,6 @@ export default function AuthScreen() {
       case 'signup':      return 'Create\naccount.';
       case 'otp_request': return 'Log in\nwith code.';
       case 'otp_verify':  return 'Enter the\ncode.';
-      case 'phone_verify': return 'Verify\nmobile.';
       case 'forgot':      return 'Reset\npassword.';
     }
   };
@@ -461,7 +397,6 @@ export default function AuthScreen() {
       case 'signup':      return 'Join Jezsy and explore your personal style.';
       case 'otp_request': return 'Enter your email to receive a 6-digit login code.';
       case 'otp_verify':  return `We sent a 6-digit verification code to ${email}`;
-      case 'phone_verify': return `We sent a 6-digit verification code to ${signupPhone}`;
       case 'forgot':      return 'Enter your email and we\'ll send a reset link.';
     }
   };
@@ -472,8 +407,6 @@ export default function AuthScreen() {
       router.back();
     } else if (mode === 'otp_verify') {
       transitionMode(verificationType === 'signup' ? 'signup' : 'otp_request');
-    } else if (mode === 'phone_verify') {
-      return;
     } else {
       if (mode === 'signup') setLegalAccepted(false);
       transitionMode('login');
@@ -486,7 +419,6 @@ export default function AuthScreen() {
       case 'signup':      return handleSignUp();
       case 'otp_request': return handleRequestOtp();
       case 'otp_verify':  return handleVerifyOtp();
-      case 'phone_verify': return timer > 0 ? verifyPhone() : sendPhoneVerification();
       case 'forgot':      return handleForgotPassword();
     }
   };
@@ -497,7 +429,6 @@ export default function AuthScreen() {
       case 'signup':      return 'Continue to Verification';
       case 'otp_request': return 'Send Verification Code';
       case 'otp_verify':  return 'Verify & Login';
-      case 'phone_verify': return timer > 0 ? 'Verify Mobile Number' : 'Send Mobile Verification Code';
       case 'forgot':      return 'Send Reset Link';
     }
   };
@@ -585,120 +516,11 @@ export default function AuthScreen() {
 
           {/* Glassmorphism card */}
           <View style={styles.glassCard}>
-            {/* Segmented Sign In / Create Account Switcher */}
-            {(mode === 'login' || mode === 'signup') && (
-              <View style={styles.segmentedControl} accessibilityRole="tablist">
-                <TouchableOpacity
-                  style={[styles.segmentTab, mode === 'login' && styles.segmentTabActive]}
-                  onPress={() => {
-                    if (mode !== 'login') {
-                      transitionMode('login');
-                    }
-                  }}
-                  activeOpacity={0.8}
-                  accessibilityRole="tab"
-                  accessibilityLabel="Sign In"
-                  accessibilityState={{ selected: mode === 'login' }}
-                >
-                  <Text style={[styles.segmentTabText, mode === 'login' && styles.segmentTabTextActive]}>
-                    Sign In
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.segmentTab, mode === 'signup' && styles.segmentTabActive]}
-                  onPress={() => {
-                    if (mode !== 'signup') {
-                      setLegalAccepted(false);
-                      transitionMode('signup');
-                    }
-                  }}
-                  activeOpacity={0.8}
-                  accessibilityRole="tab"
-                  accessibilityLabel="Create Account"
-                  accessibilityState={{ selected: mode === 'signup' }}
-                >
-                  <Text style={[styles.segmentTabText, mode === 'signup' && styles.segmentTabTextActive]}>
-                    Create Account
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
 
             {/* ─── Sign Up Form (Canonical Keyboard Chaining) ─── */}
             {mode === 'signup' && (
               <>
-                {/* 1. First Name */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>First name</Text>
-                  <View style={styles.inputRow}>
-                    <User size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
-                    <TextInput
-                      ref={firstNameRef}
-                      keyboardAppearance="dark"
-                      style={styles.input}
-                      placeholder="Enter your first name"
-                      placeholderTextColor="rgba(255,255,255,0.45)"
-                      value={firstName}
-                      onChangeText={setFirstName}
-                      autoCapitalize="words"
-                      autoComplete="given-name"
-                      textContentType="givenName"
-                      returnKeyType="next"
-                      onSubmitEditing={() => lastNameRef.current?.focus()}
-                      accessibilityLabel="First name"
-                    />
-                  </View>
-                </View>
-
-                {/* 2. Last Name */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Last name</Text>
-                  <View style={styles.inputRow}>
-                    <User size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
-                    <TextInput
-                      ref={lastNameRef}
-                      keyboardAppearance="dark"
-                      style={styles.input}
-                      placeholder="Enter your last name"
-                      placeholderTextColor="rgba(255,255,255,0.45)"
-                      value={lastName}
-                      onChangeText={setLastName}
-                      autoCapitalize="words"
-                      autoComplete="family-name"
-                      textContentType="familyName"
-                      returnKeyType="next"
-                      onSubmitEditing={() => mobileNumberRef.current?.focus()}
-                      accessibilityLabel="Last name"
-                    />
-                  </View>
-                </View>
-
-                {/* 3. Mobile Number */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Mobile number</Text>
-                  <View style={styles.inputRow}>
-                    <Phone size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
-                    <TextInput
-                      ref={mobileNumberRef}
-                      keyboardAppearance="dark"
-                      style={styles.input}
-                      placeholder="09123456789"
-                      placeholderTextColor="rgba(255,255,255,0.45)"
-                      value={mobileNumber}
-                      onChangeText={setMobileNumber}
-                      keyboardType="phone-pad"
-                      autoComplete="tel"
-                      textContentType="telephoneNumber"
-                      returnKeyType="next"
-                      onSubmitEditing={() => emailRef.current?.focus()}
-                      accessibilityLabel="Mobile number"
-                      accessibilityHint="Used for mobile login and order notifications"
-                    />
-                  </View>
-                </View>
-
-                {/* 4. Email Address */}
+                {/* 1. Email Address */}
                 <View style={styles.fieldGroup}>
                   <Text style={styles.label}>Email address</Text>
                   <View style={styles.inputRow}>
@@ -712,6 +534,7 @@ export default function AuthScreen() {
                       value={email}
                       onChangeText={setEmail}
                       autoCapitalize="none"
+                      autoFocus
                       keyboardType="email-address"
                       autoComplete="email"
                       textContentType="emailAddress"
@@ -1000,8 +823,8 @@ export default function AuthScreen() {
               </View>
             )}
 
-            {/* ─── OTP Verification Steps (Email & Phone) ─── */}
-            {(mode === 'otp_verify' || mode === 'phone_verify') && (
+            {/* ─── OTP Verification (Email) ─── */}
+            {mode === 'otp_verify' && (
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>6-DIGIT CODE</Text>
 
@@ -1047,7 +870,7 @@ export default function AuthScreen() {
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
                   accessibilityLabel="Six digit verification code"
-                  accessibilityHint={`Enter the code sent to your ${mode === 'phone_verify' ? 'mobile number' : 'email'}`}
+                  accessibilityHint="Enter the code sent to your email"
                 />
 
                 {/* Resend Code row */}
@@ -1083,76 +906,6 @@ export default function AuthScreen() {
                     <Edit3 size={14} color={Colors.dark.tint} />
                     <Text style={styles.actionCorrectionText}>Wrong email? Edit address</Text>
                   </TouchableOpacity>
-                )}
-
-                {/* Address Correction: Wrong mobile number? Edit number */}
-                {mode === 'phone_verify' && (
-                  !isEditingPhone ? (
-                    <TouchableOpacity
-                      onPress={() => {
-                        setIsEditingPhone(true);
-                        setEditedPhone(signupPhone);
-                      }}
-                      style={styles.actionCorrectionButton}
-                      accessibilityRole="button"
-                      accessibilityLabel="Wrong mobile number? Edit number"
-                    >
-                      <Edit3 size={14} color={Colors.dark.tint} />
-                      <Text style={styles.actionCorrectionText}>Wrong mobile number? Edit number</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.inlineEditPhoneBox}>
-                      <Text style={styles.inlineEditPhoneLabel}>Update mobile number:</Text>
-                      <View style={styles.inputRow}>
-                        <Phone size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
-                        <TextInput
-                          ref={editPhoneInputRef}
-                          keyboardAppearance="dark"
-                          style={styles.input}
-                          placeholder="09123456789"
-                          placeholderTextColor="rgba(255,255,255,0.45)"
-                          value={editedPhone}
-                          onChangeText={setEditedPhone}
-                          keyboardType="phone-pad"
-                          autoFocus
-                        />
-                      </View>
-                      <View style={styles.inlineEditActions}>
-                        <TouchableOpacity
-                          onPress={() => setIsEditingPhone(false)}
-                          style={styles.inlineCancelBtn}
-                        >
-                          <Text style={styles.inlineCancelText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={async () => {
-                            const normalized = normalizeMobileNumber(editedPhone);
-                            if (!normalized) {
-                              showToast('Please enter a valid mobile number.', 'error');
-                              return;
-                            }
-                            setSignupPhone(normalized);
-                            setIsEditingPhone(false);
-                            setLoading(true);
-                            try {
-                              const { error } = await supabase.auth.updateUser({ phone: normalized });
-                              if (error) throw error;
-                              setTimer(60);
-                              setOtpCode('');
-                              showToast('Code sent to updated mobile number.', 'success');
-                            } catch (err: any) {
-                              showToast(mapAuthErrorMessage(err, 'Could not update mobile number.'), 'error');
-                            } finally {
-                              setLoading(false);
-                            }
-                          }}
-                          style={styles.inlineSaveBtn}
-                        >
-                          <Text style={styles.inlineSaveText}>Save & Resend</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )
                 )}
               </View>
             )}
@@ -1512,50 +1265,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  // Segmented Tab Switcher
-  segmentedControl: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: Radius.pill,
-    padding: 4,
-    marginBottom: Spacing.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  segmentTab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: Radius.pill,
-  },
-  segmentTabActive: {
-    backgroundColor: c.tint,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 4px rgba(0,0,0,0.25)',
-      },
-    }),
-  },
-  segmentTabText: {
-    color: 'rgba(255, 255, 255, 0.65)',
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  segmentTabTextActive: {
-    color: c.onTint,
-    fontWeight: '700',
-  },
 
   // Password Checklist
   passwordChecklist: {
@@ -1623,47 +1332,6 @@ const styles = StyleSheet.create({
     color: c.tint,
     fontSize: 13,
     fontWeight: '600',
-  },
-  inlineEditPhoneBox: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    marginTop: Spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    gap: Spacing.sm,
-  },
-  inlineEditPhoneLabel: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  inlineEditActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  inlineCancelBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: Radius.sm,
-  },
-  inlineCancelText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  inlineSaveBtn: {
-    backgroundColor: c.tint,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: Radius.pill,
-  },
-  inlineSaveText: {
-    color: c.onTint,
-    fontSize: 13,
-    fontWeight: '700',
   },
 });
 

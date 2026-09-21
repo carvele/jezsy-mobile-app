@@ -158,31 +158,6 @@ export default function WelcomeScreen() {
 
       {/* CTA buttons at bottom */}
       <View style={styles.ctaContainer}>
-        {/* Explicit Sign In */}
-        <PrimaryButton
-          label="Sign In"
-          onPress={() => router.push({ pathname: '/(auth)/auth', params: { mode: 'login' } } as any)}
-          dark
-        />
-
-        {/* Explicit Create Account */}
-        <TouchableOpacity
-          style={styles.secondaryAuthButton}
-          activeOpacity={0.85}
-          onPress={() => router.push({ pathname: '/(auth)/auth', params: { mode: 'signup' } } as any)}
-          accessibilityRole="button"
-          accessibilityLabel="Create Account"
-        >
-          <Text style={styles.secondaryAuthButtonText}>Create Account</Text>
-        </TouchableOpacity>
-
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
         {/* Google Sign In */}
         <TouchableOpacity
           style={[styles.googleButton, googleLoading && styles.btnDisabled]}
@@ -202,6 +177,20 @@ export default function WelcomeScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Email Sign In */}
+        <PrimaryButton
+          label="Continue with Email"
+          onPress={() => router.push('/(auth)/auth')}
+          dark
+        />
 
         {/* Browse as Guest (Storefront First) */}
         <TouchableOpacity
@@ -247,7 +236,7 @@ const styles = StyleSheet.create({
   },
   brandingContainer: {
     position: 'absolute',
-    bottom: height * 0.44,
+    bottom: height * 0.38,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -273,24 +262,9 @@ const styles = StyleSheet.create({
     maxWidth: 440,
     alignSelf: 'center',
     paddingHorizontal: 28,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 32,
-    paddingTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  secondaryAuthButton: {
-    height: 56,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.28)',
-  },
-  secondaryAuthButtonText: {
-    color: '#FFFFFF',
-    ...Type.bodyLargeStrong,
-    fontSize: 16,
-    fontWeight: '600',
+    paddingBottom: 50,
+    paddingTop: Spacing.xl,
+    gap: Spacing.md,
   },
 
   googleButton: {
