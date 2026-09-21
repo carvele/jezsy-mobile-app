@@ -691,13 +691,10 @@ export default function HomeScreen() {
                             </Text>
                           )}
                         </View>
-                        {stockLabel && (lowStock || outOfStock) && (
+                        {stockLabel && (
                           <Text style={{ fontSize: 12, fontWeight: '600', color: stockColor, marginTop: 2 }}>
                             {stockLabel}
                           </Text>
-                        )}
-                        {!outOfStock && (
-                          <Text style={[styles.collectionLabel, { color: colors.tint }]}>Pickup available</Text>
                         )}
                       </View>
                     </Animated.View>
