@@ -1,0 +1,4 @@
+DROP FUNCTION IF EXISTS public.mark_unclaimed_reservation(uuid);
+
+-- Revert delegation (requires redefining the full original function, but we just leave it for now as a delegation since it's safer)
+-- The old one had the same logic but duplicated.

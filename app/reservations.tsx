@@ -198,8 +198,36 @@ export default function ReservationsScreen() {
     const formattedTime = item.appointment_time ? formatTimeLabel(item.appointment_time) : null;
     const appointmentDate = formattedDate === 'N/A' ? null : formattedDate;
     const appointmentTime = formattedTime === 'N/A' ? null : formattedTime;
-    const appointmentSummary = [appointmentDate, appointmentTime].filter(Boolean).join(' at ') || 'Collection time to be confirmed';
     const displayState = getCustomerReservationDisplayState(item);
+
+    let appointmentSummary: string;
+    let appointmentIcon: 'checkmark.circle.fill' | 'calendar' | 'clock.fill' = 'clock.fill';
+
+    if (displayState.bucket === 'completed' || statusBucket(item.status) === 'completed') {
+      appointmentIcon = 'checkmark.circle.fill';
+      const collectedDate = item.completed_at || item.date;
+      appointmentSummary = collectedDate
+        ? `Collected on ${formatPHDate(collectedDate, { month: 'short', day: 'numeric', year: 'numeric' })}`
+        : 'Collected';
+    } else if (item.pickup_deadline_at) {
+      appointmentIcon = 'clock.fill';
+      appointmentSummary = `Collect by ${formatPHDate(item.pickup_deadline_at, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })}`;
+    } else if (appointmentDate || appointmentTime) {
+      appointmentIcon = 'calendar';
+      appointmentSummary = [appointmentDate, appointmentTime].filter(Boolean).join(' at ');
+    } else if (displayState.bucket === 'ready') {
+      appointmentIcon = 'clock.fill';
+      appointmentSummary = 'Ready for collection';
+    } else {
+      appointmentIcon = 'clock.fill';
+      appointmentSummary = 'Collect in 3 open days once Ready';
+    }
+
     const deadline = displayState.showCountdown
       ? formatPaymentDeadline(item.payment_due_at)
       : null;
@@ -263,7 +291,7 @@ export default function ReservationsScreen() {
               Size: {item.size || 'Standard'} • Color: {item.color || 'Default'}
             </Text>
             <Text style={[styles.appointmentDetails, { color: colors.text }]}>
-              <IconSymbol name={appointmentDate || appointmentTime ? 'calendar' : 'clock.fill'} size={14} color={colors.tint} /> {appointmentSummary}
+              <IconSymbol name={appointmentIcon} size={14} color={colors.tint} /> {appointmentSummary}
             </Text>
             <Text style={[styles.price, { color: colors.tint }]}>₱{(item.rental_price || 0).toFixed(2)}</Text>
           </View>
