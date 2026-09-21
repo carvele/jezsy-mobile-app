@@ -5,6 +5,7 @@ import {
   getUnreadNonChatNotificationsCount,
   markNotificationAsRead as markNotificationAsReadService,
   markAllNotificationsAsRead as markAllNotificationsAsReadService,
+  deleteNotification as deleteNotificationService,
 } from '@/src/services/notificationService';
 
 interface NotificationContextType {
@@ -13,6 +14,7 @@ interface NotificationContextType {
   refreshUnreadCount: () => Promise<void>;
   markAsRead: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  deleteNotification: (notificationId: string, wasUnread?: boolean) => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -61,6 +63,22 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [userId, refreshUnreadCount]);
 
+  const deleteNotification = useCallback(
+    async (notificationId: string, wasUnread?: boolean) => {
+      if (!userId || !notificationId) return;
+      if (wasUnread) {
+        setUnreadNonChatCount((prev) => Math.max(0, prev - 1));
+      }
+      try {
+        await deleteNotificationService(userId, notificationId);
+      } catch (err) {
+        console.error('[NotificationContext] Failed to delete notification:', err);
+        refreshUnreadCount();
+      }
+    },
+    [userId, refreshUnreadCount]
+  );
+
   useEffect(() => {
     if (!userId) {
       setUnreadNonChatCount(0);
@@ -99,8 +117,9 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       refreshUnreadCount,
       markAsRead,
       markAllAsRead,
+      deleteNotification,
     }),
-    [unreadNonChatCount, loading, refreshUnreadCount, markAsRead, markAllAsRead]
+    [unreadNonChatCount, loading, refreshUnreadCount, markAsRead, markAllAsRead, deleteNotification]
   );
 
   return (

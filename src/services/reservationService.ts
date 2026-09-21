@@ -232,6 +232,7 @@ export type UnratedItem = {
   size: string | null;
   color: string | null;
   completedDate: string | null;
+  createdAt?: string | null;
 };
 
 /**
@@ -242,7 +243,7 @@ export async function getMyUnratedItems(userId: string): Promise<UnratedItem[]> 
   const [itemsResult, reviewsResult] = await Promise.all([
     supabase
       .from('reservation_items')
-      .select('id, reservation_id, product_id, product_name, image_url, size, color, reservations!inner(display_id, date, completed_at, customer_id, status, deleted)')
+      .select('id, reservation_id, product_id, product_name, image_url, size, color, created_at, reservations!inner(display_id, date, created_at, completed_at, customer_id, status, deleted)')
       .eq('reservations.customer_id', userId)
       .in('reservations.status', ['completed', 'Completed'])
       .eq('reservations.deleted', false),
@@ -285,8 +286,19 @@ export async function getMyUnratedItems(userId: string): Promise<UnratedItem[]> 
       size: row.size,
       color: row.color,
       completedDate: row.reservations?.completed_at ?? row.reservations?.date ?? null,
+      createdAt: row.reservations?.created_at ?? row.created_at ?? null,
     });
   }
+
+  unrated.sort((a, b) => {
+    const timeB = new Date(b.completedDate || b.createdAt || 0).getTime();
+    const timeA = new Date(a.completedDate || a.createdAt || 0).getTime();
+    if (timeB !== timeA) return timeB - timeA;
+    const createdB = new Date(b.createdAt || 0).getTime();
+    const createdA = new Date(a.createdAt || 0).getTime();
+    if (createdB !== createdA) return createdB - createdA;
+    return (b.displayId || b.reservationId || '').localeCompare(a.displayId || a.reservationId || '');
+  });
 
   return unrated;
 }
