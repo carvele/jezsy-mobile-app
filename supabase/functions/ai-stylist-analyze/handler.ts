@@ -194,6 +194,13 @@ export function resolveLlmConfig(env: HandlerDeps['env']): { config: LlmConfig }
   if (!model) return { reason: 'LLM_MODEL_NOT_CONFIGURED' };
   if (!MODEL_NAME_RE.test(model)) return { reason: 'LLM_MODEL_INVALID' };
 
+  if (model.startsWith('openrouter/') && openrouter) {
+    return { config: { provider: 'openrouter', apiKey: openrouter, model } };
+  }
+  if (model.includes('gemini') && gemini) {
+    return { config: { provider: 'gemini', apiKey: gemini, model } };
+  }
+
   return gemini
     ? { config: { provider: 'gemini', apiKey: gemini, model } }
     : { config: { provider: 'openrouter', apiKey: openrouter as string, model } };
@@ -296,7 +303,12 @@ export function createHandler(deps: HandlerDeps) {
           'https://openrouter.ai/api/v1/chat/completions',
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${config.apiKey}`,
+              'HTTP-Referer': 'https://jezsy.com',
+              'X-Title': 'JeZsy',
+            },
             body: JSON.stringify({
               model: config.model,
               messages: [
@@ -321,7 +333,12 @@ export function createHandler(deps: HandlerDeps) {
       // 7. Model output is untrusted: parse, schema-check, then bound it by the deterministic evidence.
       let parsed: unknown;
       try {
-        parsed = JSON.parse(text);
+        let cleanText = text.trim();
+        const codeBlockMatch = cleanText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (codeBlockMatch) {
+          cleanText = codeBlockMatch[1].trim();
+        }
+        parsed = JSON.parse(cleanText);
       } catch {
         return fallback('MALFORMED_LLM_RESPONSE');
       }
