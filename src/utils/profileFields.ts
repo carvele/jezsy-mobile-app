@@ -155,3 +155,45 @@ export const dbDateToFormDate = (dbDate: string | null | undefined): string => {
   return y && m && d ? `${m}/${d}/${y}` : '';
 };
 
+export const TOTAL_PROFILE_STEPS = 3;
+
+export const PROFILE_STEP_LABELS = [
+  { short: 'Name', full: 'Name' },
+  { short: 'Info', full: 'Personal Info' },
+  { short: 'Address', full: 'Address' },
+] as const;
+
+export function resolveStepLabel(stepIndex: number, isNarrow: boolean): string {
+  const step = PROFILE_STEP_LABELS[stepIndex];
+  if (!step) return '';
+  return isNarrow ? step.short : step.full;
+}
+
+export type StepState = 'completed' | 'active' | 'upcoming';
+
+export function getStepState(stepIndex: number, currentStep: number): StepState {
+  if (stepIndex < currentStep) return 'completed';
+  if (stepIndex === currentStep) return 'active';
+  return 'upcoming';
+}
+
+export function canNavigateToStep(targetStep: number, currentStep: number): boolean {
+  return targetStep < currentStep;
+}
+
+export function getStepAccessibilityLabel(
+  stepIndex: number,
+  currentStep: number,
+  totalSteps: number,
+  label: string
+): string {
+  const state = getStepState(stepIndex, currentStep);
+  if (state === 'completed') {
+    return `${label}, completed`;
+  }
+  if (state === 'active') {
+    return `Step ${stepIndex + 1} of ${totalSteps}, ${label}`;
+  }
+  return `${label}, not completed`;
+}
+
