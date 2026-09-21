@@ -245,7 +245,7 @@ export async function getMyUnratedItems(userId: string): Promise<UnratedItem[]> 
       .from('reservation_items')
       .select('id, reservation_id, product_id, product_name, image_url, size, color, reservations!inner(display_id, date, customer_id, status, deleted)')
       .eq('reservations.customer_id', userId)
-      .eq('reservations.status', 'Completed')
+      .in('reservations.status', ['completed', 'Completed'])
       .eq('reservations.deleted', false),
     supabase
       .from('reviews')

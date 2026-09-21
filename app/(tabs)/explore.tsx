@@ -100,7 +100,8 @@ export default function ExploreScreen() {
   const { measurements: sizingMeasurements, fitPreference, ready: sizingReady, needsSetup: needsSizingSetup } = useSizingProfile();
   const [sizingNudgeDismissed, setSizingNudgeDismissed] = useState(false);
   const router = useRouter();
-  const params = useLocalSearchParams<{ category?: string; all?: string }>();
+  const params = useLocalSearchParams<{ category?: string; all?: string; focusSearch?: string }>();
+  const searchInputRef = useRef<TextInput>(null);
   const tourCoachmark = useTourCoachmark('explore');
 
   // Search States
@@ -223,6 +224,16 @@ export default function ExploreScreen() {
       }
     }
   }, [params.all, params.category, topCategories, handledInitialParams]);
+
+  // Home's Explore shortcut opens discovery in its most useful state: ready
+  // to type. A changing token makes every tap intentional, even if this tab
+  // is already mounted in the navigation stack.
+  useEffect(() => {
+    if (!params.focusSearch) return;
+    setIsSearchActive(true);
+    const timer = setTimeout(() => searchInputRef.current?.focus(), 180);
+    return () => clearTimeout(timer);
+  }, [params.focusSearch]);
 
   // products.category_id references a subcategory row directly; this map
   // resolves the display names this screen navigates by (set from tile
@@ -1254,6 +1265,7 @@ export default function ExploreScreen() {
           <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <IconSymbol name="magnifyingglass" size={20} color={colors.icon} style={styles.searchIcon} />
             <TextInput keyboardAppearance={theme}
+              ref={searchInputRef}
               style={[styles.searchInput, { color: colors.text }]}
               placeholder="Search items, categories, or styles..."
               placeholderTextColor={colors.secondaryText}
