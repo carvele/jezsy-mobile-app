@@ -1,5 +1,55 @@
 import { translatePasswordServerError } from './passwordPolicy';
 
+export const DUPLICATE_PHONE_MESSAGE =
+  'This mobile number is already linked to another account. Please use a different mobile number.';
+
+/**
+ * Detects PostgreSQL unique phone constraint violation (code 23505, idx_profiles_phone_unique).
+ */
+export function isPhoneUniqueConflict(error: unknown): boolean {
+  if (!error) return false;
+
+  if (typeof error === 'object' && error !== null) {
+    const errObj = error as Record<string, unknown>;
+    const code = String(errObj.code || errObj.status || '');
+    const message = String(errObj.message || '');
+    const details = String(errObj.details || '');
+    const hint = String(errObj.hint || '');
+
+    if (code === '23505') {
+      if (
+        message.includes('idx_profiles_phone_unique') ||
+        details.includes('idx_profiles_phone_unique') ||
+        details.includes('phone') ||
+        message.includes('phone')
+      ) {
+        return true;
+      }
+    }
+
+    const combined = `${message} ${details} ${hint}`.toLowerCase();
+    if (
+      combined.includes('idx_profiles_phone_unique') ||
+      (combined.includes('unique constraint') && combined.includes('phone')) ||
+      combined.includes('duplicate key value violates unique constraint "idx_profiles_phone_unique"')
+    ) {
+      return true;
+    }
+  }
+
+  if (typeof error === 'string') {
+    const lower = error.toLowerCase();
+    if (
+      lower.includes('idx_profiles_phone_unique') ||
+      (lower.includes('unique constraint') && lower.includes('phone'))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Maps raw auth and Supabase error messages to clear, actionable customer copy.
  * Ensures internal technical messages, schema details, or stack traces are never
@@ -76,6 +126,10 @@ export function mapAuthErrorMessage(error: unknown, fallback = 'Something went w
     lower.includes('otp_expired')
   ) {
     return 'The verification code is invalid or has expired. Please request a new code.';
+  }
+
+  if (isPhoneUniqueConflict(error)) {
+    return DUPLICATE_PHONE_MESSAGE;
   }
 
   if (lower.includes('phone number is already confirmed') || lower.includes('phone_exists')) {

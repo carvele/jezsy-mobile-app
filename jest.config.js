@@ -16,6 +16,8 @@ module.exports = {
     '^react-native-url-polyfill$': '<rootDir>/src/__mocks__/react-native-url-polyfill.js',
     '^expo-secure-store$': '<rootDir>/src/__mocks__/expo-secure-store.js',
     '^expo-crypto$': '<rootDir>/src/__mocks__/expo-crypto.js',
+    '^expo-linear-gradient$': '<rootDir>/src/__mocks__/expo-linear-gradient.js',
+    '^lucide-react-native$': '<rootDir>/src/__mocks__/lucide-react-native.js',
     '^react-native$': '<rootDir>/src/__mocks__/react-native.js',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],

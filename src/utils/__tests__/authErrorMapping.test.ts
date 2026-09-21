@@ -1,4 +1,8 @@
-import { mapAuthErrorMessage } from '../authErrorMapping';
+import {
+  mapAuthErrorMessage,
+  isPhoneUniqueConflict,
+  DUPLICATE_PHONE_MESSAGE,
+} from '../authErrorMapping';
 
 describe('mapAuthErrorMessage', () => {
   it('returns fallback for null or empty error', () => {
@@ -44,6 +48,28 @@ describe('mapAuthErrorMessage', () => {
   it('maps identity_already_exists to safe account explanation', () => {
     const res = mapAuthErrorMessage({ code: 'identity_already_exists' });
     expect(res).toBe("That sign-in method can't be linked to this account. Try another sign-in method or a different Google account.");
+  });
+
+  it('detects and maps idx_profiles_phone_unique constraint violations safely', () => {
+    const pgError = {
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "idx_profiles_phone_unique"',
+      details: 'Key (phone)=(+639123659917) already exists.',
+    };
+
+    expect(isPhoneUniqueConflict(pgError)).toBe(true);
+
+    const mapped = mapAuthErrorMessage(pgError);
+    expect(mapped).toBe(DUPLICATE_PHONE_MESSAGE);
+    expect(mapped).not.toContain('23505');
+    expect(mapped).not.toContain('idx_profiles_phone_unique');
+    expect(mapped).not.toContain('+639123659917');
+    expect(mapped).not.toContain('Key (phone)');
+
+    // Fallback string detection
+    expect(isPhoneUniqueConflict('duplicate key value violates unique constraint "idx_profiles_phone_unique"')).toBe(true);
+    expect(isPhoneUniqueConflict({ code: '23505', details: 'phone' })).toBe(true);
+    expect(isPhoneUniqueConflict({ message: 'Network error' })).toBe(false);
   });
 
   it('maps rate limits and over email send rate limit', () => {
