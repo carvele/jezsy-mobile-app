@@ -42,8 +42,15 @@ export const legalService = {
 
   /**
    * Server-side proof that the user opened and viewed the document in full inside the app.
+   * Only executes if caller has an active authenticated session (unauthenticated signup flows
+   * record proof post-auth via recordSignupLegalAcceptance).
    */
   async recordLegalDocumentView(documentId: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) {
+      return;
+    }
+
     const platform = getClientPlatform();
     const { error } = await supabase.rpc('record_legal_document_view' as any, {
       _document_id: documentId,
