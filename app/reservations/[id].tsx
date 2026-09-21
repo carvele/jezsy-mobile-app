@@ -660,9 +660,14 @@ export default function ReservationDetailScreen() {
     );
   }
 
-  const dateStr = reservation.date
+  const formattedAppointmentDate = reservation.date
     ? formatPHDate(reservation.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-    : 'N/A';
+    : null;
+  const formattedAppointmentTime = reservation.appointment_time
+    ? formatTimeLabel(reservation.appointment_time)
+    : null;
+  const appointmentDate = formattedAppointmentDate === 'N/A' ? null : formattedAppointmentDate;
+  const appointmentTime = formattedAppointmentTime === 'N/A' ? null : formattedAppointmentTime;
   const displayState = getCustomerReservationDisplayState({
     ...reservation,
     refund_request_status: refundRequest?.status,
@@ -949,14 +954,18 @@ export default function ReservationDetailScreen() {
                 )}
               </View>
               <View style={[styles.infoRow, { marginTop: Spacing.md, alignItems: 'flex-start' }]}>
-                <IconSymbol name="calendar" size={20} color={colors.tint} />
-                <View>
-                  <Text style={{ color: colors.text, fontSize: 15 }}>
-                    {dateStr}
-                  </Text>
-                  <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: 2 }}>
-                    {formatTimeLabel(reservation.appointment_time)}
-                  </Text>
+                <IconSymbol name={appointmentDate || appointmentTime ? 'calendar' : 'clock.fill'} size={20} color={colors.tint} />
+                <View style={{ flex: 1 }}>
+                  {appointmentDate || appointmentTime ? (
+                    <>
+                      {appointmentDate && <Text style={{ color: colors.text, fontSize: 15 }}>{appointmentDate}</Text>}
+                      {appointmentTime && <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: appointmentDate ? 2 : 0 }}>{appointmentTime}</Text>}
+                    </>
+                  ) : (
+                    <Text style={{ color: colors.secondaryText, fontSize: 15 }}>
+                      Collection time will be confirmed by JezSy.
+                    </Text>
+                  )}
                 </View>
               </View>
 

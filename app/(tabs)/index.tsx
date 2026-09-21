@@ -444,7 +444,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={[styles.brandLogo, { color: colors.text }]}>JezSy</Text>
           <TouchableOpacity
-            onPress={() => router.push('/(tabs)/explore' as any)}
+            onPress={() => router.push(`/(tabs)/explore?focusSearch=${Date.now()}` as any)}
             style={[styles.exploreShortcut, { borderColor: colors.border, backgroundColor: colors.card }]}
             accessibilityRole="button"
             accessibilityLabel="Explore and search products"
@@ -493,7 +493,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={[styles.brandLogo, { color: colors.text }]}>JezSy</Text>
           <TouchableOpacity
-            onPress={() => router.push('/(tabs)/explore' as any)}
+            onPress={() => router.push(`/(tabs)/explore?focusSearch=${Date.now()}` as any)}
             style={[styles.exploreShortcut, { borderColor: colors.border, backgroundColor: colors.card }]}
             accessibilityRole="button"
             accessibilityLabel="Explore and search products"
