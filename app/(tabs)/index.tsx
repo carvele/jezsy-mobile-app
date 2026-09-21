@@ -65,7 +65,7 @@ const GOLDEN_RATIO = 1.618;
 const HERO_CARD_GAP = Spacing.md;
 // Safety cap, not a real limit: nothing stops a merchant flagging thirty
 // products is_featured, and a thirty-dot carousel is not a hero section.
-const HERO_MAX_CARDS = 8;
+const HERO_MAX_CARDS = 5;
 
 export default function HomeScreen() {
   const bottomInset = useSharedBottomInset();
@@ -618,27 +618,27 @@ export default function HomeScreen() {
                           style={[styles.heroCardImage, { backgroundColor: colors.imagePlaceholder }]}
                           contentFit="cover"
                         />
-                        {/* Left Column Tag Badges */}
-                        <View style={{ position: 'absolute', top: 10, left: 10, flexDirection: 'row', gap: 6, zIndex: 10 }}>
-                          {(item.is_new_arrival || (item.tags && item.tags.includes('New Arrival'))) && (
-                            <View style={{ backgroundColor: colors.tint, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 }}>
-                              <Text style={{ color: colors.onTint, fontSize: 10, fontWeight: '800' }}>NEW</Text>
-                            </View>
-                          )}
-                          {(item.on_sale || item.sale_price) && (
+                        {/* Sale takes priority over newness; AR lives separately below. */}
+                        <View style={{ position: 'absolute', top: 10, left: 10, zIndex: 10 }}>
+                          {(item.on_sale || item.sale_price) ? (
                             <View style={{ backgroundColor: colors.notification, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 }}>
                               <Text style={{ color: colors.onNotification, fontSize: 10, fontWeight: '800' }}>
                                 {item.discount_percentage ? `-${item.discount_percentage}%` : 'SALE'}
                               </Text>
                             </View>
-                          )}
-                          {!!(item.model_3d_url && item.tags && item.tags.includes('AR Try-On')) && (
-                            <View style={{ backgroundColor: Colors[theme ?? 'light'].info, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                              <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
-                              <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>AR</Text>
+                          ) : (item.is_new_arrival || (item.tags && item.tags.includes('New Arrival'))) ? (
+                            <View style={{ backgroundColor: colors.tint, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 }}>
+                              <Text style={{ color: colors.onTint, fontSize: 10, fontWeight: '800' }}>NEW</Text>
                             </View>
-                          )}
+                          ) : null}
                         </View>
+
+                        {!!(item.model_3d_url && item.tags && item.tags.includes('AR Try-On')) && (
+                          <View style={[styles.heroArBadge, { backgroundColor: Colors[theme ?? 'light'].info }]}>
+                            <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
+                            <Text style={styles.heroArBadgeText}>AR</Text>
+                          </View>
+                        )}
 
                         {/* Top-Right Wishlist Heart Button */}
                         <Pressable
@@ -691,13 +691,13 @@ export default function HomeScreen() {
                             </Text>
                           )}
                         </View>
-                        {stockLabel && (
+                        {stockLabel && (lowStock || outOfStock) && (
                           <Text style={{ fontSize: 12, fontWeight: '600', color: stockColor, marginTop: 2 }}>
                             {stockLabel}
                           </Text>
                         )}
                         {!outOfStock && (
-                          <Text style={[styles.collectionLabel, { color: colors.tint }]}>Available for collection</Text>
+                          <Text style={[styles.collectionLabel, { color: colors.tint }]}>Pickup available</Text>
                         )}
                       </View>
                     </Animated.View>
@@ -927,6 +927,7 @@ const styles = StyleSheet.create({
   // marginRight, and the leading card starts flush with the header above.
   heroCarouselContent: {
     paddingLeft: Spacing.xl,
+    paddingRight: Spacing.xxxl,
   },
   // width is applied inline (heroCardWidth, from useWindowDimensions) since
   // it now varies with the live window size rather than being fixed at
@@ -1000,6 +1001,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  heroArBadge: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  heroArBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '800' },
 
   // Edits Section
   sectionContainer: {
@@ -1040,6 +1053,7 @@ const styles = StyleSheet.create({
   },
   editsScrollContainer: {
     paddingHorizontal: Spacing.xl,
+    paddingRight: Spacing.xxxl,
     gap: Spacing.lg,
   },
 });
