@@ -242,7 +242,14 @@ export type Database = {
           expires_at: string | null
           id: string
           placement: string
+          storefront_image_storage_path: string | null
           storefront_image_url: string | null
+          storefront_impressions: number
+          storefront_position: string
+          storefront_sort_order: number
+          storefront_starts_at: string | null
+          storefront_status: string
+          storefront_taps: number
           title: string
           type: string
           updated_at: string | null
@@ -257,7 +264,14 @@ export type Database = {
           expires_at?: string | null
           id?: string
           placement?: string
+          storefront_image_storage_path?: string | null
           storefront_image_url?: string | null
+          storefront_impressions?: number
+          storefront_position?: string
+          storefront_sort_order?: number
+          storefront_starts_at?: string | null
+          storefront_status?: string
+          storefront_taps?: number
           title: string
           type?: string
           updated_at?: string | null
@@ -272,7 +286,14 @@ export type Database = {
           expires_at?: string | null
           id?: string
           placement?: string
+          storefront_image_storage_path?: string | null
           storefront_image_url?: string | null
+          storefront_impressions?: number
+          storefront_position?: string
+          storefront_sort_order?: number
+          storefront_starts_at?: string | null
+          storefront_status?: string
+          storefront_taps?: number
           title?: string
           type?: string
           updated_at?: string | null
@@ -3324,6 +3345,10 @@ export type Database = {
           _user_agent?: string
         }
         Returns: Json
+      }
+      record_storefront_campaign_event: {
+        Args: { p_announcement_id: string; p_event: string }
+        Returns: undefined
       }
       activate_staff_account: { Args: never; Returns: Json }
       adjust_inventory_on_hand: {
