@@ -18,6 +18,7 @@ import * as Linking from 'expo-linking';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
+import { mapAuthErrorMessage } from '@/src/utils/authErrorMapping';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { LegalReaderModal } from '@/src/components/LegalReaderModal';
 
@@ -125,7 +126,7 @@ export default function WelcomeScreen() {
       }
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
-      showToast('Could not sign in with Google. Please try again.', 'error');
+      showToast(mapAuthErrorMessage(err, 'Could not sign in with Google. Please try again.'), 'error');
     } finally {
       setGoogleLoading(false);
     }

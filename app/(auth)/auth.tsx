@@ -32,6 +32,7 @@ import {
 } from '@/src/utils/passwordPolicy';
 
 import { mapAuthErrorMessage } from '@/src/utils/authErrorMapping';
+import { isDuplicateSignup, DUPLICATE_ACCOUNT_MESSAGE } from '@/src/utils/connectedAccounts';
 import { legalService } from '@/src/services/legalService';
 import { normalizeMobileNumber } from '@/src/utils/profileFields';
 // Enable LayoutAnimation on Android (Legacy Architecture only)
@@ -173,10 +174,8 @@ export default function AuthScreen() {
       // server -- we detect it only to avoid arming a resend timer for a code
       // that was never sent, and we take the identical UI path so this branch
       // stays indistinguishable from a real signup.
-      const isDuplicate = !!data?.user && (data.user.identities?.length ?? 0) === 0;
-
-      if (isDuplicate) {
-        showToast('An account with this email may already exist. Please sign in instead.', 'info');
+      if (isDuplicateSignup(data)) {
+        showToast(DUPLICATE_ACCOUNT_MESSAGE, 'info');
         transitionMode('login');
         return;
       }
@@ -186,6 +185,11 @@ export default function AuthScreen() {
       transitionMode('otp_verify');
     } catch (err: any) {
       console.error('Sign Up error:', err);
+      if (isDuplicateSignup(null, err)) {
+        showToast(DUPLICATE_ACCOUNT_MESSAGE, 'info');
+        transitionMode('login');
+        return;
+      }
       showToast(mapAuthErrorMessage(err, 'Could not create your account. Please check your details and try again.'), 'error');
     } finally {
       setLoading(false);

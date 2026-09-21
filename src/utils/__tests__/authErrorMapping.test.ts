@@ -17,9 +17,33 @@ describe('mapAuthErrorMessage', () => {
     expect(res).toBe('Please verify your email address to sign in.');
   });
 
-  it('maps user already registered', () => {
+  it('maps user already registered to enumeration-safe copy', () => {
     const res = mapAuthErrorMessage({ message: 'User already registered' });
-    expect(res).toBe('An account with this email may already exist. Please sign in instead.');
+    expect(res).toBe('An account with this email may already exist. Try signing in or use password recovery.');
+
+    const resCode = mapAuthErrorMessage({ code: 'user_already_exists' });
+    expect(resCode).toBe('An account with this email may already exist. Try signing in or use password recovery.');
+  });
+
+  it('maps manual_linking_disabled to policy explanation', () => {
+    const res = mapAuthErrorMessage({ code: 'manual_linking_disabled' });
+    expect(res).toBe('Connecting or disconnecting login providers is disabled by the current authentication policy.');
+
+    const resMsg = mapAuthErrorMessage('Manual linking is disabled');
+    expect(resMsg).toBe('Connecting or disconnecting login providers is disabled by the current authentication policy.');
+  });
+
+  it('maps single_identity_not_deletable to lockout explanation', () => {
+    const res = mapAuthErrorMessage({ code: 'single_identity_not_deletable' });
+    expect(res).toBe("You can't disconnect your only linked sign-in method.");
+
+    const res2 = mapAuthErrorMessage({ code: 'cannot_unlink_only_identity' });
+    expect(res2).toBe("You can't disconnect your only linked sign-in method.");
+  });
+
+  it('maps identity_already_exists to safe account explanation', () => {
+    const res = mapAuthErrorMessage({ code: 'identity_already_exists' });
+    expect(res).toBe("That sign-in method can't be linked to this account. Try another sign-in method or a different Google account.");
   });
 
   it('maps rate limits and over email send rate limit', () => {
