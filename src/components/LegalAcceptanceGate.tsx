@@ -9,13 +9,13 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/src/context/AuthContext';
 import { LegalAcceptanceStatus, legalService } from '../services/legalService';
 import { LegalReaderModal } from './LegalReaderModal';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { showAlert } from '../utils/alert';
 
 interface LegalAcceptanceGateProps {
@@ -108,7 +108,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <View style={styles.errorContainer}>
           <View style={[styles.errorIconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
-            <Ionicons name="shield-outline" size={44} color="#EF4444" />
+            <IconSymbol name="shield" size={44} color="#EF4444" />
           </View>
 
           <Text style={[styles.errorTitle, { color: colors.text }]}>
@@ -131,7 +131,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <>
-                  <Ionicons name="refresh" size={18} color="#FFFFFF" />
+                  <IconSymbol name="arrow.clockwise" size={18} color="#FFFFFF" />
                   <Text style={styles.primaryActionBtnText}>Retry Verification</Text>
                 </>
               )}
@@ -143,7 +143,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
               accessibilityRole="button"
               accessibilityLabel="Contact in-app support"
             >
-              <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.text} />
+              <IconSymbol name="bubble.left.and.bubble.right" size={18} color={colors.text} />
               <Text style={[styles.secondaryActionBtnText, { color: colors.text }]}>
                 Contact In-App Support
               </Text>
@@ -174,7 +174,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
         {/* Header Branding */}
         <View style={styles.headerArea}>
           <View style={[styles.iconBadge, { backgroundColor: colors.surface }]}>
-            <Ionicons name="document-text-outline" size={32} color={colors.tint} />
+            <IconSymbol name="doc.text" size={32} color={colors.tint} />
           </View>
           <Text style={[styles.brandLabel, { color: colors.tint }]}>JEZSY BOUTIQUE</Text>
           <Text style={[styles.mainTitle, { color: colors.text }]}>
@@ -200,12 +200,12 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
               </View>
               {termsViewed ? (
                 <View style={styles.reviewedTag}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                  <IconSymbol name="checkmark.circle.fill" size={16} color="#10B981" />
                   <Text style={styles.reviewedTagText}>Reviewed</Text>
                 </View>
               ) : (
                 <View style={styles.pendingTag}>
-                  <Ionicons name="time-outline" size={16} color="#F59E0B" />
+                  <IconSymbol name="clock.fill" size={16} color="#F59E0B" />
                   <Text style={styles.pendingTagText}>Review Required</Text>
                 </View>
               )}
@@ -217,7 +217,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
               accessibilityRole="button"
               accessibilityLabel="Review Terms of Service in full"
             >
-              <Ionicons name="book-outline" size={16} color={colors.tint} />
+              <IconSymbol name="book" size={16} color={colors.tint} />
               <Text style={[styles.reviewBtnText, { color: colors.tint }]}>
                 {termsViewed ? 'Re-read Terms of Service' : 'Read Terms of Service'}
               </Text>
@@ -237,12 +237,12 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
               </View>
               {privacyViewed ? (
                 <View style={styles.reviewedTag}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                  <IconSymbol name="checkmark.circle.fill" size={16} color="#10B981" />
                   <Text style={styles.reviewedTagText}>Reviewed</Text>
                 </View>
               ) : (
                 <View style={styles.pendingTag}>
-                  <Ionicons name="time-outline" size={16} color="#F59E0B" />
+                  <IconSymbol name="clock.fill" size={16} color="#F59E0B" />
                   <Text style={styles.pendingTagText}>Review Required</Text>
                 </View>
               )}
@@ -254,7 +254,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
               accessibilityRole="button"
               accessibilityLabel="Review Privacy Policy in full"
             >
-              <Ionicons name="book-outline" size={16} color={colors.tint} />
+              <IconSymbol name="book" size={16} color={colors.tint} />
               <Text style={[styles.reviewBtnText, { color: colors.tint }]}>
                 {privacyViewed ? 'Re-read Privacy Policy' : 'Read Privacy Policy'}
               </Text>
@@ -286,7 +286,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
                 },
               ]}
             >
-              {termsAgreed && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+              {termsAgreed && <IconSymbol name="checkmark" size={14} color="#FFFFFF" />}
             </View>
             <View style={styles.checkboxLabelContainer}>
               <Text
@@ -327,7 +327,7 @@ export const LegalAcceptanceGate: React.FC<LegalAcceptanceGateProps> = ({
                 },
               ]}
             >
-              {privacyAgreed && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+              {privacyAgreed && <IconSymbol name="checkmark" size={14} color="#FFFFFF" />}
             </View>
             <View style={styles.checkboxLabelContainer}>
               <Text
