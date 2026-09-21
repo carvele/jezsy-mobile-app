@@ -256,16 +256,27 @@ export default function ProfileSetupScreen() {
         updated_at:    new Date().toISOString(),
       };
 
-      // Atomic idempotent upsert eliminates race conditions and duplicate entry errors
-      const { error: upsertError } = await supabase
+      // Update existing profile row (pre-created during signup/OAuth by handle_new_user trigger)
+      const { data: updatedRows, error: updateError } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email ?? null,
-          ...updatePayload,
-        }, { onConflict: 'id' });
+        .update(updatePayload)
+        .eq('id', user.id)
+        .select('id');
 
-      if (upsertError) throw upsertError;
+      if (updateError) throw updateError;
+
+      // Defensive fallback: If the profile row was not pre-created by the trigger, insert it
+      if (!updatedRows || updatedRows.length === 0) {
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email ?? null,
+            ...updatePayload,
+          });
+
+        if (insertError) throw insertError;
+      }
 
       // Refresh profile in context so root layout knows profile is complete
       await refreshProfile();
