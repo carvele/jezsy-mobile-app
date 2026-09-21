@@ -8,16 +8,16 @@ import { GeneratedOutfit } from '@/src/utils/outfitGenerator';
 import { tapMedium, tapLight } from '@/src/utils/haptics';
 
 interface Props {
-  outfit: GeneratedOutfit;
-  onSave: (outfit: GeneratedOutfit) => void;
+  outfit: GeneratedOutfit | any;
+  onSave: (outfit: any) => void;
   saving?: boolean;
   /** True when this exact combination already exists in the user's saved outfits. */
   alreadySaved?: boolean;
   /** When provided, renders a secondary "Pass" action next to Save. */
-  onPass?: (outfit: GeneratedOutfit) => void;
+  onPass?: (outfit: any) => void;
 }
 
-const LABEL_COLOR: Record<GeneratedOutfit['label'], string> = {
+const LABEL_COLOR: Record<string, string> = {
   'Perfect Harmony': '#047857',
   'Great Match': '#2563EB',
   'Neutral / Balanced': '#D4AF37',
@@ -36,16 +36,16 @@ export function SuggestedOutfitCard({ outfit, onSave, saving = false, alreadySav
       : '#DC2626'
     : accent;
 
-  const badgeText = outfit.assessment
-    ? `${outfit.assessment} · ${outfit.label}`
-    : outfit.label;
+  const badgeText = outfit.assessment || outfit.label;
+  const headline = outfit.headline;
+  const reasonText = outfit.whyThisWorks?.summary || outfit.reason;
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.thumbRow}>
-        {outfit.items.map((item) => (
+        {outfit.items.map((item: any) => (
           <View key={item.id} style={[styles.thumb, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-            <Image source={{ uri: item.image_url || undefined }} style={styles.thumbImg} contentFit="cover" />
+            <Image source={{ uri: item.image_url || (item as any).photo_url || undefined }} style={styles.thumbImg} contentFit="cover" />
           </View>
         ))}
       </View>
@@ -56,11 +56,29 @@ export function SuggestedOutfitCard({ outfit, onSave, saving = false, alreadySav
             {badgeText}
           </Text>
         </View>
+        {outfit.label && outfit.label !== badgeText && (
+          <View style={[styles.badge, { backgroundColor: colors.surface, borderColor: colors.border, marginLeft: Spacing.xs }]}>
+            <Text style={[styles.badgeText, { color: colors.text }]}>
+              {outfit.label}
+            </Text>
+          </View>
+        )}
+        {outfit.isAiRanked && (
+          <View style={[styles.aiBadge, { backgroundColor: colors.tint + '18', borderColor: colors.tint + '40', marginLeft: 'auto' }]}>
+            <IconSymbol name="sparkles" size={12} color={colors.tint} />
+            <Text style={[styles.aiBadgeText, { color: colors.tint }]}>AI Ranked</Text>
+          </View>
+        )}
       </View>
+
+      {headline && (
+        <Text style={[styles.headline, { color: colors.text }]}>{headline}</Text>
+      )}
 
       {/* The explanation is the feature: a suggestion the user cannot reason
           about is one they will not trust or learn from. */}
-      <Text style={[styles.reason, { color: colors.secondaryText }]}>{outfit.reason}</Text>
+      <Text style={[styles.reason, { color: colors.secondaryText }]}>{reasonText}</Text>
+
 
       <View style={styles.actionRow}>
         {onPass && (
@@ -141,6 +159,26 @@ const styles = StyleSheet.create({
   badgeText: {
     ...Type.caption,
     fontWeight: '700',
+  },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  aiBadgeText: {
+    ...Type.caption,
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  headline: {
+    ...Type.bodyStrong,
+    fontWeight: '700',
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
   },
   reason: {
     ...Type.body,

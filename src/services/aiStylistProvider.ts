@@ -5,6 +5,7 @@ import {
   AIAnalysisResult,
 } from '../types/aiStylist';
 import { WardrobeItem } from '../services/wardrobeService';
+import { CandidateOutfit, StylingIntent, StylingAIRecommendation } from '../types/styleAdvisor';
 import {
   firstUnaddressedTopic,
   sanitizeAIResponse,
@@ -101,6 +102,11 @@ export interface IAIStylistProvider {
     packet: StylistEvidencePacket,
     wardrobeLookup?: Record<string, WardrobeItem>
   ): Promise<AIAnalysisResult>;
+  rankCandidates?(
+    candidates: CandidateOutfit[],
+    intent: StylingIntent,
+    wardrobeLookup?: Record<string, WardrobeItem>
+  ): Promise<{ success: boolean; recommendations?: StylingAIRecommendation[]; fallbackReason?: string }>;
 }
 
 // The client owns the hard cutoff: whichever settles first, the response or this timer, wins. The server
@@ -206,6 +212,75 @@ export class SupabaseEdgeAIStylistProvider implements IAIStylistProvider {
       };
     }
   }
+
+  async rankCandidates(
+    candidates: CandidateOutfit[],
+    intent: StylingIntent,
+    wardrobeLookup?: Record<string, WardrobeItem>
+  ): Promise<{ success: boolean; recommendations?: StylingAIRecommendation[]; fallbackReason?: string }> {
+    if (Date.now() < llmUnavailableUntil) {
+      return {
+        success: false,
+        fallbackReason: 'LLM synthesis is not configured on the server',
+      };
+    }
+
+    try {
+      const candidatePayload = candidates.map((c) => ({
+        candidateId: c.candidateId,
+        items: c.items.map((it) => ({
+          wardrobeItemId: it.id,
+          name: it.sub_category || it.category || 'Garment',
+          category: it.category,
+          subCategory: it.sub_category,
+          colors: it.color_tags || [],
+          material: (it as any).material || undefined,
+          pattern: (it as any).pattern || undefined,
+        })),
+        baseScore: c.baseScore,
+      }));
+
+      const body = {
+        mode: 'rank_candidates',
+        intent,
+        candidates: candidatePayload,
+      };
+
+      const { data, error } = await withTimeout(
+        supabase.functions.invoke('ai-stylist-analyze', { body }),
+        20_000
+      );
+
+      if (error) {
+        return {
+          success: false,
+          fallbackReason: httpErrorReason(error),
+        };
+      }
+
+      if (!data || !data.success) {
+        const reason = typeof data?.reason === 'string' ? data.reason : 'Server indicated fallback required';
+        if (NOT_CONFIGURED_REASONS.has(reason)) llmUnavailableUntil = Date.now() + NOT_CONFIGURED_TTL_MS;
+        return {
+          success: false,
+          fallbackReason: reason,
+        };
+      }
+
+      const recs = Array.isArray(data.recommendations) ? data.recommendations : [];
+      return {
+        success: true,
+        recommendations: recs,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        fallbackReason: `Network or runtime exception: ${msg}`,
+      };
+    }
+  }
 }
+
 
 export const defaultAIStylistProvider: IAIStylistProvider = new SupabaseEdgeAIStylistProvider();
