@@ -454,7 +454,12 @@ export default function AddWardrobeItemScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Add New Item</Text>
@@ -612,6 +617,8 @@ export default function AddWardrobeItemScreen() {
             style={[styles.saveButton, { backgroundColor: colors.tint, opacity: imageUri && !saving ? 1 : 0.6 }]}
             onPress={handleSave}
             disabled={!imageUri || saving}
+            accessibilityRole="button"
+            accessibilityLabel={saving ? (statusMessage || 'Saving...') : 'Add to Wardrobe'}
           >
             {saving ? (
               <View style={styles.loadingRow}>
@@ -623,7 +630,7 @@ export default function AddWardrobeItemScreen() {
             )}
           </TouchableOpacity>
           
-          <View style={{ height: 60 }} />
+          <View style={{ height: 20 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
@@ -451,6 +452,8 @@ export function StylistCritiqueModal({
                   onClose();
                   onSaveLook();
                 }}
+                accessibilityRole="button"
+                accessibilityLabel="Save styled look"
               >
                 <IconSymbol name="heart.fill" size={13} color={colors.onTint} />
                 <Text style={[styles.saveActionText, { color: colors.onTint }]}>Save Styled Look</Text>
@@ -462,6 +465,8 @@ export function StylistCritiqueModal({
                 { borderColor: colors.border, backgroundColor: onSaveLook ? colors.surface : colors.tint },
               ]}
               onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Continue styling"
             >
               <Text
                 style={[
@@ -492,6 +497,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderRightWidth: 1,
     maxHeight: SCREEN_HEIGHT * 0.88,
+    // Center and cap on desktop/tablet so the sheet doesn't stretch full-width.
+    ...(Platform.OS === 'web' ? { maxWidth: 600, alignSelf: 'center' as const, width: '100%' } : {}),
   },
   header: {
     flexDirection: 'row',
