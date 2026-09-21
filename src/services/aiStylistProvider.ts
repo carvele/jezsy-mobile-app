@@ -5,6 +5,10 @@ import {
   AIAnalysisResult,
 } from '../types/aiStylist';
 import { WardrobeItem } from '../services/wardrobeService';
+import {
+  firstUnaddressedTopic,
+  sanitizeAIResponse,
+} from '../../supabase/functions/_shared/aiStylistGuards';
 
 export interface ValidationResult {
   valid: boolean;
@@ -13,43 +17,19 @@ export interface ValidationResult {
 }
 
 /**
- * Validates the structured AI response against grounded facts, context relevance,
- * item ID validity, and section uniqueness.
+ * Validates the structured AI response: schema, generic-filler rejection, section uniqueness, context
+ * relevance and wardrobe-id grounding. Verdict authority is enforced separately against the deterministic
+ * critique (see gradeOutfitWithAI); nothing here lets model wording decide suitability.
  */
 export function validateAIResponse(
   response: unknown,
   packet: StylistEvidencePacket,
   wardrobeLookup?: Record<string, WardrobeItem>
 ): ValidationResult {
-  if (!response || typeof response !== 'object') {
-    return { valid: false, reason: 'Response is not an object' };
-  }
-
-  const res = response as Partial<StructuredAIResponse>;
-
-  // 1. Core structural presence
-  const validAssessments = [
-    'Appropriate for this occasion',
-    'Could work with changes',
-    'Not appropriate for this occasion',
-    'Incomplete outfit',
-  ];
-
-  if (!res.assessment || !validAssessments.includes(res.assessment)) {
-    return { valid: false, reason: `Invalid or missing assessment: "${res.assessment}"` };
-  }
-
-  if (!res.headline || typeof res.headline !== 'string' || res.headline.trim().length < 3) {
-    return { valid: false, reason: 'Missing or empty headline' };
-  }
-
-  if (!res.whyJezsySaysThis || typeof res.whyJezsySaysThis !== 'string' || res.whyJezsySaysThis.trim().length < 15) {
-    return { valid: false, reason: 'Missing or insufficient whyJezsySaysThis explanation' };
-  }
-
-  if (!res.stylistTake || typeof res.stylistTake !== 'string' || res.stylistTake.trim().length < 10) {
-    return { valid: false, reason: 'Missing or insufficient stylistTake summary' };
-  }
+  // 1. Schema: bounded plain strings only, so a malformed field can never reach a render.
+  const schema = sanitizeAIResponse(response);
+  if (!schema.ok) return { valid: false, reason: schema.reason };
+  const res = schema.value;
 
   // 2. Generic filler rejection
   const bannedPhrases = [
@@ -58,7 +38,6 @@ export function validateAIResponse(
     /the pieces create a relaxed, wearable outfit/i,
     /effortlessly daytime styling/i,
   ];
-
   for (const pattern of bannedPhrases) {
     if (pattern.test(res.headline) || pattern.test(res.whyJezsySaysThis) || pattern.test(res.stylistTake)) {
       return { valid: false, reason: 'Contains disallowed generic fallback boilerplate' };
@@ -71,68 +50,50 @@ export function validateAIResponse(
     return { valid: false, reason: 'whyJezsySaysThis and stylistTake are identical duplicates' };
   }
 
-  // 4. Wardrobe item ID grounding validation
-  const sanitizedImprovements: { reason: string; existingWardrobeItemIds: string[] }[] = [];
-  if (Array.isArray(res.improvements)) {
-    for (const imp of res.improvements) {
-      if (imp && typeof imp.reason === 'string') {
-        const validIds = (imp.existingWardrobeItemIds || []).filter((id) =>
-          wardrobeLookup ? Boolean(wardrobeLookup[id]) : true
-        );
-        sanitizedImprovements.push({
-          reason: imp.reason,
-          existingWardrobeItemIds: validIds,
-        });
-      }
-    }
+  // 4. Item id grounding. Without a wardrobe to check against, no suggested id is trusted.
+  const improvements = (res.improvements ?? []).map((imp) => ({
+    reason: imp.reason,
+    existingWardrobeItemIds: imp.existingWardrobeItemIds.filter((id) => Boolean(wardrobeLookup?.[id])),
+  }));
+
+  // 5. Context relevance, by whole word: "brunch" is not "run".
+  const ctx = packet.request.structuredContext;
+  const responseText = [
+    res.headline,
+    res.whyJezsySaysThis,
+    res.stylistTake,
+    ...(res.whatConflicts ?? []),
+    ...(res.whatWorks ?? []),
+    ...Object.values(res.contextFit ?? {}),
+  ].join(' ');
+  const missedTopic = firstUnaddressedTopic(responseText, {
+    userText: packet.request.rawContext,
+    activity: ctx.activity,
+    occasionType: ctx.occasionType,
+    isIndoorOverride: ctx.isIndoorOverride,
+    weather: ctx.weather,
+    temperatureRequirement: ctx.temperatureRequirement,
+  });
+  if (missedTopic) {
+    const label = { swim: 'swimming / water', cold: 'cold weather', run: 'running', formal: 'wedding / formal' }[missedTopic];
+    return { valid: false, reason: `Response failed to address ${label} context` };
   }
 
-  // 5. Context relevance semantic check
-  const fullContextText = `${packet.request.rawContext} ${JSON.stringify(packet.request.structuredContext)}`.toLowerCase();
-  const fullResponseText = `${res.headline} ${res.whyJezsySaysThis} ${res.stylistTake} ${(res.whatConflicts || []).join(' ')}`.toLowerCase();
-
-  // Swimming context check
-  if (/swim|pool|water/i.test(fullContextText)) {
-    if (!/swim|pool|water|chlorine|beach|aquatic/i.test(fullResponseText)) {
-      return { valid: false, reason: 'Response failed to address swimming / water context' };
-    }
-  }
-
-  // Cold weather check
-  if (/cold|freezing|chilly|winter|snow/i.test(fullContextText) && !packet.request.structuredContext.isIndoorOverride) {
-    if (!/cold|warm|thermal|temperature|chill|layer|insulat|bare leg/i.test(fullResponseText)) {
-      return { valid: false, reason: 'Response failed to address cold weather context' };
-    }
-  }
-
-  // Running check
-  if (/run|5km|jog|sprint|marathon/i.test(fullContextText)) {
-    if (!/run|jog|athletic|workout|km|pace|performance|cushion/i.test(fullResponseText)) {
-      return { valid: false, reason: 'Response failed to address running context' };
-    }
-  }
-
-  // Wedding / formal check
-  if (/wedding|matrimony|nuptial|gala|black.?tie/i.test(fullContextText)) {
-    if (!/wedding|formal|dress.?code|ceremony|elevat|tailor/i.test(fullResponseText)) {
-      return { valid: false, reason: 'Response failed to address wedding / formal context' };
-    }
-  }
-
-  const sanitized: StructuredAIResponse = {
-    assessment: res.assessment,
-    headline: res.headline,
-    contextFit: res.contextFit,
-    whyJezsySaysThis: res.whyJezsySaysThis,
-    whatWorks: Array.isArray(res.whatWorks) ? res.whatWorks : undefined,
-    whatConflicts: Array.isArray(res.whatConflicts) ? res.whatConflicts : undefined,
-    personalization: res.personalization,
-    stylistTake: res.stylistTake,
-    improvements: sanitizedImprovements,
-    missing: Array.isArray(res.missing) ? res.missing : undefined,
+  return {
+    valid: true,
+    sanitized: {
+      assessment: res.assessment,
+      headline: res.headline,
+      contextFit: res.contextFit,
+      whyJezsySaysThis: res.whyJezsySaysThis,
+      whatWorks: res.whatWorks,
+      whatConflicts: res.whatConflicts,
+      personalization: res.personalization,
+      stylistTake: res.stylistTake,
+      improvements,
+      missing: res.missing,
+    },
   };
-
-  return { valid: true, sanitized };
 }
 
 export interface IAIStylistProvider {
@@ -142,20 +103,42 @@ export interface IAIStylistProvider {
   ): Promise<AIAnalysisResult>;
 }
 
-// A slow or overloaded free-tier LLM provider can stall the edge function well past any
-// timeout it sets internally, and the platform can force-kill the isolate outright before
-// it ever responds. The client can't trust the server to bound its own latency, so it owns
-// the hard cutoff here: whichever settles first (the real response or this timer) wins.
-// 90s proved too tight -- repeated real attempts never got a chance to finish before it
-// fired, always landing on the rule-based fallback. Measured the platform's own hard kill
-// (WORKER_RESOURCE_LIMIT) at ~150s twice, so push this right up to that ceiling to give the
-// free tier its full realistic window.
-const CLIENT_LLM_TIMEOUT_MS = 140_000;
+// The client owns the hard cutoff: whichever settles first, the response or this timer, wins. The server
+// gives the provider 40s; a critique that needs longer than this is not worth waiting for because the
+// deterministic critique is already available.
+const CLIENT_LLM_TIMEOUT_MS = 45_000;
 
-function timeoutAfter(ms: number): Promise<never> {
-  return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(`AI stylist request exceeded ${ms}ms client-side timeout`)), ms);
+// Server reasons that mean "no LLM is configured here". Retrying on every critique only adds latency.
+const NOT_CONFIGURED_REASONS = new Set([
+  'NO_SERVER_LLM_KEY_CONFIGURED',
+  'LLM_MODEL_NOT_CONFIGURED',
+  'LLM_MODEL_INVALID',
+]);
+const NOT_CONFIGURED_TTL_MS = 10 * 60 * 1000;
+let llmUnavailableUntil = 0;
+
+/** Test hook: forget any cached "LLM not configured" state. */
+export function resetAIStylistProviderState(): void {
+  llmUnavailableUntil = 0;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`AI stylist request exceeded ${ms}ms client-side timeout`)), ms);
   });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+function httpErrorReason(error: unknown): string {
+  const status = (error as { context?: { status?: number } } | null)?.context?.status;
+  if (status === 401) return 'Sign in is required for AI analysis';
+  if (status === 429) return 'AI analysis rate limit reached';
+  if (status === 403) return 'AI analysis rejected the outfit items';
+  if (status === 400 || status === 413) return 'AI analysis rejected the request';
+  return 'AI analysis is temporarily unavailable';
 }
 
 /**
@@ -166,25 +149,35 @@ export class SupabaseEdgeAIStylistProvider implements IAIStylistProvider {
     packet: StylistEvidencePacket,
     wardrobeLookup?: Record<string, WardrobeItem>
   ): Promise<AIAnalysisResult> {
+    if (Date.now() < llmUnavailableUntil) {
+      return {
+        success: false,
+        analysisMode: 'ruleBasedFallback',
+        fallbackReason: 'LLM synthesis is not configured on the server',
+      };
+    }
+
     try {
-      const { data, error } = await Promise.race([
+      const { data, error } = await withTimeout(
         supabase.functions.invoke('ai-stylist-analyze', { body: packet }),
-        timeoutAfter(CLIENT_LLM_TIMEOUT_MS),
-      ]);
+        CLIENT_LLM_TIMEOUT_MS
+      );
 
       if (error) {
         return {
           success: false,
           analysisMode: 'ruleBasedFallback',
-          fallbackReason: `Edge function invocation error: ${error.message}`,
+          fallbackReason: httpErrorReason(error),
         };
       }
 
       if (!data || !data.success) {
+        const reason = typeof data?.reason === 'string' ? data.reason : 'Server indicated fallback required';
+        if (NOT_CONFIGURED_REASONS.has(reason)) llmUnavailableUntil = Date.now() + NOT_CONFIGURED_TTL_MS;
         return {
           success: false,
           analysisMode: 'ruleBasedFallback',
-          fallbackReason: data?.reason || 'Server indicated fallback required',
+          fallbackReason: reason,
         };
       }
 
@@ -200,8 +193,8 @@ export class SupabaseEdgeAIStylistProvider implements IAIStylistProvider {
       return {
         success: true,
         data: validation.sanitized,
-        provider: data.provider || 'supabase-edge',
-        model: data.model || 'gemini-1.5-flash',
+        provider: typeof data.provider === 'string' ? data.provider : 'supabase-edge',
+        model: typeof data.model === 'string' ? data.model : 'unknown',
         analysisMode: 'hybridLLM',
       };
     } catch (err: unknown) {

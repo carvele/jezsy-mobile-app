@@ -36,6 +36,7 @@ import {
 } from '../types/aiStylist';
 import { IAIStylistProvider, defaultAIStylistProvider } from '../services/aiStylistProvider';
 import { getBatchVisualEvidence } from '../services/garmentVisualCache';
+import { aiVerdictIsMoreLenient } from '../../supabase/functions/_shared/aiStylistGuards';
 
 export type OverallAssessment =
   | 'Appropriate for this occasion'
@@ -346,13 +347,16 @@ export function computeOutfitHash(
   const tokens = items
     .map((item) => {
       const w = wardrobeLookup?.[item.wardrobe_item_id];
+      const ai = ((w as any)?.ai_attributes ?? {}) as Record<string, unknown>;
+      const str = (v: unknown) => (typeof v === 'string' ? v : '');
       const name = (item.name || (w as any)?.name || w?.sub_category || '').toLowerCase();
       const type = (item.garment_type || w?.category || '').toLowerCase();
       const desc = (w?.description || '').toLowerCase();
-      const whereWorn = ((w as any)?.where_worn_often || '').toLowerCase();
-      const color = (((w as any)?.color || (w?.color_tags || []).join(',')) as string).toLowerCase();
-      const updated = (w as any)?.updated_at || '';
-      return `${item.wardrobe_item_id || item.id}:${type}:${name}:${color}:${desc}:${whereWorn}:${updated}`;
+      // Where-worn and raw colour live in ai_attributes (there are no such columns), occasions mirrors where-worn.
+      const whereWorn = (str(ai.whereWornOften) || (w?.occasions || []).join(',')).toLowerCase();
+      const color = (str(ai.rawColor) || (w?.color_tags || []).join(',')).toLowerCase();
+      const notes = (w?.user_notes || '').toLowerCase();
+      return `${item.wardrobe_item_id || item.id}:${type}:${name}:${color}:${desc}:${whereWorn}:${notes}`;
     })
     .sort()
     .join('|');
@@ -1738,7 +1742,6 @@ export function gradeOutfit(
   const outfitHash = computeOutfitHash(items, wardrobeLookup);
   const wardrobeItemIds = (items || []).map((i) => i.wardrobe_item_id).filter(Boolean);
   const analysisMode = 'ruleBasedEvidence' as const;
-  const cacheStatus = 'fresh' as const;
 
   const contextInterpretation = interpretOutfitContext(context);
   const { rawOccasion, rawAdditionalContext, activity, occasionType, timeOfDay, weather, isIndoorOverride } =
@@ -1755,7 +1758,6 @@ export function gradeOutfit(
       contextHash,
       outfitHash,
       wardrobeItemIds: [],
-      cacheStatus,
       assessment: 'Incomplete outfit',
       headline: 'Mannequin is Empty',
       verdict: "Add at least one garment to the mannequin, then check your outfit to get JeZsy's evaluation.",
@@ -2498,7 +2500,6 @@ export function gradeOutfit(
     contextHash,
     outfitHash,
     wardrobeItemIds,
-    cacheStatus,
     aiProvider: 'deterministic-local',
     aiModel: 'evidence-engine-v3',
     evidenceCount: contradictions.length + items.length,
@@ -2771,9 +2772,8 @@ export function synthesizeHybridCritique(
     contextHash: computeContextHash(context),
     outfitHash: computeOutfitHash(items, wardrobeLookup),
     wardrobeItemIds: (items || []).map((i) => i.wardrobe_item_id).filter(Boolean),
-    cacheStatus: 'fresh',
     aiProvider: providerName || 'supabase-edge',
-    aiModel: modelName || 'gemini-1.5-flash',
+    aiModel: modelName || 'unknown',
     evidenceCount: (packet.contradictions?.length || 0) + (packet.outfit?.items?.length || 0),
     contextFit: aiResponse.contextFit,
     personalization: aiResponse.personalization,
@@ -2836,6 +2836,11 @@ export async function gradeOutfitWithAI(
   const packet = await buildStylistEvidencePacketWithVisual(items, wardrobeLookup, context, profile);
   const activeProvider = provider || defaultAIStylistProvider;
 
+  // The deterministic critique is computed once and stays authoritative: it is the fallback, and it is the
+  // floor the model's verdict is checked against.
+  const deterministic = gradeOutfit(items, wardrobeLookup, context, profile);
+  const evidenceCount = (packet.contradictions?.length || 0) + (packet.outfit?.items?.length || 0);
+
   let result;
   try {
     result = await activeProvider.analyze(packet, wardrobeLookup);
@@ -2844,6 +2849,15 @@ export async function gradeOutfitWithAI(
       success: false,
       analysisMode: 'ruleBasedFallback' as const,
       fallbackReason: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  if (result.success && result.data && aiVerdictIsMoreLenient(result.data.assessment, deterministic.assessment)) {
+    // A model may sharpen the verdict but never soften a contradiction the evidence engine found.
+    result = {
+      success: false,
+      analysisMode: 'ruleBasedFallback' as const,
+      fallbackReason: 'AI verdict was more lenient than the deterministic evidence',
     };
   }
 
@@ -2860,21 +2874,20 @@ export async function gradeOutfitWithAI(
   }
 
   // Fallback to grounded deterministic evidence engine
-  const fallbackCritique = gradeOutfit(items, wardrobeLookup, context, profile);
   return {
-    ...fallbackCritique,
+    ...deterministic,
     analysisMode: 'ruleBasedFallback',
     aiProvider: 'deterministic-local',
     aiModel: 'evidence-engine-v3',
-    evidenceCount: (packet.contradictions?.length || 0) + (packet.outfit?.items?.length || 0),
+    evidenceCount,
     fallbackReason: result.fallbackReason || 'AI provider unavailable',
   };
 }
 
 /**
  * Builds the evidence packet and then enriches each item with visual analysis
- * from the shared garmentVisualCache.  The cache key includes the image URL and
- * the item's updated_at timestamp so stale analysis is never reused.
+ * from the shared garmentVisualCache.  The cache key includes the image URL, so a
+ * replaced image is never served a stale analysis.
  *
  * Visual evidence is ONE input among many.  It never overwrites user-entered data.
  * If analysis fails for any item the packet is returned without that item's visual
@@ -2893,9 +2906,8 @@ export async function buildStylistEvidencePacketWithVisual(
   const batchInputs = (items || []).flatMap((canvasItem) => {
     const imageUrl = canvasItem.image_url;
     if (!imageUrl) return [];
-    const w = wardrobeLookup?.[canvasItem.wardrobe_item_id];
-    const versionToken = (w as any)?.updated_at || canvasItem.wardrobe_item_id;
-    return [{ imageUrl, versionToken }];
+    // wardrobe_items has no updated_at; the analysis depends only on the image, which is already in the cache key.
+    return [{ imageUrl, versionToken: canvasItem.wardrobe_item_id }];
   });
 
   if (batchInputs.length === 0) return packet;
@@ -2903,10 +2915,15 @@ export async function buildStylistEvidencePacketWithVisual(
   // Visual analysis runs concurrently with an 8s overall timeout
   const visualMap = await (async () => {
     try {
-      const timeout = new Promise<Map<string, VisualItemEvidence>>((resolve) =>
-        setTimeout(() => resolve(new Map()), 8000)
-      );
-      return await Promise.race([getBatchVisualEvidence(batchInputs), timeout]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<Map<string, VisualItemEvidence>>((resolve) => {
+        timer = setTimeout(() => resolve(new Map()), 8000);
+      });
+      try {
+        return await Promise.race([getBatchVisualEvidence(batchInputs), timeout]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
     } catch {
       return new Map<string, VisualItemEvidence>();
     }

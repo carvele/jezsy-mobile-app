@@ -154,7 +154,7 @@ export function StylistCritiqueModal({
                   Provider: {critique.aiProvider || 'none'} | Model: {critique.aiModel || 'none'}
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.secondaryText }}>
-                  Cache: {critique.cacheStatus || 'fresh'} | Evidence Count: {critique.evidenceCount || 0}
+                  Evidence Count: {critique.evidenceCount || 0}
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.secondaryText }}>
                   Context Hash: {critique.contextHash} | Outfit Hash: {critique.outfitHash}

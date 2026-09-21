@@ -1,386 +1,46 @@
-import { corsHeaders, handleCors } from '../_shared/cors.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createHandler } from './handler.ts';
 
-const jsonResponse = (req: Request, body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
+// Deploy note: gateway JWT verification stays off so browser CORS preflights (which carry no token) reach
+// the handler. The handler itself rejects every request without a valid, non-anonymous Supabase user.
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+const userClient = (token: string) =>
+  createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 
-// Free-tier LLM providers can stall far longer than a user will wait; bail out before the
-// platform's own resource-limit kill so we can at least return a clean fallback response
-// instead of a hard crash. Kept comfortably under the client's own 140s hard cutoff
-// (src/services/aiStylistProvider.ts) and under the ~150s WORKER_RESOURCE_LIMIT kill
-// observed twice in testing, so a response that does complete in time can still reach the
-// client before it gives up.
-const LLM_TIMEOUT_MS = 130_000;
+Deno.serve(
+  createHandler({
+    env: (key) => Deno.env.get(key),
 
-class LlmTimeoutError extends Error {
-  constructor() {
-    super('LLM request exceeded timeout');
-    this.name = 'LlmTimeoutError';
-  }
-}
+    authenticate: async (token) => {
+      const { data, error } = await userClient(token).auth.getUser(token);
+      return error || !data?.user?.id ? null : { id: data.user.id };
+    },
 
-// AbortController.abort() alone does not reliably cut off a slow provider response in
-// this runtime, so race the fetch against an independent timer: whichever settles first
-// wins, guaranteeing the client gets a response within timeoutMs regardless of whether
-// the underlying request actually cancels.
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const abortTimer = setTimeout(() => controller.abort(), timeoutMs);
-  let raceTimer: ReturnType<typeof setTimeout>;
-  const timeoutPromise = new Promise<Response>((_, reject) => {
-    raceTimer = setTimeout(() => reject(new LlmTimeoutError()), timeoutMs);
-  });
-  try {
-    return await Promise.race([fetch(url, { ...init, signal: controller.signal }), timeoutPromise]);
-  } finally {
-    clearTimeout(abortTimer);
-    clearTimeout(raceTimer!);
-  }
-}
-
-interface VisualItemEvidence {
-  visualGarmentFamily: string;
-  formalitySignal: number;
-  athleticSignal: boolean;
-  swimwearSignal: boolean;
-  visualPattern: string | null;
-  dominantColors: Array<{ name: string; hex: string; role: string; confidence: number }>;
-  isRealMl: boolean;
-  modelName: string;
-  confidence: number;
-  lowConfidence: boolean;
-}
-
-interface StylistEvidencePacket {
-  request: {
-    analysisId: string;
-    rawContext: string;
-    structuredContext: Record<string, unknown>;
-    generatedAt: string;
-  };
-  outfit: {
-    items: Array<{
-      wardrobeItemId: string;
-      category: string;
-      subCategory: string;
-      description?: string;
-      personalUsage?: string;
-      color?: string;
-      colorTags?: string[];
-      thermalLevel?: string;
-      functionalRole?: string;
-      styleSignals?: Record<string, boolean>;
-      visualEvidence?: VisualItemEvidence;
-    }>;
-  };
-  structure: {
-    completeness: string;
-    hasTop: boolean;
-    hasBottom: boolean;
-    hasOnePiece: boolean;
-    hasOuterwear: boolean;
-    hasShoes: boolean;
-    isOvercrowded: boolean;
-    structuralNotes?: string;
-  };
-  requirements: Record<string, unknown>;
-  contradictions: Array<{
-    dimension: string;
-    severity: string;
-    message: string;
-    garmentId?: string;
-  }>;
-  personalization: Array<{
-    garmentId: string;
-    description?: string;
-    activities?: string[];
-  }>;
-  visualEvidence?: {
-    paletteColors: string[];
-    dominantColors?: Array<{ name: string; hex: string }>;
-    itemEvidence?: Record<string, VisualItemEvidence>;
-    colorHarmonyNote?: string;
-    overallFormalitySignal?: number;
-    visualAnalysisMode?: string;
-  };
-}
-
-const SYSTEM_PROMPT = `You are JeZsy's expert AI fashion stylist.
-You evaluate outfits based on grounded evidence, actual garment properties, and the user's specific context.
-
-STRICT OPERATING RULES:
-1. REASON OVER EVIDENCE: You are provided with a structured evidence packet containing the user's active garments, descriptions, usage habits, and detected contradictions. Use this evidence directly.
-2. NO HALLUCINATION: Never invent garments, materials, brands, weather conditions, or wardrobe items not present in the packet.
-3. CONTEXT FIRST: The current user context dictates which garment relationships matter. A piece that is great for running may conflict heavily with a formal dinner or a pool swim.
-4. HONEST CONTRADICTIONS: When severe or major contradictions exist between the outfit and the occasion, weather, or activity, state them directly as the primary issue before addressing minor aesthetic points.
-5. NO GENERIC FILLER: Never use meaningless boilerplate like "comfortable separates suited for", "relaxed and wearable", or "effortlessly styled" unless directly supported by evidence.
-6. DISTINCT SECTIONS:
-   - "whyJezsySaysThis": The primary causal explanation for the verdict.
-   - "whatWorks": Only genuine positive evidence and functional/aesthetic benefits.
-   - "whatConflicts": Specific clashes, thermal/activity mismatches, or formality conflicts.
-   - "stylistTake": Concise, professional, nuanced synthesis.
-   Do not repeat the exact same sentences across these sections.
-7. ACTIONABLE RECOMMENDATIONS: When suggesting alternative pieces, reference real items or state that none exist in the user's wardrobe.
-8. RETURN PURE JSON: Return ONLY a valid JSON object matching the requested schema.`;
-
-function buildVisualEvidenceSummary(packet: StylistEvidencePacket): string {
-  const ve = packet.visualEvidence;
-  if (!ve || ((!ve.dominantColors || ve.dominantColors.length === 0) && !ve.colorHarmonyNote)) {
-    return 'Visual analysis: unavailable. Rely on user-entered colour data and semantic classification.';
-  }
-
-  const lines: string[] = [];
-  lines.push(`Visual analysis mode: ${ve.visualAnalysisMode ?? 'fallback'}`);
-
-  if (ve.dominantColors && ve.dominantColors.length > 0) {
-    lines.push(`Outfit-level dominant colours from image pixels: ${ve.dominantColors.map((c) => c.name).join(', ')}`);
-  }
-
-  if (ve.colorHarmonyNote) {
-    lines.push(ve.colorHarmonyNote);
-  }
-
-  if (typeof ve.overallFormalitySignal === 'number') {
-    const f = ve.overallFormalitySignal;
-    const fLabel = f >= 0.75 ? 'formal' : f >= 0.50 ? 'semi-formal' : f >= 0.30 ? 'casual' : 'very casual';
-    lines.push(`Visual formality signal: ${f.toFixed(2)} (${fLabel})`);
-  }
-
-  // Per-item visual details
-  const itemLines: string[] = [];
-  for (const item of packet.outfit.items) {
-    const ev = item.visualEvidence;
-    if (!ev || ev.lowConfidence) continue;
-    const colorStr = ev.dominantColors
-      .filter((c) => c.role === 'dominant' || c.role === 'secondary')
-      .map((c) => c.name)
-      .join(', ');
-    const signals = [
-      ev.athleticSignal ? 'athletic visual cues' : null,
-      ev.swimwearSignal ? 'swimwear visual cues' : null,
-      ev.visualPattern ? `${ev.visualPattern.toLowerCase()} pattern` : null,
-    ].filter(Boolean).join(', ');
-    const line = [
-      `Item ${item.wardrobeItemId} (${item.category}/${item.subCategory}):`,
-      colorStr ? `image colours: ${colorStr}` : null,
-      signals ? signals : null,
-      ev.isRealMl ? null : '(geometric fallback)',
-    ].filter(Boolean).join(' ');
-    if (line) itemLines.push(line);
-  }
-  if (itemLines.length > 0) {
-    lines.push('Per-item visual observations:');
-    lines.push(...itemLines);
-  }
-
-  lines.push(
-    'IMPORTANT: These are observations from image pixel analysis. User-entered Category, Sub Category, and Color data remain authoritative. Visual evidence supplements but never overwrites user facts.'
-  );
-
-  return lines.join('\n');
-}
-
-Deno.serve(async (req) => {
-  const preflight = handleCors(req);
-  if (preflight) return preflight;
-
-
-  if (req.method !== 'POST') {
-    return jsonResponse(req, { error: 'Method not allowed' }, 405);
-  }
-
-  let packet: StylistEvidencePacket;
-  try {
-    packet = await req.json();
-  } catch {
-    return jsonResponse(req, { error: 'Invalid JSON payload' }, 400);
-  }
-
-  if (!packet || !packet.request || !packet.outfit) {
-    return jsonResponse(req, { error: 'Missing required evidence packet fields' }, 400);
-  }
-
-  // The packet should be a compact structured summary (a few KB at most). Guard against
-  // an oversized payload (e.g. a stray embedded image) blowing up the LLM prompt into
-  // hundreds of thousands of tokens, which stalls or errors out the request.
-  const MAX_PACKET_CHARS = 20_000;
-  const packetSize = JSON.stringify(packet).length;
-  if (packetSize > MAX_PACKET_CHARS) {
-    console.error('[ai-stylist-analyze] Evidence packet too large:', packetSize, 'chars');
-    return jsonResponse(req, {
-      success: false,
-      fallbackRequired: true,
-      reason: 'PACKET_TOO_LARGE',
-    });
-  }
-
-  // Check for server-side configured AI keys
-  const geminiApiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('AI_STYLING_API_KEY');
-  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-  const openrouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
-
-  if (!geminiApiKey && !openaiApiKey && !openrouterApiKey) {
-    return jsonResponse(req, {
-      success: false,
-      fallbackRequired: true,
-      reason: 'NO_SERVER_LLM_KEY_CONFIGURED',
-      message: 'No server-side AI provider key configured. Use deterministic evidence fallback.',
-    });
-  }
-
-  const promptContent = `EVIDENCE PACKET:
-${JSON.stringify(packet, null, 2)}
-
-VISUAL FASHION EVIDENCE:
-${buildVisualEvidenceSummary(packet)}
-
-Produce a structured JSON critique with this exact schema:
-{
-  "assessment": "Appropriate for this occasion" | "Could work with changes" | "Not appropriate for this occasion" | "Incomplete outfit",
-  "headline": "Short punchy headline (e.g. 'Thermal Mismatch for Cold Night')",
-  "contextFit": {
-    "occasion": "Evaluation against occasion",
-    "activity": "Evaluation against activity",
-    "weather": "Evaluation against weather/temperature",
-    "thermal": "Evaluation of thermal balance",
-    "social": "Evaluation of social appropriateness",
-    "practicality": "Practical considerations"
-  },
-  "whyJezsySaysThis": "Clear causal explanation referencing specific garments and context",
-  "whatWorks": ["Positive factor 1", "Positive factor 2"],
-  "whatConflicts": ["Specific conflict 1", "Specific conflict 2"],
-  "personalization": "Observation referencing user wear habits or descriptions if present",
-  "stylistTake": "One cohesive, professional stylist summary",
-  "improvements": [
-    {
-      "reason": "Why this change helps",
-      "existingWardrobeItemIds": []
-    }
-  ],
-  "missing": ["Any missing foundational layer or footwear"]
-}`;
-
-  try {
-    let resultJson: string | null = null;
-    let providerName = 'unknown';
-    let modelName = 'unknown';
-
-    if (geminiApiKey) {
-      providerName = 'gemini';
-      modelName = 'gemini-1.5-flash';
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
-      const response = await fetchWithTimeout(
-        endpoint,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: `${SYSTEM_PROMPT}\n\n${promptContent}` }],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.2,
-              responseMimeType: 'application/json',
-            },
-          }),
-        },
-        LLM_TIMEOUT_MS
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('[ai-stylist-analyze] Gemini API error:', response.status, errText);
-        return jsonResponse(req, {
-          success: false,
-          fallbackRequired: true,
-          reason: 'GEMINI_API_ERROR',
-          status: response.status,
-        });
-      }
-
-      const data = await response.json();
-      resultJson = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-    } else if (openaiApiKey || openrouterApiKey) {
-      providerName = openaiApiKey ? 'openai' : 'openrouter';
-      modelName = openaiApiKey ? 'gpt-4o-mini' : 'deepseek/deepseek-v4-flash-0731:free';
-      const endpoint = openaiApiKey
-        ? 'https://api.openai.com/v1/chat/completions'
-        : 'https://openrouter.ai/api/v1/chat/completions';
-      const key = openaiApiKey || openrouterApiKey;
-
-      const response = await fetchWithTimeout(
-        endpoint,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${key}`,
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: promptContent },
-            ],
-            temperature: 0.2,
-            response_format: { type: 'json_object' },
-          }),
-        },
-        LLM_TIMEOUT_MS
-      );
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('[ai-stylist-analyze] LLM API error:', response.status, errText);
-        return jsonResponse(req, {
-          success: false,
-          fallbackRequired: true,
-          reason: 'LLM_API_ERROR',
-          status: response.status,
-        });
-      }
-
-      const data = await response.json();
-      resultJson = data?.choices?.[0]?.message?.content ?? null;
-    }
-
-    if (!resultJson) {
-      return jsonResponse(req, {
-        success: false,
-        fallbackRequired: true,
-        reason: 'EMPTY_LLM_RESPONSE',
+    checkRateLimit: async (key, maxRequests, windowSeconds) => {
+      if (!supabaseUrl || !serviceKey) return null;
+      const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+      const { data, error } = await admin.rpc('check_rate_limit', {
+        p_key: key,
+        p_max_requests: maxRequests,
+        p_window_seconds: windowSeconds,
       });
-    }
+      return error || typeof data !== 'boolean' ? null : data;
+    },
 
-    const parsed = JSON.parse(resultJson);
-    return jsonResponse(req, {
-      success: true,
-      data: parsed,
-      provider: providerName,
-      model: modelName,
-      analysisId: packet.request.analysisId,
-    });
-  } catch (err: unknown) {
-    if (err instanceof Error && (err.name === 'AbortError' || err.name === 'LlmTimeoutError')) {
-      console.error('[ai-stylist-analyze] LLM request timed out after', LLM_TIMEOUT_MS, 'ms');
-      return jsonResponse(req, {
-        success: false,
-        fallbackRequired: true,
-        reason: 'LLM_TIMEOUT',
-      });
-    }
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error('[ai-stylist-analyze] Unexpected server error:', errorMsg);
-    return jsonResponse(req, {
-      success: false,
-      fallbackRequired: true,
-      reason: 'SERVER_EXCEPTION',
-      error: errorMsg,
-    });
-  }
-});
+    findOwnedItemIds: async (token, ids) => {
+      if (ids.length === 0) return new Set<string>();
+      const { data, error } = await userClient(token).from('wardrobe_items').select('id').in('id', ids);
+      return error || !data ? null : new Set<string>(data.map((row: { id: string }) => row.id));
+    },
+
+    fetchImpl: fetch,
+    log: (message, detail) => console.error('[ai-stylist-analyze]', message, detail ?? ''),
+  })
+);

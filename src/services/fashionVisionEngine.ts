@@ -287,7 +287,8 @@ class FashionVisionEngineImpl implements IFashionVisionEngine {
         const bestTypeMatch = typeCandidates.find((c) => c.label === typeResults[0]?.label) || typeCandidates[0];
         const detectedType = bestTypeMatch.type;
         const detectedCategory = bestTypeMatch.category;
-        const confidence = Math.round((typeResults[0]?.score || 0.85) * 100) / 100;
+        // A missing score is unknown, not confident: 0 flags the result for review instead of trusting it.
+        const confidence = Math.round((typeResults[0]?.score ?? 0) * 100) / 100;
 
         // Specialized Subcategory Inference based on predicted Garment Type
         let subcategoryLabels: string[] = [];
@@ -366,13 +367,8 @@ class FashionVisionEngineImpl implements IFashionVisionEngine {
           occasions.push('Athletic', 'Travel');
         }
 
-        // Palette fallback if canvas pixel extraction was unavailable
-        const finalColors: ColorDetailItem[] = extractedColors && extractedColors.length > 0
-          ? extractedColors
-          : [
-              { name: 'Black', hex: '#111827', role: 'dominant', confidence: 0.85 },
-              { name: 'White', hex: '#F9FAFB', role: 'secondary', confidence: 0.70 }
-            ];
+        // If pixel extraction was unavailable the colours are unknown; never substitute a guessed palette.
+        const finalColors: ColorDetailItem[] = extractedColors && extractedColors.length > 0 ? extractedColors : [];
 
         // Construct 512-dim normalized synthetic embedding representation from softmax outputs
         const embedding = new Array(32).fill(0).map((_, idx) => {
@@ -493,16 +489,8 @@ class FashionVisionEngineImpl implements IFashionVisionEngine {
       };
     }
 
-    const fallbackColors: ColorDetailItem[] = extractedColors && extractedColors.length > 0
-      ? extractedColors
-      : isShoe
-      ? [
-          { name: 'Black', hex: '#212121', role: 'dominant', confidence: 0.85 },
-          { name: 'Charcoal', hex: '#374151', role: 'secondary', confidence: 0.75 },
-        ]
-      : [
-          { name: 'Black', hex: '#111827', role: 'dominant', confidence: 0.70 },
-        ];
+    // Unknown colours stay unknown: a guessed black would be read downstream as an observation.
+    const fallbackColors: ColorDetailItem[] = extractedColors && extractedColors.length > 0 ? extractedColors : [];
 
     const fallbackDesc = generateGarmentDescription({
       garmentType: fallbackType,

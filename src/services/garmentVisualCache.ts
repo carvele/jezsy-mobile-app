@@ -2,8 +2,7 @@
  * garmentVisualCache.ts
  * Lightweight in-memory cache for per-item visual evidence.
  *
- * Cache key = imageUrl + updated_at so stale analysis is never reused when
- * the image or item metadata changes.  Both Mannequin and Style Advisor share
+ * Cache key = imageUrl + version token, so a replaced image never reuses a stale analysis.  Both Mannequin and Style Advisor share
  * the same cache instance so a given item is analysed at most once per session.
  */
 

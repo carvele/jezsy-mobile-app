@@ -344,16 +344,19 @@ describe('Phase 4 — Visual Fashion Intelligence', () => {
     expect(evA?.formalitySignal).not.toBe(evB?.formalitySignal);
   });
 
-  // 15. Stale outfit analysis prevention: different outfits get different hashes
-  test('15. outfit hash changes when wardrobe item updated_at changes', () => {
-    const item1 = makeWardrobeItem({ id: 'h1', updated_at: '2026-01-01T00:00:00Z' });
-    const item2 = makeWardrobeItem({ id: 'h1', updated_at: '2026-06-01T00:00:00Z' });
-    const c1 = makeCanvasItem(item1);
-    const c2 = makeCanvasItem(item2);
+  // 15. Outfit hash follows the fields a user can actually edit (wardrobe_items has no updated_at column)
+  test('15. outfit hash changes when the user edits where-worn, description or notes', () => {
+    const base = makeWardrobeItem({ id: 'h1', ai_attributes: { whereWornOften: 'Office' } });
+    const worn = makeWardrobeItem({ id: 'h1', ai_attributes: { whereWornOften: 'Running' } });
+    const described = makeWardrobeItem({ id: 'h1', ai_attributes: { whereWornOften: 'Office' }, description: 'Now with a stain' });
+    const noted = makeWardrobeItem({ id: 'h1', ai_attributes: { whereWornOften: 'Office' }, user_notes: 'Too tight' });
+    const hashOf = (w: any) => computeOutfitHash([makeCanvasItem(w)], { [w.id]: w });
 
-    const hash1 = computeOutfitHash([c1], { [item1.id]: item1 });
-    const hash2 = computeOutfitHash([c2], { [item2.id]: item2 });
-    expect(hash1).not.toBe(hash2);
+    const baseHash = hashOf(base);
+    expect(hashOf(worn)).not.toBe(baseHash);
+    expect(hashOf(described)).not.toBe(baseHash);
+    expect(hashOf(noted)).not.toBe(baseHash);
+    expect(hashOf(base)).toBe(baseHash);
   });
 
   // 16. Generated outfits contain only owned items
