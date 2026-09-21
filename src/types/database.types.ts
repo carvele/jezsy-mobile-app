@@ -3527,32 +3527,19 @@ export type Database = {
             }
             Returns: Json
           }
-      create_reservation_multi_idempotent:
-        | {
-            Args: {
-              _appointment_time?: string
-              _customer_id?: string
-              _date?: string
-              _idempotency_key: string
-              _items: Json
-              _payment_option?: string
-              _pickup_terms_version?: string
-              _receipt_path?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              _appointment_time: string
-              _customer_id?: string
-              _date: string
-              _idempotency_key: string
-              _items: Json
-              _payment_option?: string
-              _receipt_path?: string
-            }
-            Returns: Json
-          }
+      create_reservation_multi_idempotent: {
+        Args: {
+          _appointment_time?: string
+          _customer_id?: string
+          _date?: string
+          _idempotency_key: string
+          _items: Json
+          _payment_option?: string
+          _pickup_terms_version?: string
+          _receipt_path?: string
+        }
+        Returns: Json
+      }
       create_step_up_receipt: {
         Args: {
           p_action_class: string
