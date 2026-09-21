@@ -131,6 +131,8 @@ export function MannequinSilhouette({ opacity = 1, mode = 'default', bodyParams 
   return (
     <Svg
       viewBox="0 0 300 480"
+      width="100%"
+      height="100%"
       style={StyleSheet.absoluteFill}
       preserveAspectRatio="xMidYMid meet"
     >
