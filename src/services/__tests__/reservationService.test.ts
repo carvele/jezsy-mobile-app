@@ -1,4 +1,4 @@
-import { reservationService } from '../reservationService';
+import { reservationService, getMyUnratedItems } from '../reservationService';
 import { supabase } from '@/src/lib/supabase';
 import { errorReporting } from '../observability';
 
@@ -119,6 +119,105 @@ describe('reservationService', () => {
         expect(result.error.code).toBe('ERR_INVALID_PAYMENT_OPTION');
       }
       expect(captureSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('getMyUnratedItems', () => {
+    it('returns unrated items sorted with the latest order on top', async () => {
+      const mockItemsData = [
+        {
+          id: 'item-old',
+          reservation_id: 'res-old',
+          product_id: 'prod-old',
+          product_name: 'Old Dress',
+          image_url: 'https://example.com/old.jpg',
+          size: 'M',
+          color: 'Red',
+          created_at: '2026-09-01T10:00:00Z',
+          reservations: {
+            display_id: 'RES-001',
+            date: '2026-09-01',
+            created_at: '2026-09-01T10:00:00Z',
+            completed_at: '2026-09-02T12:00:00Z',
+            customer_id: 'user-1',
+            status: 'completed',
+            deleted: false,
+          },
+        },
+        {
+          id: 'item-new',
+          reservation_id: 'res-new',
+          product_id: 'prod-new',
+          product_name: 'New Gown',
+          image_url: 'https://example.com/new.jpg',
+          size: 'L',
+          color: 'Blue',
+          created_at: '2026-09-20T15:00:00Z',
+          reservations: {
+            display_id: 'RES-002',
+            date: '2026-09-20',
+            created_at: '2026-09-20T15:00:00Z',
+            completed_at: '2026-09-21T09:00:00Z',
+            customer_id: 'user-1',
+            status: 'completed',
+            deleted: false,
+          },
+        },
+        {
+          id: 'item-reviewed',
+          reservation_id: 'res-rev',
+          product_id: 'prod-rev',
+          product_name: 'Reviewed Item',
+          image_url: null,
+          size: 'S',
+          color: 'Black',
+          created_at: '2026-09-21T11:00:00Z',
+          reservations: {
+            display_id: 'RES-003',
+            date: '2026-09-21',
+            created_at: '2026-09-21T11:00:00Z',
+            completed_at: '2026-09-21T11:30:00Z',
+            customer_id: 'user-1',
+            status: 'completed',
+            deleted: false,
+          },
+        },
+      ];
+
+      (supabase.from as jest.Mock).mockImplementation((table: string) => {
+        if (table === 'reservation_items') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                in: jest.fn().mockReturnValue({
+                  eq: jest.fn().mockResolvedValue({ data: mockItemsData, error: null }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'reviews') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({
+                data: [{ reservation_item_id: 'item-reviewed', product_id: 'prod-rev' }],
+                error: null,
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const unrated = await getMyUnratedItems('user-1');
+
+      expect(unrated).toHaveLength(2);
+      // Newest order completed_at (2026-09-21T09:00:00Z) should be first
+      expect(unrated[0].reservationItemId).toBe('item-new');
+      expect(unrated[0].displayId).toBe('RES-002');
+      // Older order completed_at (2026-09-02T12:00:00Z) should be second
+      expect(unrated[1].reservationItemId).toBe('item-old');
+      expect(unrated[1].displayId).toBe('RES-001');
     });
   });
 });

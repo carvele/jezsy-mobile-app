@@ -3,6 +3,7 @@ import {
   getUnreadNonChatNotificationsCount,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  deleteNotification,
 } from '@/src/services/notificationService';
 import { supabase } from '@/src/lib/supabase';
 
@@ -137,6 +138,33 @@ describe('notificationService', () => {
       expect(mockEqUser).toHaveBeenCalledWith('user_id', 'user-1');
       expect(mockEqRead).toHaveBeenCalledWith('is_read', false);
       expect(mockNot).toHaveBeenCalledWith('type', 'in', '(conversation,direct_chat)');
+    });
+  });
+
+  describe('deleteNotification', () => {
+    it('deletes specific notification for the user', async () => {
+      const mockEqUser = jest.fn().mockResolvedValue({ error: null });
+      const mockEqId = jest.fn().mockReturnValue({ eq: mockEqUser });
+      const mockDelete = jest.fn().mockReturnValue({ eq: mockEqId });
+
+      (supabase.from as jest.Mock).mockReturnValue({ delete: mockDelete });
+
+      await deleteNotification('user-1', 'notif-1');
+
+      expect(supabase.from).toHaveBeenCalledWith('notifications');
+      expect(mockDelete).toHaveBeenCalled();
+      expect(mockEqId).toHaveBeenCalledWith('id', 'notif-1');
+      expect(mockEqUser).toHaveBeenCalledWith('user_id', 'user-1');
+    });
+
+    it('throws error when supabase delete returns an error', async () => {
+      const mockEqUser = jest.fn().mockResolvedValue({ error: new Error('Delete error') });
+      const mockEqId = jest.fn().mockReturnValue({ eq: mockEqUser });
+      const mockDelete = jest.fn().mockReturnValue({ eq: mockEqId });
+
+      (supabase.from as jest.Mock).mockReturnValue({ delete: mockDelete });
+
+      await expect(deleteNotification('user-1', 'notif-1')).rejects.toThrow('Delete error');
     });
   });
 });
