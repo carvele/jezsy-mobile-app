@@ -785,6 +785,26 @@ describe('aiStylistAdvisor - Critical Context & Garment Compatibility Engine', (
     expect(profile.styleSignals.athletic).toBe(true);
   });
 
+  test('confirmed detector details become stylist evidence without overwriting user fields', () => {
+    const item = mockItem('detected_1', 'Top', 'Shirt', {
+      category: 'Top',
+      sub_category: 'Shirt',
+      color: 'blue',
+    });
+    item.wardrobeItem.ai_attributes = {
+      material: 'linen',
+      fit: 'relaxed',
+      sleeveType: 'long',
+      neckline: 'collared',
+    };
+
+    const profile = buildGarmentSemanticProfile(item.canvasItem, item.wardrobeItem);
+    expect(profile.materialSignals).toContain('linen');
+    expect(profile.combinedText).toContain('relaxed');
+    expect(profile.combinedText).toContain('collared');
+    expect(profile.rawUserData.subCategory).toBe('Shirt');
+  });
+
   test('PHASE 33 REGRESSION: Multi-color user entry "Navy Blue, White" preserves both colors', () => {
     const item = mockItem('c_1', 'Top', 'Striped Polo', {
       color: 'Navy Blue, White',
