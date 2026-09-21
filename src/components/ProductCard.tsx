@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6366F1',
   },
   arBadgeText: { ...Type.caption, color: '#FFF', fontWeight: '800' },
-  heart: { position: 'absolute', top: 6, right: 6 },
+  heart: { position: 'absolute', top: 8, right: 8 },
   // Real backdrop blur (expo-blur BlurView), not a flat rgba(0,0,0,0.45)
   // fill: floats over a product photo in every card variant, the one case
   // in this shared component where translucency reveals real content
@@ -257,9 +257,9 @@ const styles = StyleSheet.create({
   // NEW/SALE badges stay opaque on purpose -- they're status/urgency
   // indicators, not chrome, and need maximum legibility, not softening.
   heartBg: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',

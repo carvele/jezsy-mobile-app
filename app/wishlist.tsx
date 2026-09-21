@@ -15,7 +15,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
-import { useGridCardWidth, GRID_COLUMN_GAP } from '@/src/utils/layout';
+import { useGridCardWidth, GRID_COLUMN_GAP, GRID_GUTTER } from '@/src/utils/layout';
 import { ProductCard } from '@/src/components/ProductCard';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
@@ -125,7 +125,7 @@ export default function WishlistScreen() {
       </View>
 
       {loading && !refreshing && items.length === 0 ? (
-        <View style={{ paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: GRID_COLUMN_GAP }}>
+        <View style={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: GRID_COLUMN_GAP }}>
           <SkeletonList count={6}>
             <ProductCardSkeleton width={typeof cardWidth === 'number' ? cardWidth : 160} />
           </SkeletonList>
@@ -194,10 +194,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: GRID_GUTTER,
     paddingVertical: Spacing.md,
   },
-  backBtn: { padding: Spacing.sm },
+  backBtn: { padding: Spacing.sm, marginLeft: -Spacing.sm },
   headerTitle: { ...Type.subtitle },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xxxl, gap: Spacing.md },
   emptyTitle: { ...Type.title, marginTop: Spacing.sm },
@@ -209,8 +209,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   browseBtnText: { fontWeight: '800', fontSize: 15 },
-  list: { paddingHorizontal: Spacing.lg, paddingBottom: 100 },
-  row: { marginBottom: Spacing.lg },
+  list: { paddingHorizontal: GRID_GUTTER, paddingBottom: 100 },
+  row: { marginBottom: 0 },
   countText: { ...Type.caption, marginBottom: Spacing.md, marginTop: Spacing.xs },
   card: {
     borderRadius: 14,
