@@ -60,7 +60,7 @@ export function ProductCard({
     ? 'Out of stock'
     : lowStock
     ? `Only ${stock} left`
-    : 'Pickup available';
+    : `${stock} in stock`;
 
   const restockDateStr = outOfStock && (product as any).restock_date
     ? `Restock Expected: ${new Date((product as any).restock_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
@@ -176,7 +176,7 @@ export function ProductCard({
           <Text style={[styles.category, { color: colors.secondaryText }]} numberOfLines={1}>
             {getCategoryLabel(product, 'COLLECTION').toUpperCase()}
           </Text>
-          <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
             {product.name}
           </Text>
 
@@ -266,11 +266,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  info: { paddingTop: Spacing.md, paddingHorizontal: Spacing.xs, gap: Spacing.xs },
+  info: { paddingTop: Spacing.sm, paddingHorizontal: Spacing.xs, gap: 3 },
   // Sold-out info block is slightly muted so it reads as non-actionable.
   infoMuted: { opacity: 0.7 },
   category: { ...Type.label },
-  name: { ...Type.body, minHeight: Type.body.lineHeight * 2 },
+  name: { ...Type.body },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   price: { ...Type.bodyStrong },
   priceMuted: { opacity: 0.55 },
