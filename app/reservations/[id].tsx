@@ -846,7 +846,33 @@ export default function ReservationDetailScreen() {
         )}
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {reservation.pickup_deadline_at ? (
+          {reservationState === 'completed' ? (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Collection Info</Text>
+              </View>
+              <View style={[styles.infoRow, { marginTop: Spacing.md, alignItems: 'flex-start' }]}>
+                <IconSymbol name="checkmark.circle.fill" size={20} color={colors.tint} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
+                    {reservation.completed_at || reservation.date
+                      ? `Collected on ${formatPHDate(reservation.completed_at || reservation.date, {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}`
+                      : 'Order completed and collected'}
+                  </Text>
+                  <Text style={{ color: colors.secondaryText, fontSize: 13, marginTop: 4 }}>
+                    Thank you for collecting your order!
+                  </Text>
+                </View>
+              </View>
+            </>
+          ) : reservation.pickup_deadline_at ? (
             <>
               <View style={styles.sectionHeaderRow}>
                 <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
@@ -962,9 +988,14 @@ export default function ReservationDetailScreen() {
                       {appointmentTime && <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: appointmentDate ? 2 : 0 }}>{appointmentTime}</Text>}
                     </>
                   ) : (
-                    <Text style={{ color: colors.secondaryText, fontSize: 15 }}>
-                      Collection time will be confirmed by JezSy.
-                    </Text>
+                    <>
+                      <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>
+                        Collect within 3 open days once Ready
+                      </Text>
+                      <Text style={{ color: colors.secondaryText, fontSize: 13, marginTop: 4 }}>
+                        You will receive your pickup pass and deadline as soon as staff finish preparing your order.
+                      </Text>
+                    </>
                   )}
                 </View>
               </View>
