@@ -13,9 +13,16 @@ import { explainOutfit, OutfitExplanation } from './outfitExplainer';
 import { resolveEffectiveGarmentBucket } from './garmentSemanticClassifier';
 import {
   evaluateWardrobeOutfit,
+  interpretOutfitContext,
+  buildGarmentSemanticProfile,
+  buildOccasionRequirements,
+  buildOutfitStructure,
+  detectContradictions,
   OverallAssessment,
   Contradiction,
   StylistCritique,
+  OccasionRequirementProfile,
+  OutfitContext,
 } from './aiStylistAdvisor';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
@@ -38,6 +45,7 @@ export interface GeneratedOutfit {
 export interface GenerateOutfitsOptions {
   limit?: number;
   occasion?: string | null;
+  additionalContext?: string | null;
   profile?: UserStyleProfileDto | null;
   requiredItemId?: string | null; // When styling a specific item
 }
@@ -45,11 +53,55 @@ export interface GenerateOutfitsOptions {
 const PER_SLOT = 8;
 const NEGLECT_DAYS = 60;
 
-function bySlot(items: WardrobeItem[], type: string): WardrobeItem[] {
-  return items
+/** Minimal canvas-item shim so buildGarmentSemanticProfile can work from a bare WardrobeItem. */
+function toCanvasShim(item: WardrobeItem) {
+  return {
+    wardrobe_item_id: item.id,
+    garment_type: item.category || '',
+    name: item.sub_category || item.category || 'Item',
+    image_url: (item as any).photo_url || '',
+    id: item.id,
+  } as any;
+}
+
+/**
+ * Returns slot items sorted neglect-first.
+ * When occasion requirements are provided, items with severe individual
+ * contradictions are placed in a fallback pool and excluded when compatible
+ * candidates exist. This makes candidate selection context-first.
+ */
+function bySlot(
+  items: WardrobeItem[],
+  type: string,
+  reqs?: OccasionRequirementProfile
+): WardrobeItem[] {
+  const slotItems = items
     .filter((i) => resolveEffectiveGarmentBucket(i) === type)
-    .sort((a, b) => neglect(b) - neglect(a))
-    .slice(0, PER_SLOT);
+    .sort((a, b) => neglect(b) - neglect(a));
+
+  if (!reqs || slotItems.length === 0) {
+    return slotItems.slice(0, PER_SLOT);
+  }
+
+  const compatible: WardrobeItem[] = [];
+  const incompatible: WardrobeItem[] = [];
+
+  for (const item of slotItems) {
+    const profile = buildGarmentSemanticProfile(toCanvasShim(item), item);
+    const structure = buildOutfitStructure([profile]);
+    const contradictions = detectContradictions([profile], reqs, structure);
+    const hasSevere = contradictions.some((c) => c.severity === 'severe');
+    if (hasSevere) {
+      incompatible.push(item);
+    } else {
+      compatible.push(item);
+    }
+  }
+
+  // Use only occasion-compatible candidates; fall back to full pool if none qualify
+  // so we never return an empty slot (graceful degradation for sparse wardrobes).
+  const pool = compatible.length >= 1 ? compatible : slotItems;
+  return pool.slice(0, PER_SLOT);
 }
 
 // 0..1, higher means the item has been ignored longer.
@@ -75,7 +127,9 @@ function build(
   const personal = computePersonalAffinity(items, options?.profile, options?.occasion);
 
   // Run the shared deterministic Stylist reasoning engine
-  const context = options?.occasion ? { occasion: options.occasion } : undefined;
+  const context: OutfitContext | undefined = options?.occasion
+    ? { occasion: options.occasion, additionalContext: options.additionalContext ?? undefined }
+    : undefined;
   const critique = evaluateWardrobeOutfit(items, undefined, context, options?.profile);
 
   // 1. Composition Score
@@ -218,11 +272,22 @@ export function generateOutfits(
     }
   }
 
-  const tops = bySlot(eligibleItems, 'Top');
-  const bottoms = bySlot(eligibleItems, 'Bottom');
-  const dresses = bySlot(eligibleItems, 'Dress');
-  const shoes = bySlot(eligibleItems, 'Shoes');
-  const outerwear = bySlot(eligibleItems, 'Outerwear');
+  // Pre-compute occasion requirements once so bySlot() can filter candidates
+  // using the same contradiction engine as the Mannequin Stylist (context-first).
+  let occasionReqs: OccasionRequirementProfile | undefined;
+  if (options.occasion) {
+    const ctxInterp = interpretOutfitContext({
+      occasion: options.occasion,
+      additionalContext: options.additionalContext ?? undefined,
+    });
+    occasionReqs = buildOccasionRequirements(ctxInterp);
+  }
+
+  const tops = bySlot(eligibleItems, 'Top', occasionReqs);
+  const bottoms = bySlot(eligibleItems, 'Bottom', occasionReqs);
+  const dresses = bySlot(eligibleItems, 'Dress', occasionReqs);
+  const shoes = bySlot(eligibleItems, 'Shoes', occasionReqs);
+  const outerwear = bySlot(eligibleItems, 'Outerwear', occasionReqs);
 
   const bases: WardrobeItem[][] = [];
   for (const d of dresses) bases.push([d]);
