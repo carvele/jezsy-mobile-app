@@ -242,6 +242,7 @@ export type Database = {
           expires_at: string | null
           id: string
           placement: string
+          storefront_eyebrow: string | null
           storefront_image_storage_path: string | null
           storefront_image_url: string | null
           storefront_impressions: number
@@ -264,6 +265,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           placement?: string
+          storefront_eyebrow?: string | null
           storefront_image_storage_path?: string | null
           storefront_image_url?: string | null
           storefront_impressions?: number
@@ -286,6 +288,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           placement?: string
+          storefront_eyebrow?: string | null
           storefront_image_storage_path?: string | null
           storefront_image_url?: string | null
           storefront_impressions?: number

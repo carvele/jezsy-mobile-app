@@ -313,7 +313,7 @@ export default function HomeScreen() {
           <Image source={{ uri: campaign.storefront_image_url }} style={styles.storefrontCampaignImage} contentFit="cover" />
         )}
         <View style={[styles.storefrontCampaignOverlay, !campaign.storefront_image_url && styles.storefrontCampaignSolid]}>
-          <Text style={styles.storefrontCampaignEyebrow}>JEZSY EDIT</Text>
+          <Text style={styles.storefrontCampaignEyebrow}>{campaign.storefront_eyebrow || 'JEZSY EDIT'}</Text>
           <Text style={styles.storefrontCampaignTitle}>{campaign.title}</Text>
           <Text style={styles.storefrontCampaignBody} numberOfLines={3}>{campaign.body}</Text>
           {canNavigate && <Text style={styles.storefrontCampaignCta}>{campaign.cta_label || 'Shop collection'} →</Text>}
