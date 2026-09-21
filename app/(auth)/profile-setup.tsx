@@ -10,6 +10,7 @@ import {
   Animated,
   StatusBar,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { useToast } from '@/src/context/ToastContext';
 import { consumeAuthReturnTarget, consumePendingEntryTarget } from '@/src/utils/authReturnTarget';
@@ -34,9 +36,13 @@ import {
   DOB_PATTERN,
   matchCountryFromStoredPhone,
   dbDateToFormDate,
+  TOTAL_PROFILE_STEPS,
+  resolveStepLabel,
+  canNavigateToStep,
+  getStepAccessibilityLabel,
 } from '@/src/utils/profileFields';
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = TOTAL_PROFILE_STEPS;
 
 const STEP_META = [
   { icon: User,    label: 'Name',    title: "What's your\nname?",    subtitle: 'Help us personalize your experience.' },
@@ -55,6 +61,9 @@ export default function ProfileSetupScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const isNarrow = windowWidth < 400;
+  const reduceMotion = useReduceMotion();
   const { user, profile, refreshProfile } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -136,12 +145,23 @@ export default function ProfileSetupScreen() {
   const set = (key: keyof ProfileData, value: string) =>
     setData(prev => ({ ...prev, [key]: value }));
 
-  const transitionTo = (next: number) => {
+  const transitionTo = (nextStep: number) => {
+    if (reduceMotion) {
+      fadeAnim.setValue(1);
+      setStep(nextStep);
+      return;
+    }
     Animated.sequence([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 140, useNativeDriver: Platform.OS !== 'web' }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: Platform.OS !== 'web' }),
     ]).start();
-    setTimeout(() => setStep(next), 140);
+    setTimeout(() => setStep(nextStep), 120);
+  };
+
+  const handleStepPress = (targetStep: number) => {
+    if (canNavigateToStep(targetStep, step)) {
+      transitionTo(targetStep);
+    }
   };
 
   const handlePhoneChange = (text: string) => {
@@ -519,26 +539,128 @@ export default function ProfileSetupScreen() {
       <LinearGradient colors={[colors.background, colors.surface]} style={StyleSheet.absoluteFill} />
 
       {/* Top step indicator */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={back} activeOpacity={0.7}>
-          <ArrowLeft size={22} color={colors.text} />
-        </TouchableOpacity>
-        <View style={styles.progressPills}>
-          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                styles.pill,
-                i === step
-                  ? { backgroundColor: colors.tint }
-                  : i < step
-                  ? { backgroundColor: `${colors.tint}66` }
-                  : { backgroundColor: colors.hairline },
-              ]}
-            />
-          ))}
+      <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.topBarRow}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={back}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint={step === 0 ? 'Exits profile setup' : 'Returns to previous step'}
+          >
+            <ArrowLeft size={22} color={colors.text} />
+          </TouchableOpacity>
+
+          <View style={styles.stepperContainer}>
+            <View style={styles.stepColsRow}>
+              {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
+                const isCompleted = i < step;
+                const isActive = i === step;
+                const label = resolveStepLabel(i, isNarrow);
+                const a11yLabel = getStepAccessibilityLabel(i, step, TOTAL_STEPS, label);
+
+                const stepContent = (
+                  <View style={styles.stepColInner}>
+                    <View
+                      style={[
+                        styles.pill,
+                        isCompleted || isActive
+                          ? { backgroundColor: colors.tint }
+                          : {
+                              backgroundColor:
+                                theme === 'dark'
+                                  ? 'rgba(255, 255, 255, 0.16)'
+                                  : 'rgba(0, 0, 0, 0.12)',
+                            },
+                      ]}
+                    />
+                    <View style={styles.labelContainer}>
+                      {isCompleted && (
+                        <Check
+                          size={11}
+                          color={colors.tint}
+                          strokeWidth={2.5}
+                          style={styles.checkIcon}
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.stepLabel,
+                          isActive && [styles.stepLabelActive, { color: colors.text }],
+                          isCompleted && [styles.stepLabelCompleted, { color: colors.tint }],
+                          !isCompleted && !isActive && [
+                            styles.stepLabelUpcoming,
+                            { color: colors.secondaryText },
+                          ],
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {label}
+                      </Text>
+                    </View>
+                  </View>
+                );
+
+                if (isCompleted) {
+                  return (
+                    <TouchableOpacity
+                      key={i}
+                      style={styles.stepCol}
+                      onPress={() => handleStepPress(i)}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={a11yLabel}
+                      accessibilityHint="Returns to this step"
+                    >
+                      {stepContent}
+                    </TouchableOpacity>
+                  );
+                }
+
+                if (isActive) {
+                  return (
+                    <View
+                      key={i}
+                      style={styles.stepCol}
+                      accessible={true}
+                      accessibilityRole="text"
+                      accessibilityLabel={a11yLabel}
+                      accessibilityState={{ selected: true }}
+                    >
+                      {stepContent}
+                    </View>
+                  );
+                }
+
+                return (
+                  <View
+                    key={i}
+                    style={styles.stepCol}
+                    accessible={true}
+                    accessibilityRole="text"
+                    accessibilityLabel={a11yLabel}
+                    accessibilityState={{ disabled: true }}
+                  >
+                    {stepContent}
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={styles.stepCountWrapper}>
+              <Text
+                style={[styles.stepCount, { color: colors.secondaryText }]}
+                accessibilityElementsHidden={true}
+                importantForAccessibility="no"
+              >
+                STEP {step + 1} OF {TOTAL_STEPS}
+              </Text>
+            </View>
+          </View>
         </View>
-        <Text style={[styles.stepCount, { color: colors.secondaryText }]}>{step + 1}/{TOTAL_STEPS}</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -617,19 +739,78 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
 
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  topBarRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: Spacing.md,
   },
-  backBtn: { padding: 6 },
-  progressPills: { flex: 1, flexDirection: 'row', gap: 6 },
-  pill: { flex: 1, height: 3, borderRadius: 2 },
-  stepCount: {
-    fontSize: 12,
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -2,
+    marginLeft: -Spacing.xs,
+  },
+  stepperContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingTop: 18,
+  },
+  stepColsRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  stepCol: {
+    flex: 1,
+  },
+  stepColInner: {
+    width: '100%',
+  },
+  pill: {
+    width: '100%',
+    height: 5,
+    borderRadius: Radius.pill,
+  },
+  labelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 3,
+  },
+  checkIcon: {
+    marginRight: 1,
+  },
+  stepLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  stepLabelActive: {
+    fontWeight: '700',
+  },
+  stepLabelCompleted: {
     fontWeight: '600',
-    letterSpacing: 0.5,
+  },
+  stepLabelUpcoming: {
+    fontWeight: '500',
+    opacity: 0.6,
+  },
+  stepCountWrapper: {
+    height: 5,
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+  stepCount: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
   },
 
   content: {
