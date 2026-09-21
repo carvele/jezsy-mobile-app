@@ -1,0 +1,11 @@
+-- Rollback for 20260921165000_allow_authenticated_delete_notifications.sql
+
+BEGIN;
+
+-- 1. Drop RLS DELETE policy
+DROP POLICY IF EXISTS "Users can delete their own notifications" ON public.notifications;
+
+-- 2. Revoke DELETE privilege
+REVOKE DELETE ON public.notifications FROM authenticated;
+
+COMMIT;
