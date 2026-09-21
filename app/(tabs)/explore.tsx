@@ -1428,7 +1428,7 @@ export default function ExploreScreen() {
                 accessibilityLabel="Browse all products"
               >
                 <Text style={[styles.shopAllButtonText, { color: colors.tint }]}>Browse all products</Text>
-                <IconSymbol name="arrow.right" size={15} color={colors.tint} />
+                <IconSymbol name="chevron.right" size={15} color={colors.tint} />
               </TouchableOpacity>
 
               {needsSizingSetup && !sizingNudgeDismissed && (
