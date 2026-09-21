@@ -294,7 +294,17 @@ export default function StyleAdvisorScreen() {
 
         {loading ? (
           <ActivityIndicator size="large" color={colors.tint} style={{ marginTop: Spacing.xxxl }} />
-        ) : !occasion ? null : items.length === 0 ? (
+        ) : !occasion ? (
+          <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.emptyIconBadge, { backgroundColor: colors.tint + '18' }]}>
+              <IconSymbol name="sparkles" size={32} color={colors.tint} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Where are you heading?</Text>
+            <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+              Select an occasion above and your AI stylist will curate complete outfits from your wardrobe.
+            </Text>
+          </View>
+        ) : items.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <IconSymbol name="hanger" size={32} color={colors.icon} />
             <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
@@ -303,20 +313,12 @@ export default function StyleAdvisorScreen() {
           </View>
         ) : (
           <>
-            <View style={[styles.tipsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {tips.map((tip, i) => (
-                <View key={i} style={styles.tipRow}>
-                  <IconSymbol name="sparkles" size={14} color={colors.tint} />
-                  <Text style={[styles.tipText, { color: colors.text }]}>{tip}</Text>
-                </View>
-              ))}
-            </View>
-
             {current ? (
               <>
+                {/* 1. Generated Outfit Card Front and Center */}
                 <SuggestedOutfitCard outfit={current} onSave={handleSave} saving={savingKey === current.key} />
 
-                {/* AI Stylist Explanation Card */}
+                {/* 2. AI Stylist Explanation Card */}
                 {current.explanation && (
                   <View style={[styles.explanationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <TouchableOpacity
@@ -341,20 +343,29 @@ export default function StyleAdvisorScreen() {
                         <Text style={[styles.explanationSummary, { color: colors.text }]}>
                           {current.explanation.summary}
                         </Text>
-                        <View style={styles.explanationPillars}>
-                          <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>
-                            • Palette: {current.explanation.colorStory}
-                          </Text>
-                          <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>
-                            • Silhouette: {current.explanation.silhouetteNote}
-                          </Text>
-                          <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>
-                            • Occasion: {current.explanation.occasionFit}
-                          </Text>
+                        <View style={styles.pillarsRow}>
+                          {current.explanation.colorStory ? (
+                            <View style={[styles.pillarChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                              <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>Palette</Text>
+                              <Text style={[styles.pillarValue, { color: colors.text }]}>{current.explanation.colorStory}</Text>
+                            </View>
+                          ) : null}
+                          {current.explanation.silhouetteNote ? (
+                            <View style={[styles.pillarChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                              <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>Silhouette</Text>
+                              <Text style={[styles.pillarValue, { color: colors.text }]}>{current.explanation.silhouetteNote}</Text>
+                            </View>
+                          ) : null}
+                          {current.explanation.occasionFit ? (
+                            <View style={[styles.pillarChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                              <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>Occasion</Text>
+                              <Text style={[styles.pillarValue, { color: colors.text }]}>{current.explanation.occasionFit}</Text>
+                            </View>
+                          ) : null}
                         </View>
                         <View style={[styles.proTipBox, { backgroundColor: colors.background }]}>
                           <Text style={[styles.proTipText, { color: colors.tint }]}>
-                             Pro Tip: {current.explanation.proTip}
+                            Pro Tip: {current.explanation.proTip}
                           </Text>
                         </View>
                       </View>
@@ -362,19 +373,23 @@ export default function StyleAdvisorScreen() {
                   </View>
                 )}
 
-                {/* Stylist Actions Row */}
+                {/* 3. Primary Actions Row */}
                 <View style={styles.actionRow}>
                   <TouchableOpacity
-                    style={[styles.feedbackBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+                    style={[styles.feedbackBtn, { borderColor: '#10B981', backgroundColor: '#10B981' + '18' }]}
                     onPress={handleLogWorn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Wear this outfit"
                   >
                     <IconSymbol name="checkmark.circle.fill" size={16} color="#10B981" />
-                    <Text style={[styles.feedbackBtnText, { color: colors.text }]}>Wear This</Text>
+                    <Text style={[styles.feedbackBtnText, { color: '#10B981' }]}>Wear This</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[styles.feedbackBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
                     onPress={handlePass}
+                    accessibilityRole="button"
+                    accessibilityLabel="Pass on this recommendation"
                   >
                     <IconSymbol name="xmark.circle.fill" size={16} color="#EF4444" />
                     <Text style={[styles.feedbackBtnText, { color: colors.text }]}>Pass</Text>
@@ -383,13 +398,15 @@ export default function StyleAdvisorScreen() {
                   <TouchableOpacity
                     style={[styles.feedbackBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
                     onPress={handleSendToMannequin}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send outfit to mannequin"
                   >
                     <IconSymbol name="person.fill" size={16} color={colors.tint} />
                     <Text style={[styles.feedbackBtnText, { color: colors.tint }]}>Mannequin</Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* Show another suggestion */}
+                {/* 4. Ghost Action: Show another suggestion */}
                 <TouchableOpacity
                   style={[styles.anotherBtn, { borderColor: colors.border, marginTop: Spacing.md }]}
                   onPress={handleShowAnother}
@@ -399,9 +416,21 @@ export default function StyleAdvisorScreen() {
                 >
                   <IconSymbol name="shuffle" size={16} color={ranked.length <= 1 ? colors.secondaryText : colors.tint} />
                   <Text style={[styles.anotherBtnText, { color: ranked.length <= 1 ? colors.secondaryText : colors.tint }]}>
-                    Show me another combination
+                    Show another combination
                   </Text>
                 </TouchableOpacity>
+
+                {/* 5. Stylist Occasion Advice Card */}
+                {tips.length > 0 && (
+                  <View style={[styles.tipsCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: Spacing.lg }]}>
+                    {tips.map((tip, i) => (
+                      <View key={i} style={styles.tipRow}>
+                        <IconSymbol name="sparkles" size={14} color={colors.tint} />
+                        <Text style={[styles.tipText, { color: colors.text }]}>{tip}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </>
             ) : (
               <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -458,7 +487,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     borderWidth: 1,
     padding: Spacing.lg,
-    marginBottom: Spacing.lg,
     gap: Spacing.sm,
   },
   tipRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
@@ -494,13 +522,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  explanationPillars: {
-    gap: 4,
+  pillarsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginVertical: 4,
   },
+  pillarChip: {
+    flexDirection: 'column',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: 2,
+  },
   pillarLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  pillarValue: {
     fontSize: 13,
-    lineHeight: 18,
+    fontWeight: '500',
   },
   proTipBox: {
     borderRadius: Radius.md,
@@ -548,5 +592,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
   },
-  emptyText: { ...Type.body, textAlign: 'center' },
+  emptyIconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    ...Type.headline,
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  emptyText: { ...Type.body, textAlign: 'center', maxWidth: 360 },
 });

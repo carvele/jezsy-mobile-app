@@ -668,16 +668,55 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
         </View>
       </View>
 
-      {/* ── Studio Backdrop Swatches ── */}
-      <View style={styles.backdropBar}>
-        <View style={styles.backdropTitleWrap}>
-          <IconSymbol name="paintpalette.fill" size={12} color={colors.tint} />
-          <Text style={[styles.backdropLabel, { color: colors.secondaryText }]}>Background:</Text>
+      {/* ── Compact Appearance Bar (Silhouette + Studio Backdrop) ── */}
+      <View style={styles.appearanceBar}>
+        {/* Silhouette Segmented Switch */}
+        <View style={[styles.compactSilhouetteGroup, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderColor: colors.border }]}>
+          <TouchableOpacity
+            style={[
+              styles.compactPill,
+              silhouetteMode === 'default' && { backgroundColor: colors.tint }
+            ]}
+            onPress={() => setSilhouetteMode('default')}
+            accessibilityRole="button"
+            accessibilityLabel="Classic form silhouette"
+          >
+            <Text style={[styles.compactPillText, { color: silhouetteMode === 'default' ? colors.onTint : colors.secondaryText }]}>
+              Classic
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.compactPill,
+              silhouetteMode === 'proportions' && { backgroundColor: colors.tint }
+            ]}
+            onPress={() => {
+              if (!sizingLoaded) {
+                showToast('Still loading your profile, one moment...', 'info');
+                return;
+              }
+              if (sizingReady && bodyParams.isCustomProportioned) {
+                setSilhouetteMode('proportions');
+                showToast('Applied your real body measurements', 'info');
+              } else {
+                showToast('Set up your measurements to enable custom proportions', 'info');
+                router.push('/profile/measurements?from=mannequin');
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="My body silhouette proportions"
+          >
+            <Text style={[styles.compactPillText, { color: silhouetteMode === 'proportions' ? colors.onTint : colors.secondaryText }]}>
+              My Body
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        {/* Compact Backdrop Swatches */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.backdropScroll}
+          contentContainerStyle={styles.compactBackdropScroll}
         >
           {CANVAS_BACKDROPS.map((b) => {
             const active = canvasBgColor === b.color;
@@ -685,9 +724,9 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               <TouchableOpacity
                 key={b.id}
                 style={[
-                  styles.backdropSwatch,
+                  styles.compactDot,
                   { backgroundColor: b.color, borderColor: active ? colors.tint : colors.border },
-                  active && styles.backdropSwatchActive,
+                  active && styles.compactDotActive,
                 ]}
                 onPress={() => setCanvasBgColor(b.color)}
                 accessibilityRole="button"
@@ -696,7 +735,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                 {active && (
                   <IconSymbol
                     name="checkmark"
-                    size={10}
+                    size={8}
                     color={b.isDark ? '#FFFFFF' : '#1A1A1A'}
                   />
                 )}
@@ -706,70 +745,9 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
         </ScrollView>
       </View>
 
-      {/* ── Mannequin Silhouette Proportions Toggle ── */}
-      <View style={styles.silhouetteBar}>
-        <View style={styles.backdropTitleWrap}>
-          <IconSymbol name="figure.stand" size={13} color={colors.tint} />
-          <Text style={[styles.backdropLabel, { color: colors.secondaryText }]}>Silhouette:</Text>
-        </View>
-        <View style={styles.silhouetteToggleGroup}>
-          <TouchableOpacity
-            style={[
-              styles.silhouettePill,
-              { backgroundColor: silhouetteMode === 'default' ? colors.tint : colors.card, borderColor: silhouetteMode === 'default' ? colors.tint : colors.border }
-            ]}
-            onPress={() => setSilhouetteMode('default')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.silhouettePillText, { color: silhouetteMode === 'default' ? colors.onTint : colors.text }]}>
-              Classic Form
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.silhouettePill,
-              { backgroundColor: silhouetteMode === 'proportions' ? colors.tint : colors.card, borderColor: silhouetteMode === 'proportions' ? colors.tint : colors.border }
-            ]}
-            onPress={() => {
-              // useSizingProfile() re-fetches from scratch on every mount and
-              // starts with ready=false until that fetch resolves. Without
-              // this guard, tapping "My Body" during that window -- entirely
-              // realistic on a fresh navigation into this screen -- read
-              // "not ready yet" as "never set up" and bounced the user to
-              // the measurements screen even though their profile was saved
-              // and sitting in the database the whole time.
-              if (!sizingLoaded) {
-                showToast('Still loading your profile, one moment...', 'info');
-                return;
-              }
-              if (sizingReady && bodyParams.isCustomProportioned) {
-                setSilhouetteMode('proportions');
-                showToast('Applied your real body measurements ', 'info');
-              } else {
-                // Alert.alert is a no-op on web; navigate directly instead.
-                showToast('Set up your measurements to enable custom proportions', 'info');
-                router.push('/profile/measurements?from=mannequin');
-              }
-            }}
-            activeOpacity={0.7}
-          >
-            <IconSymbol
-              name="sparkles"
-              size={11}
-              color={silhouetteMode === 'proportions' ? colors.onTint : colors.tint}
-              style={{ marginRight: 3 }}
-            />
-            <Text style={[styles.silhouettePillText, { color: silhouetteMode === 'proportions' ? colors.onTint : colors.text }]}>
-              My Body {sizingReady ? '' : ''}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ── Size & Layer Controls (Fixed geometry bar) ── */}
-      <View style={styles.toolbarSlot}>
-        {selectedItemId && activeSelectedItem ? (
+      {/* ── Contextual Size & Layer Controls (Shown only when a piece is selected) ── */}
+      {selectedItemId && activeSelectedItem ? (
+        <View style={styles.toolbarSlot}>
           <View style={[styles.layerToolbar, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.controlGroup}>
               <Text maxFontSizeMultiplier={1.2} style={[styles.controlLabel, { color: colors.secondaryText }]}>Size:</Text>
@@ -838,26 +816,8 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               </TouchableOpacity>
             </View>
           </View>
-        ) : (
-          <View style={[styles.toolbarEmptyPrompt, { borderColor: colors.border, backgroundColor: colors.card }]}>
-            <IconSymbol
-              name={canvasItems.length === 0 ? 'tshirt' : 'hand.tap'}
-              size={12}
-              color={colors.secondaryText}
-            />
-            <Text
-              maxFontSizeMultiplier={1.2}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              style={[styles.toolbarEmptyPromptText, { color: colors.secondaryText }]}
-            >
-              {canvasItems.length === 0
-                ? 'Select garments below to dress the mannequin'
-                : 'Tap a garment on the mannequin to resize or layer'}
-            </Text>
-          </View>
-        )}
-      </View>
+        </View>
+      ) : null}
 
       {/* ── Mannequin Canvas ── */}
       <View
@@ -908,6 +868,63 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
               Tap garments below to dress the mannequin
             </Text>
           </View>
+        )}
+      </View>
+
+      {/* ── Selected Pieces on Mannequin Strip ── */}
+      <View style={[styles.selectedStrip, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <View style={styles.selectedStripHeader}>
+          <View style={styles.selectedStripTitleRow}>
+            <IconSymbol name="sparkles" size={13} color={colors.tint} />
+            <Text style={[styles.selectedStripTitle, { color: colors.text }]}>
+              On Mannequin ({canvasItems.length})
+            </Text>
+          </View>
+          {canvasItems.length > 0 && (
+            <TouchableOpacity onPress={() => setCanvasItems([])} style={styles.clearMiniBtn} accessibilityRole="button" accessibilityLabel="Clear all garments">
+              <Text style={[styles.clearMiniText, { color: colors.notification }]}>Clear all</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {canvasItems.length === 0 ? (
+          <Text style={[styles.selectedEmptyText, { color: colors.secondaryText }]}>
+            No garments on mannequin yet. Tap pieces below to dress.
+          </Text>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectedScroll}>
+            {canvasItems.map((ci) => {
+              const isSelected = selectedItemId === ci.id;
+              return (
+                <TouchableOpacity
+                  key={ci.id}
+                  style={[
+                    styles.selectedPieceCard,
+                    { borderColor: isSelected ? colors.tint : colors.border, backgroundColor: colors.surface },
+                    isSelected && { borderWidth: 2 },
+                  ]}
+                  onPress={() => setSelectedItemId(isSelected ? null : ci.id)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${ci.name}, tap to adjust`}
+                >
+                  <Image source={{ uri: ci.image_url }} style={styles.selectedPieceThumb} contentFit="contain" />
+                  <Text style={[styles.selectedPieceName, { color: colors.text }]} numberOfLines={1}>
+                    {ci.name || ci.garment_type}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.selectedPieceRemove}
+                    onPress={() => handleRemoveFromCanvas(ci.id)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${ci.name}`}
+                  >
+                    <IconSymbol name="xmark" size={9} color={colors.secondaryText} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         )}
       </View>
 
@@ -1331,88 +1348,127 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  /* ── Studio Backdrop Swatches ── */
-  backdropBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    marginBottom: 6,
-    gap: Spacing.sm,
-  },
-  backdropTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  backdropLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  backdropScroll: {
-    gap: 6,
-    alignItems: 'center',
-    paddingRight: Spacing.lg,
-  },
-  backdropSwatch: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backdropSwatchActive: {
-    borderWidth: 2,
-    transform: [{ scale: 1.15 }],
-  },
 
-  /* ── Silhouette Form Toggle ── */
-  silhouetteBar: {
+
+  /* ── Compact Appearance Bar ── */
+  appearanceBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
     gap: Spacing.sm,
   },
-  silhouetteToggleGroup: {
+  compactSilhouetteGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
-  silhouettePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: Spacing.xs,
     borderRadius: Radius.pill,
     borderWidth: 1,
+    padding: 2,
   },
-  silhouettePillText: {
+  compactPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+  },
+  compactPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  compactBackdropScroll: {
+    gap: 6,
+    alignItems: 'center',
+    paddingLeft: Spacing.xs,
+  },
+  compactDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactDotActive: {
+    transform: [{ scale: 1.2 }],
+  },
+
+  /* ── Selected Pieces on Mannequin Strip ── */
+  selectedStrip: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 9,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+  selectedStripHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  selectedStripTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  selectedStripTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  clearMiniBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  clearMiniText: {
     fontSize: 11,
     fontWeight: '600',
   },
-
-  /* ── Layer / Size Controls (Fixed geometry bar) ── */
-  toolbarSlot: {
-    height: 44,
-    marginHorizontal: Spacing.lg,
-    marginBottom: 6,
-    justifyContent: 'center',
+  selectedEmptyText: {
+    fontSize: 12,
+    paddingVertical: 4,
   },
-  toolbarEmptyPrompt: {
-    flex: 1,
+  selectedScroll: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingVertical: 4,
+  },
+  selectedPieceCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 6,
-    paddingHorizontal: 10,
-    borderRadius: Radius.md,
+    paddingVertical: 4,
+    paddingLeft: 4,
+    paddingRight: 8,
+    borderRadius: Radius.pill,
     borderWidth: 1,
-    borderStyle: 'dashed',
   },
-  toolbarEmptyPromptText: {
+  selectedPieceThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  selectedPieceName: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
+    maxWidth: 90,
+  },
+  selectedPieceRemove: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  /* ── Layer / Size Controls (Rendered when piece is selected) ── */
+  toolbarSlot: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   layerToolbar: {
     flex: 1,

@@ -373,36 +373,42 @@ export default function WardrobeScreen() {
   const renderItem = useCallback(({ item, index }: { item: WardrobeItem; index: number }) => {
     // Use the computed effective bucket so a stale garment_type column never shows wrong info.
     const displayLabel = item.sub_category || resolveEffectiveGarmentBucket(item) || item.category || 'Clothing';
+    const subLabel = item.sub_category && item.category && item.category !== item.sub_category ? item.category : (item.color_tags?.[0] || '');
     return (
       <FadeInView index={index}>
       <TouchableOpacity
         style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border, width: cardWidth }]}
         onPress={() => router.push(`/wardrobe/item/${item.id}` as any)}
-        activeOpacity={0.8}
+        activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={`${displayLabel}, ${item.wear_count > 0 ? `worn ${item.wear_count} times` : 'never worn'}`}
       >
-        <View>
+        <View style={styles.imageWrap}>
           <Image
             source={{ uri: item.image_url || undefined }}
             style={[styles.itemImage, { backgroundColor: colors.surface }]}
-            contentFit="cover"
+            contentFit="contain"
           />
-          <View style={[styles.wearBadge, { backgroundColor: item.wear_count > 0 ? 'rgba(0,0,0,0.6)' : colors.tint }]}>
-            <Text style={[styles.wearBadgeText, { color: item.wear_count > 0 ? 'white' : colors.onTint }]}>
-              {item.wear_count > 0 ? `Worn ${item.wear_count}x` : 'Never worn'}
+          <View style={[styles.wearBadge, { backgroundColor: item.wear_count > 0 ? (theme === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.55)') : colors.tint }]}>
+            <Text style={[styles.wearBadgeText, { color: item.wear_count > 0 ? '#FFFFFF' : colors.onTint }]}>
+              {item.wear_count > 0 ? `${item.wear_count}x worn` : 'New'}
             </Text>
           </View>
         </View>
         <View style={styles.itemInfo}>
-          <Text style={[styles.itemCategory, { color: colors.secondaryText }]} numberOfLines={1}>
+          <Text style={[styles.itemCategory, { color: colors.text }]} numberOfLines={1}>
             {displayLabel}
           </Text>
+          {subLabel ? (
+            <Text style={[styles.itemSubLabel, { color: colors.secondaryText }]} numberOfLines={1}>
+              {subLabel}
+            </Text>
+          ) : null}
         </View>
       </TouchableOpacity>
       </FadeInView>
     );
-  }, [colors, router, cardWidth]);
+  }, [colors, router, cardWidth, theme]);
 
   const renderOutfitItem = useCallback(({ item }: { item: SavedOutfit }) => {
     // items is a JSON array
@@ -1037,33 +1043,47 @@ const styles = StyleSheet.create({
     rowGap: 16,
   },
   itemCard: {
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
     borderWidth: 1,
+    ...Elevation.sm,
+  },
+  imageWrap: {
+    position: 'relative',
+    width: '100%',
+    height: 180,
+    overflow: 'hidden',
   },
   itemImage: {
     width: '100%',
-    height: 180,
+    height: '100%',
   },
   wearBadge: {
     position: 'absolute',
     bottom: 8,
     left: 8,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
   },
   wearBadgeText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   itemInfo: {
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.sm,
+    gap: 2,
   },
   itemCategory: {
-    ...Type.label,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  itemSubLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'capitalize',
   },
   suggestBlock: {
     marginBottom: Spacing.sm,

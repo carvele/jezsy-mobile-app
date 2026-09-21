@@ -69,6 +69,7 @@ export default function WardrobeItemDetailScreen() {
 
   // Edit Modal State
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [showAdvancedDetails, setShowAdvancedDetails] = useState(false);
   const [editCategory, setEditCategory] = useState('');
   const [editSubCategory, setEditSubCategory] = useState('');
   const [editColor, setEditColor] = useState('');
@@ -424,157 +425,162 @@ export default function WardrobeItemDetailScreen() {
             )}
           </View>
 
-          {/* Where I Wear This */}
+          {/* Wear Activity */}
           <View style={styles.fieldBlock}>
-            <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>WHERE I WEAR THIS</Text>
-            <Text style={[styles.fieldValue, { color: colors.text }]}>
-              {rawWhereWornText || 'Not specified'}
-            </Text>
+            <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>WEAR ACTIVITY</Text>
+            <Text style={[styles.fieldValue, { color: colors.text }]}>{wearLabel}</Text>
           </View>
 
-          {/* Description */}
-          <View style={styles.fieldBlock}>
-            <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>DESCRIPTION</Text>
-            <Text style={[styles.fieldValue, styles.descriptionText, { color: colors.text }]}>
-              {rawDescriptionText || 'No description provided'}
-            </Text>
-          </View>
+          {/* Where I Wear This (if specified) */}
+          {rawWhereWornText ? (
+            <View style={styles.fieldBlock}>
+              <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>WHERE I WEAR THIS</Text>
+              <Text style={[styles.fieldValue, { color: colors.text }]}>{rawWhereWornText}</Text>
+            </View>
+          ) : null}
 
-          {/* Personal Notes */}
-          <View style={styles.fieldBlock}>
-            <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>PERSONAL NOTES</Text>
-            <Text style={[styles.fieldValue, styles.notesText, { color: colors.text }]}>
-              {rawUserNotesText || 'None provided'}
-            </Text>
-          </View>
+          {/* Description (if provided) */}
+          {rawDescriptionText ? (
+            <View style={styles.fieldBlock}>
+              <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>DESCRIPTION</Text>
+              <Text style={[styles.fieldValue, styles.descriptionText, { color: colors.text }]}>
+                {rawDescriptionText}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Personal Notes (if provided) */}
+          {rawUserNotesText ? (
+            <View style={styles.fieldBlock}>
+              <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>PERSONAL NOTES</Text>
+              <Text style={[styles.fieldValue, styles.notesText, { color: colors.text }]}>
+                {rawUserNotesText}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* Derived JeZsy Classification Card (Clearly labeled as system-derived) */}
-        <View style={[styles.card, styles.classificationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.cardHeader}>
-            <IconSymbol name="sparkles" size={16} color={colors.tint} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: colors.tint }]}>JeZsy Classification</Text>
-              <Text style={[styles.cardSubtitle, { color: colors.secondaryText }]}>
-                Derived fashion intelligence for styling and mannequin
-              </Text>
+        {/* Collapsible Style & Intelligence Section */}
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <TouchableOpacity
+            style={styles.collapsibleHeader}
+            onPress={() => setShowAdvancedDetails(!showAdvancedDetails)}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle style and intelligence details"
+          >
+            <View style={styles.collapsibleHeaderTitleRow}>
+              <IconSymbol name="sparkles" size={16} color={colors.tint} />
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Style & Intelligence</Text>
             </View>
-          </View>
+            <IconSymbol
+              name={showAdvancedDetails ? 'chevron.up' : 'chevron.down'}
+              size={16}
+              color={colors.secondaryText}
+            />
+          </TouchableOpacity>
 
-          <View style={styles.attrGrid}>
-            <View style={styles.attrItem}>
-              <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Garment Family</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>
-                {normalized.family === 'Unknown' ? 'Not specified' : normalized.family}
-              </Text>
-            </View>
-            <View style={styles.attrItem}>
-              <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Garment Type</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.type || 'Not specified'}</Text>
-            </View>
-            <View style={styles.attrItem}>
-              <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Subtype</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.subtype || 'Not specified'}</Text>
-            </View>
-            <View style={styles.attrItem}>
-              <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Style</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>
-                {normalized.style.length > 0 ? normalized.style.join(' · ') : 'Not specified'}
-              </Text>
-            </View>
-            <View style={styles.attrItem}>
-              <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Activity</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>
-                {normalized.activity.length > 0 ? normalized.activity.join(' · ') : 'Not specified'}
-              </Text>
-            </View>
-            <View style={styles.attrItem}>
-              <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Material</Text>
-              <Text style={[styles.attrValue, { color: colors.text }]}>
-                {normalized.material.length > 0 ? normalized.material.join(' · ') : (aiAttrs.material ? String(aiAttrs.material) : 'Not specified')}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Style Profile Card (Only if actual values exist) */}
-        {hasStyleProfile && (
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.cardHeader}>
-              <IconSymbol name="tag.fill" size={16} color={colors.tint} />
-              <Text style={[styles.cardTitle, { color: colors.text }]}>Style Profile</Text>
-            </View>
-            <View style={styles.attrGrid}>
-              {aiAttrs.pattern && (
+          {showAdvancedDetails && (
+            <View style={styles.collapsibleBody}>
+              {/* JeZsy Classification */}
+              <Text style={[styles.subSectionTitle, { color: colors.tint }]}>JeZsy Classification</Text>
+              <View style={styles.attrGrid}>
                 <View style={styles.attrItem}>
-                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Pattern</Text>
-                  <Text style={[styles.attrValue, { color: colors.text }]}>{String(aiAttrs.pattern)}</Text>
+                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Garment Family</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>
+                    {normalized.family === 'Unknown' ? 'Not specified' : normalized.family}
+                  </Text>
                 </View>
-              )}
-              {aiAttrs.material && (
+                <View style={styles.attrItem}>
+                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Garment Type</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.type || 'Not specified'}</Text>
+                </View>
+                <View style={styles.attrItem}>
+                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Subtype</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>{normalized.subtype || 'Not specified'}</Text>
+                </View>
+                <View style={styles.attrItem}>
+                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Style</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>
+                    {normalized.style.length > 0 ? normalized.style.join(' · ') : 'Not specified'}
+                  </Text>
+                </View>
+                <View style={styles.attrItem}>
+                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Activity</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>
+                    {normalized.activity.length > 0 ? normalized.activity.join(' · ') : 'Not specified'}
+                  </Text>
+                </View>
                 <View style={styles.attrItem}>
                   <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Material</Text>
-                  <Text style={[styles.attrValue, { color: colors.text }]}>{String(aiAttrs.material)}</Text>
+                  <Text style={[styles.attrValue, { color: colors.text }]}>
+                    {normalized.material.length > 0 ? normalized.material.join(' · ') : (aiAttrs.material ? String(aiAttrs.material) : 'Not specified')}
+                  </Text>
                 </View>
-              )}
-              {aiAttrs.fit && (
-                <View style={styles.attrItem}>
-                  <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Fit</Text>
-                  <Text style={[styles.attrValue, { color: colors.text }]}>{String(aiAttrs.fit)}</Text>
-                </View>
-              )}
-            </View>
+              </View>
 
-            {item.occasions && item.occasions.length > 0 && (
-              <View style={styles.occasionsContainer}>
-                <Text style={[styles.attrLabel, { color: colors.secondaryText, marginBottom: 6 }]}>Occasions</Text>
-                <View style={styles.chipRow}>
-                  {(item.occasions as string[]).map((occ: string) => (
-                    <View key={occ} style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                      <Text style={[styles.chipText, { color: colors.text }]}>{occ}</Text>
+              {/* Style Profile */}
+              {hasStyleProfile && (
+                <>
+                  <Text style={[styles.subSectionTitle, { color: colors.tint, marginTop: Spacing.md }]}>Style Profile</Text>
+                  <View style={styles.attrGrid}>
+                    {aiAttrs.pattern && (
+                      <View style={styles.attrItem}>
+                        <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Pattern</Text>
+                        <Text style={[styles.attrValue, { color: colors.text }]}>{String(aiAttrs.pattern)}</Text>
+                      </View>
+                    )}
+                    {aiAttrs.fit && (
+                      <View style={styles.attrItem}>
+                        <Text style={[styles.attrLabel, { color: colors.secondaryText }]}>Fit</Text>
+                        <Text style={[styles.attrValue, { color: colors.text }]}>{String(aiAttrs.fit)}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {item.occasions && item.occasions.length > 0 && (
+                    <View style={styles.occasionsContainer}>
+                      <Text style={[styles.attrLabel, { color: colors.secondaryText, marginBottom: 6 }]}>Occasions</Text>
+                      <View style={styles.chipRow}>
+                        {(item.occasions as string[]).map((occ: string) => (
+                          <View key={occ} style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                            <Text style={[styles.chipText, { color: colors.text }]}>{occ}</Text>
+                          </View>
+                        ))}
+                      </View>
                     </View>
-                  ))}
-                </View>
-              </View>
-            )}
+                  )}
 
-            {item.seasons && item.seasons.length > 0 && (
-              <View style={styles.occasionsContainer}>
-                <Text style={[styles.attrLabel, { color: colors.secondaryText, marginBottom: 6 }]}>Seasons</Text>
-                <View style={styles.chipRow}>
-                  {(item.seasons as string[]).map((season: string) => (
-                    <View key={season} style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                      <Text style={[styles.chipText, { color: colors.text }]}>{season}</Text>
+                  {item.seasons && item.seasons.length > 0 && (
+                    <View style={styles.occasionsContainer}>
+                      <Text style={[styles.attrLabel, { color: colors.secondaryText, marginBottom: 6 }]}>Seasons</Text>
+                      <View style={styles.chipRow}>
+                        {(item.seasons as string[]).map((season: string) => (
+                          <View key={season} style={[styles.chip, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                            <Text style={[styles.chipText, { color: colors.text }]}>{season}</Text>
+                          </View>
+                        ))}
+                      </View>
                     </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
-        )}
+                  )}
+                </>
+              )}
 
-        {/* Item Information & Wear History */}
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.cardHeader}>
-            <IconSymbol name="chart.bar.fill" size={16} color={colors.tint} />
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Item History & Metadata</Text>
-          </View>
-          <View style={styles.metadataList}>
-            <View style={styles.metadataRow}>
-              <Text style={[styles.metadataLabel, { color: colors.secondaryText }]}>Wear Activity</Text>
-              <Text style={[styles.metadataValue, { color: colors.text }]}>{wearLabel}</Text>
-            </View>
-            <View style={styles.metadataRow}>
-              <Text style={[styles.metadataLabel, { color: colors.secondaryText }]}>Date Added</Text>
-              <Text style={[styles.metadataValue, { color: colors.text }]}>{formatDate(item.created_at)}</Text>
-            </View>
-            {item.last_worn_at && (
-              <View style={styles.metadataRow}>
-                <Text style={[styles.metadataLabel, { color: colors.secondaryText }]}>Last Logged Wear</Text>
-                <Text style={[styles.metadataValue, { color: colors.text }]}>{formatDate(item.last_worn_at)}</Text>
+              {/* History / Audit */}
+              <Text style={[styles.subSectionTitle, { color: colors.tint, marginTop: Spacing.md }]}>Record History</Text>
+              <View style={styles.metadataList}>
+                <View style={styles.metadataRow}>
+                  <Text style={[styles.metadataLabel, { color: colors.secondaryText }]}>Date Added</Text>
+                  <Text style={[styles.metadataValue, { color: colors.text }]}>{formatDate(item.created_at)}</Text>
+                </View>
+                {item.last_worn_at && (
+                  <View style={styles.metadataRow}>
+                    <Text style={[styles.metadataLabel, { color: colors.secondaryText }]}>Last Logged Wear</Text>
+                    <Text style={[styles.metadataValue, { color: colors.text }]}>{formatDate(item.last_worn_at)}</Text>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
+            </View>
+          )}
         </View>
 
         {/* Action Buttons */}
@@ -800,6 +806,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  collapsibleHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  collapsibleBody: {
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  subSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   cardTitle: {
     ...Type.bodyStrong,
