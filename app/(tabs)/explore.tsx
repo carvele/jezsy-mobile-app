@@ -92,6 +92,7 @@ const renderSheetBackdrop = (props: React.ComponentProps<typeof BottomSheetBackd
 
 export default function ExploreScreen() {
   const bottomInset = useSharedBottomInset();
+  const exploreBottomInset = bottomInset + Spacing.xxl;
   const { columns } = useGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -1003,7 +1004,7 @@ export default function ExploreScreen() {
 
     if (selectedSubCategory) {
       const isAllSub = selectedSubCategory === ALL_SUBCATEGORY || selectedSubCategory === 'View All';
-      const subcatLabel = isAllSub ? `All ${selectedCategory}` : selectedSubCategory;
+      const subcatLabel = isAllSub ? 'All' : selectedSubCategory;
       breadcrumbItems.push(
         <Text key="sep2" style={[styles.breadcrumbSeparator, { color: colors.secondaryText }]}> &gt; </Text>,
         <Text key="subcat" style={[styles.breadcrumbText, { color: colors.tint, fontWeight: '700' }]}>{subcatLabel}</Text>
@@ -1127,7 +1128,7 @@ export default function ExploreScreen() {
               accessibilityLabel={`All ${selectedCategory}`}
             >
               <Text style={[styles.subCategoryChipText, { color: selectedSubCategory === ALL_SUBCATEGORY ? colors.tint : colors.secondaryText }]}>
-                All {selectedCategory}
+                All
               </Text>
             </TouchableOpacity>
             {activeSubs.map((subcat) => {
@@ -1289,12 +1290,12 @@ export default function ExploreScreen() {
         {!isSearchActive && (
           <TouchableOpacity
             onPress={() => router.push('/cart')}
-            style={styles.cartBtn}
+            style={[styles.cartBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={itemCount > 0 ? `Cart, ${itemCount} items` : 'Cart, empty'}
           >
-            <IconSymbol name="bag" size={24} color={colors.text} />
+            <IconSymbol name="bag" size={20} color={colors.text} />
             {itemCount > 0 && (
               <View style={[styles.cartBadge, { backgroundColor: colors.notification }]}>
                 <Text style={styles.cartBadgeText}>{itemCount > 99 ? '99+' : itemCount}</Text>
@@ -1361,7 +1362,7 @@ export default function ExploreScreen() {
                   key={`grid-${columns}`}
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
-                  contentContainerStyle={[styles.productList, { paddingBottom: bottomInset }]}
+                  contentContainerStyle={[styles.productList, { paddingBottom: exploreBottomInset }]}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderGridHeader(
@@ -1411,7 +1412,7 @@ export default function ExploreScreen() {
           {/* Level 0: Categories Grid */}
           {!selectedCategory && !showAllProducts && (
             <ScrollView
-              contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: exploreBottomInset }]}
               refreshControl={
                 <RefreshControl
                   refreshing={categoriesLoading}
@@ -1421,13 +1422,13 @@ export default function ExploreScreen() {
               }
             >
               <TouchableOpacity
-                style={[styles.shopAllButton, { backgroundColor: colors.tint }]}
+                style={styles.shopAllButton}
                 onPress={() => setShowAllProducts(true)}
                 accessibilityRole="button"
                 accessibilityLabel="Browse all products"
               >
-                <IconSymbol name="bag.fill" size={18} color={colors.onTint} />
-                <Text style={[styles.shopAllButtonText, { color: colors.onTint }]}>Shop All Products</Text>
+                <Text style={[styles.shopAllButtonText, { color: colors.tint }]}>Browse all products</Text>
+                <IconSymbol name="arrow.right" size={15} color={colors.tint} />
               </TouchableOpacity>
 
               {needsSizingSetup && !sizingNudgeDismissed && (
@@ -1498,7 +1499,7 @@ export default function ExploreScreen() {
           {/* Level 1: Sub-Categories View in a 2-Column Grid Layout */}
           {selectedCategory && !selectedSubCategory && (
             <ScrollView
-              contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset }]}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: exploreBottomInset }]}
               refreshControl={
                 <RefreshControl
                   refreshing={categoriesLoading}
@@ -1577,13 +1578,13 @@ export default function ExploreScreen() {
                   key={`grid-${columns}`}
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
-                  contentContainerStyle={[styles.productList, { paddingBottom: bottomInset }]}
+                  contentContainerStyle={[styles.productList, { paddingBottom: exploreBottomInset }]}
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderCategorySwitcher()}
                       {renderGridHeader(
-                        `${processedProducts.length} items found`,
-                        `Sort: ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
+                        `${processedProducts.length} items`,
+                        SORT_OPTIONS.find(o => o.id === selectedSort)?.label ?? 'Sort',
                         `Sort by ${SORT_OPTIONS.find(o => o.id === selectedSort)?.label}`,
                       )}
                     </View>
@@ -2100,26 +2101,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   cartBtn: {
-    marginLeft: Spacing.md,
+    width: 40,
+    height: 40,
+    marginLeft: Spacing.xs,
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing.xs,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   cartBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: 3,
   },
   cartBadgeText: {
     color: 'white',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   breadcrumbWrapper: {
@@ -2155,14 +2159,14 @@ const styles = StyleSheet.create({
   shopAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    height: 52,
-    borderRadius: 26,
+    alignSelf: 'flex-start',
+    gap: Spacing.xs,
+    height: 40,
+    paddingHorizontal: Spacing.sm,
     marginTop: Spacing.lg,
   },
   shopAllButtonText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   sectionTitle: {
@@ -2172,7 +2176,8 @@ const styles = StyleSheet.create({
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: GRID_COLUMN_GAP,
+    columnGap: GRID_COLUMN_GAP,
+    rowGap: Spacing.lg,
     justifyContent: 'flex-start',
   },
   suggestionsContainer: {
@@ -2208,7 +2213,7 @@ const styles = StyleSheet.create({
   },
   resultsCountText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   controlsRow: {
     flexDirection: 'row',
@@ -2218,7 +2223,7 @@ const styles = StyleSheet.create({
   filterTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
     borderRadius: Radius.lg,
     borderWidth: 1,
