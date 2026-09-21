@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,6 +7,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { outfitService } from '@/src/services';
+import { wardrobeService, WARDROBE_LIST_COLUMNS } from '@/src/services/wardrobeService';
+import { describeWearLogResult } from '@/src/utils/wearLog';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { Database } from '@/src/types/database.types';
@@ -63,7 +65,7 @@ export default function StyleAdvisorScreen() {
         const [itemsRes, userProfile] = await Promise.all([
           supabase
             .from('wardrobe_items')
-            .select('*')
+            .select(WARDROBE_LIST_COLUMNS)
             .eq('user_id', session.user.id)
             .eq('deleted', false)
             .order('created_at', { ascending: false }),
@@ -72,7 +74,7 @@ export default function StyleAdvisorScreen() {
 
         if (mounted) {
           if (!itemsRes.error && itemsRes.data) {
-            setItems(itemsRes.data);
+            setItems(itemsRes.data as unknown as WardrobeItem[]);
           }
           if (userProfile) {
             setProfile(userProfile);
@@ -139,7 +141,7 @@ export default function StyleAdvisorScreen() {
           color_tags: i.color_tags,
         }));
 
-        const result = await outfitService.saveOutfit({
+        const result = await outfitService.saveOutfitOnce({
           userId: session.user.id,
           name: `${activeOccasion?.label || 'Advisor'} look`,
           items: payload,
@@ -167,35 +169,30 @@ export default function StyleAdvisorScreen() {
     [session?.user?.id, activeOccasion, showToast]
   );
 
+  const wearLogInFlight = useRef(false);
   const handleLogWorn = useCallback(async () => {
-    if (!session?.user?.id || !current) return;
+    if (!session?.user?.id || !current || wearLogInFlight.current) return;
+    wearLogInFlight.current = true;
     try {
-      await outfitFeedbackService.logFeedback(
-        {
-          userId: session.user.id,
-          feedbackType: 'worn',
-          occasion: activeOccasion?.label,
-        },
-        current.items as any
-      );
-
-      // Increment wear count on items
-      for (const item of current.items) {
-        try {
-          await (supabase.from('wardrobe_items') as any)
-            .update({
-              wear_count: (item.wear_count || 0) + 1,
-              last_worn_at: new Date().toISOString(),
-            })
-            .eq('id', item.id);
-        } catch {
-          // Ignore individual wear update error
-        }
+      // Atomic, ownership-checked RPC per item; success is only reported for what the database confirmed.
+      const outcome = await wardrobeService.logItemsWorn(current.items.map((i) => i.id));
+      const summary = describeWearLogResult(outcome, current.items.length);
+      if (summary.recorded) {
+        await outfitFeedbackService.logFeedback(
+          {
+            userId: session.user.id,
+            feedbackType: 'worn',
+            occasion: activeOccasion?.label,
+            wardrobeItemIds: outcome.succeeded,
+          },
+          current.items.filter((i) => outcome.succeeded.includes(i.id)) as any
+        );
       }
-
-      showToast('Recorded as worn! Your stylist will remember your favorites.', 'success');
+      showToast(summary.message, summary.kind);
     } catch {
       showToast('Could not record wear.', 'error');
+    } finally {
+      wearLogInFlight.current = false;
     }
   }, [session?.user?.id, current, activeOccasion, showToast]);
 
@@ -217,8 +214,10 @@ export default function StyleAdvisorScreen() {
     showToast('Noted! Adjusting suggestions.', 'info');
   }, [session?.user?.id, current, activeOccasion, handleShowAnother, showToast]);
 
+  const sendInFlight = useRef(false);
   const handleSendToMannequin = useCallback(async () => {
-    if (!session?.user?.id || !current) return;
+    if (!session?.user?.id || !current || sendInFlight.current) return;
+    sendInFlight.current = true;
     setSavingKey(current.key);
     try {
       const payload = current.items.map((i) => ({
@@ -230,7 +229,8 @@ export default function StyleAdvisorScreen() {
         color_tags: i.color_tags,
       }));
 
-      const result = await outfitService.saveOutfit({
+      // Reuses an existing look with the same items, so repeated taps never create duplicate outfits.
+      const result = await outfitService.saveOutfitOnce({
         userId: session.user.id,
         name: `${activeOccasion?.label || 'Advisor'} look`,
         items: payload,
@@ -239,14 +239,15 @@ export default function StyleAdvisorScreen() {
       if (result.ok && result.data?.id) {
         router.push(`/wardrobe?tab=mannequin&loadOutfit=${result.data.id}` as any);
       } else {
-        router.push('/wardrobe?tab=mannequin' as any);
+        showToast('Could not open this look in the Mannequin. Please try again.', 'error');
       }
     } catch {
-      router.push('/wardrobe?tab=mannequin' as any);
+      showToast('Could not open this look in the Mannequin. Please try again.', 'error');
     } finally {
+      sendInFlight.current = false;
       setSavingKey(null);
     }
-  }, [session?.user?.id, current, activeOccasion, router]);
+  }, [session?.user?.id, current, activeOccasion, router, showToast]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>

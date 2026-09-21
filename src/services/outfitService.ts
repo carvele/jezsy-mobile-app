@@ -12,6 +12,15 @@ import {
   errorReporting,
 } from './observability';
 
+/** Order-independent identity of an outfit's contents, for duplicate detection. */
+export function outfitSignature(items: OutfitItemDto[]): string {
+  return (items ?? [])
+    .map((i) => i.wardrobe_item_id || i.product_id || i.name || '')
+    .filter(Boolean)
+    .sort()
+    .join('|');
+}
+
 export const outfitService = {
   /**
    * Saves a composed outfit to saved_outfits.
@@ -53,6 +62,37 @@ export const outfitService = {
 
       return domainFail(domainError);
     }
+  },
+
+  /**
+   * Saves an outfit unless the user already has a live look containing exactly the same items, in which case
+   * that look is reused. Keeps repeated taps (Send to Mannequin, Save) from filling My Looks with duplicates.
+   */
+  async saveOutfitOnce(
+    input: SaveOutfitInput
+  ): Promise<DomainResult<SaveOutfitResult & { reused: boolean }>> {
+    try {
+      const wanted = outfitSignature(input.items);
+      const { data, error } = await supabase
+        .from('saved_outfits')
+        .select('id, items')
+        .eq('user_id', input.userId)
+        .eq('deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (!error && data) {
+        const match = (data as { id: string; items: unknown }[]).find(
+          (row) => Array.isArray(row.items) && outfitSignature(row.items as OutfitItemDto[]) === wanted
+        );
+        if (match) return domainOk({ id: match.id, reused: true });
+      }
+    } catch {
+      // A failed lookup must not block saving; worst case is one duplicate, which the user can delete.
+    }
+
+    const saved = await outfitService.saveOutfit(input);
+    return saved.ok ? domainOk({ id: saved.data.id, reused: false }) : saved;
   },
 
   /**

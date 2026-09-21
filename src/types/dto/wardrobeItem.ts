@@ -1,6 +1,8 @@
 import { ColorDetailItem } from './aiAttributes';
 
 export interface AddWardrobeItemInput {
+  /** Client-generated uuid; makes the save idempotent across retries. */
+  id?: string;
   userId: string;
   category: string;
   garmentType: string;

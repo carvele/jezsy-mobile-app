@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import * as Crypto from 'expo-crypto';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -64,6 +65,9 @@ export default function AddWardrobeItemScreen() {
 
   const saveStartedAtRef = useRef<number | null>(null);
   const saveGenerationRef = useRef(0);
+  // One save attempt per image: the client-generated item id and the uploaded file survive retries, so a
+  // retry after a timeout reuses both instead of creating a second row and a second orphaned upload.
+  const attemptRef = useRef<{ uri: string; itemId: string; path?: string; publicUrl?: string } | null>(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -257,18 +261,32 @@ export default function AddWardrobeItemScreen() {
 
     try {
       const activeUri = (removeBg && processedImageUri) ? processedImageUri : imageUri;
-      const response = await fetch(activeUri);
-      const headerContentType = response.headers?.get('content-type');
-      const bytes = await response.arrayBuffer();
-      if (!bytes || bytes.byteLength === 0) {
-        throw new Error('Selected image file is empty.');
-      }
-      const { contentType, ext } = resolveImageFileInfo(activeUri, headerContentType);
 
       const userId = session?.user?.id;
       if (!userId) {
         throw new Error('You must be signed in to save items to your wardrobe.');
       }
+
+      // A different image is a different item: release the previous attempt's upload if its row was never created.
+      const previous = attemptRef.current;
+      if (previous && previous.uri !== activeUri) {
+        if (previous.path && (await wardrobeService.itemExists(previous.itemId, userId)) === false) {
+          await wardrobeService.removeWardrobeImage(previous.path);
+        }
+        attemptRef.current = null;
+      }
+      if (!attemptRef.current) {
+        attemptRef.current = { uri: activeUri, itemId: Crypto.randomUUID() };
+      }
+      const attempt = attemptRef.current;
+
+      const response = attempt.path ? null : await fetch(activeUri);
+      const headerContentType = response?.headers?.get('content-type');
+      const bytes = response ? await response.arrayBuffer() : null;
+      if (response && (!bytes || bytes.byteLength === 0)) {
+        throw new Error('Selected image file is empty.');
+      }
+      const { contentType, ext } = resolveImageFileInfo(activeUri, headerContentType);
 
       // Non-blocking ML visual representation generation
       let visualEmbedding: number[] | null = null;
@@ -281,57 +299,58 @@ export default function AddWardrobeItemScreen() {
         visualEmbedding = null;
       }
 
-      setStatusMessage('Uploading photo...');
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-      const filePath = `${userId}/${fileName}`;
+      if (!attempt.path) {
+        setStatusMessage('Uploading photo...');
+        // Random uuid, not a timestamp: the bucket is public, so the URL is the only thing protecting the photo.
+        const filePath = `${userId}/${Crypto.randomUUID()}.${ext}`;
 
-      const attemptUpload = async () => {
-        return await supabase.storage
-          .from('wardrobe-images')
-          .upload(filePath, bytes, {
-            contentType,
-            upsert: false,
-          });
-      };
+        const attemptUpload = async () => {
+          return await supabase.storage
+            .from('wardrobe-images')
+            .upload(filePath, bytes as ArrayBuffer, {
+              contentType,
+              upsert: false,
+            });
+        };
 
-      let uploadResult: any = null;
-      let lastUploadErr: any = null;
+        let uploadResult: any = null;
+        let lastUploadErr: any = null;
 
-      for (let attempt = 1; attempt <= 4; attempt++) {
-        if (myGeneration !== saveGenerationRef.current) return;
-        try {
-          setStatusMessage(attempt === 1 ? 'Uploading photo...' : `Retrying upload (${attempt}/4)...`);
-          const uploadPromise = attemptUpload();
-          uploadResult = await withTimeout(uploadPromise, 40000, 'Photo upload timed out');
-          if (uploadResult?.error) {
-            lastUploadErr = uploadResult.error;
-            if (attempt < 4) {
-              await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
-              continue;
+        for (let tries = 1; tries <= 4; tries++) {
+          if (myGeneration !== saveGenerationRef.current) return;
+          try {
+            setStatusMessage(tries === 1 ? 'Uploading photo...' : `Retrying upload (${tries}/4)...`);
+            uploadResult = await withTimeout(attemptUpload(), 40000, 'Photo upload timed out');
+            if (uploadResult?.error) {
+              lastUploadErr = uploadResult.error;
+              if (tries < 4) {
+                await new Promise((resolve) => setTimeout(resolve, tries * 1500));
+                continue;
+              }
+            } else {
+              lastUploadErr = null;
+              break;
             }
-          } else {
-            lastUploadErr = null;
-            break;
-          }
-        } catch (err: any) {
-          lastUploadErr = err;
-          if (attempt < 4) {
-            await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+          } catch (err: any) {
+            lastUploadErr = err;
+            if (tries < 4) {
+              await new Promise((resolve) => setTimeout(resolve, tries * 1500));
+            }
           }
         }
-      }
 
-      if (lastUploadErr) {
-        const err: any = new Error(lastUploadErr.message || 'Upload failed.');
-        err.exhaustedRetries = true;
-        throw err;
-      }
-      const { data: uploadData, error: uploadError } = uploadResult!;
-      if (uploadError || !uploadData) throw uploadError || new Error('Upload failed.');
+        if (lastUploadErr) {
+          const err: any = new Error(lastUploadErr.message || 'Upload failed.');
+          err.exhaustedRetries = true;
+          throw err;
+        }
+        const { data: uploadData, error: uploadError } = uploadResult!;
+        if (uploadError || !uploadData) throw uploadError || new Error('Upload failed.');
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('wardrobe-images')
-        .getPublicUrl(uploadData.path);
+        attempt.path = uploadData.path;
+        attempt.publicUrl = supabase.storage.from('wardrobe-images').getPublicUrl(uploadData.path).data.publicUrl;
+      }
+      const publicUrl = attempt.publicUrl as string;
 
       setStatusMessage('Saving details...');
 
@@ -351,31 +370,41 @@ export default function AddWardrobeItemScreen() {
         : [];
       const occasionTags = parsedOccasionTags.length > 0 ? parsedOccasionTags : (trimmedWhereWorn ? [trimmedWhereWorn] : []);
 
-      const result = await withTimeout(
-        wardrobeService.addItem({
-          userId,
-          category: effectiveCategory,
-          garmentType: inferredBucket,
-          subCategory: trimmedSub || null,
-          imageUrl: publicUrl,
-          color: trimmedColor || null,
-          colorTags,
-          whereWornOften: trimmedWhereWorn || null,
-          occasions: occasionTags,
-          description: trimmedDesc || null,
-          userNotes: trimmedNotes || null,
-          embedding: visualEmbedding,
-          aiAttributes: {
-            rawColor: trimmedColor || undefined,
-            whereWornOften: trimmedWhereWorn || undefined,
-            description: trimmedDesc || undefined,
-            userNotes: trimmedNotes || undefined,
-          },
-        }),
-        12000,
-      );
+      const outcome = await wardrobeService.saveItemVerified({
+        id: attempt.itemId,
+        userId,
+        category: effectiveCategory,
+        garmentType: inferredBucket,
+        subCategory: trimmedSub || null,
+        imageUrl: publicUrl,
+        color: trimmedColor || null,
+        colorTags,
+        whereWornOften: trimmedWhereWorn || null,
+        occasions: occasionTags,
+        description: trimmedDesc || null,
+        userNotes: trimmedNotes || null,
+        embedding: visualEmbedding,
+        aiAttributes: {
+          rawColor: trimmedColor || undefined,
+          whereWornOften: trimmedWhereWorn || undefined,
+          description: trimmedDesc || undefined,
+          userNotes: trimmedNotes || undefined,
+        },
+      });
 
-      if (!result.ok) throw result.error;
+      if (outcome.status === 'failed') {
+        // The database definitively refused the row, so the uploaded photo would be orphaned.
+        if (attempt.path) await wardrobeService.removeWardrobeImage(attempt.path);
+        attemptRef.current = null;
+        throw outcome.error;
+      }
+      if (outcome.status === 'unknown') {
+        // Not confirmed either way: keep the id and the upload so tapping Add again cannot create a duplicate.
+        const err: any = new Error('We could not confirm the item was saved.');
+        err.isUnconfirmed = true;
+        throw err;
+      }
+      attemptRef.current = null;
 
       if (myGeneration !== saveGenerationRef.current) return;
       saveStartedAtRef.current = null;
@@ -409,8 +438,8 @@ export default function AddWardrobeItemScreen() {
       let userMessage = err?.message || 'Failed to save item. Try again.';
       if (err?.exhaustedRetries) {
         userMessage = 'Still stuck after several tries. Please reload the app and try again.';
-      } else if (err?.isTimeout) {
-        userMessage = 'The upload took too long. Check your connection and tap Add to Wardrobe again.';
+      } else if (err?.isUnconfirmed || err?.isTimeout) {
+        userMessage = 'We could not confirm the save. Check your connection and tap Add to Wardrobe again; it will not create a duplicate.';
       }
       showToast(userMessage, 'error');
     } finally {

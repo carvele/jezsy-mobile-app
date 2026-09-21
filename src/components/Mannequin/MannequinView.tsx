@@ -37,6 +37,7 @@ import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
 import { useSizingProfile } from '@/src/hooks/useSizingProfile';
 import { buildSilhouetteParams } from '@/src/utils/bodySilhouette';
 import { gradeOutfitWithAI, StylistCritique, OutfitContext } from '@/src/utils/aiStylistAdvisor';
+import { runStylistRequest } from '@/src/utils/stylistRun';
 import { StylistCritiqueModal } from './StylistCritiqueModal';
 import { OutfitContextModal } from './OutfitContextModal';
 import { MannequinCanvasItem } from './MannequinCanvasItem';
@@ -1113,37 +1114,39 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       <OutfitContextModal
         visible={outfitContextVisible}
         loading={stylistLoading}
-        onConfirm={async (ctx) => {
-          const requestId = ++currentStylistRequestIdRef.current;
-          setStylistLoading(true);
-          setActiveCritique(null);
-          setUserFeedback(null);
-          try {
-            let profile = null;
-            if (session?.user?.id) {
-              try {
-                profile = await styleProfileService.getProfile(session.user.id);
-              } catch {
-                // fallback gracefully
+        onConfirm={(ctx) =>
+          runStylistRequest(currentStylistRequestIdRef, {
+            onStart: () => {
+              setStylistLoading(true);
+              setActiveCritique(null);
+              setUserFeedback(null);
+            },
+            run: async (isCurrent) => {
+              let profile = null;
+              if (session?.user?.id) {
+                try {
+                  profile = await styleProfileService.getProfile(session.user.id);
+                } catch {
+                  // fallback gracefully
+                }
               }
-            }
-            if (requestId !== currentStylistRequestIdRef.current) {
-              return;
-            }
-            const critique = await gradeOutfitWithAI(canvasItems, wardrobeLookup, ctx, profile);
-            if (requestId !== currentStylistRequestIdRef.current) {
-              return;
-            }
-            setActiveCritique(critique);
-            setActiveStylistContext(ctx);
-            setOutfitContextVisible(false);
-            setStylistModalVisible(true);
-          } finally {
-            if (requestId === currentStylistRequestIdRef.current) {
-              setStylistLoading(false);
-            }
-          }
-        }}
+              if (!isCurrent()) return undefined;
+              return gradeOutfitWithAI(canvasItems, wardrobeLookup, ctx, profile);
+            },
+            onSuccess: (critique) => {
+              setActiveCritique(critique);
+              setActiveStylistContext(ctx);
+              setOutfitContextVisible(false);
+              setStylistModalVisible(true);
+            },
+            // The context sheet stays open so the user can retry without re-entering anything.
+            onError: (err) => {
+              console.error('Stylist analysis failed:', err);
+              showToast('Could not analyze this look. Please try again.', 'error');
+            },
+            onSettled: () => setStylistLoading(false),
+          })
+        }
         onCancel={() => {
           currentStylistRequestIdRef.current++;
           setStylistLoading(false);

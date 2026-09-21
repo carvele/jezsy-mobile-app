@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../lib/supabase';
 import { OutfitFeedbackInput } from '../types/dto/styleProfile';
 import { WardrobeItem } from './wardrobeService';
 import { styleProfileService } from './styleProfileService';
@@ -9,7 +8,8 @@ const LOCAL_PASSED_KEY = 'jezsy_wardrobe_passed_suggestions_';
 
 export const outfitFeedbackService = {
   /**
-   * Logs a feedback event (like, dislike, save, reject, worn, rate) and automatically updates the style profile
+   * Records a feedback event (like, dislike, save, reject, worn, rate) on this device and updates the style profile.
+   * Feedback is local-first by design: there is no outfit_feedback table in production, so nothing is sent to the server.
    */
   async logFeedback(
     input: OutfitFeedbackInput,
@@ -33,22 +33,7 @@ export const outfitFeedbackService = {
       }
     }
 
-    // 2. Persist feedback event in Supabase outfit_feedback table
-    try {
-      await (supabase as any).from('outfit_feedback').insert({
-        user_id: input.userId,
-        outfit_id: input.outfitId || null,
-        feedback_type: input.feedbackType,
-        rating: input.rating || null,
-        occasion: input.occasion || null,
-        wardrobe_item_ids: itemIds,
-        context: input.context || {},
-      });
-    } catch (err) {
-      console.warn('Could not persist outfit feedback to Supabase (offline or network error):', err);
-    }
-
-    // 3. Update personal style profile weights
+    // 2. Update personal style profile weights
     if (items.length > 0) {
       try {
         const currentProfile = await styleProfileService.getProfile(input.userId);

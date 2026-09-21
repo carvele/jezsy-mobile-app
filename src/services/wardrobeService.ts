@@ -30,6 +30,31 @@ export type WardrobeFilter = {
 
 const NEGLECT_MS = 60 * 86_400_000;
 
+/**
+ * Everything the app reads from a wardrobe row except `embedding`: the visual vector is only ever written
+ * (Add Item) and would otherwise ride along on every list and Style Advisor load.
+ */
+export const WARDROBE_LIST_COLUMNS =
+  'id,user_id,product_id,image_url,category,sub_category,deleted,created_at,color_tags,garment_type,wear_count,last_worn_at,description,user_notes,ai_attributes,occasions,seasons';
+
+/**
+ * Builds the PostgREST `or` filter for wardrobe search. The user's text is placed inside a comma-separated,
+ * parenthesised filter grammar, so the characters that structure that grammar (and LIKE wildcards) are
+ * removed rather than interpreted. Returns null when nothing searchable remains.
+ * Ownership is not affected: this filter is AND-ed with user_id and RLS.
+ */
+export function buildSearchOrFilter(raw: string | undefined | null): string | null {
+  const term = (raw ?? '')
+    .replace(/[,()"'\\*:;%_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+  if (!term) return null;
+  return ['garment_type', 'category', 'sub_category', 'description']
+    .map((col) => `${col}.ilike.%${term}%`)
+    .join(',');
+}
+
 export async function getWardrobeItemsPage(
   userId: string,
   offset = 0,
@@ -38,7 +63,7 @@ export async function getWardrobeItemsPage(
 ): Promise<OffsetPageResult<WardrobeItem>> {
   let query = supabase
     .from('wardrobe_items')
-    .select('*')
+    .select(WARDROBE_LIST_COLUMNS)
     .eq('user_id', userId)
     .eq('deleted', false);
 
@@ -53,9 +78,9 @@ export async function getWardrobeItemsPage(
     query = query.gt('wear_count', 0).lt('last_worn_at', cutoff);
   }
 
-  const q = filters.search?.trim();
-  if (q) {
-    query = query.or(`garment_type.ilike.%${q}%,category.ilike.%${q}%,sub_category.ilike.%${q}%,description.ilike.%${q}%`);
+  const searchFilter = buildSearchOrFilter(filters.search);
+  if (searchFilter) {
+    query = query.or(searchFilter);
   }
 
   query = query
@@ -66,7 +91,7 @@ export async function getWardrobeItemsPage(
   const { data, error } = await query;
   if (error) throw error;
 
-  const raw = data ?? [];
+  const raw = (data ?? []) as unknown as WardrobeItem[];
   const hasMore = raw.length > limit;
   const items = raw.slice(0, limit);
 
@@ -152,6 +177,99 @@ export async function getWardrobeCapsulesPage(
   };
 }
 
+// Columns that can be omitted from an insert without losing anything the user typed.
+const OPTIONAL_INSERT_COLUMNS = ['embedding', 'seasons'];
+
+/** Extracts the column name from PostgREST/Postgres "column does not exist" errors, or null for any other error. */
+function missingColumnFromError(error: { code?: string; message?: string }): string | null {
+  if (!error?.message) return null;
+  if (error.code !== 'PGRST204' && error.code !== '42703') return null;
+  const m = error.message.match(/'([a-z_][a-z0-9_]*)' column/i) ?? error.message.match(/column "?([a-z_][a-z0-9_]*)"?/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * Whether a wardrobe row exists for this user. Returns null when the check itself failed, so callers can
+ * distinguish "not saved" from "could not tell" before deciding to retry.
+ */
+export async function itemExists(itemId: string, userId: string): Promise<boolean | null> {
+  const { data, error } = await supabase
+    .from('wardrobe_items')
+    .select('id')
+    .eq('id', itemId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) return null;
+  return Boolean(data);
+}
+
+export type SaveOutcome =
+  | { status: 'saved' }
+  /** The database definitively did not create the row. */
+  | { status: 'failed'; error: unknown }
+  /** The insert did not confirm and the follow-up check could not tell either. Do not clean up; retry with the same id. */
+  | { status: 'unknown'; error: unknown };
+
+/**
+ * Inserts a new item and settles what actually happened. A timeout or error is never taken at face value:
+ * the row is looked up by its client-generated id first, so a slow success is reported as saved instead of
+ * being retried into a duplicate.
+ */
+export async function saveItemVerified(
+  input: AddWardrobeItemInput & { id: string },
+  timeoutMs = 12_000
+): Promise<SaveOutcome> {
+  let cause: unknown = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const err: Error & { isTimeout?: boolean } = new Error('Saving the item timed out');
+        err.isTimeout = true;
+        reject(err);
+      }, timeoutMs);
+    });
+    const result = await Promise.race([addItem(input), timeout]);
+    if (result.ok) return { status: 'saved' };
+    cause = result.error;
+  } catch (err) {
+    cause = err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+
+  const exists = await itemExists(input.id, input.userId);
+  if (exists === true) return { status: 'saved' };
+  if (exists === false) return { status: 'failed', error: cause };
+  return { status: 'unknown', error: cause };
+}
+
+/** Removes an uploaded wardrobe image (best effort; storage RLS limits this to the caller's own folder). */
+export async function removeWardrobeImage(path: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.storage.from('wardrobe-images').remove([path]);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Records a wear for each item through the atomic, ownership-checked increment_wear_count RPC.
+ * Reports exactly which items were and were not recorded; callers must not claim success for `failed`.
+ */
+export async function logItemsWorn(itemIds: string[]): Promise<{ succeeded: string[]; failed: string[] }> {
+  const ids = Array.from(new Set(itemIds.filter(Boolean)));
+  const results = await Promise.allSettled(ids.map((id) => supabase.rpc('increment_wear_count', { p_item_id: id })));
+  const succeeded: string[] = [];
+  const failed: string[] = [];
+  results.forEach((res, i) => {
+    if (res.status === 'fulfilled' && !res.value.error) succeeded.push(ids[i]);
+    else failed.push(ids[i]);
+  });
+  return { succeeded, failed };
+}
+
 /**
  * Adds a new item to the user's wardrobe.
  */
@@ -170,6 +288,8 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
       : null;
 
     const insertPayload: Record<string, any> = {
+      // A client-generated id makes the insert idempotent: a retry of the same save can never create a second row.
+      ...(input.id ? { id: input.id } : {}),
       user_id: input.userId,
       category: input.category,
       garment_type: input.garmentType,
@@ -234,33 +354,27 @@ export async function addItem(input: AddWardrobeItemInput): Promise<DomainResult
 
     let { error } = await (supabase.from('wardrobe_items') as any).insert(insertPayload);
 
-    // Fallback: If newer columns (e.g. ai_attributes) are pending in schema cache or unapplied migration, retry with base columns
-    if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache') || error.message?.includes('column'))) {
-      const basePayload: Record<string, any> = {
-        user_id: input.userId,
-        category: input.category,
-        garment_type: input.garmentType,
-        sub_category: input.subCategory ?? null,
-        image_url: input.imageUrl,
-        color_tags: effectiveColorTags ?? input.colorTags ?? null,
-      };
-      if (input.description) basePayload.description = input.description;
-      if (input.userNotes) basePayload.user_notes = input.userNotes;
-      if (effectiveOccasions && !error.message?.includes('occasions')) basePayload.occasions = effectiveOccasions;
-      if (input.seasons && input.seasons.length > 0 && !error.message?.includes('seasons')) basePayload.seasons = input.seasons;
+    // Only columns that hold no user-entered fact may be dropped, and only the one the database names.
+    // ai_attributes carries the exact where-worn and colour text, so a missing ai_attributes column is a
+    // loud failure, never a silent downgrade.
+    for (let attempt = 0; error && attempt < OPTIONAL_INSERT_COLUMNS.length; attempt++) {
+      const missing = missingColumnFromError(error);
+      if (!missing || !OPTIONAL_INSERT_COLUMNS.includes(missing) || !(missing in insertPayload)) break;
 
       errorReporting.capture(new DomainError({
         code: 'WARN_WARDROBE_ITEM_ADD_FALLBACK',
-        message: `Rich insert failed (${error.message}); retrying with baseline supported columns.`,
+        message: `Insert failed on optional column '${missing}'; retrying without it. User-entered fields are preserved.`,
         domain: 'wardrobe',
-        context: { operation: 'addItem', userId: input.userId, originalError: error.message },
+        context: { operation: 'addItem', userId: input.userId, missingColumn: missing },
       }));
+      delete insertPayload[missing];
+      ({ error } = await (supabase.from('wardrobe_items') as any).insert(insertPayload));
+    }
 
-      const retry = await (supabase.from('wardrobe_items') as any).insert(basePayload);
-      if (!retry.error) {
-        return domainOk(undefined);
-      }
-      error = retry.error;
+    // A duplicate key on our own client id means an earlier attempt already saved this item.
+    if (error && error.code === '23505' && input.id) {
+      const exists = await itemExists(input.id, input.userId);
+      if (exists === true) return domainOk(undefined);
     }
 
     if (error) {
@@ -550,39 +664,8 @@ export async function updateItem(
       .select('*')
       .single();
 
-    // Fallback: If newer columns (e.g. ai_attributes, occasions) are pending in schema cache or unapplied migration, retry with base columns
-    if (updateErr && (updateErr.code === 'PGRST204' || updateErr.message?.includes('schema cache') || updateErr.message?.includes('column'))) {
-      const basePayload: Record<string, any> = {
-        category: effectiveCategory,
-        sub_category: effectiveSub,
-        garment_type: newBucket,
-        description: effectiveDesc,
-        user_notes: effectiveNotes,
-        color_tags: effectiveColorTags,
-      };
-      if (effectiveOccasions && !updateErr.message?.includes('occasions')) {
-        basePayload.occasions = effectiveOccasions;
-      }
-
-      errorReporting.capture(new DomainError({
-        code: 'WARN_WARDROBE_ITEM_UPDATE_FALLBACK',
-        message: `Rich update failed (${updateErr.message}); retrying with baseline supported columns.`,
-        domain: 'wardrobe',
-        context: { operation: 'updateItem', itemId, userId, originalError: updateErr.message },
-      }));
-
-      const retry = await (supabase.from('wardrobe_items') as any)
-        .update(basePayload)
-        .eq('id', itemId)
-        .eq('user_id', userId)
-        .select('*')
-        .single();
-
-      if (!retry.error) {
-        return domainOk(retry.data as WardrobeItem);
-      }
-      updateErr = retry.error;
-    }
+    // The rich payload carries ai_attributes (exact where-worn and colour text). A schema error is surfaced
+    // instead of retrying without it, because a silent downgrade would discard what the user typed.
 
     if (updateErr) {
       throw updateErr;
@@ -608,6 +691,10 @@ export async function updateItem(
 }
 
 export const wardrobeService = {
+  itemExists,
+  saveItemVerified,
+  removeWardrobeImage,
+  logItemsWorn,
   getItemsPage: getWardrobeItemsPage,
   getOutfitsPage: getWardrobeOutfitsPage,
   getCapsulesPage: getWardrobeCapsulesPage,
