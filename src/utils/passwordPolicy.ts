@@ -17,6 +17,12 @@ export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_REQUIREMENT_HINT =
   'At least 8 characters, with a lowercase letter, an uppercase letter, a number and a symbol.';
 
+export interface PasswordRequirementCheck {
+  id: 'length' | 'lowercase' | 'uppercase' | 'number' | 'symbol';
+  label: string;
+  met: boolean;
+}
+
 /** Null when the password satisfies the policy; otherwise the message to show. */
 export function passwordPolicyError(password: string): string | null {
   if (password.length < PASSWORD_MIN_LENGTH) {
@@ -35,6 +41,40 @@ export function passwordPolicyError(password: string): string | null {
     return 'Please add a symbol, like ! or #.';
   }
   return null;
+}
+
+/**
+ * Returns structured requirement checks for live UI display.
+ * Kept in strict sync with passwordPolicyError above.
+ */
+export function evaluatePasswordRequirements(password: string): PasswordRequirementCheck[] {
+  return [
+    {
+      id: 'length',
+      label: `At least ${PASSWORD_MIN_LENGTH} characters`,
+      met: password.length >= PASSWORD_MIN_LENGTH,
+    },
+    {
+      id: 'lowercase',
+      label: 'One lowercase letter',
+      met: /[a-z]/.test(password),
+    },
+    {
+      id: 'uppercase',
+      label: 'One uppercase letter',
+      met: /[A-Z]/.test(password),
+    },
+    {
+      id: 'number',
+      label: 'One number',
+      met: /[0-9]/.test(password),
+    },
+    {
+      id: 'symbol',
+      label: 'One symbol (e.g. ! @ # $)',
+      met: /[^a-zA-Z0-9]/.test(password),
+    },
+  ];
 }
 
 /**

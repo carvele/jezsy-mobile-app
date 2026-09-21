@@ -82,25 +82,29 @@ export default function ProfileSetupScreen() {
 
   // Prefill from the existing profile, falling back to OAuth metadata for
   // names on first-time setup. Without this, a returning user hitting this
-  // screen mid-setup would start blank and the skip-address path would
-  // upsert null over a previously saved address. The `prev.x ||` guards
-  // keep anything the user has already typed from being overwritten.
+  const hasInitializedStepRef = useRef(false);
+
+  // Prefill from existing profile, user object, and signup/OAuth metadata.
+  // Prevents duplicate entry by auto-advancing past steps the customer already completed.
   useEffect(() => {
     if (!user) return;
 
     const meta = user.user_metadata ?? {};
     const fullName: string = meta.full_name ?? meta.name ?? '';
     const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
+    const existingFirst = profile?.first_name || (typeof meta.first_name === 'string' ? meta.first_name : '') || nameParts[0] || '';
+    const existingLast = profile?.last_name || (typeof meta.last_name === 'string' ? meta.last_name : '') || nameParts.slice(1).join(' ') || '';
+    const storedPhone = profile?.phone || user.phone || (typeof meta.signup_phone === 'string' ? meta.signup_phone : '');
 
-    const { country: matchedCountry, localPhone } = matchCountryFromStoredPhone(profile?.phone);
+    const { country: matchedCountry, localPhone } = matchCountryFromStoredPhone(storedPhone);
     if (matchedCountry) setSelectedCountry(matchedCountry);
     const fmtCountry = matchedCountry ?? COUNTRIES[0];
 
     const dob = dbDateToFormDate(profile?.date_of_birth);
 
     setData(prev => ({
-      firstName:   prev.firstName   || profile?.first_name || nameParts[0] || '',
-      lastName:    prev.lastName    || profile?.last_name  || nameParts.slice(1).join(' ') || '',
+      firstName:   prev.firstName   || existingFirst,
+      lastName:    prev.lastName    || existingLast,
       phone:       prev.phone       || (localPhone ? formatPhoneForCountry(localPhone, fmtCountry) : ''),
       gender:      prev.gender      || profile?.gender || '',
       dateOfBirth: prev.dateOfBirth || dob,
@@ -110,7 +114,24 @@ export default function ProfileSetupScreen() {
       province:    prev.province    || profile?.province || '',
       zipCode:     prev.zipCode     || profile?.zip_code || '',
     }));
+
+    // Prevent duplicate entry: If Name (First & Last) was already gathered in signup or OAuth,
+    // advance directly to Personal Info so the user is never asked for duplicate information.
+    if (!hasInitializedStepRef.current) {
+      hasInitializedStepRef.current = true;
+      if (existingFirst && existingLast) {
+        const hasPhone = Boolean(storedPhone);
+        const hasDob = Boolean(dob);
+        const hasGender = Boolean(profile?.gender);
+        if (hasPhone && hasDob && hasGender) {
+          setStep(2);
+        } else {
+          setStep(1);
+        }
+      }
+    }
   }, [user, profile]);
+
 
   const set = (key: keyof ProfileData, value: string) =>
     setData(prev => ({ ...prev, [key]: value }));
@@ -202,6 +223,7 @@ export default function ProfileSetupScreen() {
   };
 
   const next = () => {
+    if (loading) return;
     if (!validate()) return;
     if (step < TOTAL_STEPS - 1) transitionTo(step + 1);
     else handleSubmit();
@@ -213,7 +235,7 @@ export default function ProfileSetupScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!user) return;
+    if (!user || loading) return;
     setLoading(true);
     try {
       const cleanedPhone = data.phone.replace(/\D/g, '');
@@ -234,28 +256,20 @@ export default function ProfileSetupScreen() {
         updated_at:    new Date().toISOString(),
       };
 
-      const { data: updatedRows, error: updateError } = await supabase
+      // Atomic idempotent upsert eliminates race conditions and duplicate entry errors
+      const { error: upsertError } = await supabase
         .from('profiles')
-        .update(updatePayload)
-        .eq('id', user.id)
-        .select('id');
+        .upsert({
+          id: user.id,
+          email: user.email ?? null,
+          ...updatePayload,
+        }, { onConflict: 'id' });
 
-      if (updateError) throw updateError;
-
-      if (!updatedRows || updatedRows.length === 0) {
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email ?? null,
-            ...updatePayload,
-          });
-
-        if (insertError) throw insertError;
-      }
+      if (upsertError) throw upsertError;
 
       // Refresh profile in context so root layout knows profile is complete
       await refreshProfile();
+
 
       const returnTarget = await consumeAuthReturnTarget();
       if (returnTarget) {
