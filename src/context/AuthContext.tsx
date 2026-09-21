@@ -269,6 +269,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [user, fetchProfile]);
 
   const signOut = useCallback(async () => {
+    const currentUserId = user?.id;
     try {
       syncedUsersRef.current.clear();
       setProfile(null);
@@ -281,14 +282,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       // Clear return targets and private storage caches
       await clearAuthReturnTarget().catch(() => {});
-      await AsyncStorage.multiRemove(['@jezsy_cart', 'jezsy_cart', 'jezsy_profile_cache']).catch(() => {});
-      if (user?.id) await deleteSecureValue(profileCacheKey(user.id)).catch(() => {});
+      const keysToRemove = [
+        '@jezsy_cart',
+        'jezsy_cart',
+        'jezsy_profile_cache',
+      ];
+      if (currentUserId) {
+        keysToRemove.push(
+          `@recently_viewed_${currentUserId}`,
+          `jezsy_style_profile_cache_${currentUserId}`,
+          `@jezsy_tour_progress_${currentUserId}`,
+          `@jezsy_tour_dismissed_${currentUserId}`,
+          `@jezsy_tour_seen_${currentUserId}`,
+          `@jezsy_outfit_feedback_${currentUserId}`,
+        );
+        await deleteSecureValue(profileCacheKey(currentUserId)).catch(() => {});
+      }
+      await AsyncStorage.multiRemove(keysToRemove).catch(() => {});
     } catch (e) {
       console.error('Error during signOut private state purge:', e);
     } finally {
       await supabase.auth.signOut().catch(() => {});
     }
   }, [user]);
+
 
   useEffect(() => {
     // The local PIN feature was removed; drop the secrets it left behind on

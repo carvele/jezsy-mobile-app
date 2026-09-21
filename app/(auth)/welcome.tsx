@@ -18,7 +18,9 @@ import * as Linking from 'expo-linking';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
+import { mapAuthErrorMessage } from '@/src/utils/authErrorMapping';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
+import { LegalReaderModal } from '@/src/components/LegalReaderModal';
 
 // Required to dismiss the auth session on iOS
 WebBrowser.maybeCompleteAuthSession();
@@ -49,6 +51,7 @@ export default function WelcomeScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = React.useState(false);
+  const [activeLegalModal, setActiveLegalModal] = React.useState<'terms' | 'privacy' | null>(null);
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
@@ -123,7 +126,7 @@ export default function WelcomeScreen() {
       }
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
-      showToast('Could not sign in with Google. Please try again.', 'error');
+      showToast(mapAuthErrorMessage(err, 'Could not sign in with Google. Please try again.'), 'error');
     } finally {
       setGoogleLoading(false);
     }
@@ -190,24 +193,33 @@ export default function WelcomeScreen() {
           dark
         />
 
-        {/* Continue Browsing (Storefront First) */}
+        {/* Browse as Guest (Storefront First) */}
         <TouchableOpacity
           style={styles.guestButton}
           onPress={() => router.replace('/(tabs)')}
           accessibilityRole="button"
-          accessibilityLabel="Continue browsing without signing in"
+          accessibilityLabel="Browse as Guest"
         >
-          <Text style={styles.guestButtonText}>Continue Browsing</Text>
+          <Text style={styles.guestButtonText}>Browse as Guest</Text>
         </TouchableOpacity>
 
         <Text style={styles.termsText}>
           By continuing, you agree to our{' '}
-          <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>Terms & Conditions</Text>
+          <Text style={styles.termsLink} onPress={() => setActiveLegalModal('terms')}>Terms & Conditions</Text>
           {' '}and{' '}
-          <Text style={styles.termsLink} onPress={() => router.push('/legal/privacy')}>Privacy Policy</Text>.
+          <Text style={styles.termsLink} onPress={() => setActiveLegalModal('privacy')}>Privacy Policy</Text>.
         </Text>
 
+
       </View>
+
+      {activeLegalModal && (
+        <LegalReaderModal
+          visible={true}
+          documentType={activeLegalModal}
+          onClose={() => setActiveLegalModal(null)}
+        />
+      )}
     </View>
   );
 }
@@ -255,6 +267,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.xl,
     gap: Spacing.md,
   },
+
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',

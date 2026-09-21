@@ -232,37 +232,50 @@ export type UnratedItem = {
   size: string | null;
   color: string | null;
   completedDate: string | null;
+  createdAt?: string | null;
 };
 
 /**
- * Items from Completed reservations the customer hasn't reviewed yet, one
- * row per distinct product -- a multi-item reservation can be partially
- * rated, so this checks per product, not per reservation.
+ * Items from Completed reservations the customer hasn't reviewed yet.
+ * Keyed per reservation item, so every completed purchase item can be rated.
  */
 export async function getMyUnratedItems(userId: string): Promise<UnratedItem[]> {
   const [itemsResult, reviewsResult] = await Promise.all([
     supabase
       .from('reservation_items')
-      .select('id, reservation_id, product_id, product_name, image_url, size, color, reservations!inner(display_id, date, customer_id, status, deleted)')
+      .select('id, reservation_id, product_id, product_name, image_url, size, color, created_at, reservations!inner(display_id, date, created_at, completed_at, customer_id, status, deleted)')
       .eq('reservations.customer_id', userId)
       .in('reservations.status', ['completed', 'Completed'])
       .eq('reservations.deleted', false),
     supabase
       .from('reviews')
-      .select('product_id')
+      .select('reservation_item_id, product_id')
       .eq('user_id', userId),
   ]);
 
   if (itemsResult.error) throw itemsResult.error;
   if (reviewsResult.error) throw reviewsResult.error;
 
-  const reviewedProductIds = new Set((reviewsResult.data ?? []).map((r) => r.product_id));
-  const seenProductIds = new Set<string>();
+  const reviewedItemIds = new Set(
+    (reviewsResult.data ?? [])
+      .map((r: any) => r.reservation_item_id)
+      .filter(Boolean)
+  );
+  const legacyReviewedProductIds = new Set(
+    (reviewsResult.data ?? [])
+      .filter((r: any) => !r.reservation_item_id)
+      .map((r: any) => r.product_id)
+      .filter(Boolean)
+  );
+
   const unrated: UnratedItem[] = [];
 
   for (const row of (itemsResult.data ?? []) as any[]) {
-    if (reviewedProductIds.has(row.product_id) || seenProductIds.has(row.product_id)) continue;
-    seenProductIds.add(row.product_id);
+    // If this specific reservation item was already reviewed, skip it
+    if (row.id && reviewedItemIds.has(row.id)) continue;
+    // For legacy rows lacking an item id, check legacy reviewed product
+    if (!row.id && legacyReviewedProductIds.has(row.product_id)) continue;
+
     unrated.push({
       reservationItemId: row.id,
       reservationId: row.reservation_id,
@@ -272,9 +285,20 @@ export async function getMyUnratedItems(userId: string): Promise<UnratedItem[]> 
       imageUrl: row.image_url,
       size: row.size,
       color: row.color,
-      completedDate: row.reservations?.date ?? null,
+      completedDate: row.reservations?.completed_at ?? row.reservations?.date ?? null,
+      createdAt: row.reservations?.created_at ?? row.created_at ?? null,
     });
   }
+
+  unrated.sort((a, b) => {
+    const timeB = new Date(b.completedDate || b.createdAt || 0).getTime();
+    const timeA = new Date(a.completedDate || a.createdAt || 0).getTime();
+    if (timeB !== timeA) return timeB - timeA;
+    const createdB = new Date(b.createdAt || 0).getTime();
+    const createdA = new Date(a.createdAt || 0).getTime();
+    if (createdB !== createdA) return createdB - createdA;
+    return (b.displayId || b.reservationId || '').localeCompare(a.displayId || a.reservationId || '');
+  });
 
   return unrated;
 }

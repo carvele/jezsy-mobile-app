@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
+import { Colors, Spacing, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { WardrobeStats } from '@/src/utils/outfitGenerator';
 import { tapLight } from '@/src/utils/haptics';
@@ -35,7 +35,7 @@ export function WardrobeStatsBar({ stats, onSelect, active = 'all' }: Props) {
             style={[
               styles.cell,
               {
-                backgroundColor: isActive ? colors.tint : colors.card,
+                backgroundColor: isActive ? colors.tint : (theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)'),
                 borderColor: isActive ? colors.tint : colors.border,
               },
             ]}
@@ -62,26 +62,27 @@ export function WardrobeStatsBar({ stats, onSelect, active = 'all' }: Props) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
   },
   cell: {
     flex: 1,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
+    flexDirection: 'row',
     alignItems: 'center',
-    ...Elevation.sm,
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    paddingVertical: 7,
+    paddingHorizontal: Spacing.sm,
   },
   value: {
-    ...Type.title,
-    fontWeight: '800',
+    fontSize: 13,
+    fontWeight: '700',
   },
   label: {
-    ...Type.label,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-    marginTop: Spacing.xs / 2,
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.1,
   },
 });

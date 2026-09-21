@@ -65,6 +65,8 @@ const MAPPING = {
   'ellipsis': 'more-horiz',
   'delete.left': 'backspace',
   'pencil': 'edit',
+  'doc.text': 'description',
+  'book': 'book',
 
   // Status & Alerts
   'bell': 'notifications-none',
@@ -76,6 +78,7 @@ const MAPPING = {
   'hand.thumbsup.fill': 'thumb-up',
   'hand.thumbsdown.fill': 'thumb-down',
   'pin.fill': 'push-pin',
+  'shield': 'shield',
 
   // User & Profile
   'person.fill': 'person',

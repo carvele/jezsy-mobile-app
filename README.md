@@ -43,6 +43,20 @@ Schema changes live in `supabase/migrations/`, applied against a live, shared
 Postgres project. See [supabase/migrations/README.md](supabase/migrations/README.md)
 for the idempotency conventions every migration in this repo must follow.
 
+## Optional garment auto-detection
+
+The Add Item screen works fully with manual entry. To enable its optional
+Auto-detect button, configure these **Supabase Edge Function secrets** and deploy
+`analyze-wardrobe-image`:
+
+- `GEMINI_TAGGING_API_KEY`
+- `GEMINI_TAGGING_MODEL`
+
+The function is authenticated and rate-limited. It suggests category,
+subcategory, up to three colours, visible pattern and material appearance, fit,
+length, sleeves, neckline, and silhouette. It never saves a result on the
+user's behalf; the user reviews, corrects, and applies it before saving.
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

@@ -18,7 +18,7 @@ import { isNewArrival } from '@/src/utils/newArrival';
 // component is that there is only one place to change a product card.
 export type ProductCardVariant = 'grid' | 'rail';
 
-const RAIL_WIDTH = 150;
+const RAIL_WIDTH = 164;
 const LOW_STOCK_THRESHOLD = 5;
 
 type Props = {
@@ -60,7 +60,7 @@ export function ProductCard({
     ? 'Out of stock'
     : lowStock
     ? `Only ${stock} left`
-    : `${stock} in stock`;
+    : 'Pickup available';
 
   const restockDateStr = outOfStock && (product as any).restock_date
     ? `Restock Expected: ${new Date((product as any).restock_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
@@ -113,33 +113,34 @@ export function ProductCard({
             />
           ) : null}
 
-          {/* Left column of badges so they never collide with the heart. */}
+          {/* One status badge keeps the product image calm; AR has its own
+              fixed corner so it never competes with sale or newness. */}
           <View style={styles.badgeColumn}>
             {outOfStock && (
               <View style={[styles.badge, styles.badgeSoldOut]}>
                 <Text style={[styles.badgeText, styles.badgeSoldOutText]}>SOLD OUT</Text>
               </View>
             )}
-            {isNew && !outOfStock && (
-              <View style={[styles.badge, styles.badgeRow, { backgroundColor: colors.tint }]}>
-                <IconSymbol name="sparkles" size={10} color={colors.onTint} />
-                <Text style={[styles.badgeText, { color: colors.onTint }]}>NEW ARRIVAL</Text>
-              </View>
-            )}
-            {onSale && (
+            {onSale && !outOfStock ? (
               <View style={[styles.badge, { backgroundColor: colors.notification }]}>
                 <Text style={[styles.badgeText, { color: colors.onNotification }]}>
                   {product.discount_percentage ? `-${product.discount_percentage}%` : 'SALE'}
                 </Text>
               </View>
-            )}
-            {!!(product.model_3d_url && product.tags && product.tags.includes('AR Try-On')) && (
-              <View style={[styles.badge, styles.badgeRow, { backgroundColor: '#6366f1' }]}>
-                <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
-                <Text style={[styles.badgeText, { color: 'white' }]}>AR</Text>
+            ) : isNew && !outOfStock ? (
+              <View style={[styles.badge, styles.badgeRow, { backgroundColor: colors.tint }]}>
+                <IconSymbol name="sparkles" size={10} color={colors.onTint} />
+                <Text style={[styles.badgeText, { color: colors.onTint }]}>NEW</Text>
               </View>
-            )}
+            ) : null}
           </View>
+
+          {!!(product.model_3d_url && product.tags && product.tags.includes('AR Try-On')) && (
+            <View style={styles.arBadge}>
+              <IconSymbol name="cube.transparent" size={10} color="#ffffff" />
+              <Text style={styles.arBadgeText}>AR</Text>
+            </View>
+          )}
 
           {/* Saving from the catalog was previously impossible without opening
               the product. Pressable rather than nesting inside the Link's
@@ -175,7 +176,7 @@ export function ProductCard({
           <Text style={[styles.category, { color: colors.secondaryText }]} numberOfLines={1}>
             {getCategoryLabel(product, 'COLLECTION').toUpperCase()}
           </Text>
-          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>
             {product.name}
           </Text>
 
@@ -216,7 +217,7 @@ export function ProductCard({
 const styles = StyleSheet.create({
   card: { marginBottom: Spacing.xl },
   cardGrid: {},
-  cardRail: { width: RAIL_WIDTH, marginRight: 14, marginBottom: 0 },
+  cardRail: { width: RAIL_WIDTH, marginBottom: 0 },
   imageWrap: {
     width: '100%',
     aspectRatio: 3 / 4,
@@ -234,7 +235,20 @@ const styles = StyleSheet.create({
   // Neutral grey badge — same badge system as NEW/SALE, just a disabled treatment.
   badgeSoldOut: { backgroundColor: 'rgba(0,0,0,0.45)' },
   badgeSoldOutText: { color: '#FFF', letterSpacing: 1 },
-  heart: { position: 'absolute', top: 6, right: 6 },
+  arBadge: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+    backgroundColor: '#6366F1',
+  },
+  arBadgeText: { ...Type.caption, color: '#FFF', fontWeight: '800' },
+  heart: { position: 'absolute', top: 8, right: 8 },
   // Real backdrop blur (expo-blur BlurView), not a flat rgba(0,0,0,0.45)
   // fill: floats over a product photo in every card variant, the one case
   // in this shared component where translucency reveals real content
@@ -243,20 +257,20 @@ const styles = StyleSheet.create({
   // NEW/SALE badges stay opaque on purpose -- they're status/urgency
   // indicators, not chrome, and need maximum legibility, not softening.
   heartBg: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  info: { paddingTop: Spacing.sm, paddingHorizontal: Spacing.xs, gap: 3 },
+  info: { paddingTop: Spacing.md, paddingHorizontal: Spacing.xs, gap: Spacing.xs },
   // Sold-out info block is slightly muted so it reads as non-actionable.
   infoMuted: { opacity: 0.7 },
   category: { ...Type.label },
-  name: { ...Type.body },
+  name: { ...Type.body, minHeight: Type.body.lineHeight * 2 },
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   price: { ...Type.bodyStrong },
   priceMuted: { opacity: 0.55 },

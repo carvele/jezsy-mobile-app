@@ -44,8 +44,8 @@ export default function TabLayout() {
       fontWeight: '600' as const,
       letterSpacing: 0.2,
       lineHeight: isCompact ? 12 : 14,
-      marginTop: 2,
-      marginBottom: 2,
+      marginTop: 3,
+      marginBottom: 3,
     },
     tabBarBadgeStyle: {
       fontSize: 10,
@@ -85,8 +85,8 @@ export default function TabLayout() {
           }),
     },
     tabBarItemStyle: {
-      paddingTop: 6,
-      paddingBottom: 6,
+      paddingTop: 7,
+      paddingBottom: 7,
       justifyContent: 'center' as const,
       alignItems: 'center' as const,
     },

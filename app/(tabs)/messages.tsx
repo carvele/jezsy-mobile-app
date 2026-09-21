@@ -23,7 +23,12 @@ export default function InboxScreen() {
   const bottomInset = useSharedBottomInset();
   const { conversations, loading: messagesLoading, error: messagesError, refreshConversations, onlineUsers, isStaffOnline, getOrCreateConversation } = useMessages();
   const { user, profile } = useAuth();
-  const { unreadNonChatCount, markAsRead: markNotifReadInContext, markAllAsRead: markAllNotifsReadInContext } = useNotifications();
+  const {
+    unreadNonChatCount,
+    markAsRead: markNotifReadInContext,
+    markAllAsRead: markAllNotifsReadInContext,
+    deleteNotification: deleteNotifInContext,
+  } = useNotifications();
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -159,6 +164,23 @@ export default function InboxScreen() {
     }
   };
 
+  const handleDeleteNotification = async (item: NotificationItem, e?: any) => {
+    if (e?.stopPropagation) {
+      e.stopPropagation();
+    }
+    if (!user) return;
+    const previous = notifications;
+    setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+    try {
+      await deleteNotifInContext(item.id, !item.is_read);
+      showToast('Notification deleted', 'info');
+    } catch (err) {
+      console.error('Failed to delete notification:', err);
+      setNotifications(previous);
+      showToast('Failed to delete notification', 'error');
+    }
+  };
+
   const getIconForType = (type: string) => {
     switch (type) {
       case 'reservation':
@@ -273,7 +295,7 @@ export default function InboxScreen() {
             {new Date(item.created_at).toLocaleString()}
           </Text>
         </View>
-        {isAnnouncement && (
+        {isAnnouncement ? (
           <TouchableOpacity
             style={styles.dismissButton}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -282,6 +304,19 @@ export default function InboxScreen() {
             accessibilityLabel="Dismiss this announcement"
           >
             <IconSymbol name="xmark" size={16} color={colors.secondaryText} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.dismissButton}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            onPress={(e) => {
+              if (e?.stopPropagation) e.stopPropagation();
+              handleDeleteNotification(item, e);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Delete this notification"
+          >
+            <IconSymbol name="trash" size={16} color={colors.secondaryText} />
           </TouchableOpacity>
         )}
       </TouchableOpacity>

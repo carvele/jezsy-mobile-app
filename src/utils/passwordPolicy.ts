@@ -17,6 +17,13 @@ export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_REQUIREMENT_HINT =
   'At least 8 characters, with a lowercase letter, an uppercase letter, a number and a symbol.';
 
+export interface PasswordRequirementCheck {
+  id: 'length' | 'lowercase' | 'uppercase' | 'number' | 'symbol';
+  label: string;
+  shortLabel: string;
+  met: boolean;
+}
+
 /** Null when the password satisfies the policy; otherwise the message to show. */
 export function passwordPolicyError(password: string): string | null {
   if (password.length < PASSWORD_MIN_LENGTH) {
@@ -35,6 +42,52 @@ export function passwordPolicyError(password: string): string | null {
     return 'Please add a symbol, like ! or #.';
   }
   return null;
+}
+
+/**
+ * Returns true if all password policy requirements are satisfied.
+ */
+export function areAllPasswordRequirementsMet(password: string): boolean {
+  return passwordPolicyError(password) === null;
+}
+
+/**
+ * Returns structured requirement checks for live UI display.
+ * Kept in strict sync with passwordPolicyError above.
+ */
+export function evaluatePasswordRequirements(password: string): PasswordRequirementCheck[] {
+  return [
+    {
+      id: 'length',
+      label: `At least ${PASSWORD_MIN_LENGTH} characters`,
+      shortLabel: `${PASSWORD_MIN_LENGTH}+ chars`,
+      met: password.length >= PASSWORD_MIN_LENGTH,
+    },
+    {
+      id: 'uppercase',
+      label: 'One uppercase letter',
+      shortLabel: 'A-Z',
+      met: /[A-Z]/.test(password),
+    },
+    {
+      id: 'lowercase',
+      label: 'One lowercase letter',
+      shortLabel: 'a-z',
+      met: /[a-z]/.test(password),
+    },
+    {
+      id: 'number',
+      label: 'One number',
+      shortLabel: '0-9',
+      met: /[0-9]/.test(password),
+    },
+    {
+      id: 'symbol',
+      label: 'One symbol (e.g. ! @ # $)',
+      shortLabel: 'Symbol',
+      met: /[^a-zA-Z0-9]/.test(password),
+    },
+  ];
 }
 
 /**

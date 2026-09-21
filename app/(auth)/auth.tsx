@@ -13,20 +13,28 @@ import {
   StatusBar,
   ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/src/lib/supabase';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
-import { ArrowLeft, Eye, EyeOff, Mail, Lock, Phone, User } from 'lucide-react-native';
+import { ArrowLeft, Eye, EyeOff, Mail, Lock, Check, Circle, Edit3 } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
-import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
+import { LegalReaderModal } from '@/src/components/LegalReaderModal';
+import {
+  passwordPolicyError,
+  evaluatePasswordRequirements,
+  areAllPasswordRequirementsMet,
+  PasswordRequirementCheck,
+} from '@/src/utils/passwordPolicy';
+
+import { mapAuthErrorMessage } from '@/src/utils/authErrorMapping';
+import { isDuplicateSignup, DUPLICATE_ACCOUNT_MESSAGE } from '@/src/utils/connectedAccounts';
 import { legalService } from '@/src/services/legalService';
 import { normalizeMobileNumber } from '@/src/utils/profileFields';
-
 // Enable LayoutAnimation on Android (Legacy Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -36,22 +44,19 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const BG_IMAGE =
   'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=85&w=1200&auto=format&fit=crop';
 
-type Mode = 'login' | 'signup' | 'otp_request' | 'otp_verify' | 'phone_verify' | 'forgot';
+type Mode = 'login' | 'signup' | 'otp_request' | 'otp_verify' | 'forgot';
 type VerificationType = 'signup' | 'login';
 
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: 'login' | 'signup' }>();
 
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode] = useState<Mode>(params.mode === 'signup' ? 'signup' : 'login');
   const [verificationType, setVerificationType] = useState<VerificationType>('login');
   const [email, setEmail] = useState('');
   const [loginIdentifier, setLoginIdentifier] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
-  const [signupPhone, setSignupPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -61,12 +66,36 @@ export default function AuthScreen() {
   const [timer, setTimer] = useState(0);
   const [inputFocused, setInputFocused] = useState(false);
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const [hasReadTerms, setHasReadTerms] = useState(false);
+  const [activeLegalModal, setActiveLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
+  // Chained input refs for seamless keyboard navigation
+  const emailRef = useRef<TextInput>(null);
+  const loginIdentifierRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
   const otpInputRef = useRef<TextInput>(null);
 
-  // Timer countdown handler for OTP resend. Depending on whether counting has
-  // started (rather than on `timer` itself) means this only fires once per
-  // countdown, instead of tearing down and recreating the interval every tick.
+  const transitionMode = useCallback((nextMode: Mode) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setMode(nextMode);
+    setPassword('');
+    setConfirmPassword('');
+    setOtpCode('');
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  }, []);
+
+  // Sync mode with route parameter if it changes
+  useEffect(() => {
+    if (params.mode === 'signup' || params.mode === 'login') {
+      if (params.mode !== mode && (mode === 'login' || mode === 'signup')) {
+        transitionMode(params.mode);
+      }
+    }
+  }, [params.mode, mode, transitionMode]);
+
+  // Timer countdown handler for OTP resend.
   const isCounting = timer > 0;
   useEffect(() => {
     if (!isCounting) return;
@@ -84,40 +113,22 @@ export default function AuthScreen() {
 
   // Focus the hidden OTP input when transitioning to 'otp_verify' step
   useEffect(() => {
-    if (mode === 'otp_verify' || mode === 'phone_verify') {
+    if (mode === 'otp_verify') {
       setTimeout(() => {
         otpInputRef.current?.focus();
       }, 250);
     }
   }, [mode]);
 
-  const transitionMode = useCallback((nextMode: Mode) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setMode(nextMode);
-    setPassword('');
-    setConfirmPassword('');
-    setOtpCode('');
-    setShowPassword(false);
-    setShowConfirmPassword(false);
-  }, []);
 
   const validateEmail = (value: string) => /\S+@\S+\.\S+/.test(value);
 
   // ─── Sign Up (Email + Password) ──────────────────────
   const handleSignUp = async () => {
     const trimmedEmail = email.trim().toLowerCase();
-    const normalizedPhone = normalizeMobileNumber(mobileNumber);
 
-    if (!firstName.trim() || !lastName.trim()) {
-      showToast('Enter your first and last name.', 'error');
-      return;
-    }
     if (!trimmedEmail || !validateEmail(trimmedEmail)) {
       showToast('Enter a valid email address.', 'error');
-      return;
-    }
-    if (!normalizedPhone) {
-      showToast('Enter a valid mobile number, such as 09123456789 or +639123456789.', 'error');
       return;
     }
     const policyError = passwordPolicyError(password);
@@ -127,6 +138,11 @@ export default function AuthScreen() {
     }
     if (password !== confirmPassword) {
       showToast('Passwords do not match.', 'error');
+      return;
+    }
+    if (!hasReadTerms) {
+      showToast('Please read the Terms of Service before agreeing.', 'error');
+      setActiveLegalModal('terms');
       return;
     }
     if (!legalAccepted) {
@@ -139,7 +155,6 @@ export default function AuthScreen() {
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
-        options: { data: { first_name: firstName.trim(), last_name: lastName.trim(), signup_phone: normalizedPhone } },
       });
 
       if (error) throw error;
@@ -147,8 +162,7 @@ export default function AuthScreen() {
       // If user is already logged in (confirm email was turned off)
       if (data?.session) {
         await legalService.recordSignupLegalAcceptance();
-        setSignupPhone(normalizedPhone);
-        transitionMode('phone_verify');
+        router.replace('/(auth)/account-created' as any);
         return;
       }
 
@@ -160,29 +174,23 @@ export default function AuthScreen() {
       // server -- we detect it only to avoid arming a resend timer for a code
       // that was never sent, and we take the identical UI path so this branch
       // stays indistinguishable from a real signup.
-      const isDuplicate = !!data?.user && (data.user.identities?.length ?? 0) === 0;
-
-      if (isDuplicate) {
-        showToast('An account with this email may already exist. Please sign in instead.', 'info');
+      if (isDuplicateSignup(data)) {
+        showToast(DUPLICATE_ACCOUNT_MESSAGE, 'info');
         transitionMode('login');
         return;
       }
 
       setVerificationType('signup');
-      setSignupPhone(normalizedPhone);
       setTimer(60);
       transitionMode('otp_verify');
     } catch (err: any) {
       console.error('Sign Up error:', err);
-      let msg = translatePasswordServerError(err.message ?? 'Could not create your account.');
-      // Never confirm that an address is already registered. Supabase
-      // obfuscates this case when email confirmations are on, so this branch
-      // only fires with confirmations off -- where its raw message would
-      // otherwise disclose more than the removed pre-check did.
-      if (msg.includes('already registered')) {
-        msg = 'Could not create your account. Please check your details and try again.';
+      if (isDuplicateSignup(null, err)) {
+        showToast(DUPLICATE_ACCOUNT_MESSAGE, 'info');
+        transitionMode('login');
+        return;
       }
-      showToast(msg, 'error');
+      showToast(mapAuthErrorMessage(err, 'Could not create your account. Please check your details and try again.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -214,13 +222,12 @@ export default function AuthScreen() {
 
       if (error) throw error;
 
+      showToast('Welcome back!', 'success');
       // Auth state listener handles routing
     } catch (err: any) {
       console.error('Login error:', err);
-      let msg = err.message ?? 'Could not sign in.';
-      if (msg.includes('Invalid login credentials')) {
-        msg = 'Incorrect email or mobile number, or password. Please try again.';
-      } else if (validateEmail(trimmedEmail) && msg.includes('Email not confirmed')) {
+      const msg = err?.message ?? '';
+      if (validateEmail(trimmedEmail) && msg.toLowerCase().includes('email not confirmed')) {
         // signInWithPassword failing never dispatches a code, so send one
         // explicitly before arming the resend timer
         const { error: resendError } = await supabase.auth.resend({
@@ -228,7 +235,7 @@ export default function AuthScreen() {
           email: trimmedEmail,
         });
         if (resendError) {
-          showToast(resendError.message ?? 'Could not send verification code.', 'error');
+          showToast(mapAuthErrorMessage(resendError, 'Could not send verification code.'), 'error');
           return;
         }
         setVerificationType('signup');
@@ -236,11 +243,12 @@ export default function AuthScreen() {
         transitionMode('otp_verify');
         return;
       }
-      showToast(msg, 'error');
+      showToast(mapAuthErrorMessage(err, 'Incorrect email, mobile number, or password. Please try again.'), 'error');
     } finally {
       setLoading(false);
     }
   };
+
 
   // ─── Request Passwordless OTP Code ───────────────────
   const handleRequestOtp = async () => {
@@ -266,11 +274,7 @@ export default function AuthScreen() {
       transitionMode('otp_verify');
     } catch (err: any) {
       console.error('Send OTP error:', err);
-      let errorMessage = err.message ?? 'Could not send verification code.';
-      if (errorMessage.includes('rate limit')) {
-        errorMessage = 'You have requested too many codes recently. Please try again later.';
-      }
-      showToast(errorMessage, 'error');
+      showToast(mapAuthErrorMessage(err, 'Could not send verification code. Please try again.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -301,47 +305,17 @@ export default function AuthScreen() {
           console.error('Sign-up legal acceptance error:', legalError);
           showToast('Your account is verified. Please complete legal acceptance before continuing.', 'info');
         }
-        transitionMode('phone_verify');
+        router.replace('/(auth)/account-created' as any);
         return;
       }
 
       // AuthState change listener in root layout will automatically handle routing
     } catch (err: any) {
       console.error('Verify OTP error:', err);
-      showToast(err.message ?? 'The code entered is invalid or has expired.', 'error');
+      showToast(mapAuthErrorMessage(err, 'The code entered is invalid or has expired.'), 'error');
     } finally {
       setLoading(false);
     }
-  };
-
-  const sendPhoneVerification = async () => {
-    if (!signupPhone) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.updateUser({ phone: signupPhone });
-      if (error) throw error;
-      if (data.user.phone === signupPhone) {
-        router.replace('/(auth)/account-created' as any);
-        return;
-      }
-      setTimer(60);
-      setOtpCode('');
-      showToast('A verification code was sent to your mobile number.', 'success');
-    } catch (err: any) {
-      showToast(err.message ?? 'Could not verify this mobile number.', 'error');
-    } finally { setLoading(false); }
-  };
-
-  const verifyPhone = async () => {
-    if (otpCode.length !== 6 || !signupPhone) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({ phone: signupPhone, token: otpCode, type: 'phone_change' });
-      if (error) throw error;
-      router.replace('/(auth)/account-created' as any);
-    } catch (err: any) {
-      showToast(err.message ?? 'The mobile verification code is invalid or expired.', 'error');
-    } finally { setLoading(false); }
   };
 
   // ─── Resend Code ─────────────────────────────────────
@@ -349,10 +323,6 @@ export default function AuthScreen() {
     if (timer > 0) return;
     setLoading(true);
     try {
-      if (mode === 'phone_verify') {
-        await sendPhoneVerification();
-        return;
-      }
       // Both branches previously gated on an existence check that disclosed
       // whether the address was registered. Supabase's own responses here are
       // deliberately non-disclosing, so let them through unchanged.
@@ -377,11 +347,7 @@ export default function AuthScreen() {
       showToast('A new 6-digit verification code has been sent to your email.', 'success');
     } catch (err: any) {
       console.error('Resend OTP error:', err);
-      let errorMessage = err.message ?? 'Could not resend verification code.';
-      if (errorMessage.includes('rate limit')) {
-        errorMessage = 'You have requested too many codes recently. Please try again later.';
-      }
-      showToast(errorMessage, 'error');
+      showToast(mapAuthErrorMessage(err, 'Could not resend verification code. Please try again later.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -413,11 +379,7 @@ export default function AuthScreen() {
       );
     } catch (err: any) {
       console.error('Reset password error:', err);
-      let msg = err.message ?? 'Could not send reset email.';
-      if (msg.includes('rate limit')) {
-        msg = 'Too many requests. Please try again later.';
-      }
-      showToast(msg, 'error');
+      showToast(mapAuthErrorMessage(err, 'Could not send reset email. Please try again.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -440,18 +402,16 @@ export default function AuthScreen() {
       case 'signup':      return 'Join Jezsy and explore your personal style.';
       case 'otp_request': return 'Enter your email to receive a 6-digit login code.';
       case 'otp_verify':  return `We sent a 6-digit verification code to ${email}`;
-      case 'phone_verify': return 'Verify your mobile number to enable phone login.';
       case 'forgot':      return 'Enter your email and we\'ll send a reset link.';
     }
   };
+
 
   const goBack = () => {
     if (mode === 'login') {
       router.back();
     } else if (mode === 'otp_verify') {
       transitionMode(verificationType === 'signup' ? 'signup' : 'otp_request');
-    } else if (mode === 'phone_verify') {
-      return;
     } else {
       if (mode === 'signup') setLegalAccepted(false);
       transitionMode('login');
@@ -464,7 +424,6 @@ export default function AuthScreen() {
       case 'signup':      return handleSignUp();
       case 'otp_request': return handleRequestOtp();
       case 'otp_verify':  return handleVerifyOtp();
-      case 'phone_verify': return timer > 0 ? verifyPhone() : sendPhoneVerification();
       case 'forgot':      return handleForgotPassword();
     }
   };
@@ -475,7 +434,6 @@ export default function AuthScreen() {
       case 'signup':      return 'Continue to Verification';
       case 'otp_request': return 'Send Verification Code';
       case 'otp_verify':  return 'Verify & Login';
-      case 'phone_verify': return timer > 0 ? 'Verify Mobile Number' : 'Send Mobile Verification Code';
       case 'forgot':      return 'Send Reset Link';
     }
   };
@@ -563,137 +521,332 @@ export default function AuthScreen() {
 
           {/* Glassmorphism card */}
           <View style={styles.glassCard}>
-            
-            {/* Email Field (visible on all screens except otp_verify) */}
-            {mode !== 'otp_verify' && mode !== 'phone_verify' && (
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>{mode === 'login' ? 'Email address or mobile number' : 'Email address'}</Text>
-                <View style={styles.inputRow}>
-                  <Mail size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
-                  <TextInput keyboardAppearance="dark"
-                    style={styles.input}
-                    placeholder={mode === 'forgot' ? 'Enter your registered email' : 'Enter your email'}
-                    placeholderTextColor="rgba(255,255,255,0.45)"
-                    value={mode === 'login' ? loginIdentifier : email}
-                    onChangeText={mode === 'login' ? setLoginIdentifier : setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    autoComplete="email"
-                    returnKeyType={mode === 'forgot' || mode === 'otp_request' ? 'done' : 'next'}
-                    onSubmitEditing={mode === 'forgot' || mode === 'otp_request' ? handleSubmit : undefined}
-                    accessibilityLabel="Email"
-                    accessibilityHint="Enter your email address"
-                  />
-                </View>
-              </View>
-            )}
 
+            {/* ─── Sign Up Form (Canonical Keyboard Chaining) ─── */}
             {mode === 'signup' && (
               <>
-                <View style={styles.fieldGroup}><Text style={styles.label}>First name</Text><View style={styles.inputRow}><User size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} /><TextInput style={styles.input} placeholder="Enter your first name" placeholderTextColor="rgba(255,255,255,0.45)" value={firstName} onChangeText={setFirstName} accessibilityLabel="First name" /></View></View>
-                <View style={styles.fieldGroup}><Text style={styles.label}>Last name</Text><View style={styles.inputRow}><User size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} /><TextInput style={styles.input} placeholder="Enter your last name" placeholderTextColor="rgba(255,255,255,0.45)" value={lastName} onChangeText={setLastName} accessibilityLabel="Last name" /></View></View>
-                <View style={styles.fieldGroup}><Text style={styles.label}>Mobile number</Text><View style={styles.inputRow}><Phone size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} /><TextInput style={styles.input} placeholder="09123456789" placeholderTextColor="rgba(255,255,255,0.45)" value={mobileNumber} onChangeText={setMobileNumber} keyboardType="phone-pad" accessibilityLabel="Mobile number" /></View></View>
+                {/* 1. Email Address */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>Email address</Text>
+                  <View style={styles.inputRow}>
+                    <Mail size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                    <TextInput
+                      ref={emailRef}
+                      keyboardAppearance="dark"
+                      style={styles.input}
+                      placeholder="Enter your email"
+                      placeholderTextColor="rgba(255,255,255,0.45)"
+                      value={email}
+                      onChangeText={setEmail}
+                      autoCapitalize="none"
+                      autoFocus
+                      keyboardType="email-address"
+                      autoComplete="email"
+                      textContentType="emailAddress"
+                      returnKeyType="next"
+                      onSubmitEditing={() => passwordRef.current?.focus()}
+                      accessibilityLabel="Email address"
+                    />
+                  </View>
+                </View>
+
+                {/* 5. Password */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>Password</Text>
+                  <View style={styles.inputRow}>
+                    <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                    <TextInput
+                      ref={passwordRef}
+                      keyboardAppearance="dark"
+                      style={styles.inputWithAction}
+                      placeholder="Create password"
+                      placeholderTextColor="rgba(255,255,255,0.45)"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoComplete="new-password"
+                      textContentType="newPassword"
+                      returnKeyType="next"
+                      onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+                      accessibilityLabel="Password"
+                      accessibilityHint="Create a secure password matching all policy requirements"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeBtn}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                      accessibilityState={{ expanded: showPassword }}
+                    >
+                      {showPassword ? (
+                        <EyeOff size={20} color="rgba(255,255,255,0.6)" />
+                      ) : (
+                        <Eye size={20} color="rgba(255,255,255,0.6)" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Progressive Password Requirements */}
+                {password.length > 0 && (
+                  areAllPasswordRequirementsMet(password) ? (
+                    <View style={styles.matchRow} accessibilityRole="summary" accessibilityLabel="Password meets all requirements">
+                      <Check size={13} color={Colors.dark.tint} />
+                      <Text style={[styles.matchText, { color: Colors.dark.tint }]}>Password meets all requirements</Text>
+                    </View>
+                  ) : (
+                    <View
+                      style={styles.pillsContainer}
+                      accessibilityRole="summary"
+                      accessibilityLabel="Password requirements"
+                    >
+                      {evaluatePasswordRequirements(password).map((req: PasswordRequirementCheck) => (
+                        <View
+                          key={req.id}
+                          style={[
+                            styles.pillBadge,
+                            req.met ? styles.pillBadgeMet : styles.pillBadgeUnmet,
+                          ]}
+                          accessibilityLabel={`${req.label}: ${req.met ? 'satisfied' : 'not met'}`}
+                        >
+                          {req.met ? (
+                            <Check size={11} color={Colors.dark.tint} style={styles.pillIcon} />
+                          ) : (
+                            <Circle size={6} color="rgba(255, 255, 255, 0.35)" style={styles.pillDot} />
+                          )}
+                          <Text style={[styles.pillText, req.met ? styles.pillTextMet : styles.pillTextUnmet]}>
+                            {req.shortLabel}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )
+                )}
+
+
+                {/* 6. Confirm Password */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>Confirm password</Text>
+                  <View style={styles.inputRow}>
+                    <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                    <TextInput
+                      ref={confirmPasswordRef}
+                      keyboardAppearance="dark"
+                      style={styles.inputWithAction}
+                      placeholder="Confirm your password"
+                      placeholderTextColor="rgba(255,255,255,0.45)"
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry={!showConfirmPassword}
+                      autoCapitalize="none"
+                      autoComplete="new-password"
+                      textContentType="newPassword"
+                      returnKeyType="done"
+                      onSubmitEditing={handleSubmit}
+                      accessibilityLabel="Confirm password"
+                      accessibilityHint="Re-enter your password to confirm"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={styles.eyeBtn}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      accessibilityState={{ expanded: showConfirmPassword }}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff size={20} color="rgba(255,255,255,0.6)" />
+                      ) : (
+                        <Eye size={20} color="rgba(255,255,255,0.6)" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Password Match Hint */}
+                {confirmPassword.length > 0 && (
+                  <View style={styles.matchRow}>
+                    {password === confirmPassword ? (
+                      <>
+                        <Check size={13} color={Colors.dark.tint} />
+                        <Text style={[styles.matchText, { color: Colors.dark.tint }]}>Passwords match</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Circle size={8} color="rgba(255, 255, 255, 0.4)" />
+                        <Text style={styles.matchText}>Passwords do not match yet</Text>
+                      </>
+                    )}
+                  </View>
+                )}
+
+                {/* Legal Consent Row */}
+                <View style={styles.legalConsentRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.legalCheckbox,
+                      legalAccepted && styles.legalCheckboxChecked,
+                      !hasReadTerms && styles.legalCheckboxLocked,
+                    ]}
+                    onPress={() => {
+                      if (!hasReadTerms) {
+                        showToast('Please read the Terms of Service to the bottom before agreeing.', 'info');
+                        setActiveLegalModal('terms');
+                        return;
+                      }
+                      setLegalAccepted((accepted) => !accepted);
+                    }}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel="I agree to the Terms and Conditions and Privacy Policy"
+                    accessibilityState={{ checked: legalAccepted, disabled: !hasReadTerms }}
+                    accessibilityHint={!hasReadTerms ? 'Opens terms reader to review before agreeing' : undefined}
+                  >
+                    {legalAccepted && <Text style={styles.legalCheckboxMark}>✓</Text>}
+                  </TouchableOpacity>
+                  <View style={styles.legalConsentTextContainer}>
+                    <Text style={styles.legalConsentText}>
+                      I agree to the{' '}
+                      <Text
+                        style={styles.legalConsentLink}
+                        onPress={() => setActiveLegalModal('terms')}
+                      >
+                        Terms & Conditions
+                      </Text>
+                      {' '}and{' '}
+                      <Text
+                        style={styles.legalConsentLink}
+                        onPress={() => setActiveLegalModal('privacy')}
+                      >
+                        Privacy Policy
+                      </Text>
+                      .
+                    </Text>
+                    {!hasReadTerms && (
+                      <Text style={styles.legalReadPromptText}>
+                        (Please read the Terms before agreeing)
+                      </Text>
+                    )}
+                  </View>
+                </View>
               </>
             )}
 
-            {/* Password Field (login & signup) */}
-            {(mode === 'login' || mode === 'signup') && (
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Password</Text>
-                <View style={styles.inputRow}>
-                  <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
-                  <TextInput keyboardAppearance="dark"
-                    style={styles.inputWithAction}
-                    placeholder={mode === 'signup' ? 'Create password (min. 8 chars)' : 'Enter your password'}
-                    placeholderTextColor="rgba(255,255,255,0.45)"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                    returnKeyType={mode === 'signup' ? 'next' : 'done'}
-                    onSubmitEditing={mode === 'login' ? handleSubmit : undefined}
-                    accessibilityLabel="Password"
-                    accessibilityHint={mode === 'signup' ? 'Create a password with at least 8 characters' : 'Enter your password'}
-                  />
+            {/* ─── Login Form (Canonical Keyboard Chaining) ─── */}
+            {mode === 'login' && (
+              <>
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>Email address or mobile number</Text>
+                  <View style={styles.inputRow}>
+                    <Mail size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                    <TextInput
+                      ref={loginIdentifierRef}
+                      keyboardAppearance="dark"
+                      style={styles.input}
+                      placeholder="Enter your email or mobile"
+                      placeholderTextColor="rgba(255,255,255,0.45)"
+                      value={loginIdentifier}
+                      onChangeText={setLoginIdentifier}
+                      autoCapitalize="none"
+                      autoComplete="username"
+                      textContentType="username"
+                      returnKeyType="next"
+                      onSubmitEditing={() => passwordRef.current?.focus()}
+                      accessibilityLabel="Email address or mobile number"
+                      accessibilityHint="Enter your registered email address or mobile number"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>Password</Text>
+                  <View style={styles.inputRow}>
+                    <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                    <TextInput
+                      ref={passwordRef}
+                      keyboardAppearance="dark"
+                      style={styles.inputWithAction}
+                      placeholder="Enter your password"
+                      placeholderTextColor="rgba(255,255,255,0.45)"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoComplete="current-password"
+                      textContentType="password"
+                      returnKeyType="done"
+                      onSubmitEditing={handleSubmit}
+                      accessibilityLabel="Password"
+                      accessibilityHint="Enter your password"
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeBtn}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                      accessibilityState={{ expanded: showPassword }}
+                    >
+                      {showPassword ? (
+                        <EyeOff size={20} color="rgba(255,255,255,0.6)" />
+                      ) : (
+                        <Eye size={20} color="rgba(255,255,255,0.6)" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Login helper buttons */}
+                <View style={styles.linksRow}>
                   <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.eyeBtn}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    onPress={() => transitionMode('otp_request')}
+                    hitSlop={10}
                     accessibilityRole="button"
-                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                    accessibilityState={{ expanded: showPassword }}
+                    accessibilityLabel="Log in with a verification code instead"
                   >
-                    {showPassword ? (
-                      <EyeOff size={20} color="rgba(255,255,255,0.6)" />
-                    ) : (
-                      <Eye size={20} color="rgba(255,255,255,0.6)" />
-                    )}
+                    <Text style={styles.linkText}>Log in with code</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => transitionMode('forgot')}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Forgot password"
+                  >
+                    <Text style={styles.linkText}>Forgot password?</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </>
             )}
 
-            {/* Confirm Password (signup only) */}
-            {mode === 'signup' && (
+            {/* ─── Forgot Password / OTP Request ─── */}
+            {(mode === 'forgot' || mode === 'otp_request') && (
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Confirm password</Text>
+                <Text style={styles.label}>Email address</Text>
                 <View style={styles.inputRow}>
-                  <Lock size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
-                  <TextInput keyboardAppearance="dark"
-                    style={styles.inputWithAction}
-                    placeholder="Confirm your password"
+                  <Mail size={18} color="rgba(255,255,255,0.45)" style={styles.inputIcon} />
+                  <TextInput
+                    ref={emailRef}
+                    keyboardAppearance="dark"
+                    style={styles.input}
+                    placeholder={mode === 'forgot' ? 'Enter your registered email' : 'Enter your email'}
                     placeholderTextColor="rgba(255,255,255,0.45)"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry={!showConfirmPassword}
+                    value={email}
+                    onChangeText={setEmail}
                     autoCapitalize="none"
-                    autoComplete="new-password"
+                    keyboardType="email-address"
+                    autoComplete="email"
+                    textContentType="emailAddress"
                     returnKeyType="done"
                     onSubmitEditing={handleSubmit}
-                    accessibilityLabel="Confirm password"
-                    accessibilityHint="Re-enter your password to confirm"
+                    accessibilityLabel="Email address"
                   />
-                  <TouchableOpacity
-                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                    style={styles.eyeBtn}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    accessibilityRole="button"
-                    accessibilityLabel={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-                    accessibilityState={{ expanded: showConfirmPassword }}
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff size={20} color="rgba(255,255,255,0.6)" />
-                    ) : (
-                      <Eye size={20} color="rgba(255,255,255,0.6)" />
-                    )}
-                  </TouchableOpacity>
                 </View>
               </View>
             )}
 
-            {mode === 'signup' && (
-              <View style={styles.legalConsentRow}>
-                <TouchableOpacity
-                  style={[styles.legalCheckbox, legalAccepted && styles.legalCheckboxChecked]}
-                  onPress={() => setLegalAccepted((accepted) => !accepted)}
-                  accessibilityRole="checkbox"
-                  accessibilityLabel="I agree to the Terms and Conditions and Privacy Policy"
-                  accessibilityState={{ checked: legalAccepted }}
-                >
-                  {legalAccepted && <Text style={styles.legalCheckboxMark}>✓</Text>}
-                </TouchableOpacity>
-                <Text style={styles.legalConsentText}>
-                  I agree to the{' '}
-                  <Text style={styles.legalConsentLink} onPress={() => router.push('/legal/terms')}>Terms & Conditions</Text>
-                  {' '}and{' '}
-                  <Text style={styles.legalConsentLink} onPress={() => router.push('/legal/privacy')}>Privacy Policy</Text>.
-                </Text>
-              </View>
-            )}
-
-            {/* OTP Verification Steps (only in otp_verify screen) */}
-            {(mode === 'otp_verify' || mode === 'phone_verify') && (
+            {/* ─── OTP Verification (Email) ─── */}
+            {mode === 'otp_verify' && (
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>6-DIGIT CODE</Text>
 
@@ -726,7 +879,8 @@ export default function AuthScreen() {
                 </TouchableOpacity>
 
                 {/* Hidden real input */}
-                <TextInput keyboardAppearance="dark"
+                <TextInput
+                  keyboardAppearance="dark"
                   ref={otpInputRef}
                   style={styles.hiddenInput}
                   value={otpCode}
@@ -738,7 +892,7 @@ export default function AuthScreen() {
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
                   accessibilityLabel="Six digit verification code"
-                  accessibilityHint={`Enter the code sent to your ${mode === 'phone_verify' ? 'mobile number' : 'email'}`}
+                  accessibilityHint="Enter the code sent to your email"
                 />
 
                 {/* Resend Code row */}
@@ -758,28 +912,23 @@ export default function AuthScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-              </View>
-            )}
 
-            {/* Login helper buttons (forgot password / OTP switch) */}
-            {mode === 'login' && (
-              <View style={styles.linksRow}>
+                {/* Address Correction: Wrong email? Edit address */}
+                {mode === 'otp_verify' && (
                   <TouchableOpacity
-                    onPress={() => transitionMode('otp_request')}
-                    hitSlop={10}
+                    onPress={() => {
+                      setOtpCode('');
+                      setTimer(0);
+                      transitionMode(verificationType === 'signup' ? 'signup' : 'otp_request');
+                    }}
+                    style={styles.actionCorrectionButton}
                     accessibilityRole="button"
-                    accessibilityLabel="Log in with a verification code instead"
+                    accessibilityLabel="Wrong email? Edit address"
                   >
-                  <Text style={styles.linkText}>Log in with code instead</Text>
-                </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => transitionMode('forgot')}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel="Forgot password"
-                  >
-                  <Text style={styles.linkText}>Forgot password?</Text>
-                </TouchableOpacity>
+                    <Edit3 size={14} color={Colors.dark.tint} />
+                    <Text style={styles.actionCorrectionText}>Wrong email? Edit address</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
@@ -792,6 +941,26 @@ export default function AuthScreen() {
               dark
               style={styles.primaryBtnGlow}
             />
+
+            {mode === 'login' && (
+              <Text style={styles.signinNoticeText}>
+                By signing in to your account, you agree to our{' '}
+                <Text
+                  style={styles.legalConsentLink}
+                  onPress={() => setActiveLegalModal('terms')}
+                >
+                  Terms
+                </Text>
+                {' '}and{' '}
+                <Text
+                  style={styles.legalConsentLink}
+                  onPress={() => setActiveLegalModal('privacy')}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            )}
 
             {/* Switch between Log In and Sign Up */}
             {(mode === 'login' || mode === 'signup') && (
@@ -828,8 +997,23 @@ export default function AuthScreen() {
               </TouchableOpacity>
             )}
           </View>
+
         </ScrollView>
       </KeyboardAvoidingView>
+      {activeLegalModal && (
+        <LegalReaderModal
+          visible={true}
+          documentType={activeLegalModal}
+          initialViewed={activeLegalModal === 'terms' ? hasReadTerms : false}
+          onClose={() => setActiveLegalModal(null)}
+          onViewCompleted={() => {
+            if (activeLegalModal === 'terms') {
+              setHasReadTerms(true);
+              setLegalAccepted(true);
+            }
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -976,13 +1160,19 @@ const styles = StyleSheet.create({
     backgroundColor: c.tint,
     borderColor: c.tint,
   },
+  legalCheckboxLocked: {
+    opacity: 0.45,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
   legalCheckboxMark: {
     color: c.onTint,
     fontWeight: '800',
     fontSize: 14,
   },
-  legalConsentText: {
+  legalConsentTextContainer: {
     flex: 1,
+  },
+  legalConsentText: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 13,
     lineHeight: 19,
@@ -990,6 +1180,20 @@ const styles = StyleSheet.create({
   legalConsentLink: {
     color: c.tint,
     fontWeight: '700',
+  },
+  legalReadPromptText: {
+    color: 'rgba(255, 255, 255, 0.45)',
+    fontSize: 12,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  signinNoticeText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
   },
   linksRow: {
     flexDirection: 'row',
@@ -1083,4 +1287,77 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+
+  // Progressive Password Requirements Pills
+  pillsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: -4,
+    marginBottom: Spacing.xs,
+    paddingLeft: 2,
+  },
+  pillBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    gap: 4,
+  },
+  pillBadgeUnmet: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  pillBadgeMet: {
+    backgroundColor: 'rgba(201, 169, 110, 0.12)',
+    borderColor: 'rgba(201, 169, 110, 0.35)',
+  },
+  pillIcon: {
+    marginRight: 1,
+  },
+  pillDot: {
+    marginHorizontal: 2,
+  },
+  pillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  pillTextUnmet: {
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+  pillTextMet: {
+    color: Colors.dark.tint,
+  },
+
+  // Passwords Match
+  matchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: -4,
+    paddingLeft: 4,
+  },
+  matchText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.5)',
+  },
+
+  // Address and Mobile Corrections
+  actionCorrectionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  actionCorrectionText: {
+    color: c.tint,
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });
+

@@ -1,0 +1,9 @@
+-- =============================================================================
+-- Rollback for 20260920140100_enable_pickup_deadline_cron.sql
+-- =============================================================================
+
+DO $$
+BEGIN
+  PERFORM cron.unschedule('sweep-pickup-deadlines');
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;

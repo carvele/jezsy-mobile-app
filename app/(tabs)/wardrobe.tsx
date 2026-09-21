@@ -28,7 +28,7 @@ import { FadeInView } from '@/src/components/FadeInView';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { FlourishDivider } from '@/src/components/BrandFlourish';
 import { tapLight } from '@/src/utils/haptics';
-import { useGridCardWidth } from '@/src/utils/layout';
+import { useGridCardWidth, GRID_COLUMN_GAP, GRID_GUTTER } from '@/src/utils/layout';
 import { useToast } from '@/src/context/ToastContext';
 import { MannequinView } from '@/src/components/Mannequin/MannequinView';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
@@ -373,31 +373,53 @@ export default function WardrobeScreen() {
   const renderItem = useCallback(({ item, index }: { item: WardrobeItem; index: number }) => {
     // Use the computed effective bucket so a stale garment_type column never shows wrong info.
     const displayLabel = item.sub_category || resolveEffectiveGarmentBucket(item) || item.category || 'Clothing';
+    const subLabel = item.sub_category && item.category && item.category !== item.sub_category ? item.category : (item.color_tags?.[0] || '');
+    const isNew = !item.wear_count || item.wear_count <= 0;
     return (
       <FadeInView index={index}>
       <TouchableOpacity
         style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border, width: cardWidth }]}
         onPress={() => router.push(`/wardrobe/item/${item.id}` as any)}
-        activeOpacity={0.8}
+        activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={`${displayLabel}, ${item.wear_count > 0 ? `worn ${item.wear_count} times` : 'never worn'}`}
+        accessibilityLabel={`${displayLabel}, ${!isNew ? `worn ${item.wear_count} times` : 'never worn'}`}
       >
-        <View>
-          <Image
-            source={{ uri: item.image_url || undefined }}
-            style={[styles.itemImage, { backgroundColor: colors.surface }]}
-            contentFit="cover"
-          />
-          <View style={[styles.wearBadge, { backgroundColor: item.wear_count > 0 ? 'rgba(0,0,0,0.6)' : colors.tint }]}>
-            <Text style={[styles.wearBadgeText, { color: item.wear_count > 0 ? 'white' : colors.onTint }]}>
-              {item.wear_count > 0 ? `Worn ${item.wear_count}x` : 'Never worn'}
+        <View style={[styles.imageWrap, { backgroundColor: colors.surface }]}>
+          {item.image_url ? (
+            <Image
+              source={{ uri: item.image_url }}
+              style={styles.itemImage}
+              contentFit="contain"
+              transition={200}
+            />
+          ) : (
+            <View style={styles.placeholderContainer}>
+              <IconSymbol name="hanger" size={32} color={colors.secondaryText} />
+            </View>
+          )}
+          <View style={[
+            styles.wearBadge,
+            isNew
+              ? { backgroundColor: colors.tint }
+              : styles.wearBadgeWorn
+          ]}>
+            <Text style={[
+              styles.wearBadgeText,
+              { color: isNew ? colors.onTint : '#FFFFFF' }
+            ]}>
+              {isNew ? 'New' : `${item.wear_count}x worn`}
             </Text>
           </View>
         </View>
         <View style={styles.itemInfo}>
-          <Text style={[styles.itemCategory, { color: colors.secondaryText }]} numberOfLines={1}>
+          <Text style={[styles.itemCategory, { color: colors.text }]} numberOfLines={1}>
             {displayLabel}
           </Text>
+          {subLabel ? (
+            <Text style={[styles.itemSubLabel, { color: colors.secondaryText }]} numberOfLines={1}>
+              {subLabel}
+            </Text>
+          ) : null}
         </View>
       </TouchableOpacity>
       </FadeInView>
@@ -663,10 +685,10 @@ export default function WardrobeScreen() {
       {activeTab === 'mannequin' ? null : loading ? (
         // A skeleton grid keeps the layout stable while loading instead of
         // collapsing to a centred spinner and then jumping.
-        <ScrollView contentContainerStyle={{ padding: Spacing.lg }} scrollEnabled={false}>
-          <View style={styles.skeletonRow}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.lg }} scrollEnabled={false}>
+          <View style={[styles.skeletonRow, { gap: GRID_COLUMN_GAP }]}>
             <SkeletonList count={6}>
-              <ProductCardSkeleton width={(width - 56) / 2} />
+              <ProductCardSkeleton width={typeof cardWidth === 'number' ? cardWidth : 160} />
             </SkeletonList>
           </View>
         </ScrollView>
@@ -677,8 +699,8 @@ export default function WardrobeScreen() {
           keyExtractor={(item) => item.id}
           key={`items-grid-${columns}`}
           numColumns={columns}
-          columnWrapperStyle={styles.columnWrapper}
-          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: bottomInset }}
+          columnWrapperStyle={[styles.columnWrapper, { gap: GRID_COLUMN_GAP, justifyContent: 'flex-start' }]}
+          contentContainerStyle={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.lg, paddingBottom: bottomInset }}
           ListHeaderComponent={itemsHeader}
           initialNumToRender={8}
           windowSize={7}
@@ -958,10 +980,14 @@ const styles = StyleSheet.create({
     minWidth: '100%',
   },
   tab: {
+    // HIG/Material minimum touch target is 44pt; keep at least that.
+    minHeight: 44,
     paddingVertical: Spacing.md,
     paddingHorizontal: 6,
     borderBottomWidth: 2.5,
     borderBottomColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabInner: {
     flexDirection: 'row',
@@ -1023,43 +1049,74 @@ const styles = StyleSheet.create({
     flexWrap: 'nowrap',
   },
   columnWrapper: {
-    justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
+    justifyContent: 'flex-start',
+    gap: GRID_COLUMN_GAP,
+    marginBottom: 0,
   },
   skeletonRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 16,
+    justifyContent: 'flex-start',
+    gap: GRID_COLUMN_GAP,
   },
   itemCard: {
-    borderRadius: 16,
+    borderRadius: Radius.md,
     overflow: 'hidden',
     borderWidth: 1,
+    marginBottom: Spacing.xl,
+    ...Elevation.sm,
+  },
+  imageWrap: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 1,
+    overflow: 'hidden',
+    borderTopLeftRadius: Radius.md,
+    borderTopRightRadius: Radius.md,
   },
   itemImage: {
     width: '100%',
-    height: 180,
+    height: '100%',
+  },
+  placeholderContainer: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   wearBadge: {
     position: 'absolute',
-    bottom: 8,
+    top: 8,
     left: 8,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+  },
+  wearBadgeWorn: {
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   wearBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   itemInfo: {
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    gap: 2,
   },
   itemCategory: {
-    ...Type.label,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  itemSubLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'capitalize',
+    lineHeight: 16,
   },
   suggestBlock: {
     marginBottom: Spacing.sm,
@@ -1216,7 +1273,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     borderTopWidth: 1,
     padding: Spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 36 : Spacing.xl,
+    // Safe bottom clearance: 36pt on iPhone notch, 20pt on Android, flat on web.
+    paddingBottom: Platform.OS === 'ios' ? 36 : Platform.OS === 'android' ? 20 : Spacing.xl,
+    // Cap width on desktop so the sheet doesn't span the full viewport.
+    maxWidth: Platform.OS === 'web' ? 600 : undefined,
+    alignSelf: Platform.OS === 'web' ? 'center' as const : undefined,
+    width: '100%',
   },
   sheetTitle: {
     ...Type.subtitle,

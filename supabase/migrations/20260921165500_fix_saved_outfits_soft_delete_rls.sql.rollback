@@ -1,0 +1,23 @@
+-- Rollback for 20260921165500_fix_saved_outfits_soft_delete_rls.sql
+
+BEGIN;
+
+DROP POLICY IF EXISTS "Saved outfits read" ON public.saved_outfits;
+
+CREATE POLICY "Saved outfits read"
+ON public.saved_outfits
+FOR SELECT
+TO authenticated
+USING (
+  (COALESCE(deleted, false) = false)
+  AND (
+    (user_id = (SELECT auth.uid()))
+    OR is_staff_or_admin()
+    OR (
+      (get_outfit_privacy(user_id) = 'public')
+      AND (NOT is_blocked_between((SELECT auth.uid()), user_id))
+    )
+  )
+);
+
+COMMIT;

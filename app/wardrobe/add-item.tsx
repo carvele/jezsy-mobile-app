@@ -33,6 +33,7 @@ import { ImageCropModal } from '@/src/components/ImageCropModal';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
 import { isOnline } from '@/src/services/offlineSync';
 import { fashionMlService } from '@/src/services/fashionMlService';
+import { analyzeGarmentImage, GarmentTagSuggestion } from '@/src/services/garmentTaggingService';
 import { inferSystemBucket } from '@/src/utils/garmentSemanticClassifier';
 
 const { width } = Dimensions.get('window');
@@ -51,6 +52,10 @@ export default function AddWardrobeItemScreen() {
   const [processedImageUri, setProcessedImageUri] = useState<string | null>(null);
   const [isProcessingBg, setIsProcessingBg] = useState<boolean>(false);
   const [removeBg, setRemoveBg] = useState<boolean>(true);
+  const [isTagging, setIsTagging] = useState(false);
+  const [tagSuggestion, setTagSuggestion] = useState<GarmentTagSuggestion | null>(null);
+  const [detectedDetails, setDetectedDetails] = useState({ pattern: '', material: '', fit: '', lengthType: '', sleeveType: '', neckline: '', silhouette: '' });
+  const [detectionConfidence, setDetectionConfidence] = useState<number | null>(null);
 
   // Five primary clean fields + optional notes
   const [category, setCategory] = useState<string>('');
@@ -200,6 +205,7 @@ export default function AddWardrobeItemScreen() {
 
   const handleCropComplete = (croppedUri: string) => {
     setImageUri(croppedUri);
+    setTagSuggestion(null);
     setCropModalVisible(false);
     setRawPickedUri(null);
     setRawPickedSize(null);
@@ -210,6 +216,7 @@ export default function AddWardrobeItemScreen() {
     if (rawPickedUri) {
       setImageUri(rawPickedUri);
     }
+    setTagSuggestion(null);
     setRawPickedUri(null);
     setRawPickedSize(null);
   };
@@ -228,6 +235,43 @@ export default function AddWardrobeItemScreen() {
     } finally {
       if (timer) clearTimeout(timer);
     }
+  };
+
+  const handleAutoDetect = async () => {
+    if (!imageUri || isTagging) return;
+    if (!(await isOnline())) {
+      showToast('Auto-detect needs an internet connection. You can enter the details manually.', 'error');
+      return;
+    }
+    setIsTagging(true);
+    try {
+      const suggestion = await analyzeGarmentImage(imageUri);
+      setTagSuggestion(suggestion);
+      showToast('Details detected. Review the suggestion before applying it.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not detect clothing details. Please enter them manually.', 'error');
+    } finally {
+      setIsTagging(false);
+    }
+  };
+
+  const applyTagSuggestion = () => {
+    if (!tagSuggestion) return;
+    setCategory(tagSuggestion.category);
+    setSubCategory(tagSuggestion.subCategory);
+    setColor(tagSuggestion.colorTags.join(', ') || tagSuggestion.primaryColor);
+    setDetectedDetails({
+      pattern: tagSuggestion.pattern === 'unknown' ? '' : tagSuggestion.pattern,
+      material: tagSuggestion.material === 'unknown' ? '' : tagSuggestion.material,
+      fit: tagSuggestion.fit === 'unknown' ? '' : tagSuggestion.fit,
+      lengthType: tagSuggestion.lengthType === 'unknown' ? '' : tagSuggestion.lengthType,
+      sleeveType: tagSuggestion.sleeveType === 'unknown' ? '' : tagSuggestion.sleeveType,
+      neckline: tagSuggestion.neckline === 'unknown' ? '' : tagSuggestion.neckline,
+      silhouette: tagSuggestion.silhouette === 'unknown' ? '' : tagSuggestion.silhouette,
+    });
+    setDetectionConfidence(tagSuggestion.confidence);
+    setTagSuggestion(null);
+    showToast('Suggestions applied. You can edit any field before saving.', 'success');
   };
 
   const handleSave = async () => {
@@ -389,7 +433,16 @@ export default function AddWardrobeItemScreen() {
           whereWornOften: trimmedWhereWorn || undefined,
           description: trimmedDesc || undefined,
           userNotes: trimmedNotes || undefined,
+          detectionSource: detectionConfidence === null ? undefined : 'gemini-image-tagging',
         },
+        pattern: detectedDetails.pattern || undefined,
+        material: detectedDetails.material || undefined,
+        fit: detectedDetails.fit || undefined,
+        lengthType: detectedDetails.lengthType || undefined,
+        sleeveType: detectedDetails.sleeveType || undefined,
+        neckline: detectedDetails.neckline || undefined,
+        silhouette: detectedDetails.silhouette || undefined,
+        aiConfidence: detectionConfidence ?? undefined,
       });
 
       if (outcome.status === 'failed') {
@@ -414,6 +467,7 @@ export default function AddWardrobeItemScreen() {
       setProcessedImageUri(null);
       setRawPickedUri(null);
       setRawPickedSize(null);
+      setTagSuggestion(null);
       setCategory('');
       setSubCategory('');
       setColor('');
@@ -454,7 +508,12 @@ export default function AddWardrobeItemScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <IconSymbol name="chevron.left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Add New Item</Text>
@@ -478,7 +537,7 @@ export default function AddWardrobeItemScreen() {
                     <Text style={[styles.processingText, { color: colors.tint }]}>Extracting Item...</Text>
                   </View>
                 )}
-                <TouchableOpacity style={styles.removeImageBtn} onPress={() => setImageUri(null)}>
+                <TouchableOpacity style={styles.removeImageBtn} onPress={() => { setImageUri(null); setTagSuggestion(null); }}>
                   <IconSymbol name="trash.fill" size={20} color="#FF453A" />
                 </TouchableOpacity>
               </View>
@@ -511,6 +570,47 @@ export default function AddWardrobeItemScreen() {
               thumbColor={Platform.OS === 'android' ? (removeBg ? 'white' : '#f4f3f4') : undefined}
             />
           </View>
+
+          <View style={[styles.autoDetectCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={styles.autoDetectCopy}>
+              <Text style={[styles.label, { color: colors.text }]}>Auto-detect details</Text>
+              <Text style={[styles.subLabel, { color: colors.secondaryText }]}>Optional. Your photo is analyzed only when you tap this button.</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.autoDetectButton, { borderColor: colors.tint, opacity: imageUri && !isTagging ? 1 : 0.5 }]}
+              onPress={handleAutoDetect}
+              disabled={!imageUri || isTagging}
+              accessibilityRole="button"
+              accessibilityLabel={isTagging ? 'Detecting clothing details' : 'Auto-detect clothing details'}
+            >
+              {isTagging ? <ActivityIndicator color={colors.tint} size="small" /> : <IconSymbol name="sparkles" size={16} color={colors.tint} />}
+              <Text style={[styles.autoDetectButtonText, { color: colors.tint }]}>{isTagging ? 'Detecting...' : 'Auto-detect'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {tagSuggestion && (
+            <View style={[styles.suggestionCard, { borderColor: colors.tint + '66', backgroundColor: colors.tint + '10' }]}>
+              <Text style={[styles.label, { color: colors.text }]}>Suggested details</Text>
+              <Text style={[styles.suggestionText, { color: colors.secondaryText }]}>
+                {tagSuggestion.category} · {tagSuggestion.subCategory} · {tagSuggestion.primaryColor}
+              </Text>
+              <Text style={[styles.subLabel, { color: colors.secondaryText }]}>
+                {tagSuggestion.colorTags.join(', ')} · {tagSuggestion.pattern} pattern · {tagSuggestion.material} appearance · {tagSuggestion.fit} fit
+              </Text>
+              <Text style={[styles.subLabel, { color: colors.secondaryText }]}>
+                {tagSuggestion.lengthType} length · {tagSuggestion.sleeveType} sleeves · {tagSuggestion.neckline} neckline · {tagSuggestion.silhouette} silhouette
+              </Text>
+              <Text style={[styles.subLabel, { color: colors.secondaryText }]}>Review before applying. You can edit every field before saving.</Text>
+              <View style={styles.suggestionActions}>
+                <TouchableOpacity style={[styles.applySuggestionButton, { backgroundColor: colors.tint }]} onPress={applyTagSuggestion}>
+                  <Text style={[styles.applySuggestionText, { color: colors.onTint }]}>Apply suggestions</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dismissSuggestionButton} onPress={() => setTagSuggestion(null)}>
+                  <Text style={[styles.dismissSuggestionText, { color: colors.secondaryText }]}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Primary Item Information Flow */}
           <View style={styles.form}>
@@ -552,6 +652,36 @@ export default function AddWardrobeItemScreen() {
                 onChangeText={setColor}
               />
             </View>
+
+            {detectionConfidence !== null && (
+              <View style={[styles.detectedDetailsCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                <Text style={[styles.label, { color: colors.text }]}>Detected styling details</Text>
+                <Text style={[styles.subLabel, { color: colors.secondaryText }]}>Optional suggestions. Correct or clear anything before saving.</Text>
+                <View style={styles.detectedDetailsGrid}>
+                  {[
+                    ['Pattern', 'pattern', 'Example: striped'],
+                    ['Material appearance', 'material', 'Example: linen'],
+                    ['Fit', 'fit', 'Example: relaxed'],
+                    ['Length', 'lengthType', 'Example: midi'],
+                    ['Sleeves', 'sleeveType', 'Example: long'],
+                    ['Neckline', 'neckline', 'Example: v-neck'],
+                    ['Silhouette', 'silhouette', 'Example: a-line'],
+                  ].map(([label, key, placeholder]) => (
+                    <View style={styles.formRow} key={key}>
+                      <Text style={[styles.subLabel, { color: colors.secondaryText }]}>{label}</Text>
+                      <TextInput
+                        keyboardAppearance={theme}
+                        style={[styles.input, styles.detectedDetailInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+                        placeholder={placeholder}
+                        placeholderTextColor={colors.secondaryText}
+                        value={detectedDetails[key as keyof typeof detectedDetails]}
+                        onChangeText={(value) => setDetectedDetails((current) => ({ ...current, [key]: value }))}
+                      />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
 
             {/* Where do you wear this often? */}
             <View style={styles.formRow}>
@@ -612,6 +742,8 @@ export default function AddWardrobeItemScreen() {
             style={[styles.saveButton, { backgroundColor: colors.tint, opacity: imageUri && !saving ? 1 : 0.6 }]}
             onPress={handleSave}
             disabled={!imageUri || saving}
+            accessibilityRole="button"
+            accessibilityLabel={saving ? (statusMessage || 'Saving...') : 'Add to Wardrobe'}
           >
             {saving ? (
               <View style={styles.loadingRow}>
@@ -623,7 +755,7 @@ export default function AddWardrobeItemScreen() {
             )}
           </TouchableOpacity>
           
-          <View style={{ height: 60 }} />
+          <View style={{ height: 20 }} />
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -734,6 +866,73 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: Spacing.lg,
   },
+  autoDetectCard: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    gap: Spacing.md,
+  },
+  autoDetectCopy: {
+    gap: 2,
+  },
+  autoDetectButton: {
+    height: 42,
+    borderWidth: 1,
+    borderRadius: Radius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+  },
+  autoDetectButtonText: {
+    ...Type.caption,
+    fontWeight: '700',
+  },
+  suggestionCard: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  detectedDetailsCard: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  detectedDetailsGrid: {
+    gap: Spacing.sm,
+  },
+  suggestionText: {
+    ...Type.bodyStrong,
+  },
+  suggestionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  applySuggestionButton: {
+    height: 40,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.pill,
+    justifyContent: 'center',
+  },
+  applySuggestionText: {
+    ...Type.caption,
+    fontWeight: '700',
+  },
+  dismissSuggestionButton: {
+    height: 40,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xs,
+  },
+  dismissSuggestionText: {
+    ...Type.caption,
+    fontWeight: '600',
+  },
   label: {
     ...Type.body,
     fontWeight: '600',
@@ -748,6 +947,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: Spacing.lg,
     ...Type.bodyStrong,
+  },
+  detectedDetailInput: {
+    height: 44,
   },
   textArea: {
     height: 110,

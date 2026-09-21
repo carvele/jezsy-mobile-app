@@ -1,0 +1,59 @@
+-- 20260920140106_reservation_financial_guard_hardening.sql.rollback
+-- Restores guard_reservation_financial_state() to its pre-140106 definition.
+-- Block 2 reverts to: any Paid/Refund Required → non-allowed downgrade is rejected.
+-- Block 3 reverts to: Cancelled + any paid payment row → rejected unconditionally.
+
+CREATE OR REPLACE FUNCTION public.guard_reservation_financial_state()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO ''
+AS $$
+BEGIN
+  IF current_user = 'authenticated'
+     AND (
+       NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.payment_status IS DISTINCT FROM OLD.payment_status
+     ) THEN
+    RAISE EXCEPTION 'Use an authorized reservation command to change lifecycle or payment state.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF lower(coalesce(OLD.payment_status, '')) IN ('paid', 'refund required')
+     AND lower(coalesce(NEW.payment_status, '')) NOT IN ('paid', 'refund required', 'refunded') THEN
+    RAISE EXCEPTION 'Settled or refundable payment cannot be marked unpaid or cancelled.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF lower(coalesce(NEW.payment_status, '')) = 'cancelled'
+     AND EXISTS (
+       SELECT 1 FROM public.payments p
+       WHERE p.reservation_id = NEW.id
+         AND p.status = 'paid'
+         AND p.refund_disbursed_at IS NULL
+     ) THEN
+    RAISE EXCEPTION 'Cannot cancel payment obligation: settled payments exist for this reservation.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF lower(coalesce(NEW.status, '')) = 'cancelled'
+     AND lower(coalesce(NEW.payment_status, '')) NOT IN ('cancelled', 'refund required', 'refunded') THEN
+    RAISE EXCEPTION 'A cancelled reservation must have payment status of Cancelled, Refund Required, or Refunded.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND lower(coalesce(OLD.status, '')) IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be reopened or changed.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND lower(coalesce(NEW.status, '')) IN ('preparing', 'ready', 'to pickup')
+     AND lower(coalesce(NEW.payment_status, '')) <> 'paid' THEN
+    RAISE EXCEPTION 'Payment must be confirmed before preparing this reservation.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;

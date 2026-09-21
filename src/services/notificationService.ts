@@ -133,3 +133,20 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
     throw error;
   }
 }
+
+export async function deleteNotification(
+  userId: string,
+  notificationId: string
+): Promise<void> {
+  if (!userId || !notificationId) return;
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('id', notificationId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error deleting notification:', error);
+    throw error;
+  }
+}

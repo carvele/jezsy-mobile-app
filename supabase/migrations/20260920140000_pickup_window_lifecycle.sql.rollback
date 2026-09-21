@@ -1,0 +1,149 @@
+-- =============================================================================
+-- Rollback for 20260920140000_pickup_window_lifecycle.sql
+-- =============================================================================
+
+-- 0. Financial safety guard
+-- Do not drop financial columns if they contain live data that would be lost.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.payments
+    WHERE forfeited_centavos IS NOT NULL OR refund_required_centavos IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'Cannot rollback: public.payments contains non-null forfeiture or refund data. Rolling back would destroy customer financial records. Manual data migration required.';
+  END IF;
+END $$;
+
+-- 1. Unschedule cron job (safety catch, in case the 140100 rollback wasn't run)
+DO $$
+BEGIN
+  PERFORM cron.unschedule('sweep-pickup-deadlines');
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- 2. Restore transition_reservation_status to its previous state (from 20260913170919)
+CREATE OR REPLACE FUNCTION public.transition_reservation_status(_reservation_id uuid, _expected_status text, _next_status text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+  v_old text;
+  v_next text;
+  v_stored_next text;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+
+  v_old := lower(trim(coalesce(v_res.status, '')));
+  v_next := lower(trim(coalesce(_next_status, '')));
+  IF v_old <> lower(trim(coalesce(_expected_status, ''))) THEN
+    RAISE EXCEPTION 'Reservation changed since it was loaded. Refresh and try again.'
+      USING ERRCODE = 'serialization_failure';
+  END IF;
+  IF v_old IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be changed.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_old IN ('pending', 'request approval') AND v_next IN ('to pay', 'confirmed') THEN
+    v_stored_next := 'To Pay';
+  ELSIF v_old IN ('to pay', 'confirmed', 'approved') AND v_next = 'preparing' THEN
+    IF lower(coalesce(v_res.payment_status, '')) <> 'paid' THEN
+      RAISE EXCEPTION 'Payment must be confirmed before preparation starts.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    v_stored_next := 'Preparing';
+  ELSIF v_old = 'preparing' AND v_next IN ('ready', 'to pickup') THEN
+    v_stored_next := 'Ready';
+  ELSE
+    RAISE EXCEPTION 'Unsupported reservation transition from % to %.', v_res.status, _next_status
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  UPDATE public.reservations
+  SET status = v_stored_next,
+      confirmed_by_id = CASE WHEN v_stored_next = 'To Pay' THEN v_actor ELSE confirmed_by_id END,
+      confirmed_by_name = CASE WHEN v_stored_next = 'To Pay' THEN coalesce(v_actor_name, 'Owner') ELSE confirmed_by_name END,
+      confirmed_at = CASE WHEN v_stored_next = 'To Pay' THEN now() ELSE confirmed_at END,
+      assigned_staff_id = CASE WHEN v_stored_next = 'Preparing' THEN v_actor ELSE assigned_staff_id END,
+      countdown = CASE WHEN v_stored_next = 'Preparing' THEN false ELSE countdown END,
+      updated_at = now()
+  WHERE id = _reservation_id
+  RETURNING * INTO v_res;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor, coalesce(v_actor_name, 'Owner'), 'Changed reservation status',
+    'reservation', _reservation_id::text,
+    jsonb_build_object('previous_status', _expected_status, 'status', v_res.status)
+  );
+
+  RETURN jsonb_build_object('reservation_id', v_res.id, 'previous_status', _expected_status, 'status', v_res.status);
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.transition_reservation_status(uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.transition_reservation_status(uuid, text, text) TO authenticated;
+
+-- 3. Drop new RPCs
+DROP FUNCTION IF EXISTS public.sweep_pickup_deadlines();
+DROP FUNCTION IF EXISTS public.cancel_no_show_reservation(uuid);
+DROP FUNCTION IF EXISTS public.cancel_reservation_after_ready(uuid);
+DROP FUNCTION IF EXISTS public.resolve_pickup_extension(uuid, boolean, text);
+DROP FUNCTION IF EXISTS public.request_pickup_extension(uuid, text, text);
+DROP FUNCTION IF EXISTS public.compute_extension_deadline(timestamptz);
+DROP FUNCTION IF EXISTS public.compute_pickup_deadline(timestamptz, integer);
+
+-- 4. Delete settings entry
+DELETE FROM public.settings WHERE key = 'pickupPolicy';
+
+-- 5. Drop notification_events_dedup
+DROP TABLE IF EXISTS public.notification_events_dedup CASCADE;
+
+-- 6. Drop columns from return_refund_requests
+ALTER TABLE public.return_refund_requests
+  DROP COLUMN IF EXISTS return_received_at,
+  DROP COLUMN IF EXISTS return_received_by,
+  DROP COLUMN IF EXISTS inspection_verified_at,
+  DROP COLUMN IF EXISTS inspection_verified_by;
+
+-- 7. Drop columns and constraints from payments
+ALTER TABLE public.payments
+  DROP CONSTRAINT IF EXISTS payments_refund_nonneg,
+  DROP CONSTRAINT IF EXISTS payments_forfeiture_nonneg,
+  DROP CONSTRAINT IF EXISTS payments_refund_forfeiture_sum,
+  DROP COLUMN IF EXISTS refund_required_centavos,
+  DROP COLUMN IF EXISTS forfeited_centavos;
+
+-- 8. Drop columns and constraints from reservations
+ALTER TABLE public.reservations
+  DROP CONSTRAINT IF EXISTS reservations_extension_complete,
+  DROP CONSTRAINT IF EXISTS reservations_extension_lifecycle,
+  DROP COLUMN IF EXISTS pickup_ready_at,
+  DROP COLUMN IF EXISTS pickup_deadline_at,
+  DROP COLUMN IF EXISTS extension_requested_at,
+  DROP COLUMN IF EXISTS extension_reason,
+  DROP COLUMN IF EXISTS extension_evidence_path,
+  DROP COLUMN IF EXISTS extension_status,
+  DROP COLUMN IF EXISTS extension_resolved_at,
+  DROP COLUMN IF EXISTS extension_resolved_by,
+  DROP COLUMN IF EXISTS extension_resolution_notes,
+  DROP COLUMN IF EXISTS extension_deadline_at;

@@ -1,0 +1,1 @@
+SELECT cron.schedule('sweep-pickup-deadlines', '*/15 * * * *', 'SELECT public.sweep_pickup_deadlines()');
