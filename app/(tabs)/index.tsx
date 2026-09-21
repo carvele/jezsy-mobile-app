@@ -103,6 +103,17 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const router = useRouter();
   const reduceMotion = useReduceMotion();
+  const seenCampaignImpressions = useRef<Set<string>>(new Set());
+
+  const recordCampaignEvent = useCallback((campaignId: string, event: 'impression' | 'tap') => {
+    // Metrics help staff improve merchandising, but must never block shopping.
+    // The database function only accepts calls from signed-in customers.
+    if (!session?.user?.id) return;
+    void supabase.rpc('record_storefront_campaign_event', {
+      p_announcement_id: campaignId,
+      p_event: event,
+    });
+  }, [session?.user?.id]);
 
   const [showTour, setShowTour] = useState(false);
   const [tourProgress, setTourProgress] = useState<TourProgressSnapshot | null>(null);
@@ -249,14 +260,67 @@ export default function HomeScreen() {
       .from('announcements')
       .select('*')
       .in('placement', ['storefront', 'both'])
+      .eq('storefront_status', 'published')
+      .or(`storefront_starts_at.is.null,storefront_starts_at.lte.${nowIso}`)
       .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+      .order('storefront_sort_order', { ascending: true })
       .order('created_at', { ascending: false })
-      .limit(3);
+      .limit(9);
 
     // Storefront campaigns are an enhancement, not a dependency for shopping.
     // A temporary permission or network failure must never hide the catalog.
-    if (!error) setStorefrontCampaigns(data ?? []);
-  }, []);
+    if (error) {
+      console.warn('Unable to load storefront campaigns:', error.message);
+      setStorefrontCampaigns([]);
+      return;
+    }
+
+    const campaigns = data ?? [];
+    setStorefrontCampaigns(campaigns);
+    campaigns.forEach((campaign) => {
+      if (!seenCampaignImpressions.current.has(campaign.id)) {
+        seenCampaignImpressions.current.add(campaign.id);
+        recordCampaignEvent(campaign.id, 'impression');
+      }
+    });
+  }, [recordCampaignEvent]);
+
+  const renderStorefrontCampaign = (campaign: StorefrontCampaign) => {
+    const canNavigate = campaign.cta_target_type !== 'none' && !!campaign.cta_target_value;
+    const openCampaign = () => {
+      if (!canNavigate) return;
+      recordCampaignEvent(campaign.id, 'tap');
+      if (campaign.cta_target_type === 'product') {
+        router.push(`/product/${campaign.cta_target_value}` as any);
+      } else if (campaign.cta_target_type === 'category') {
+        router.push(`/(tabs)/explore?category=${encodeURIComponent(campaign.cta_target_value ?? '')}` as any);
+      } else if (campaign.cta_target_type === 'catalog') {
+        router.push('/(tabs)/explore?all=1' as any);
+      }
+    };
+
+    return (
+      <TouchableOpacity
+        key={campaign.id}
+        activeOpacity={canNavigate ? 0.9 : 1}
+        disabled={!canNavigate}
+        onPress={openCampaign}
+        style={[styles.storefrontCampaign, { backgroundColor: colors.tint }]}
+        accessibilityRole={canNavigate ? 'button' : undefined}
+        accessibilityLabel={canNavigate ? `${campaign.title}. ${campaign.cta_label || 'Open campaign'}` : campaign.title}
+      >
+        {campaign.storefront_image_url && (
+          <Image source={{ uri: campaign.storefront_image_url }} style={styles.storefrontCampaignImage} contentFit="cover" />
+        )}
+        <View style={[styles.storefrontCampaignOverlay, !campaign.storefront_image_url && styles.storefrontCampaignSolid]}>
+          <Text style={styles.storefrontCampaignEyebrow}>JEZSY EDIT</Text>
+          <Text style={styles.storefrontCampaignTitle}>{campaign.title}</Text>
+          <Text style={styles.storefrontCampaignBody} numberOfLines={3}>{campaign.body}</Text>
+          {canNavigate && <Text style={styles.storefrontCampaignCta}>{campaign.cta_label || 'Shop collection'} →</Text>}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   // Focus, not mount-only: Shop by Category's order depends on affinity
   // counts that recordCategoryVisit writes when the user taps into a
@@ -449,41 +513,9 @@ export default function HomeScreen() {
 
         {/* Staff-curated campaign cards are managed with Broadcasts in Admin.
             They add an editorial entry point without duplicating product data. */}
-        {storefrontCampaigns.map((campaign) => {
-          const canNavigate = campaign.cta_target_type !== 'none' && !!campaign.cta_target_value;
-          const openCampaign = () => {
-            if (!canNavigate) return;
-            if (campaign.cta_target_type === 'product') {
-              router.push(`/product/${campaign.cta_target_value}` as any);
-            } else if (campaign.cta_target_type === 'category') {
-              router.push(`/(tabs)/explore?category=${encodeURIComponent(campaign.cta_target_value ?? '')}` as any);
-            } else if (campaign.cta_target_type === 'catalog') {
-              router.push('/(tabs)/explore?all=1' as any);
-            }
-          };
-
-          return (
-            <TouchableOpacity
-              key={campaign.id}
-              activeOpacity={canNavigate ? 0.9 : 1}
-              disabled={!canNavigate}
-              onPress={openCampaign}
-              style={[styles.storefrontCampaign, { backgroundColor: colors.tint }]}
-              accessibilityRole={canNavigate ? 'button' : undefined}
-              accessibilityLabel={canNavigate ? `${campaign.title}. ${campaign.cta_label || 'Open campaign'}` : campaign.title}
-            >
-              {campaign.storefront_image_url && (
-                <Image source={{ uri: campaign.storefront_image_url }} style={styles.storefrontCampaignImage} contentFit="cover" />
-              )}
-              <View style={[styles.storefrontCampaignOverlay, !campaign.storefront_image_url && styles.storefrontCampaignSolid]}>
-                <Text style={styles.storefrontCampaignEyebrow}>JEZSY EDIT</Text>
-                <Text style={styles.storefrontCampaignTitle}>{campaign.title}</Text>
-                <Text style={styles.storefrontCampaignBody} numberOfLines={3}>{campaign.body}</Text>
-                {canNavigate && <Text style={styles.storefrontCampaignCta}>{campaign.cta_label || 'Shop collection'} →</Text>}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+        {storefrontCampaigns
+          .filter((campaign) => campaign.storefront_position === 'top')
+          .map(renderStorefrontCampaign)}
 
         {/* A concise, persistent explanation of JezSy's core fulfillment
             promise. Home inspires; Explore finds; orders are collected in store. */}
@@ -691,6 +723,10 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {storefrontCampaigns
+          .filter((campaign) => campaign.storefront_position === 'after_featured')
+          .map(renderStorefrontCampaign)}
+
         {/* 2. Shop by Category is the intentional bridge into Explore, which
             owns the full search, filter, sort, and catalog experience. */}
         {topCategories.length > 0 && (
@@ -711,6 +747,10 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
         )}
+
+        {storefrontCampaigns
+          .filter((campaign) => campaign.storefront_position === 'after_categories')
+          .map(renderStorefrontCampaign)}
 
         {/* Style Inspiration is a distinct try-on discovery experience, not a
             second product catalog, so it follows the shopping entry points. */}
