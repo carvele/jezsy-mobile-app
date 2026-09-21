@@ -23,6 +23,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { useToast } from '@/src/context/ToastContext';
+import {
+  mapAuthErrorMessage,
+  isPhoneUniqueConflict,
+  DUPLICATE_PHONE_MESSAGE,
+} from '@/src/utils/authErrorMapping';
 import { consumeAuthReturnTarget, consumePendingEntryTarget } from '@/src/utils/authReturnTarget';
 import { CountryPickerModal } from '@/src/components/CountryPickerModal';
 import { DobPickerModal } from '@/src/components/DobPickerModal';
@@ -88,6 +93,10 @@ export default function ProfileSetupScreen() {
 
   // Custom DOB Selector state
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+
+  // Phone validation error state (e.g. duplicate phone conflict)
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const phoneInputRef = useRef<TextInput>(null);
 
   // Prefill from the existing profile, falling back to OAuth metadata for
   // names on first-time setup. Without this, a returning user hitting this
@@ -165,6 +174,7 @@ export default function ProfileSetupScreen() {
   };
 
   const handlePhoneChange = (text: string) => {
+    if (phoneError) setPhoneError(null);
     set('phone', formatPhoneForCountry(text, selectedCountry));
   };
 
@@ -323,7 +333,16 @@ export default function ProfileSetupScreen() {
       router.replace('/(tabs)');
     } catch (err: any) {
       console.error('Failed to save profile:', err);
-      showToast('Could not save your profile. Please try again.', 'error');
+      if (isPhoneUniqueConflict(err)) {
+        setPhoneError(DUPLICATE_PHONE_MESSAGE);
+        showToast(DUPLICATE_PHONE_MESSAGE, 'error');
+        transitionTo(1);
+        setTimeout(() => {
+          phoneInputRef.current?.focus();
+        }, 300);
+        return;
+      }
+      showToast(mapAuthErrorMessage(err, 'Could not save your profile. Please try again.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -373,7 +392,7 @@ export default function ProfileSetupScreen() {
             <Text style={[styles.label, { color: colors.secondaryText }]}>Mobile number</Text>
             <View style={styles.phoneInputRow}>
               <TouchableOpacity
-                style={[styles.countrySelectorBtn, { backgroundColor: colors.glass, borderColor: colors.hairline }]}
+                style={[styles.countrySelectorBtn, { backgroundColor: colors.glass, borderColor: phoneError ? colors.error : colors.hairline }]}
                 onPress={() => setShowCountryModal(true)}
                 activeOpacity={0.7}
               >
@@ -382,7 +401,12 @@ export default function ProfileSetupScreen() {
                 <ChevronDown size={14} color={colors.secondaryText} />
               </TouchableOpacity>
               <TextInput keyboardAppearance={theme}
-                style={[styles.input, styles.phoneInput, { color: colors.text, borderBottomColor: colors.border }]}
+                ref={phoneInputRef}
+                style={[
+                  styles.input,
+                  styles.phoneInput,
+                  { color: colors.text, borderBottomColor: phoneError ? colors.error : colors.border }
+                ]}
                 placeholder={selectedCountry.placeholder}
                 placeholderTextColor={colors.secondaryText}
                 value={data.phone}
@@ -392,6 +416,11 @@ export default function ProfileSetupScreen() {
                 accessibilityLabel="Mobile phone number"
               />
             </View>
+            {phoneError ? (
+              <Text style={{ color: colors.error, fontSize: 12, marginTop: 6, lineHeight: 16 }}>
+                {phoneError}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText, marginTop: Spacing.sm }]}>Date of birth</Text>
