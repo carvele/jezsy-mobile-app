@@ -20,6 +20,7 @@ export const PASSWORD_REQUIREMENT_HINT =
 export interface PasswordRequirementCheck {
   id: 'length' | 'lowercase' | 'uppercase' | 'number' | 'symbol';
   label: string;
+  shortLabel: string;
   met: boolean;
 }
 
@@ -44,6 +45,13 @@ export function passwordPolicyError(password: string): string | null {
 }
 
 /**
+ * Returns true if all password policy requirements are satisfied.
+ */
+export function areAllPasswordRequirementsMet(password: string): boolean {
+  return passwordPolicyError(password) === null;
+}
+
+/**
  * Returns structured requirement checks for live UI display.
  * Kept in strict sync with passwordPolicyError above.
  */
@@ -52,26 +60,31 @@ export function evaluatePasswordRequirements(password: string): PasswordRequirem
     {
       id: 'length',
       label: `At least ${PASSWORD_MIN_LENGTH} characters`,
+      shortLabel: `${PASSWORD_MIN_LENGTH}+ chars`,
       met: password.length >= PASSWORD_MIN_LENGTH,
-    },
-    {
-      id: 'lowercase',
-      label: 'One lowercase letter',
-      met: /[a-z]/.test(password),
     },
     {
       id: 'uppercase',
       label: 'One uppercase letter',
+      shortLabel: 'A-Z',
       met: /[A-Z]/.test(password),
+    },
+    {
+      id: 'lowercase',
+      label: 'One lowercase letter',
+      shortLabel: 'a-z',
+      met: /[a-z]/.test(password),
     },
     {
       id: 'number',
       label: 'One number',
+      shortLabel: '0-9',
       met: /[0-9]/.test(password),
     },
     {
       id: 'symbol',
       label: 'One symbol (e.g. ! @ # $)',
+      shortLabel: 'Symbol',
       met: /[^a-zA-Z0-9]/.test(password),
     },
   ];
