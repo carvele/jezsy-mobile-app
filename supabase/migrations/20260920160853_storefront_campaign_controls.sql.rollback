@@ -1,0 +1,15 @@
+DROP POLICY IF EXISTS "Admin or owner can manage storefront images" ON storage.objects;
+DROP FUNCTION IF EXISTS public.record_storefront_campaign_event(uuid, text);
+-- The storage bucket is intentionally retained during rollback so campaign
+-- images are never deleted as a side effect of reversing application schema.
+DROP INDEX IF EXISTS public.idx_announcements_storefront_position_order;
+ALTER TABLE public.announcements
+  DROP CONSTRAINT IF EXISTS announcements_storefront_position_check,
+  DROP CONSTRAINT IF EXISTS announcements_storefront_status_check,
+  DROP COLUMN IF EXISTS storefront_taps,
+  DROP COLUMN IF EXISTS storefront_impressions,
+  DROP COLUMN IF EXISTS storefront_starts_at,
+  DROP COLUMN IF EXISTS storefront_status,
+  DROP COLUMN IF EXISTS storefront_image_storage_path,
+  DROP COLUMN IF EXISTS storefront_sort_order,
+  DROP COLUMN IF EXISTS storefront_position;

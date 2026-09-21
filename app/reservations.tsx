@@ -194,7 +194,11 @@ export default function ReservationsScreen() {
   }, [activeFilter, fetchInitialReservations, showToast]);
 
   const renderReservationItem = ({ item }: { item: Reservation }) => {
-    const dateStr = item.date ? formatPHDate(item.date) : 'N/A';
+    const formattedDate = item.date ? formatPHDate(item.date) : null;
+    const formattedTime = item.appointment_time ? formatTimeLabel(item.appointment_time) : null;
+    const appointmentDate = formattedDate === 'N/A' ? null : formattedDate;
+    const appointmentTime = formattedTime === 'N/A' ? null : formattedTime;
+    const appointmentSummary = [appointmentDate, appointmentTime].filter(Boolean).join(' at ') || 'Collection time to be confirmed';
     const displayState = getCustomerReservationDisplayState(item);
     const deadline = displayState.showCountdown
       ? formatPaymentDeadline(item.payment_due_at)
@@ -219,7 +223,7 @@ export default function ReservationsScreen() {
           <TouchableOpacity
             accessible={true}
           accessibilityRole="button"
-          accessibilityLabel={`Reservation ${item.display_id ? item.display_id.split('-').pop() : item.id.substring(0,8)}, ${item.product_name}, status ${displayState.label}${hasRefundPending ? ', refund in progress' : ''}${deadline ? `, ${deadline.label} to pay` : ''}, ${dateStr} at ${formatTimeLabel(item.appointment_time)}`}
+          accessibilityLabel={`Reservation ${item.display_id ? item.display_id.split('-').pop() : item.id.substring(0,8)}, ${item.product_name}, status ${displayState.label}${hasRefundPending ? ', refund in progress' : ''}${deadline ? `, ${deadline.label} to pay` : ''}, ${appointmentSummary}`}
           accessibilityHint="View reservation details"
           onPress={() => router.push(`/reservations/${item.id}` as any)}
         >
@@ -259,7 +263,7 @@ export default function ReservationsScreen() {
               Size: {item.size || 'Standard'} • Color: {item.color || 'Default'}
             </Text>
             <Text style={[styles.appointmentDetails, { color: colors.text }]}>
-              <IconSymbol name="calendar" size={14} color={colors.tint} /> {dateStr} at {formatTimeLabel(item.appointment_time)}
+              <IconSymbol name={appointmentDate || appointmentTime ? 'calendar' : 'clock.fill'} size={14} color={colors.tint} /> {appointmentSummary}
             </Text>
             <Text style={[styles.price, { color: colors.tint }]}>₱{(item.rental_price || 0).toFixed(2)}</Text>
           </View>

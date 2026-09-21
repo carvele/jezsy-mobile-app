@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
@@ -6,7 +6,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { useWishlist } from '@/src/context/WishlistContext';
 import { useCart } from '@/src/context/CartContext';
@@ -40,7 +40,7 @@ export default function ProfileScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!user?.id) return;
     let isMounted = true;
 
@@ -80,7 +80,7 @@ export default function ProfileScreen() {
 
     fetchReservations();
     return () => { isMounted = false; };
-  }, [user?.id]);
+  }, [user?.id]));
 
   const handleShareProfile = async () => {
     // A profile has no shareable link without a username -- silently doing
