@@ -164,10 +164,6 @@ export function StyleGallery() {
                   <Text style={styles.occasionText}>{pose.occasion}</Text>
                 </View>
               )}
-              <View style={[styles.tryBadge, { backgroundColor: colors.tint }]}>
-                <IconSymbol name="sparkles" size={12} color={colors.onTint} />
-                <Text style={[styles.tryBadgeText, { color: colors.onTint }]}>Try in AR</Text>
-              </View>
             </View>
 
             <View style={styles.cardBody}>
@@ -285,23 +281,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   occasionText: {
     color: colors.tint,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  tryBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: colors.tint,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  tryBadgeText: {
-    color: colors.onTint,
     fontSize: 10,
     fontWeight: '700',
   },
