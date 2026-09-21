@@ -23,6 +23,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { ArrowLeft, Eye, EyeOff, Mail, Lock, Phone, User } from 'lucide-react-native';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
+import { LegalReaderModal } from '@/src/components/LegalReaderModal';
 import { passwordPolicyError, translatePasswordServerError } from '@/src/utils/passwordPolicy';
 import { legalService } from '@/src/services/legalService';
 import { normalizeMobileNumber } from '@/src/utils/profileFields';
@@ -61,6 +62,8 @@ export default function AuthScreen() {
   const [timer, setTimer] = useState(0);
   const [inputFocused, setInputFocused] = useState(false);
   const [legalAccepted, setLegalAccepted] = useState(false);
+  const [hasReadTerms, setHasReadTerms] = useState(false);
+  const [activeLegalModal, setActiveLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
   const otpInputRef = useRef<TextInput>(null);
 
@@ -127,6 +130,11 @@ export default function AuthScreen() {
     }
     if (password !== confirmPassword) {
       showToast('Passwords do not match.', 'error');
+      return;
+    }
+    if (!hasReadTerms) {
+      showToast('Please read the Terms of Service before agreeing.', 'error');
+      setActiveLegalModal('terms');
       return;
     }
     if (!legalAccepted) {
@@ -675,20 +683,50 @@ export default function AuthScreen() {
             {mode === 'signup' && (
               <View style={styles.legalConsentRow}>
                 <TouchableOpacity
-                  style={[styles.legalCheckbox, legalAccepted && styles.legalCheckboxChecked]}
-                  onPress={() => setLegalAccepted((accepted) => !accepted)}
+                  style={[
+                    styles.legalCheckbox,
+                    legalAccepted && styles.legalCheckboxChecked,
+                    !hasReadTerms && styles.legalCheckboxLocked,
+                  ]}
+                  onPress={() => {
+                    if (!hasReadTerms) {
+                      showToast('Please read the Terms of Service to the bottom before agreeing.', 'info');
+                      setActiveLegalModal('terms');
+                      return;
+                    }
+                    setLegalAccepted((accepted) => !accepted);
+                  }}
                   accessibilityRole="checkbox"
                   accessibilityLabel="I agree to the Terms and Conditions and Privacy Policy"
-                  accessibilityState={{ checked: legalAccepted }}
+                  accessibilityState={{ checked: legalAccepted, disabled: !hasReadTerms }}
+                  accessibilityHint={!hasReadTerms ? 'Opens terms reader to review before agreeing' : undefined}
                 >
                   {legalAccepted && <Text style={styles.legalCheckboxMark}>✓</Text>}
                 </TouchableOpacity>
-                <Text style={styles.legalConsentText}>
-                  I agree to the{' '}
-                  <Text style={styles.legalConsentLink} onPress={() => router.push('/legal/terms')}>Terms & Conditions</Text>
-                  {' '}and{' '}
-                  <Text style={styles.legalConsentLink} onPress={() => router.push('/legal/privacy')}>Privacy Policy</Text>.
-                </Text>
+                <View style={styles.legalConsentTextContainer}>
+                  <Text style={styles.legalConsentText}>
+                    I agree to the{' '}
+                    <Text
+                      style={styles.legalConsentLink}
+                      onPress={() => setActiveLegalModal('terms')}
+                    >
+                      Terms & Conditions
+                    </Text>
+                    {' '}and{' '}
+                    <Text
+                      style={styles.legalConsentLink}
+                      onPress={() => setActiveLegalModal('privacy')}
+                    >
+                      Privacy Policy
+                    </Text>
+                    .
+                  </Text>
+                  {!hasReadTerms && (
+                    <Text style={styles.legalReadPromptText}>
+                      (Please read the Terms before agreeing)
+                    </Text>
+                  )}
+                </View>
               </View>
             )}
 
@@ -793,6 +831,26 @@ export default function AuthScreen() {
               style={styles.primaryBtnGlow}
             />
 
+            {mode === 'login' && (
+              <Text style={styles.signinNoticeText}>
+                By signing in to your account, you agree to our{' '}
+                <Text
+                  style={styles.legalConsentLink}
+                  onPress={() => setActiveLegalModal('terms')}
+                >
+                  Terms
+                </Text>
+                {' '}and{' '}
+                <Text
+                  style={styles.legalConsentLink}
+                  onPress={() => setActiveLegalModal('privacy')}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            )}
+
             {/* Switch between Log In and Sign Up */}
             {(mode === 'login' || mode === 'signup') && (
               <View style={styles.toggleRow}>
@@ -830,6 +888,20 @@ export default function AuthScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      {activeLegalModal && (
+        <LegalReaderModal
+          visible={true}
+          documentType={activeLegalModal}
+          initialViewed={activeLegalModal === 'terms' ? hasReadTerms : false}
+          onClose={() => setActiveLegalModal(null)}
+          onViewCompleted={() => {
+            if (activeLegalModal === 'terms') {
+              setHasReadTerms(true);
+              setLegalAccepted(true);
+            }
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -976,13 +1048,19 @@ const styles = StyleSheet.create({
     backgroundColor: c.tint,
     borderColor: c.tint,
   },
+  legalCheckboxLocked: {
+    opacity: 0.45,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
   legalCheckboxMark: {
     color: c.onTint,
     fontWeight: '800',
     fontSize: 14,
   },
-  legalConsentText: {
+  legalConsentTextContainer: {
     flex: 1,
+  },
+  legalConsentText: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 13,
     lineHeight: 19,
@@ -990,6 +1068,20 @@ const styles = StyleSheet.create({
   legalConsentLink: {
     color: c.tint,
     fontWeight: '700',
+  },
+  legalReadPromptText: {
+    color: 'rgba(255, 255, 255, 0.45)',
+    fontSize: 12,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  signinNoticeText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
   },
   linksRow: {
     flexDirection: 'row',

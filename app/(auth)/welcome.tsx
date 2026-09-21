@@ -19,6 +19,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
+import { LegalReaderModal } from '@/src/components/LegalReaderModal';
 
 // Required to dismiss the auth session on iOS
 WebBrowser.maybeCompleteAuthSession();
@@ -49,6 +50,7 @@ export default function WelcomeScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = React.useState(false);
+  const [activeLegalModal, setActiveLegalModal] = React.useState<'terms' | 'privacy' | null>(null);
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
@@ -202,12 +204,20 @@ export default function WelcomeScreen() {
 
         <Text style={styles.termsText}>
           By continuing, you agree to our{' '}
-          <Text style={styles.termsLink} onPress={() => router.push('/legal/terms')}>Terms & Conditions</Text>
+          <Text style={styles.termsLink} onPress={() => setActiveLegalModal('terms')}>Terms & Conditions</Text>
           {' '}and{' '}
-          <Text style={styles.termsLink} onPress={() => router.push('/legal/privacy')}>Privacy Policy</Text>.
+          <Text style={styles.termsLink} onPress={() => setActiveLegalModal('privacy')}>Privacy Policy</Text>.
         </Text>
 
       </View>
+
+      {activeLegalModal && (
+        <LegalReaderModal
+          visible={true}
+          documentType={activeLegalModal}
+          onClose={() => setActiveLegalModal(null)}
+        />
+      )}
     </View>
   );
 }

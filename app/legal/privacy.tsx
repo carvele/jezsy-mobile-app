@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { legalService } from '@/src/services/legalService';
@@ -40,16 +40,25 @@ export default function PrivacyScreen() {
     };
   }, []);
 
+  const handleClose = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
+          style={styles.closeButton}
+          onPress={handleClose}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel="Close privacy policy"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+          <IconSymbol name="xmark" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Privacy Policy</Text>
         <View style={styles.headerRightPlaceholder} />
@@ -77,7 +86,7 @@ export default function PrivacyScreen() {
             </>
           ) : (
             <View style={styles.emptyContainer}>
-              <Ionicons name="shield-checkmark-outline" size={48} color={colors.secondaryText} />
+              <IconSymbol name="checkmark.seal.fill" size={48} color={colors.secondaryText} />
               <Text style={[styles.emptyTitle, { color: colors.text }]}>Privacy Policy</Text>
               <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
                 Our privacy policy is currently being updated by boutique management. Please check back shortly or reach out to customer support.
@@ -102,15 +111,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backButton: {
-    padding: 4,
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 17,
     fontWeight: '700',
   },
   headerRightPlaceholder: {
-    width: 32,
+    width: 36,
   },
   loadingContainer: {
     flex: 1,

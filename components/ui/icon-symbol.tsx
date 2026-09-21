@@ -65,6 +65,7 @@ const MAPPING = {
   'ellipsis': 'more-horiz',
   'delete.left': 'backspace',
   'pencil': 'edit',
+  'doc.text': 'description',
 
   // Status & Alerts
   'bell': 'notifications-none',
