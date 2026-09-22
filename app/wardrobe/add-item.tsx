@@ -37,6 +37,7 @@ import { analyzeGarmentImage, GarmentTagSuggestion } from '@/src/services/garmen
 import { inferSystemBucket } from '@/src/utils/garmentSemanticClassifier';
 
 const { width } = Dimensions.get('window');
+const EMPTY_STYLING_DETAILS = { pattern: '', material: '', fit: '', lengthType: '', sleeveType: '', neckline: '', silhouette: '' };
 
 export default function AddWardrobeItemScreen() {
   const { showToast } = useToast();
@@ -54,8 +55,9 @@ export default function AddWardrobeItemScreen() {
   const [removeBg, setRemoveBg] = useState<boolean>(true);
   const [isTagging, setIsTagging] = useState(false);
   const [tagSuggestion, setTagSuggestion] = useState<GarmentTagSuggestion | null>(null);
-  const [detectedDetails, setDetectedDetails] = useState({ pattern: '', material: '', fit: '', lengthType: '', sleeveType: '', neckline: '', silhouette: '' });
+  const [detectedDetails, setDetectedDetails] = useState(EMPTY_STYLING_DETAILS);
   const [detectionConfidence, setDetectionConfidence] = useState<number | null>(null);
+  const [showStylingDetails, setShowStylingDetails] = useState(false);
 
   // Five primary clean fields + optional notes
   const [category, setCategory] = useState<string>('');
@@ -270,6 +272,7 @@ export default function AddWardrobeItemScreen() {
       silhouette: tagSuggestion.silhouette === 'unknown' ? '' : tagSuggestion.silhouette,
     });
     setDetectionConfidence(tagSuggestion.confidence);
+    setShowStylingDetails(true);
     setTagSuggestion(null);
     showToast('Suggestions applied. You can edit any field before saving.', 'success');
   };
@@ -468,6 +471,9 @@ export default function AddWardrobeItemScreen() {
       setRawPickedUri(null);
       setRawPickedSize(null);
       setTagSuggestion(null);
+      setDetectedDetails(EMPTY_STYLING_DETAILS);
+      setDetectionConfidence(null);
+      setShowStylingDetails(false);
       setCategory('');
       setSubCategory('');
       setColor('');
@@ -537,7 +543,7 @@ export default function AddWardrobeItemScreen() {
                     <Text style={[styles.processingText, { color: colors.tint }]}>Extracting Item...</Text>
                   </View>
                 )}
-                <TouchableOpacity style={styles.removeImageBtn} onPress={() => { setImageUri(null); setTagSuggestion(null); }}>
+                <TouchableOpacity style={styles.removeImageBtn} onPress={() => { setImageUri(null); setTagSuggestion(null); setDetectedDetails(EMPTY_STYLING_DETAILS); setDetectionConfidence(null); setShowStylingDetails(false); }}>
                   <IconSymbol name="trash.fill" size={20} color="#FF453A" />
                 </TouchableOpacity>
               </View>
@@ -653,10 +659,29 @@ export default function AddWardrobeItemScreen() {
               />
             </View>
 
-            {detectionConfidence !== null && (
+            {!showStylingDetails && (
+              <TouchableOpacity
+                style={[styles.additionalDetailsButton, { borderColor: colors.border, backgroundColor: colors.card }]}
+                onPress={() => setShowStylingDetails(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Add optional styling details manually"
+              >
+                <Text style={[styles.label, { color: colors.text }]}>Add styling details (optional)</Text>
+                <Text style={[styles.subLabel, { color: colors.secondaryText }]}>Pattern, material, fit, cut, and more</Text>
+              </TouchableOpacity>
+            )}
+
+            {showStylingDetails && (
               <View style={[styles.detectedDetailsCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                <Text style={[styles.label, { color: colors.text }]}>Detected styling details</Text>
-                <Text style={[styles.subLabel, { color: colors.secondaryText }]}>Optional suggestions. Correct or clear anything before saving.</Text>
+                <View style={styles.stylingDetailsHeader}>
+                  <View>
+                    <Text style={[styles.label, { color: colors.text }]}>{detectionConfidence === null ? 'Styling details (optional)' : 'Detected styling details'}</Text>
+                    <Text style={[styles.subLabel, { color: colors.secondaryText }]}>{detectionConfidence === null ? 'Add details manually to improve recommendations.' : 'Optional suggestions. Correct or clear anything before saving.'}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setShowStylingDetails(false)} accessibilityRole="button" accessibilityLabel="Hide styling details">
+                    <Text style={[styles.hideStylingDetailsText, { color: colors.tint }]}>Hide</Text>
+                  </TouchableOpacity>
+                </View>
                 <View style={styles.detectedDetailsGrid}>
                   {[
                     ['Pattern', 'pattern', 'Example: striped'],
@@ -901,6 +926,23 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     padding: Spacing.md,
     gap: Spacing.sm,
+  },
+  additionalDetailsButton: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  stylingDetailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  hideStylingDetailsText: {
+    ...Type.caption,
+    fontWeight: '700',
+    paddingVertical: Spacing.xs,
   },
   detectedDetailsGrid: {
     gap: Spacing.sm,
