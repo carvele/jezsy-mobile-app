@@ -47,6 +47,7 @@ describe('analyze-wardrobe-image', () => {
     expect(url).not.toContain('tagging-key');
     expect(init.headers['x-goog-api-key']).toBe('tagging-key');
     expect(JSON.parse(init.body).contents[0].parts[1].inlineData.data).toBe('aGVsbG8=');
+    expect(JSON.parse(init.body).generationConfig).toEqual({ temperature: 0, responseMimeType: 'application/json' });
   });
 
   test('does not call Gemini when tagging is not configured', async () => {
@@ -66,5 +67,12 @@ describe('analyze-wardrobe-image', () => {
     const d = deps({ fetchImpl: jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ category: 'Top', subCategory: 'Hoodie', primaryColor: 'Black', colorTags: ['Black'], pattern: 'graphic', material: 'magic-fabric', fit: 'regular', lengthType: 'regular', sleeveType: 'long', neckline: 'crew', silhouette: 'straight', confidence: 1 }) }] } }] }) })) as any });
     const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
     expect(await response.json()).toEqual({ success: false, reason: 'INVALID_PROVIDER_RESPONSE' });
+  });
+
+  test('reports a rejected Gemini request distinctly from an invalid photograph', async () => {
+    const d = deps({ fetchImpl: jest.fn(async () => ({ ok: false, status: 400, json: async () => ({}) })) as any });
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ success: false, reason: 'TAGGING_PROVIDER_REJECTED' });
   });
 });

@@ -26,7 +26,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
 import { wardrobeService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
-import { removeBackground } from '@six33/react-native-bg-removal';
+import { isNativeBackgroundRemovalSupported, removeBackground } from '@six33/react-native-bg-removal';
 import { removeBackgroundWeb } from '@/src/utils/webBackgroundRemoval';
 import { useToast } from '@/src/context/ToastContext';
 import { ImageCropModal } from '@/src/components/ImageCropModal';
@@ -53,6 +53,8 @@ export default function AddWardrobeItemScreen() {
   const [processedImageUri, setProcessedImageUri] = useState<string | null>(null);
   const [isProcessingBg, setIsProcessingBg] = useState<boolean>(false);
   const [removeBg, setRemoveBg] = useState<boolean>(true);
+  const [backgroundRemovalError, setBackgroundRemovalError] = useState<string | null>(null);
+  const [backgroundRemovalAttempt, setBackgroundRemovalAttempt] = useState(0);
   const [isTagging, setIsTagging] = useState(false);
   const [tagSuggestion, setTagSuggestion] = useState<GarmentTagSuggestion | null>(null);
   const [detectedDetails, setDetectedDetails] = useState(EMPTY_STYLING_DETAILS);
@@ -100,15 +102,18 @@ export default function AddWardrobeItemScreen() {
     const processImage = async () => {
       if (!imageUri) {
         setProcessedImageUri(null);
+        setBackgroundRemovalError(null);
         return;
       }
       
       if (!removeBg) {
         setProcessedImageUri(null);
+        setBackgroundRemovalError(null);
         return;
       }
 
       setIsProcessingBg(true);
+      setBackgroundRemovalError(null);
       try {
         if (Platform.OS === 'web') {
           const webCutoutUri = await removeBackgroundWeb(imageUri);
@@ -116,8 +121,14 @@ export default function AddWardrobeItemScreen() {
             setProcessedImageUri(webCutoutUri);
           }
         } else {
+          if (!(await isNativeBackgroundRemovalSupported())) {
+            throw new Error('Background removal is not supported on this device.');
+          }
           const result = await removeBackground(imageUri);
-          if (isMounted && result) {
+          if (!result || result === imageUri) {
+            throw new Error('No isolated garment image was created.');
+          }
+          if (isMounted) {
             setProcessedImageUri(result);
           }
         }
@@ -125,6 +136,7 @@ export default function AddWardrobeItemScreen() {
         console.warn('Background removal failed, falling back to original image:', err);
         if (isMounted) {
           setProcessedImageUri(null);
+          setBackgroundRemovalError('Could not remove the background on this device. Your original photo is still safe to use.');
         }
       } finally {
         if (isMounted) {
@@ -138,7 +150,7 @@ export default function AddWardrobeItemScreen() {
     return () => {
       isMounted = false;
     };
-  }, [imageUri, removeBg]);
+  }, [backgroundRemovalAttempt, imageUri, removeBg]);
 
   const pickImage = async (useCamera: boolean) => {
     try {
@@ -577,6 +589,15 @@ export default function AddWardrobeItemScreen() {
             />
           </View>
 
+          {backgroundRemovalError && (
+            <View style={[styles.backgroundRemovalError, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Text style={[styles.subLabel, { color: colors.secondaryText }]}>{backgroundRemovalError}</Text>
+              <TouchableOpacity onPress={() => setBackgroundRemovalAttempt((attempt) => attempt + 1)} accessibilityRole="button" accessibilityLabel="Try background removal again">
+                <Text style={[styles.retryBackgroundRemovalText, { color: colors.tint }]}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={[styles.autoDetectCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
             <View style={styles.autoDetectCopy}>
               <Text style={[styles.label, { color: colors.text }]}>Auto-detect details</Text>
@@ -897,6 +918,17 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     marginBottom: Spacing.lg,
     gap: Spacing.md,
+  },
+  backgroundRemovalError: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  retryBackgroundRemovalText: {
+    ...Type.caption,
+    fontWeight: '700',
   },
   autoDetectCopy: {
     gap: 2,
