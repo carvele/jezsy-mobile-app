@@ -1647,17 +1647,27 @@ export default function ExploreScreen() {
         keyboardBehavior="extend"
         enableDynamicSizing={false}
       >
-        <BottomSheetView style={styles.sheetContent}>
+        <View style={styles.sheetContent}>
           {/* Static Modal Header */}
           <View style={styles.modalHeader}>
             <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
-            <TouchableOpacity
-              onPress={clearAllFilters}
-              accessibilityRole="button"
-              accessibilityLabel="Clear all filters"
-            >
-              <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+              <TouchableOpacity
+                onPress={clearAllFilters}
+                accessibilityRole="button"
+                accessibilityLabel="Clear all filters"
+              >
+                <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={applyFilters}
+                accessibilityRole="button"
+                accessibilityLabel="Apply filters"
+                style={[styles.headerApplyButton, { backgroundColor: colors.tint }]}
+              >
+                <Text style={[styles.headerApplyButtonText, { color: colors.onTint }]}>Apply</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Scrollable Filter Body */}
@@ -1665,6 +1675,8 @@ export default function ExploreScreen() {
             style={styles.modalScroll}
             contentContainerStyle={styles.modalScrollContent}
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
+            showsVerticalScrollIndicator={true}
           >
             {/* Special Offers Section */}
             <View style={styles.filterSection}>
@@ -1971,7 +1983,7 @@ export default function ExploreScreen() {
               <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
             </TouchableOpacity>
           </View>
-        </BottomSheetView>
+        </View>
       </BottomSheetModal>
 
         {/* SORT OPTIONS BOTTOM SHEET MODAL */}
