@@ -168,10 +168,43 @@ export function calculateBoneRotationsFromCanonical(
   let lArmRest: Vec3 = { x: 1, y: 0, z: 0 };
   let rArmRest: Vec3 = { x: -1, y: 0, z: 0 };
   if (restPose === 'A_POSE') {
-    const angle = 35 * Math.PI / 180;
+    const angle = (35 * Math.PI) / 180;
     lArmRest = { x: Math.cos(angle), y: -Math.sin(angle), z: 0 };
     rArmRest = { x: -Math.cos(angle), y: -Math.sin(angle), z: 0 };
   }
+
+  // Neutral human resting pose deadzone:
+  // In natural standing posture, arms hang down along the torso (~ -Y).
+  // Live monocular MediaPipe tracking introduces landmark noise and natural anatomical
+  // abduction (~8-12 deg). Within the neutral deadzone (<= 15 deg from vertical -Y),
+  // the arm direction is resolved to relaxed vertical hang (0, -1, 0), ensuring the
+  // garment sleeves hang relaxed, symmetric, and upright without jitter or A-pose stub
+  // deformation. Outside the transition zone (>= 28 deg), live tracking engages smoothly.
+  const NEUTRAL_ARM_DEADZONE_RAD = (15.0 * Math.PI) / 180;
+  const FULL_ARM_ENGAGE_RAD = (28.0 * Math.PI) / 180;
+
+  function resolveArmDirection(rawDir: Vec3 | null): Vec3 | null {
+    if (!rawDir) return null;
+    const cosAngle = Math.max(-1, Math.min(1, -rawDir.y));
+    const angleRad = Math.acos(cosAngle);
+
+    if (angleRad <= NEUTRAL_ARM_DEADZONE_RAD) {
+      return { x: 0, y: -1, z: 0 };
+    }
+    if (angleRad >= FULL_ARM_ENGAGE_RAD) {
+      return rawDir;
+    }
+    const t = (angleRad - NEUTRAL_ARM_DEADZONE_RAD) / (FULL_ARM_ENGAGE_RAD - NEUTRAL_ARM_DEADZONE_RAD);
+    const s = t * t * (3 - 2 * t);
+    return normalizeVec({
+      x: rawDir.x * s,
+      y: -1 * (1 - s) + rawDir.y * s,
+      z: rawDir.z * s,
+    });
+  }
+
+  const FOREARM_DEADZONE_RAD = (12.0 * Math.PI) / 180;
+  const MAX_ARM_BEND_RAD = (145.0 * Math.PI) / 180;
 
   /** Direction from joint a to joint b, rotated out of canonical space into the torso frame. */
   const localDir = (a: CanonicalJoint | null, b: CanonicalJoint | null): Vec3 | null => {
@@ -181,10 +214,12 @@ export function calculateBoneRotationsFromCanonical(
     return normalizeVec(toTorsoLocal(torsoForRetarget, d));
   };
 
-  // Upper arms: shoulder -> elbow. Missing joint means "no delta", i.e. leave the bone at
-  // its bind pose, rather than inheriting some other bone rotation.
-  const lArmDir = localDir(lS, lE);
-  const rArmDir = localDir(rS, rE);
+  // Upper arms: shoulder -> elbow. Neutral arms down produce relaxed, symmetric hang.
+  const rawLArmDir = localDir(lS, lE);
+  const rawRArmDir = localDir(rS, rE);
+  const lArmDir = resolveArmDirection(rawLArmDir);
+  const rArmDir = resolveArmDirection(rawRArmDir);
+
   const lArm = lArmDir ? setFromUnitVectors(lArmRest, lArmDir) : IDENTITY_QUAT;
   const rArm = rArmDir ? setFromUnitVectors(rArmRest, rArmDir) : IDENTITY_QUAT;
   boneRotations['LeftArm'] = lArm;
@@ -193,12 +228,20 @@ export function calculateBoneRotationsFromCanonical(
   // Forearms: elbow -> wrist, expressed relative to the upper arm (the parent in the chain).
   const lForeDir = localDir(lE, lW);
   const rForeDir = localDir(rE, rW);
-  boneRotations['LeftForeArm'] = lForeDir
-    ? multiplyQuat(invertQuat(lArm), setFromUnitVectors(lArmRest, lForeDir))
-    : IDENTITY_QUAT;
-  boneRotations['RightForeArm'] = rForeDir
-    ? multiplyQuat(invertQuat(rArm), setFromUnitVectors(rArmRest, rForeDir))
-    : IDENTITY_QUAT;
+
+  function computeForearm(armDelta: Quaternion, armRest: Vec3, armDir: Vec3 | null, foreDir: Vec3 | null): Quaternion {
+    if (!armDir || !foreDir) return IDENTITY_QUAT;
+    const d = Math.max(-1, Math.min(1, armDir.x * foreDir.x + armDir.y * foreDir.y + armDir.z * foreDir.z));
+    const angle = Math.acos(d);
+    if (angle <= FOREARM_DEADZONE_RAD) {
+      return IDENTITY_QUAT;
+    }
+    const rawForeDelta = multiplyQuat(invertQuat(armDelta), setFromUnitVectors(armRest, foreDir));
+    return clampQuatAngle(rawForeDelta, MAX_ARM_BEND_RAD);
+  }
+
+  boneRotations['LeftForeArm'] = computeForearm(lArm, lArmRest, lArmDir, lForeDir);
+  boneRotations['RightForeArm'] = computeForearm(rArm, rArmRest, rArmDir, rForeDir);
 
   // Upper legs: hip -> knee. Rest direction is straight down the torso-local
   // -Y axis regardless of restPose -- unlike arms, T-pose and A-pose don't

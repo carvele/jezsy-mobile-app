@@ -312,12 +312,37 @@ export function normalizePose(
   }
 
   const xAxis = normalizeVec(xRaw);
-  const upHint = normalizeVec(upRaw);
 
-  // zAxis (out of the chest, toward the viewer at rest) = xAxis X upHint.
-  // Its length is sin(angle between them): near zero means the two source lines are
-  // parallel and the basis carries no real orientation.
-  const zRaw = crossVec(xAxis, upHint);
+  // In live monocular MediaPipe tracking, depth (Z) between shoulders and hips
+  // carries a natural camera elevation / monocular statistical model bias (~ +14.5 deg
+  // in upRaw pitch), causing an upright user facing the camera to produce an unintended
+  // forward pitch. We establish a neutral upright deadzone window [-3 deg, +16.5 deg]
+  // where the forward depth component of upRaw is suppressed, ensuring the torso root
+  // transform is strictly upright (0 deg pitch) and immune to landmark depth jitter.
+  // Outside this deadzone (genuine forward bends or backward leans), the Z component
+  // smoothly engages via smoothstep and clamps to anatomically reasonable bounds.
+  // Preserving upRaw.x and upRaw.y ensures torso roll and yaw are unaffected.
+  const rawPitchRad = Math.atan2(upRaw.z, Math.sqrt(upRaw.x * upRaw.x + upRaw.y * upRaw.y));
+  const DZ_MIN_RAD = (-3.0 * Math.PI) / 180;
+  const DZ_MAX_RAD = (16.5 * Math.PI) / 180;
+  const FULL_MAX_RAD = (28.0 * Math.PI) / 180;
+  const FULL_MIN_RAD = (-15.0 * Math.PI) / 180;
+
+  let effZ = 0;
+  if (rawPitchRad > DZ_MAX_RAD) {
+    const t = Math.min(1, (rawPitchRad - DZ_MAX_RAD) / (FULL_MAX_RAD - DZ_MAX_RAD));
+    const s = t * t * (3 - 2 * t);
+    effZ = upRaw.z * s;
+  } else if (rawPitchRad < DZ_MIN_RAD) {
+    const t = Math.min(1, (DZ_MIN_RAD - rawPitchRad) / (DZ_MIN_RAD - FULL_MIN_RAD));
+    const s = t * t * (3 - 2 * t);
+    effZ = upRaw.z * s;
+  }
+
+  const upCorrected: Vec3 = { x: upRaw.x, y: upRaw.y, z: effZ };
+
+  // zAxis (out of the chest, toward the viewer at rest) = xAxis X upCorrected.
+  const zRaw = crossVec(xAxis, upCorrected);
   if (lengthVec(zRaw) < MIN_BASIS_SEPARATION) {
     return {
       space: CANONICAL_SPACE_VERSION,
