@@ -199,3 +199,46 @@ describe('Invalid-torso fallback roll cancellation (#6)', () => {
   });
 
 });
+
+describe('Neutral arm resting deadzone and independent arm tracking', () => {
+
+  function uprightNeutralArms(): WorldLandmark[] {
+    const w = makeWorldLandmarks();
+    w[11] = { x: 0.2, y: -0.4, z: 0, visibility: 1 };   // left shoulder
+    w[12] = { x: -0.2, y: -0.4, z: 0, visibility: 1 };  // right shoulder
+    w[23] = { x: 0.1, y: 0.4, z: 0, visibility: 1 };    // left hip
+    w[24] = { x: -0.1, y: 0.4, z: 0, visibility: 1 };   // right hip
+    // Hands hanging down along torso with slight anatomical carrying angle (~8-10 deg)
+    w[13] = { x: 0.26, y: 0.0, z: 0, visibility: 1 };   // left elbow
+    w[14] = { x: -0.26, y: 0.0, z: 0, visibility: 1 };  // right elbow
+    return w;
+  }
+
+  it('stabilizes neutral arm resting pose against slight anatomical abduction and jitter', () => {
+    const pose = normalizePose(uprightNeutralArms());
+    const rotations = calculateBoneRotationsFromCanonical(pose, 'T_POSE');
+
+    // Both arms should resolve to the exact symmetric vertical hanging delta (rot from X to -Y)
+    expect(rotations['LeftArm'].z).toBeCloseTo(-0.7071, 3);
+    expect(rotations['LeftArm'].w).toBeCloseTo(0.7071, 3);
+    expect(rotations['RightArm'].z).toBeCloseTo(0.7071, 3);
+    expect(rotations['RightArm'].w).toBeCloseTo(0.7071, 3);
+  });
+
+  it('raising left arm moves only the left arm hierarchy while right arm remains at relaxed hang', () => {
+    const w = uprightNeutralArms();
+    // Raise left arm to 45 deg above horizontal (+X, -Y in MediaPipe)
+    w[13] = { x: 0.5, y: -0.7, z: 0, visibility: 1 };
+
+    const pose = normalizePose(w);
+    const rotations = calculateBoneRotationsFromCanonical(pose, 'T_POSE');
+
+    // LeftArm should have rotated away from resting hang
+    expect(rotations['LeftArm'].z).not.toBeCloseTo(-0.7071, 2);
+
+    // RightArm must remain rock-solid at neutral resting hang
+    expect(rotations['RightArm'].z).toBeCloseTo(0.7071, 3);
+    expect(rotations['RightArm'].w).toBeCloseTo(0.7071, 3);
+  });
+
+});
