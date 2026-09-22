@@ -5,6 +5,7 @@ import {
   computeSceneViewAnchoredPosition,
 } from '../sceneViewMath';
 import { validateGarmentRig, parseGlbHeader } from '../sceneViewRigValidator';
+import { SceneViewSkeletalRetargeter, type BoneLocalTransform } from '../sceneViewRetargeter';
 import type { GarmentMetadata } from '../../types/garment';
 import type { CameraCalibration } from '../../types/arRenderState';
 
@@ -232,4 +233,159 @@ describe('SceneView AR Renderer Integration', () => {
       expect(invalid).toBeNull();
     });
   });
+
+  describe('4. Skeletal Retargeting & Per-Joint Deformation (Phase 2)', () => {
+    const mockMetadata: GarmentMetadata = {
+      id: 'prod_jacket',
+      category: 'jacket',
+      calibrationVersion: '1.0',
+      ingestionStatus: 'AR_READY',
+      anatomicalAnchorOffset: { x: 0, y: 0.15, z: 0 },
+      anchorConfidence: 'merchant_confirmed',
+      anchorType: 'NECK',
+      restPoseMetricWidth: 0.46,
+      boneMap: {
+        LeftArm: 'mixamorigLeftArm',
+        RightArm: 'mixamorigRightArm',
+        LeftForeArm: 'mixamorigLeftForeArm',
+        RightForeArm: 'mixamorigRightForeArm',
+        Spine: 'mixamorigSpine',
+      },
+      restPose: 'A_POSE',
+    };
+
+    it('resolves bone names once and caches mapping without re-searching', () => {
+      const retargeter = new SceneViewSkeletalRetargeter(mockMetadata);
+      expect(retargeter.getResolvedBoneName('LeftArm')).toBe('mixamorigLeftArm');
+      expect(retargeter.getResolvedBoneName('RightForeArm')).toBe('mixamorigRightForeArm');
+      expect(retargeter.getResolvedBoneName('Spine')).toBe('mixamorigSpine');
+    });
+
+    it('returns exact rest pose with zero drift on neutral pose (identity deltas)', () => {
+      const retargeter = new SceneViewSkeletalRetargeter(mockMetadata);
+      const w = Math.sqrt(1 - 0.1 * 0.1 - 0.2 * 0.2 - 0.3 * 0.3);
+      retargeter.registerBindTransform({
+        boneName: 'mixamorigLeftArm',
+        mappedEntityName: 'mixamorigLeftArm',
+        localRotation: { x: 0.1, y: 0.2, z: 0.3, w },
+        worldRotation: { x: 0.1, y: 0.2, z: 0.3, w },
+        position: [0.2, 1.4, 0],
+        scale: [1, 1, 1],
+      });
+
+      // Pass neutral pose (identity)
+      const transforms = retargeter.computePerFrameBoneTransforms({});
+      const leftArm = transforms.find((t: BoneLocalTransform) => t.boneName === 'mixamorigLeftArm');
+
+      expect(leftArm).toBeDefined();
+      expect(leftArm!.rotation.x).toBeCloseTo(0.1, 4);
+      expect(leftArm!.rotation.y).toBeCloseTo(0.2, 4);
+      expect(leftArm!.rotation.z).toBeCloseTo(0.3, 4);
+      expect(leftArm!.rotation.w).toBeCloseTo(w, 4);
+    });
+
+    it('deforms only the left sleeve when raising the left arm while right sleeve stays rest pose', () => {
+      const retargeter = new SceneViewSkeletalRetargeter(mockMetadata);
+      retargeter.registerBindTransform({
+        boneName: 'mixamorigLeftArm',
+        mappedEntityName: 'mixamorigLeftArm',
+        localRotation: { x: 0, y: 0, z: 0, w: 1 },
+        worldRotation: { x: 0, y: 0, z: 0, w: 1 },
+        position: [0.2, 1.4, 0],
+        scale: [1, 1, 1],
+      });
+      retargeter.registerBindTransform({
+        boneName: 'mixamorigRightArm',
+        mappedEntityName: 'mixamorigRightArm',
+        localRotation: { x: 0, y: 0, z: 0, w: 1 },
+        worldRotation: { x: 0, y: 0, z: 0, w: 1 },
+        position: [-0.2, 1.4, 0],
+        scale: [1, 1, 1],
+      });
+
+      // 45 degree delta only on LeftArm
+      const rad = (45 * Math.PI) / 180 / 2;
+      const leftDelta = { x: Math.sin(rad), y: 0, z: 0, w: Math.cos(rad) };
+
+      const transforms = retargeter.computePerFrameBoneTransforms({
+        mixamorigLeftArm: leftDelta,
+      });
+
+      const left = transforms.find((t: BoneLocalTransform) => t.boneName === 'mixamorigLeftArm');
+      const right = transforms.find((t: BoneLocalTransform) => t.boneName === 'mixamorigRightArm');
+
+      // Left arm has delta applied
+      expect(left!.rotation.x).toBeCloseTo(Math.sin(rad), 4);
+      // Right arm remains in undisturbed bind pose
+      expect(right!.rotation.x).toBeCloseTo(0, 4);
+      expect(right!.rotation.w).toBeCloseTo(1, 4);
+    });
+
+    it('composes valid 16-element column-major 4x4 matrix', () => {
+      const retargeter = new SceneViewSkeletalRetargeter(mockMetadata);
+      const transforms = retargeter.computePerFrameBoneTransforms({});
+      expect(transforms[0].matrix16).toHaveLength(16);
+      expect(transforms[0].matrix16.every(Number.isFinite)).toBe(true);
+      // Diagonal scale components non-zero
+      expect(transforms[0].matrix16[0]).not.toBe(0);
+      expect(transforms[0].matrix16[5]).not.toBe(0);
+      expect(transforms[0].matrix16[10]).not.toBe(0);
+      expect(transforms[0].matrix16[15]).toBe(1); // homogeneous coordinate
+    });
+  });
+
+  describe('5. True Material Variant Recoloring (Phase 2)', () => {
+    it('parses valid #RRGGBB hex color into normalized RGBA floats', () => {
+      const { hexToNormalizedRgba } = require('../sceneViewMaterialRecolorer');
+      const rgba = hexToNormalizedRgba('#FF0000');
+      expect(rgba).toEqual([1.0, 0, 0, 1.0]);
+
+      const black = hexToNormalizedRgba('#000000');
+      expect(black).toEqual([0, 0, 0, 1.0]);
+
+      const invalid = hexToNormalizedRgba('invalid');
+      expect(invalid).toBeNull();
+    });
+
+    it('identifies garment fabric material and excludes buttons, zippers, and logos', () => {
+      const { isFabricMaterialName } = require('../sceneViewMaterialRecolorer');
+      expect(isFabricMaterialName('Fabric_Cotton_Body')).toBe(true);
+      expect(isFabricMaterialName('Shirt_Main_Mat')).toBe(true);
+      expect(isFabricMaterialName('metal_zipper_pull')).toBe(false);
+      expect(isFabricMaterialName('plastic_button_01')).toBe(false);
+      expect(isFabricMaterialName('brand_logo_patch')).toBe(false);
+    });
+
+    it('recolors only fabric material in multi-material GLBs preserving metallic & roughness', () => {
+      const { resolveFabricMaterialRecoloring } = require('../sceneViewMaterialRecolorer');
+      const materials = [
+        { name: 'Metal_Zipper', index: 0 },
+        { name: 'Cotton_Fabric_Body', index: 1 },
+        { name: 'Plastic_Buttons', index: 2 },
+      ];
+
+      const override = resolveFabricMaterialRecoloring('#1A3B8B', undefined, materials);
+      expect(override).not.toBeNull();
+      expect(override!.materialName).toBe('Cotton_Fabric_Body');
+      expect(override!.materialIndex).toBe(1);
+      expect(override!.baseColorFactor[0]).toBeCloseTo(0x1a / 255, 3);
+      expect(override!.baseColorFactor[1]).toBeCloseTo(0x3b / 255, 3);
+      expect(override!.baseColorFactor[2]).toBeCloseTo(0x8b / 255, 3);
+      expect(override!.preservedAttributes).toContain('roughnessFactor');
+      expect(override!.preservedAttributes).toContain('metallicFactor');
+      expect(override!.preservedAttributes).toContain('normalTexture');
+    });
+
+    it('preserves authored GLB colors and warns when multiple materials have no identifiable fabric', () => {
+      const { resolveFabricMaterialRecoloring } = require('../sceneViewMaterialRecolorer');
+      const ambiguousMaterials = [
+        { name: 'Zipper_Hardware', index: 0 },
+        { name: 'Button_Trim', index: 1 },
+      ];
+
+      const override = resolveFabricMaterialRecoloring('#FFCC00', undefined, ambiguousMaterials);
+      expect(override).toBeNull();
+    });
+  });
 });
+

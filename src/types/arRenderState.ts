@@ -61,6 +61,11 @@ export interface BaseGarmentRendererProps {
   hexColor?: string | null;
   onLoadError?: (error: string | { type: string; message: string }) => void;
   onLoaded?: () => void;
+  /** Called once when the renderer has confirmed its first real rendered frame.
+   *  For SceneViewScene this fires inside updateTransform after hasTransform becomes true,
+   *  meaning the native GLSurfaceView is confirmed active and rendering the garment.
+   *  This is the authoritative ground-truth signal — not a JS state label. */
+  onRendererConfirmed?: (rendererName: string) => void;
 }
 
 export type GarmentRendererProps = BaseGarmentRendererProps;

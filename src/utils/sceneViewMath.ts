@@ -98,7 +98,7 @@ export class SceneViewProjection {
     ) {
       this.calibration = undefined;
     }
-    this.distance = this.calibration ? 0.6 : 5;
+    this.distance = this.calibration ? 0.6 : 3.0;
   }
 
   update(

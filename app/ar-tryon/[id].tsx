@@ -17,7 +17,6 @@ import { recommendSize, analyzeFit, summarizeOverallFit } from '@/src/utils/size
 import { computeLiveLengthFit } from '@/src/utils/liveLengthFit';
 import { useARTrackingSession } from '@/src/hooks/useARTrackingSession';
 import { AR_TRACKING_GUIDANCE } from '@/src/utils/arTrackingSession';
-import { FilamentExperimentRenderer } from '@/src/components/AR/FilamentExperimentRenderer';
 import { SceneViewExperimentRenderer } from '@/src/components/AR/SceneViewExperimentRenderer';
 import { filamentReplayFrame, FILAMENT_REPLAY_INTERVAL_MS } from '@/src/utils/filamentReplay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -310,7 +309,7 @@ function buildFallbackMetadata(p: Product | null | undefined): import('@/src/typ
     category: cat as any,
     calibrationVersion: '1.0.0',
     ingestionStatus: 'DEMO_RIG',
-    anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
+    anatomicalAnchorOffset: { x: 0, y: 1.35, z: 0 },
     anchorConfidence: 'inferred',
     anchorType: 'SHOULDER_CENTER',
     restPoseMetricWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
@@ -344,17 +343,41 @@ export default function ARTryOnScreen() {
   const [hasConsented, setHasConsented] = useState<boolean | null>(null);
   const [stageLayout, setStageLayout] = useState<{ width: number; height: number }>({ width: 390, height: 600 });
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
-  const experimentEnabled = __DEV__ && Platform.OS !== 'web' && process.env.EXPO_PUBLIC_AR_FILAMENT_EXPERIMENT === '1';
-  const [experimentRenderer, setExperimentRenderer] = useState<'three' | 'sceneview' | 'filament'>('three');
-  const [replay, setReplay] = useState(false);
-  const replayActive = experimentEnabled && replay;
+  // SceneView is the primary renderer on native; Three.js is fallback on error.
+  // Platform.OS === 'web' always falls back because SceneViewScene is .native.tsx only.
+  const [rendererMode, setRendererMode] = useState<'filament-sceneview' | 'three' | 'fallback' | 'unavailable'>(
+    Platform.OS !== 'web' ? 'filament-sceneview' : 'three'
+  );
+  const replayActive = false;
+  // confirmedRenderer is only set by the onRendererConfirmed callback fired from
+  // inside SceneViewScene.native.tsx — it cannot be set by JS state alone.
+  const [confirmedRenderer, setConfirmedRenderer] = useState<string | null>(null);
+  const handleRendererConfirmed = useCallback((name: string) => {
+    setConfirmedRenderer(name);
+    if (__DEV__) console.log(`[AR Renderer] Ground-truth confirmed: ${name} is rendering`);
+  }, []);
+  // Suppress lint: confirmedRenderer is intentionally tracked for future conditional logic.
+  void confirmedRenderer;
   const LiveRenderer =
-    !experimentEnabled || experimentRenderer === 'three'
-      ? GarmentRenderer
-      : experimentRenderer === 'sceneview'
+    rendererMode === 'filament-sceneview'
       ? SceneViewExperimentRenderer
-      : FilamentExperimentRenderer;
+      : GarmentRenderer;
   const tourCoachmark = useTourCoachmark('ar-tryon');
+
+  useEffect(() => {
+    if (__DEV__) {
+      const modeLabel = rendererMode === 'filament-sceneview' ? 'Filament SceneView' : 'Three.js Fallback';
+      console.log(`[AR Renderer] Selected: ${modeLabel}`);
+    }
+  }, [rendererMode]);
+
+  const handleRendererFallback = useCallback((reason: string) => {
+    if (__DEV__) {
+      console.warn(`[AR Renderer] Filament unavailable/failure: ${reason}`);
+      console.log('[AR Renderer] Falling back to Three.js');
+    }
+    setRendererMode('three');
+  }, []);
 
   useEffect(() => {
     emitTourEvent('ar_tryon_screen');
@@ -483,7 +506,7 @@ export default function ARTryOnScreen() {
     && !loading && product?.id === id && (Platform.OS === 'web' || (hasPermission && !!device));
   const trackingEnabled = cameraActive && !cameraError && !arLoadError;
   const trackingSessionKey = JSON.stringify([id, product?.id, product?.model_3d_url, recommendedSize,
-    product?.measurements, cameraRetryKey, device?.id, stageWidth, stageHeight, experimentRenderer, replayActive]);
+    product?.measurements, cameraRetryKey, device?.id, stageWidth, stageHeight, rendererMode, replayActive]);
   const { status: trackingStatus, lengthFit, report: reportTracking, isActive: isTrackingSessionActive } = useARTrackingSession(trackingEnabled, trackingSessionKey);
   const isTrackerActive = trackingStatus === 'tracking' || trackingStatus === 'turned';
   const handleTrackingLost = useCallback(() => { reportTracking('TRACKING_LOST'); }, [reportTracking]);
@@ -1178,26 +1201,8 @@ export default function ARTryOnScreen() {
         </TouchableOpacity>
       </View>
 
-      {experimentEnabled && mode === '2d' && (
-        <View style={{ padding: 8, backgroundColor: '#352b16', gap: 8 }}>
-          <Text style={{ color: 'white' }}>Renderer experiment only. SceneView & Filament prototypes active.</Text>
-          <TouchableOpacity accessibilityRole="button" onPress={() => {
-            setExperimentRenderer((current) => {
-              if (current === 'three') return 'sceneview';
-              if (current === 'sceneview') return 'filament';
-              return 'three';
-            });
-            setArLoadError(null);
-          }}>
-            <Text style={{ color: 'white' }}>
-              Renderer: {experimentRenderer === 'three' ? 'Three.js reference' : experimentRenderer === 'sceneview' ? 'SceneView prototype' : 'Filament prototype'} (switch)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity accessibilityRole="button" onPress={() => setReplay((current) => !current)}>
-            <Text style={{ color: 'white' }}>Input: {replayActive ? 'synthetic replay; camera paused' : 'live camera'} (switch)</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+
+
 
       {mode === '3d' ? (
         <View style={styles.webviewContainer}>
@@ -1298,7 +1303,7 @@ export default function ARTryOnScreen() {
           {/* Layer 2: 3D Garment WebGL Overlay */}
           {garmentMetadata && (
             <LiveRenderer
-              key={experimentEnabled ? trackingSessionKey : undefined}
+              key={rendererMode === 'filament-sceneview' ? trackingSessionKey : undefined}
               stageWidth={stageWidth}
               stageHeight={stageHeight}
               ref={garmentRendererRef}
@@ -1310,12 +1315,18 @@ export default function ARTryOnScreen() {
               cameraCalibration={cameraCalibration}
               cameraDimensions={cameraDimensions || (cameraCalibration ? { width: cameraCalibration.videoWidthPx, height: cameraCalibration.videoHeightPx } : undefined)}
               onLoadError={(err) => {
-                if (typeof err === 'string') {
-                  setArError({ type: 'AR_LOAD_ERROR', message: err });
-                } else if (err && typeof err === 'object') {
-                  setArError(err);
+                if (rendererMode === 'filament-sceneview') {
+                  const errMsg = typeof err === 'string' ? err : (err && typeof err === 'object' ? (err as any).message : 'SceneView load error');
+                  handleRendererFallback(errMsg || 'SceneView failure');
+                } else {
+                  if (typeof err === 'string') {
+                    setArError({ type: 'AR_LOAD_ERROR', message: err });
+                  } else if (err && typeof err === 'object') {
+                    setArError(err);
+                  }
                 }
               }}
+              onRendererConfirmed={handleRendererConfirmed}
             />
           )}
 
@@ -1381,6 +1392,9 @@ export default function ARTryOnScreen() {
               </View>
             )}
 
+            {/* The true SceneView confirmation badge is rendered from inside
+                SceneViewScene.native.tsx when the native module confirms isReady.
+                We suppress the old JS-state pill entirely to avoid false labelling. */}
           </View>
         </View>
       )}
@@ -1455,6 +1469,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  devRendererDiagnostic: {
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 6,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,229,255,0.4)',
+  },
+  devRendererDiagnosticText: {
+    color: '#00E5FF',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   arLoadErrorBanner: {
     position: 'absolute',
