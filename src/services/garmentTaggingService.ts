@@ -31,6 +31,14 @@ function messageFor(reason?: string): string {
       return 'This photo is too large to auto-detect. You can still enter the details manually.';
     case 'RATE_LIMITED':
       return 'Auto-detect is busy right now. Please enter the details manually or try again later.';
+    case 'TAGGING_PROVIDER_REJECTED':
+      return 'Auto-detect needs a compatible Gemini model. Please check its server setup, then try again.';
+    case 'TAGGING_PROVIDER_NOT_AUTHORIZED':
+      return 'Auto-detect could not access Gemini. Please check its server key, then try again.';
+    case 'TAGGING_PROVIDER_LIMITED':
+      return 'Gemini has reached its current limit. Please try again later or enter the details manually.';
+    case 'INVALID_PROVIDER_RESPONSE':
+      return 'Auto-detect returned incomplete details. Please try again or enter them manually.';
     default:
       return 'Could not detect clothing details. Please enter them manually.';
   }
@@ -47,6 +55,19 @@ export async function analyzeGarmentImage(uri: string): Promise<GarmentTagSugges
   const { data, error } = await supabase.functions.invoke<TaggingResponse>('analyze-wardrobe-image', {
     body: { mimeType: contentType, imageBase64: encode(bytes) },
   });
-  if (error || !data || !data.success) throw new Error(messageFor(data && !data.success ? data.reason : undefined));
+  if (error) {
+    const response = (error as { context?: Response }).context;
+    let reason: string | undefined;
+    if (response && typeof response.clone === 'function') {
+      try {
+        const body = await response.clone().json() as TaggingResponse;
+        reason = !body.success ? body.reason : undefined;
+      } catch {
+        reason = undefined;
+      }
+    }
+    throw new Error(messageFor(reason));
+  }
+  if (!data || !data.success) throw new Error(messageFor(data && !data.success ? data.reason : undefined));
   return data.suggestion;
 }
