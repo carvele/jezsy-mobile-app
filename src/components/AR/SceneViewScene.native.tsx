@@ -301,7 +301,6 @@ export const SceneViewScene = forwardRef<GarmentRendererRef, SceneViewExperiment
               style={styles.sceneContainer}
               cameraOrbit={false}
               autoCenterContent={false}
-              isOpaque={false}
               transparent={true}
               modelNodes={modelNodes}
               geometryNodes={testGeometryNodes}
