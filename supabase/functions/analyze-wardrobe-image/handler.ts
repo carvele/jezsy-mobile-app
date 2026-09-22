@@ -138,8 +138,9 @@ export function createHandler(deps: HandlerDeps) {
         }),
       });
       if (!result.ok) {
-        deps.log('provider error', { status: result.status });
-        const reason = result.status === 400
+        const errorText = typeof result.text === 'function' ? await result.text().catch(() => '') : '';
+        deps.log('provider error', { status: result.status, message: errorText.slice(0, 500) });
+        const reason = result.status === 400 || result.status === 404
           ? 'TAGGING_PROVIDER_REJECTED'
           : result.status === 401 || result.status === 403
           ? 'TAGGING_PROVIDER_NOT_AUTHORIZED'

@@ -74,5 +74,14 @@ describe('analyze-wardrobe-image', () => {
     const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ success: false, reason: 'TAGGING_PROVIDER_REJECTED' });
+    expect(d.log).toHaveBeenCalledWith('provider error', expect.objectContaining({ status: 400 }));
+  });
+
+  test('reports a 404 model not found as provider rejected and logs the message', async () => {
+    const d = deps({ fetchImpl: jest.fn(async () => ({ ok: false, status: 404, text: async () => 'models/gemini-2.5-flash not found' })) as any });
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ success: false, reason: 'TAGGING_PROVIDER_REJECTED' });
+    expect(d.log).toHaveBeenCalledWith('provider error', expect.objectContaining({ status: 404, message: 'models/gemini-2.5-flash not found' }));
   });
 });
