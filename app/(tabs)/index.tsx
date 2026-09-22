@@ -172,8 +172,7 @@ export default function HomeScreen() {
         const data = cached as any[];
         const sellable = data.filter(isInStock);
         const featuredInStock = sellable.filter((p) => p.is_featured);
-        const heroPool = featuredInStock.length >= 2 ? featuredInStock : sellable.length >= 2 ? sellable : data;
-        setFeaturedProducts(heroPool.slice(0, HERO_MAX_CARDS));
+        setFeaturedProducts(featuredInStock.slice(0, HERO_MAX_CARDS));
         const byPopularity = [...data].sort((a, b) => {
           const stockDiff = Number(isInStock(b)) - Number(isInStock(a));
           if (stockDiff !== 0) return stockDiff;
@@ -219,12 +218,7 @@ export default function HomeScreen() {
 
         const sellable = data.filter(isInStock);
         const featuredInStock = sellable.filter((p) => p.is_featured);
-
-        const heroPool =
-          featuredInStock.length >= 2 ? featuredInStock
-          : sellable.length >= 2 ? sellable
-          : data;
-        setFeaturedProducts(heroPool.slice(0, HERO_MAX_CARDS));
+        setFeaturedProducts(featuredInStock.slice(0, HERO_MAX_CARDS));
 
         if (trendingRes.data) {
           setTrendingProducts((trendingRes.data as any[]).slice(0, 4));
