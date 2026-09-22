@@ -1648,7 +1648,7 @@ export default function ExploreScreen() {
         enableDynamicSizing={false}
       >
         <BottomSheetView style={styles.sheetContent}>
-          {/* Modal Header */}
+          {/* Static Modal Header */}
           <View style={styles.modalHeader}>
             <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
@@ -1670,9 +1670,11 @@ export default function ExploreScreen() {
             </View>
           </View>
 
+          {/* Scrollable Filter Body */}
           <BottomSheetScrollView
             style={styles.modalScroll}
             contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
           >
             {/* Special Offers Section */}
             <View style={styles.filterSection}>
@@ -1966,21 +1968,19 @@ export default function ExploreScreen() {
                 />
               </View>
             </View>
-
-            <View style={{ height: 20 }} />
-
-            {/* Bottom Actions */}
-            <View style={[styles.modalFooter, { borderTopColor: colors.border, paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}>
-              <TouchableOpacity
-                style={[styles.footerButton, { backgroundColor: colors.tint }]}
-                onPress={applyFilters}
-                accessibilityRole="button"
-                accessibilityLabel="Apply filters"
-              >
-                <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
-              </TouchableOpacity>
-            </View>
           </BottomSheetScrollView>
+
+          {/* Pinned Bottom Actions */}
+          <View style={[styles.modalFooter, { borderTopColor: colors.border, paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}>
+            <TouchableOpacity
+              style={[styles.footerButton, { backgroundColor: colors.tint }]}
+              onPress={applyFilters}
+              accessibilityRole="button"
+              accessibilityLabel="Apply filters"
+            >
+              <Text style={[styles.footerApplyButtonText, { color: colors.onTint }]}>Apply Filters</Text>
+            </TouchableOpacity>
+          </View>
         </BottomSheetView>
       </BottomSheetModal>
 
