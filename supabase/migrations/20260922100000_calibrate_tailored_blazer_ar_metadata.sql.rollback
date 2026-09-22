@@ -1,0 +1,4 @@
+-- Rollback Tailored Blazer AR Metadata calibration
+UPDATE public.products
+SET garment_metadata = jsonb_build_object('fabric_stretch', COALESCE(garment_metadata->>'fabric_stretch', 'Moderate'))
+WHERE id = 'b0000008-0000-4000-8000-000000000002';

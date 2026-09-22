@@ -324,7 +324,7 @@ function buildFallbackMetadata(p: Product | null | undefined): import('@/src/typ
       'RightArm': 'mixamorigRightArm',
       'RightForeArm': 'mixamorigRightForeArm'
     },
-    restPose: 'A_POSE'
+    restPose: 'T_POSE'
   };
 }
 
@@ -1182,7 +1182,7 @@ export default function ARTryOnScreen() {
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={[styles.headerTitle, { color: '#FFF' }]}>AR Try-On</Text>
-          {isDemoRig && (
+          {__DEV__ && isDemoRig && (
             <View style={{ backgroundColor: '#FFCC00', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
               <Text style={{ color: 'black', fontSize: 10, fontWeight: 'bold' }}>️ Demo rig</Text>
             </View>
