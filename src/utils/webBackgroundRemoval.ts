@@ -1,8 +1,8 @@
 /**
  * Client-side transparent background extractor for web / local preview.
- * Floodfills or samples corner background pixels and converts uniform / near-white background pixels to transparent alpha.
+ * Removes edge-connected background pixels using a colour tolerance inferred from the image border.
  */
-export async function removeBackgroundWeb(imageUri: string, tolerance: number = 32): Promise<string> {
+export async function removeBackgroundWeb(imageUri: string): Promise<string> {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return imageUri;
   }
@@ -27,17 +27,17 @@ export async function removeBackgroundWeb(imageUri: string, tolerance: number = 
         const width = canvas.width;
         const height = canvas.height;
 
-        // Sample 4 corner pixels to determine background reference color
-        const corners = [
-          [0, 0],
-          [width - 1, 0],
-          [0, height - 1],
-          [width - 1, height - 1],
-        ];
+        const edgePixels: number[] = [];
+        for (let x = 0; x < width; x++) {
+          edgePixels.push(x, (height - 1) * width + x);
+        }
+        for (let y = 1; y < height - 1; y++) {
+          edgePixels.push(y * width, y * width + width - 1);
+        }
 
         let bgR = 0, bgG = 0, bgB = 0, sampleCount = 0;
-        corners.forEach(([cx, cy]) => {
-          const idx = (cy * width + cx) * 4;
+        edgePixels.forEach((pixel) => {
+          const idx = pixel * 4;
           if (data[idx + 3] > 10) { // not already transparent
             bgR += data[idx];
             bgG += data[idx + 1];
@@ -55,22 +55,29 @@ export async function removeBackgroundWeb(imageUri: string, tolerance: number = 
         bgG = Math.round(bgG / sampleCount);
         bgB = Math.round(bgB / sampleCount);
 
-        // Remove background color with smooth alpha falloff
-        const tolSq = tolerance * tolerance;
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const distSq = (r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2;
+        const distances = edgePixels.map((pixel) => {
+          const index = pixel * 4;
+          return Math.hypot(data[index] - bgR, data[index + 1] - bgG, data[index + 2] - bgB);
+        }).sort((a, b) => a - b);
+        const tolerance = Math.min(105, Math.max(42, distances[Math.floor(distances.length * 0.9)] + 24));
+        const visited = new Uint8Array(width * height);
+        const pending = [...edgePixels];
 
-          if (distSq < tolSq) {
-            // Fully transparent
-            data[i + 3] = 0;
-          } else if (distSq < tolSq * 2.2) {
-            // Soft anti-aliased edge
-            const factor = (distSq - tolSq) / (tolSq * 1.2);
-            data[i + 3] = Math.round(data[i + 3] * factor);
-          }
+        while (pending.length > 0) {
+          const pixel = pending.pop()!;
+          if (visited[pixel]) continue;
+          visited[pixel] = 1;
+          const index = pixel * 4;
+          const distance = Math.hypot(data[index] - bgR, data[index + 1] - bgG, data[index + 2] - bgB);
+          if (data[index + 3] <= 10 || distance > tolerance) continue;
+
+          data[index + 3] = 0;
+          const x = pixel % width;
+          const y = Math.floor(pixel / width);
+          if (x > 0) pending.push(pixel - 1);
+          if (x < width - 1) pending.push(pixel + 1);
+          if (y > 0) pending.push(pixel - width);
+          if (y < height - 1) pending.push(pixel + width);
         }
 
         ctx.putImageData(imageData, 0, 0);
