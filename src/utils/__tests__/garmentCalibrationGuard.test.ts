@@ -72,7 +72,7 @@ describe('checkCalibrationPlausibility', () => {
   it('accepts the demo-rig fallback\'s own values (buildFallbackMetadata in [id].tsx) -- the guard must never flag its own fallback', () => {
     const result = checkCalibrationPlausibility({
       restPoseMetricWidth: 0.35, // shirt fallback
-      anatomicalAnchorOffset: { x: 0, y: 0.5, z: 0 },
+      anatomicalAnchorOffset: { x: 0, y: 1.35, z: 0 },
     });
     expect(result.plausible).toBe(true);
   });

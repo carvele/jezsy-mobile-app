@@ -735,7 +735,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // wearer's stomach; the calibrated value is the one that's actually verified.
               // Bone-position derivation remains as a fallback for garments that were never
               // run through calibration at all (no anatomicalAnchorOffset in metadata).
-              if (${metadata && metadata.anatomicalAnchorOffset ? 'true' : 'false'}) {
+              const isCalibrated = ${metadata && metadata.ingestionStatus === 'AR_READY' && metadata.anatomicalAnchorOffset ? 'true' : 'false'};
+              if (isCalibrated) {
                 anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? safeStringify(metadata.anatomicalAnchorOffset) : 'null'};
                 showDebug('Anatomical anchor: calibrated metadata: ' + JSON.stringify(anchorOffset));
               } else if (armLeft && armRight) {
@@ -760,6 +761,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   y: +anchorOffset.y.toFixed(4),
                   z: +anchorOffset.z.toFixed(4)
                 }));
+              } else if (${metadata && metadata.anatomicalAnchorOffset ? 'true' : 'false'}) {
+                anchorOffset = ${metadata && metadata.anatomicalAnchorOffset ? safeStringify(metadata.anatomicalAnchorOffset) : 'null'};
+                showDebug('Anatomical anchor: uncalibrated fallback metadata: ' + JSON.stringify(anchorOffset));
               }
 
               if (anchorOffset) {
