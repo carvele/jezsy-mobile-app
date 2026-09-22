@@ -187,12 +187,21 @@ export default function HomeScreen() {
       }
     }
     try {
-      const [productsRes, trendingRes, categoriesRes] = await Promise.all([
+      const [productsRes, featuredRes, trendingRes, categoriesRes] = await Promise.all([
         supabase
           .from('products')
           .select(`*, ${CATEGORY_SELECT}`)
           .eq('visibility', 'public')
           .eq('deleted', false)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .limit(20),
+        supabase
+          .from('products')
+          .select(`*, ${CATEGORY_SELECT}`)
+          .eq('visibility', 'public')
+          .eq('deleted', false)
+          .eq('is_featured', true)
           .order('created_at', { ascending: false })
           .order('id', { ascending: true })
           .limit(20),
@@ -206,19 +215,27 @@ export default function HomeScreen() {
       ]);
 
       if (productsRes.error) throw productsRes.error;
+      if (featuredRes.error) throw featuredRes.error;
       if (trendingRes.error) throw trendingRes.error;
       if (categoriesRes.error) throw categoriesRes.error;
 
       const data = productsRes.data;
+      const featuredData = (featuredRes.data ?? []) as Product[];
       if (data) {
-        // Write a fresh catalog snapshot to AsyncStorage for offline use.
-        cacheProductCatalog(data as unknown as OfflineProduct[]).catch(() => {});
+        // Write a fresh catalog snapshot to AsyncStorage for offline use,
+        // merging featured items so offline cache includes them too.
+        const combinedForCache = Array.from(
+          new Map([...featuredData, ...data].map((p) => [p.id, p])).values()
+        );
+        cacheProductCatalog(combinedForCache as unknown as OfflineProduct[]).catch(() => {});
 
         setAllProducts(data);
 
-        const sellable = data.filter(isInStock);
-        const featuredInStock = sellable.filter((p) => p.is_featured);
-        setFeaturedProducts(featuredInStock.slice(0, HERO_MAX_CARDS));
+        const featuredInStock = featuredData.filter(isInStock);
+        const heroProducts = featuredInStock.length > 0
+          ? featuredInStock
+          : data.filter(isInStock).filter((p) => p.is_featured);
+        setFeaturedProducts(heroProducts.slice(0, HERO_MAX_CARDS));
 
         if (trendingRes.data) {
           setTrendingProducts((trendingRes.data as any[]).slice(0, 4));
