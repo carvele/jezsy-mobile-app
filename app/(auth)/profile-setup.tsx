@@ -31,6 +31,7 @@ import {
 import { consumeAuthReturnTarget, consumePendingEntryTarget } from '@/src/utils/authReturnTarget';
 import { CountryPickerModal } from '@/src/components/CountryPickerModal';
 import { DobPickerModal } from '@/src/components/DobPickerModal';
+import { getProfileSetupResumeStep } from '@/src/utils/profileCompletion';
 import {
   type ProfileData,
   type Country,
@@ -133,19 +134,22 @@ export default function ProfileSetupScreen() {
       zipCode:     prev.zipCode     || profile?.zip_code || '',
     }));
 
-    // Prevent duplicate entry: If Name (First & Last) was already gathered in signup or OAuth,
-    // advance directly to Personal Info so the user is never asked for duplicate information.
+    // Prevent duplicate entry: Auto-advance past completed steps using canonical resume evaluator
     if (!hasInitializedStepRef.current) {
       hasInitializedStepRef.current = true;
-      if (existingFirst && existingLast) {
-        const hasPhone = Boolean(storedPhone);
-        const hasDob = Boolean(dob);
-        const hasGender = Boolean(profile?.gender);
-        if (hasPhone && hasDob && hasGender) {
-          setStep(2);
-        } else {
-          setStep(1);
-        }
+      // Synthesize candidate profile from DB profile falling back to user/metadata for names/phone
+      const effectiveProfile = {
+        ...(profile ?? {}),
+        first_name: existingFirst || null,
+        last_name: existingLast || null,
+        phone: storedPhone || null,
+        date_of_birth: profile?.date_of_birth ?? (dob ? parseDateOfBirth(dob) : null),
+        gender: profile?.gender ?? null,
+      } as any;
+
+      const resumeStep = getProfileSetupResumeStep(effectiveProfile);
+      if (resumeStep > 0) {
+        setStep(resumeStep);
       }
     }
   }, [user, profile]);
