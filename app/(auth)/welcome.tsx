@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
-  Dimensions,
   ActivityIndicator,
   Platform,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { supabase } from '@/src/lib/supabase';
 import { useToast } from '@/src/context/ToastContext';
@@ -24,8 +24,6 @@ import { LegalReaderModal } from '@/src/components/LegalReaderModal';
 
 // Required to dismiss the auth session on iOS
 WebBrowser.maybeCompleteAuthSession();
-
-const { height } = Dimensions.get('window');
 
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1469334031218-e382a71b716b?q=85&w=1200&auto=format&fit=crop';
@@ -48,6 +46,7 @@ const GoogleLogo = () => (
 );
 
 export default function WelcomeScreen() {
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = React.useState(false);
@@ -151,66 +150,68 @@ export default function WelcomeScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Branding */}
-      <View style={styles.brandingContainer}>
-        <Text style={styles.brandLogo}>JezSy</Text>
-        <Text style={styles.brandTagline}>Your personal fashion collection</Text>
-      </View>
-
-      {/* CTA buttons at bottom */}
-      <View style={styles.ctaContainer}>
-        {/* Google Sign In */}
-        <TouchableOpacity
-          style={[styles.googleButton, googleLoading && styles.btnDisabled]}
-          activeOpacity={0.85}
-          onPress={handleGoogleSignIn}
-          disabled={googleLoading}
-          accessibilityRole="button"
-          accessibilityLabel="Continue with Google"
-          accessibilityState={{ disabled: googleLoading, busy: googleLoading }}
-        >
-          {googleLoading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <GoogleLogo />
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
+      {/* Foreground content flow anchored to bottom */}
+      <View style={[styles.contentContainer, { paddingBottom: Math.max(insets.bottom + 16, 40) }]}>
+        {/* Branding */}
+        <View style={styles.brandingContainer}>
+          <Text style={styles.brandLogo}>JezSy</Text>
+          <Text style={styles.brandTagline}>Your personal fashion collection</Text>
         </View>
 
-        {/* Email Sign In */}
-        <PrimaryButton
-          label="Continue with Email"
-          onPress={() => router.push('/(auth)/auth')}
-          dark
-        />
+        {/* CTA buttons */}
+        <View style={styles.ctaContainer}>
+          {/* Google Sign In */}
+          <TouchableOpacity
+            style={[styles.googleButton, googleLoading && styles.btnDisabled]}
+            activeOpacity={0.85}
+            onPress={handleGoogleSignIn}
+            disabled={googleLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+            accessibilityState={{ disabled: googleLoading, busy: googleLoading }}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <GoogleLogo />
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-        {/* Browse as Guest (Storefront First) */}
-        <TouchableOpacity
-          style={styles.guestButton}
-          onPress={() => router.replace('/(tabs)')}
-          accessibilityRole="button"
-          accessibilityLabel="Browse as Guest"
-        >
-          <Text style={styles.guestButtonText}>Browse as Guest</Text>
-        </TouchableOpacity>
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
-        <Text style={styles.termsText}>
-          By continuing, you agree to our{' '}
-          <Text style={styles.termsLink} onPress={() => setActiveLegalModal('terms')}>Terms & Conditions</Text>
-          {' '}and{' '}
-          <Text style={styles.termsLink} onPress={() => setActiveLegalModal('privacy')}>Privacy Policy</Text>.
-        </Text>
+          {/* Email Sign In */}
+          <PrimaryButton
+            label="Continue with Email"
+            onPress={() => router.push('/(auth)/auth')}
+            dark
+          />
 
+          {/* Browse as Guest (Storefront First) */}
+          <TouchableOpacity
+            style={styles.guestButton}
+            activeOpacity={0.85}
+            onPress={() => router.replace('/(tabs)')}
+            accessibilityRole="button"
+            accessibilityLabel="Browse as Guest"
+          >
+            <Text style={styles.guestButtonText}>Browse as Guest</Text>
+          </TouchableOpacity>
 
+          <Text style={styles.termsText}>
+            By continuing, you agree to our{' '}
+            <Text style={styles.termsLink} onPress={() => setActiveLegalModal('terms')}>Terms & Conditions</Text>
+            {' '}and{' '}
+            <Text style={styles.termsLink} onPress={() => setActiveLegalModal('privacy')}>Privacy Policy</Text>.
+          </Text>
+        </View>
       </View>
 
       {activeLegalModal && (
@@ -235,13 +236,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: c.background,
   },
+  contentContainer: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'flex-end',
+  },
   brandingContainer: {
-    position: 'absolute',
-    bottom: height * 0.38,
-    left: 0,
-    right: 0,
     alignItems: 'center',
     paddingHorizontal: 30,
+    marginBottom: Spacing.xxl,
   },
   brandLogo: {
     fontSize: 52,
@@ -252,19 +254,15 @@ const styles = StyleSheet.create({
   },
   brandTagline: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.7)',
     letterSpacing: 1,
     fontWeight: '400',
   },
   ctaContainer: {
-    position: 'absolute',
-    bottom: 0,
     width: '100%',
     maxWidth: 440,
     alignSelf: 'center',
     paddingHorizontal: 28,
-    paddingBottom: 50,
-    paddingTop: Spacing.xl,
     gap: Spacing.md,
   },
 
@@ -272,8 +270,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: 'rgba(255, 255, 255, 0.32)',
     borderWidth: 1,
     borderRadius: 14,
     height: 56,
@@ -297,10 +295,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   dividerText: {
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(255,255,255,0.5)',
     fontSize: 13,
     fontWeight: '500',
   },
@@ -324,9 +322,10 @@ const styles = StyleSheet.create({
   },
   termsText: {
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.35)',
+    color: 'rgba(255,255,255,0.45)',
     fontSize: 12,
     lineHeight: 18,
+    marginTop: Spacing.xs,
   },
   termsLink: {
     color: c.tint,
@@ -376,9 +375,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    marginTop: Spacing.sm,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginTop: Spacing.xs,
   },
   guestButtonText: {
     ...Type.label,
