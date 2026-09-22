@@ -7,19 +7,41 @@ import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/src/context/AuthContext';
 
+import { isProfileSetupComplete } from '@/src/utils/profileCompletion';
+import { consumeAuthReturnTarget, consumePendingEntryTarget } from '@/src/utils/authReturnTarget';
+
 export default function AccountCreatedScreen() {
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
 
-  const hasName = Boolean(profile?.first_name);
+  const isComplete = isProfileSetupComplete(profile);
 
   const handlePrimaryAction = async () => {
     await refreshProfile().catch(() => {});
-    if (!profile?.first_name) {
+    if (!isProfileSetupComplete(profile)) {
       router.replace('/(auth)/profile-setup' as any);
-    } else {
-      router.replace('/(tabs)' as any);
+      return;
     }
+
+    const returnTarget = await consumeAuthReturnTarget();
+    if (returnTarget) {
+      router.replace({
+        pathname: returnTarget.pathname,
+        params: returnTarget.params,
+      } as any);
+      return;
+    }
+
+    const pendingEntry = await consumePendingEntryTarget();
+    if (pendingEntry) {
+      router.replace({
+        pathname: pendingEntry.pathname,
+        params: pendingEntry.params,
+      } as any);
+      return;
+    }
+
+    router.replace('/(tabs)' as any);
   };
 
   const handleReviewProfile = () => {
@@ -62,13 +84,13 @@ export default function AccountCreatedScreen() {
 
         <View style={styles.actions}>
           <PrimaryButton
-            label={hasName ? 'Start Exploring' : 'Complete Profile'}
+            label={isComplete ? 'Start Exploring' : 'Complete Profile'}
             onPress={handlePrimaryAction}
             dark
             style={styles.primaryBtn}
           />
 
-          {hasName && (
+          {isComplete && (
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={handleReviewProfile}

@@ -1,5 +1,6 @@
 import { isDuplicateSignup, DUPLICATE_ACCOUNT_MESSAGE } from '../connectedAccounts';
 import { mapAuthErrorMessage } from '../authErrorMapping';
+import { isProfileSetupComplete } from '../profileCompletion';
 
 describe('Auth Flow Regression Invariants', () => {
   describe('Duplicate Signup Hardening & Enumeration Resistance', () => {
@@ -82,17 +83,20 @@ describe('Auth Flow Regression Invariants', () => {
         id: 'canonical-user-uuid',
         first_name: 'Carl',
         last_name: 'Vener',
+        phone: '+639123456789',
+        gender: 'Male',
+        date_of_birth: '1995-01-01',
         role: 'customer',
         deleted: false,
       };
 
-      // Invariant: If profile has first_name and is not deleted, profile is complete
-      const isProfileComplete = Boolean(completedProfile.first_name) && !completedProfile.deleted;
-      expect(isProfileComplete).toBe(true);
+      // Invariant: Profile is complete when mandatory identity and personal info fields are satisfied
+      const isComplete = isProfileSetupComplete(completedProfile as any) && !completedProfile.deleted;
+      expect(isComplete).toBe(true);
 
-      // Onboarding should NOT restart for a completed profile regardless of auth provider
-      const shouldRestartOnboarding = !isProfileComplete;
-      expect(shouldRestartOnboarding).toBe(false);
+      // Setup should NOT restart for a completed profile regardless of auth provider
+      const shouldRestartSetup = !isComplete;
+      expect(shouldRestartSetup).toBe(false);
     });
 
     it('enforces legal gate when legal acceptance has not been recorded', () => {

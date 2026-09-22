@@ -37,6 +37,7 @@ import { appVersionService, VersionCheckResult } from '@/src/services/appVersion
 import { MandatoryUpdateScreen } from '@/src/components/MandatoryUpdateScreen';
 import { legalService, LegalAcceptanceStatus } from '@/src/services/legalService';
 import { LegalAcceptanceGate } from '@/src/components/LegalAcceptanceGate';
+import { isProfileSetupComplete } from '@/src/utils/profileCompletion';
 
 LogBox.ignoreLogs([
   'AuthApiError: Invalid Refresh Token: Refresh Token Not Found',
@@ -388,7 +389,7 @@ function InitialLayout() {
 
     // CRITICAL: Once authenticated and in the app tabs, ensure settled state is latched
     // and skip ALL re-evaluations during tab switches so the cold-boot overlay never flickers.
-    if (session && profile?.first_name && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
+    if (session && isProfileSetupComplete(profile) && !inAuthGroup && !isPasswordRecovery && !profile?.deleted) {
       hasAuthenticated.current = true;
       lastRedirectTargetRef.current = null;
       if (!routeSettled) setRouteSettled(true);
@@ -456,10 +457,10 @@ function InitialLayout() {
     }
 
     // 5. Authenticated Users
-    // 5a. Incomplete Profile: First name required before entering the app.
-    // Only route to profile-setup if profile resolution is complete, first_name is missing,
+    // 5a. Incomplete Profile: Required profile setup before entering the app.
+    // Only route to profile-setup if profile resolution is complete, mandatory fields are missing,
     // and the user has not already been established inside the authenticated app.
-    if (!profile?.first_name && !hasAuthenticated.current) {
+    if (!isProfileSetupComplete(profile) && !hasAuthenticated.current) {
       if (!onProfileSetup) {
         safeRedirect('/(auth)/profile-setup');
       } else {
