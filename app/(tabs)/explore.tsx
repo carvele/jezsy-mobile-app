@@ -1651,23 +1651,13 @@ export default function ExploreScreen() {
           {/* Static Modal Header */}
           <View style={styles.modalHeader}>
             <Text accessibilityRole="header" style={[styles.modalTitle, { color: colors.text }]}>Refine Results</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
-              <TouchableOpacity
-                onPress={clearAllFilters}
-                accessibilityRole="button"
-                accessibilityLabel="Clear all filters"
-              >
-                <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={applyFilters}
-                accessibilityRole="button"
-                accessibilityLabel="Apply filters"
-                style={[styles.headerApplyButton, { backgroundColor: colors.tint }]}
-              >
-                <Text style={[styles.headerApplyButtonText, { color: colors.onTint }]}>Apply</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={clearAllFilters}
+              accessibilityRole="button"
+              accessibilityLabel="Clear all filters"
+            >
+              <Text style={[styles.clearAllText, { color: colors.notification }]}>Clear All</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Scrollable Filter Body */}
@@ -2448,7 +2438,7 @@ const styles = StyleSheet.create({
   },
   modalScrollContent: {
     paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xl,
+    paddingBottom: 100,
   },
   filterSection: {
     marginBottom: Spacing.xl,
