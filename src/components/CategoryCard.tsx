@@ -37,12 +37,20 @@ export function CategoryCard({
   const colors = Colors[theme];
   const isRail = variant === 'rail';
   const { cardWidth } = useGridCardWidth();
+  // Every child of the card is absolutely positioned, so its height comes only
+  // from the aspect ratio. Inside the wrapping grid row, Android collapsed that
+  // to zero and the whole Explore category grid vanished. An explicit height
+  // removes the dependency on aspectRatio resolution.
+  const gridStyle =
+    typeof cardWidth === 'number'
+      ? { width: cardWidth, height: Math.round(cardWidth / GRID_CARD_ASPECT) }
+      : { width: cardWidth, aspectRatio: GRID_CARD_ASPECT };
 
   const variantStyle = isRail
     ? styles.cardRail
     : layout === 'fill'
     ? [styles.cardFill, { aspectRatio: GRID_CARD_ASPECT }]
-    : [styles.cardGrid, { width: cardWidth, aspectRatio: GRID_CARD_ASPECT }];
+    : [styles.cardGrid, gridStyle];
 
   return (
     <TouchableOpacity

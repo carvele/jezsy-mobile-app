@@ -127,7 +127,57 @@ describe('analyze-wardrobe-image', () => {
     const body = await response.json();
     expect(body.success).toBe(true);
     expect(body.suggestion.category).toBe('Top');
+    expect(d.log).toHaveBeenCalledWith('provider fallback succeeded', expect.objectContaining({ requestedModel: 'gemini-1.5-flash', activeModel: 'gemini-3.8-flash' }));
     expect(callCount).toBe(2);
-    expect(d.log).toHaveBeenCalledWith('provider fallback succeeded', expect.objectContaining({ requestedModel: 'gemini-1.5-flash', activeModel: 'gemini-2.5-flash' }));
+  });
+
+  test('dynamically adopts recommended model from provider deprecation error', async () => {
+    let callCount = 0;
+    const d = deps({
+      env: (key) => (key === 'GEMINI_TAGGING_API_KEY' ? 'tagging-key' : key === 'GEMINI_TAGGING_MODEL' ? 'old-model' : undefined),
+      fetchImpl: jest.fn(async (url: string) => {
+        callCount++;
+        if (url.includes('old-model')) {
+          return {
+            ok: false,
+            status: 404,
+            text: async () => 'This model models/old-model is no longer available. Please update your code to use models/gemini-future-flash for the latest features.',
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [{
+              content: {
+                parts: [{
+                  text: JSON.stringify({
+                    category: 'Bottom',
+                    subCategory: 'Jeans',
+                    primaryColor: 'Blue',
+                    colorTags: ['Blue'],
+                    pattern: 'solid',
+                    material: 'denim',
+                    fit: 'regular',
+                    lengthType: 'long',
+                    sleeveType: 'unknown',
+                    neckline: 'unknown',
+                    silhouette: 'straight',
+                    confidence: 0.9,
+                  }),
+                }],
+              },
+            }],
+          }),
+        };
+      }) as any,
+    });
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.suggestion.category).toBe('Bottom');
+    expect(d.log).toHaveBeenCalledWith('provider fallback succeeded', expect.objectContaining({ requestedModel: 'old-model' }));
+    expect(callCount).toBe(2);
   });
 });
