@@ -1672,13 +1672,19 @@ export function detectContradictions(
   }
 
   // 6. ACCESSORY CONTRADICTIONS (Phase F Complete Ensemble Critique)
-  // (a) Active swimming with leather bags, backpacks, or non-waterproof watches
+  // (a) Active swimming with leather bags, backpacks, or non-waterproof/delicate watches
   if (reqs.prohibitsSwimwearConflicts || reqs.requiresSwimwear) {
     for (const g of structure.accessories) {
       const name = g.identity.name;
       const sub = g.garmentStructure.accessorySubtype;
       const isLeather = g.materialSignals.includes('leather');
-      if (sub === 'bag' || (sub === 'belt' && isLeather) || sub === 'watch') {
+      const isNonSwimWatch =
+        sub === 'watch' &&
+        (isLeather ||
+          /\b(leather|dress|delicate|formal|gold|vintage|mechanical|non.?waterproof)\b/i.test(g.combinedText));
+
+      // Unknown waterproof capability or generic sports watch does NOT trigger a hard contradiction
+      if (sub === 'bag' || (sub === 'belt' && isLeather) || isNonSwimWatch) {
         contradictions.push({
           severity: 'severe',
           category: 'activity_water',
@@ -1693,11 +1699,13 @@ export function detectContradictions(
   }
 
   // (b) Formal belts paired with athletic bottoms
+  // Requires verified elastic-waist athletic construction; unknown waistband construction remains neutral
   const hasAthleticBottom = structure.bottoms.some(
     (b) =>
-      b.styleSignals.athletic ||
-      b.functionalRole === 'athleticPerformance' ||
-      /\b(running|athletic|gym|sweatpants|joggers|track pants)\b/i.test(b.combinedText)
+      (b.styleSignals.athletic ||
+        b.functionalRole === 'athleticPerformance' ||
+        /\b(running shorts|athletic shorts|gym shorts|sweatpants|track pants|joggers)\b/i.test(b.combinedText)) &&
+      !/\b(belt loops?|tailored|chinos?|slacks)\b/i.test(b.combinedText)
   );
   if (hasAthleticBottom && structure.hasBelt) {
     for (const b of structure.belts) {
@@ -1737,10 +1745,16 @@ export function detectContradictions(
   if (reqs.weather === 'hot' || reqs.weather === 'warm') {
     const warmAccessories = [...structure.scarves, ...structure.headwear, ...structure.gloves];
     for (const acc of warmAccessories) {
+      const isLightweightFabric =
+        acc.materialSignals.includes('silk') ||
+        acc.materialSignals.includes('linen') ||
+        /\b(silk|linen|cotton|chiffon|thin|lightweight|summer|neckerchief)\b/i.test(acc.combinedText);
       const isWinterPiece =
-        acc.materialSignals.includes('knit') ||
-        acc.thermal === 'heavyWarmth' ||
-        /\b(winter|heavy|wool|knit|fleece|beanie|mittens|scarf)\b/i.test(acc.combinedText);
+        !isLightweightFabric &&
+        (acc.materialSignals.includes('knit') ||
+          acc.materialSignals.includes('wool') ||
+          acc.thermal === 'heavyWarmth' ||
+          /\b(winter|heavy|wool|knit|fleece|beanie|mittens|cashmere|shearling|puffer)\b/i.test(acc.combinedText));
       if (isWinterPiece) {
         contradictions.push({
           severity: 'severe',

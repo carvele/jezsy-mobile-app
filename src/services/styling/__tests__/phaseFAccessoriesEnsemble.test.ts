@@ -36,6 +36,8 @@ import {
 import {
   validateAndPartitionPinnedSet,
 } from '../mannequinSmartShuffle';
+import { localExposureService, computeCoreLookExposureKey } from '../localExposureService';
+import { outfitSignature } from '@/src/services/outfitService';
 import { WardrobeItem, StylingIntent, CandidateOutfit, StylingOption } from '@/src/types/styleAdvisor';
 
 function makeMockWardrobeItem(partial: Partial<WardrobeItem> & { id: string; category: string }): WardrobeItem {
@@ -337,6 +339,100 @@ describe('Phase F: Accessories & Complete Ensemble Critique', () => {
       expect(contradictions.some((c) => c.category === 'weather_thermal' && c.severity === 'severe')).toBe(true);
     });
 
+    test('missing evidence remains neutral: generic sports/stainless watch does NOT contradict active swimming', () => {
+      const swimContext = interpretOutfitContext({ occasion: 'Lap swimming at pool', additionalContext: 'swimming laps in pool' });
+      const reqs = buildOccasionRequirements(swimContext);
+
+      const swimsuit = makeMockWardrobeItem({
+        id: 'sw1',
+        category: 'OnePiece',
+        sub_category: 'Swimsuit',
+        description: 'Aquatic athletic competition swimsuit',
+      });
+      const genericWatch = makeMockWardrobeItem({
+        id: 'gw',
+        category: 'Accessories',
+        sub_category: 'Sports Watch',
+        description: 'Water resistant sports chronograph',
+      });
+
+      const profiles = [
+        buildGarmentSemanticProfile({ id: '1', wardrobe_item_id: 'sw1', image_url: '', name: 'Swimsuit', garment_type: 'OnePiece', x: 0, y: 0, scale: 1, rotation: 0, zIndex: 1 }, swimsuit),
+        buildGarmentSemanticProfile({ id: '2', wardrobe_item_id: 'gw', image_url: '', name: 'Sports Watch', garment_type: 'Accessory', x: 0, y: 0, scale: 1, rotation: 0, zIndex: 1 }, genericWatch),
+      ];
+      const structure = buildOutfitStructure(profiles);
+      const contradictions = detectContradictions(profiles, reqs, structure);
+
+      expect(contradictions.some((c) => c.garmentName === 'Sports Watch')).toBe(false);
+    });
+
+    test('missing evidence remains neutral: casual cotton shorts with unknown waistband do NOT contradict leather belt', () => {
+      const casualContext = interpretOutfitContext({ occasion: 'Weekend brunch', additionalContext: 'casual dining' });
+      const reqs = buildOccasionRequirements(casualContext);
+
+      const cottonShorts = makeMockWardrobeItem({
+        id: 'cs',
+        category: 'Bottom',
+        sub_category: 'Cotton Shorts',
+        description: 'Standard casual shorts',
+      });
+      const belt = makeMockWardrobeItem({
+        id: 'blt',
+        category: 'Accessories',
+        sub_category: 'Leather Belt',
+        description: 'Classic leather belt',
+      });
+
+      const profiles = [
+        buildGarmentSemanticProfile({ id: '1', wardrobe_item_id: 'cs', image_url: '', name: 'Cotton Shorts', garment_type: 'Bottom', x: 0, y: 0, scale: 1, rotation: 0, zIndex: 1 }, cottonShorts),
+        buildGarmentSemanticProfile({ id: '2', wardrobe_item_id: 'blt', image_url: '', name: 'Leather Belt', garment_type: 'Accessory', x: 0, y: 0, scale: 1, rotation: 0, zIndex: 1 }, belt),
+      ];
+      const structure = buildOutfitStructure(profiles);
+      const contradictions = detectContradictions(profiles, reqs, structure);
+
+      expect(contradictions.some((c) => c.category === 'formality_dresscode')).toBe(false);
+    });
+
+    test('missing evidence remains neutral: clear reading glasses indoors or at night do NOT trigger sunglasses contradiction', () => {
+      const indoorContext = interpretOutfitContext({ occasion: 'Night dinner party', additionalContext: 'indoor dining at night' });
+      const reqs = buildOccasionRequirements(indoorContext);
+
+      const glasses = makeMockWardrobeItem({
+        id: 'og',
+        category: 'Accessories',
+        sub_category: 'Reading Glasses',
+        description: 'Clear optical frames',
+      });
+
+      const profiles = [
+        buildGarmentSemanticProfile({ id: '1', wardrobe_item_id: 'og', image_url: '', name: 'Reading Glasses', garment_type: 'Accessory', x: 0, y: 0, scale: 1, rotation: 0, zIndex: 1 }, glasses),
+      ];
+      const structure = buildOutfitStructure(profiles);
+      const contradictions = detectContradictions(profiles, reqs, structure);
+
+      expect(contradictions.some((c) => c.category === 'occasion_context')).toBe(false);
+    });
+
+    test('missing evidence remains neutral: lightweight silk scarf in warm weather does NOT trigger heavy knit contradiction', () => {
+      const hotContext = interpretOutfitContext({ occasion: 'Summer day in Miami', additionalContext: 'hot 35C sunny day' });
+      const reqs = buildOccasionRequirements(hotContext);
+
+      const silkScarf = makeMockWardrobeItem({
+        id: 'ss',
+        category: 'Accessories',
+        sub_category: 'Silk Scarf',
+        description: 'Lightweight silk neckerchief',
+      });
+
+      const profiles = [
+        buildGarmentSemanticProfile({ id: '1', wardrobe_item_id: 'ss', image_url: '', name: 'Silk Scarf', garment_type: 'Accessory', x: 0, y: 0, scale: 1, rotation: 0, zIndex: 1 }, silkScarf),
+      ];
+      const structure = buildOutfitStructure(profiles);
+      const contradictions = detectContradictions(profiles, reqs, structure);
+
+      expect(contradictions.some((c) => c.category === 'weather_thermal')).toBe(false);
+    });
+
     test('Soft over-accessorizing advisory triggers when >3 statement accessories are present', () => {
       const acc1 = makeMockWardrobeItem({ id: 'a1', category: 'Accessories', sub_category: 'Leather Belt' });
       const acc2 = makeMockWardrobeItem({ id: 'a2', category: 'Accessories', sub_category: 'Tote Bag' });
@@ -489,8 +585,13 @@ describe('Phase F: Accessories & Complete Ensemble Critique', () => {
   // 6. MANNEQUIN PLACEMENT & SMART SHUFFLE
   // =========================================================================
   describe('6. Mannequin Coordinate Placement & Smart Shuffle', () => {
-    test('createMannequinItem positions Bag at (0.26, 0.48, zIndex 6)', () => {
-      const bag = makeMockWardrobeItem({ id: 'b1', category: 'Accessories', sub_category: 'Tote Bag' });
+    test('createMannequinItem positions transparent-safe Bag on body (0.26, 0.48, zIndex 6)', () => {
+      const bag = makeMockWardrobeItem({
+        id: 'b1',
+        category: 'Accessories',
+        sub_category: 'Tote Bag',
+        image_url: 'https://example.com/bag.png', // png indicates alpha
+      });
       const item = createMannequinItem(bag);
       expect(item.x).toBe(0.26);
       expect(item.y).toBe(0.48);
@@ -498,13 +599,44 @@ describe('Phase F: Accessories & Complete Ensemble Critique', () => {
       expect(item.zIndex).toBeGreaterThanOrEqual(6);
     });
 
-    test('createMannequinItem positions Belt at (0, 0.42, zIndex 4)', () => {
-      const belt = makeMockWardrobeItem({ id: 'blt1', category: 'Accessories', sub_category: 'Leather Belt' });
+    test('createMannequinItem positions opaque Bag on bottom shelf (0, 0.88)', () => {
+      const opaqueBag = makeMockWardrobeItem({
+        id: 'b_op',
+        category: 'Accessories',
+        sub_category: 'Tote Bag',
+        image_url: 'https://example.com/bag.jpg', // jpg has no alpha
+      });
+      const item = createMannequinItem(opaqueBag);
+      expect(item.x).toBe(0);
+      expect(item.y).toBe(0.88);
+      expect(item.scale).toBe(0.55);
+    });
+
+    test('createMannequinItem positions transparent-safe Belt on waist (0, 0.42, zIndex 4)', () => {
+      const belt = makeMockWardrobeItem({
+        id: 'blt1',
+        category: 'Accessories',
+        sub_category: 'Leather Belt',
+        image_url: 'https://example.com/belt.png', // png indicates alpha
+      });
       const item = createMannequinItem(belt);
       expect(item.x).toBe(0);
       expect(item.y).toBe(0.42);
       expect(item.scale).toBe(0.85);
       expect(item.zIndex).toBeGreaterThanOrEqual(4);
+    });
+
+    test('createMannequinItem positions opaque Belt on bottom shelf (0, 0.88)', () => {
+      const opaqueBelt = makeMockWardrobeItem({
+        id: 'blt_op',
+        category: 'Accessories',
+        sub_category: 'Leather Belt',
+        image_url: 'https://example.com/belt.jpg', // jpg has no alpha
+      });
+      const item = createMannequinItem(opaqueBelt);
+      expect(item.x).toBe(0);
+      expect(item.y).toBe(0.88);
+      expect(item.scale).toBe(0.55);
     });
 
     test('createMannequinItem safely places opaque accessories on bottom shelf (0, 0.88)', () => {
@@ -555,6 +687,101 @@ describe('Phase F: Accessories & Complete Ensemble Critique', () => {
       const partition = validateAndPartitionPinnedSet(new Set(['b1', 'b2']), wardrobeMap);
       expect(partition.valid).toBe(false);
       expect(partition.reason).toContain('Multiple bags are pinned');
+    });
+  });
+
+  // =========================================================================
+  // 7. IDENTITY, PHASE B EXPOSURE & GENERATION MODES
+  // =========================================================================
+  describe('7. Identity, Phase B Exposure & Generation Modes', () => {
+    test('exact ensemble identity includes accessories while coreLookKey isolates core garments', () => {
+      const top = makeMockWardrobeItem({ id: 'top_1', category: 'Top' });
+      const bot = makeMockWardrobeItem({ id: 'bot_1', category: 'Bottom' });
+      const shoes = makeMockWardrobeItem({ id: 'shoe_1', category: 'Shoes' });
+      const bagA = makeMockWardrobeItem({ id: 'bag_a', category: 'Accessories', sub_category: 'Tote Bag' });
+      const bagB = makeMockWardrobeItem({ id: 'bag_b', category: 'Accessories', sub_category: 'Clutch Bag' });
+
+      const ensembleA = [top, bot, shoes, bagA];
+      const ensembleB = [top, bot, shoes, bagB];
+
+      const keyA = ensembleA.map((i) => i.id).sort().join('|');
+      const keyB = ensembleB.map((i) => i.id).sort().join('|');
+      expect(keyA).not.toBe(keyB); // Exact ensemble keys are different
+
+      const coreKeyA = computeCoreLookExposureKey(ensembleA);
+      const coreKeyB = computeCoreLookExposureKey(ensembleB);
+      expect(coreKeyA).toBe(coreKeyB); // Core look key is identical
+      expect(coreKeyA).toBe('bot_1|shoe_1|top_1');
+
+      // outfitSignature includes all accessories for exact duplicate checking
+      const sigA = outfitSignature(ensembleA.map((i) => ({ wardrobe_item_id: i.id, name: i.sub_category || '', slot: 'core' })));
+      const sigB = outfitSignature(ensembleB.map((i) => ({ wardrobe_item_id: i.id, name: i.sub_category || '', slot: 'core' })));
+      expect(sigA).not.toBe(sigB);
+    });
+
+    test('Phase B cooldown: accessory-only variation of passed look does NOT reset fatigue cooldown', async () => {
+      const userId = 'user_fatigue_test';
+      localExposureService.purgeInMemoryForUser(userId);
+
+      const top = makeMockWardrobeItem({ id: 't1', category: 'Top' });
+      const bot = makeMockWardrobeItem({ id: 'b1', category: 'Bottom' });
+      const shoes = makeMockWardrobeItem({ id: 's1', category: 'Shoes' });
+      const bag = makeMockWardrobeItem({ id: 'bg1', category: 'Accessories', sub_category: 'Bag' });
+      const watch = makeMockWardrobeItem({ id: 'w1', category: 'Accessories', sub_category: 'Watch' });
+
+      const look1 = [top, bot, shoes, bag];
+      const look1Key = look1.map((i) => i.id).sort().join('|');
+      const coreKey = computeCoreLookExposureKey(look1);
+
+      // User passes look1 in Phase B
+      await localExposureService.logInteraction(userId, look1Key, 'passed', look1.map((i) => i.id), undefined, Date.now(), coreKey);
+
+      const history = await localExposureService.getExposureHistory(userId);
+
+      // Look 1 is under active cooldown
+      expect(localExposureService.isOutfitCooldownActive(look1Key, history, undefined, Date.now(), coreKey)).toBe(true);
+
+      // Look 2 has the exact same core garments but swapped bag for watch
+      const look2 = [top, bot, shoes, watch];
+      const look2Key = look2.map((i) => i.id).sort().join('|');
+      const look2CoreKey = computeCoreLookExposureKey(look2);
+
+      // Core look cooldown catches the accessory variation: does NOT reset cooldown!
+      expect(localExposureService.isOutfitCooldownActive(look2Key, history, undefined, Date.now(), look2CoreKey)).toBe(true);
+    });
+
+    test('Watch and Jewelry are NOT automatically added to ordinary recommendations without prompt/must-use', () => {
+      const wardrobe = [
+        makeMockWardrobeItem({ id: 't1', category: 'Top', sub_category: 'Shirt', color_tags: ['White'] }),
+        makeMockWardrobeItem({ id: 'b1', category: 'Bottom', sub_category: 'Trousers', color_tags: ['Black'] }),
+        makeMockWardrobeItem({ id: 's1', category: 'Shoes', sub_category: 'Loafers', color_tags: ['Black'] }),
+        makeMockWardrobeItem({ id: 'w1', category: 'Accessories', sub_category: 'Gold Watch', color_tags: ['Gold'] }),
+        makeMockWardrobeItem({ id: 'j1', category: 'Accessories', sub_category: 'Pearl Necklace', color_tags: ['White'] }),
+      ];
+
+      const candidates = generateCandidateOutfits(wardrobe, { rawPrompt: 'Casual workday outfit' }, { limit: 5 });
+      expect(candidates.length).toBeGreaterThan(0);
+
+      for (const cand of candidates) {
+        const itemIds = cand.items.map((i) => i.id);
+        // Neither watch nor jewelry is auto-injected
+        expect(itemIds).not.toContain('w1');
+        expect(itemIds).not.toContain('j1');
+      }
+    });
+
+    test('evaluates [None] as a valid bundle and applies simplicity tie-break', () => {
+      const top = makeMockWardrobeItem({ id: 't1', category: 'Top', sub_category: 'Shirt', color_tags: ['Navy'] });
+      const bot = makeMockWardrobeItem({ id: 'b1', category: 'Bottom', sub_category: 'Chinos', color_tags: ['Beige'] });
+      const shoes = makeMockWardrobeItem({ id: 's1', category: 'Shoes', sub_category: 'Sneakers', color_tags: ['White'] });
+      const belt = makeMockWardrobeItem({ id: 'blt1', category: 'Accessories', sub_category: 'Belt', color_tags: ['Navy'] });
+
+      const candidates = generateCandidateOutfits([top, bot, shoes, belt], { rawPrompt: 'Clean minimalist look' }, { limit: 5 });
+      expect(candidates.length).toBeGreaterThan(0);
+
+      // Verify at least one candidate with 0 accessories was evaluated and returned
+      const cleanCandidate = candidates.find((c) => (c.accessoryCount ?? 0) === 0);
+      expect(cleanCandidate).toBeDefined();
     });
   });
 });

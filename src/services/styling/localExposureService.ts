@@ -7,6 +7,23 @@ export interface OutfitExposureRecord {
   itemIds: string[];
   interaction: OutfitInteractionType;
   timestamp: number;
+  coreLookKey?: string;
+}
+
+/**
+ * Computes order-independent core-look exposure identity.
+ * Filters out accessory items so an accessory-only variation (e.g. adding or swapping a watch/bag)
+ * shares the same core-look identity and does NOT reset user fatigue or pass cooldowns in Phase B.
+ */
+export function computeCoreLookExposureKey(
+  items: { id: string; category?: string | null; garment_type?: string | null; sub_category?: string | null }[]
+): string {
+  const coreItems = items.filter((item) => {
+    const cat = (item.category || item.garment_type || '').toLowerCase();
+    const sub = (item.sub_category || '').toLowerCase();
+    return cat !== 'accessory' && cat !== 'accessories' && !sub.includes('bag') && !sub.includes('belt');
+  });
+  return coreItems.map((i) => i.id).sort().join('|');
 }
 
 export interface ItemExposureSummary {
@@ -205,7 +222,8 @@ export class LocalExposureService {
     outfitKey: string,
     itemIds: string[],
     config: ExposureDiversityConfig = PROVISIONAL_EXPOSURE_CONFIG,
-    now: number = Date.now()
+    now: number = Date.now(),
+    coreLookKey?: string
   ): Promise<void> {
     if (!userId || !outfitKey) return;
 
@@ -215,6 +233,7 @@ export class LocalExposureService {
       itemIds: [...itemIds],
       interaction: 'viewed',
       timestamp: now,
+      coreLookKey,
     };
 
     const nextOutfits = [newRecord, ...history.recentOutfits];
@@ -253,7 +272,8 @@ export class LocalExposureService {
     interaction: OutfitInteractionType,
     itemIds: string[] = [],
     config: ExposureDiversityConfig = PROVISIONAL_EXPOSURE_CONFIG,
-    now: number = Date.now()
+    now: number = Date.now(),
+    coreLookKey?: string
   ): Promise<void> {
     if (!userId || !outfitKey) return;
 
@@ -263,6 +283,7 @@ export class LocalExposureService {
       itemIds: [...itemIds],
       interaction,
       timestamp: now,
+      coreLookKey,
     };
 
     const nextOutfits = [newRecord, ...history.recentOutfits];
@@ -301,15 +322,21 @@ export class LocalExposureService {
 
   /**
    * Checks whether outfit is under an active pass or save cooldown.
+   * Matches on either exact ensemble outfitKey OR shared coreLookKey so accessory-only
+   * variations of a passed/saved core look do not reset user fatigue cooldown.
    */
   isOutfitCooldownActive(
     outfitKey: string,
     history: LocalExposureHistory,
     config: ExposureDiversityConfig = PROVISIONAL_EXPOSURE_CONFIG,
-    now: number = Date.now()
+    now: number = Date.now(),
+    coreLookKey?: string
   ): boolean {
     for (const record of history.recentOutfits) {
-      if (record.outfitKey === outfitKey) {
+      const match =
+        record.outfitKey === outfitKey ||
+        (Boolean(coreLookKey) && Boolean(record.coreLookKey) && record.coreLookKey === coreLookKey);
+      if (match) {
         if (record.interaction === 'passed' || record.interaction === 'saved') {
           if (now - record.timestamp < config.passCooldownMs) {
             return true;

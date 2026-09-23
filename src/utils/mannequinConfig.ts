@@ -105,18 +105,18 @@ export function createMannequinItem(
       (wardrobeItem as any)?.has_transparent_background === true ||
       Boolean(wardrobeItem.image_url && /\.png(\?|$)/i.test(wardrobeItem.image_url));
 
-    if (sub === 'bag') {
-      x = 0.26;
-      y = 0.48;
-      scale = 0.75;
-      zIndex = 6;
-    } else if (sub === 'belt') {
-      x = 0;
-      y = 0.42;
-      scale = 0.85;
-      zIndex = 4;
-    } else if (hasAlpha) {
-      if (sub === 'headwear' || sub === 'eyewear') {
+    if (hasAlpha) {
+      if (sub === 'bag') {
+        x = 0.26;
+        y = 0.48;
+        scale = 0.75;
+        zIndex = 6;
+      } else if (sub === 'belt') {
+        x = 0;
+        y = 0.42;
+        scale = 0.85;
+        zIndex = 4;
+      } else if (sub === 'headwear' || sub === 'eyewear') {
         x = 0;
         y = 0.05;
         scale = 0.55;
@@ -138,7 +138,7 @@ export function createMannequinItem(
         zIndex = 6;
       }
     } else {
-      // Opaque accessory -> safe flat-lay / shelf placement
+      // Opaque accessory (including opaque bag or belt) -> safe flat-lay / shelf placement
       x = 0;
       y = 0.88;
       scale = 0.55;
