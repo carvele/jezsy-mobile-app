@@ -1,4 +1,9 @@
-import { WardrobeItem, StylingIntent } from '@/src/types/styleAdvisor';
+import {
+  WardrobeItem,
+  StylingIntent,
+  StyleAdvisorChipContext,
+  ExplicitTextProvenance,
+} from '@/src/types/styleAdvisor';
 import { interpretOutfitContext, OutfitContextInterpretation } from '@/src/utils/aiStylistAdvisor';
 import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
 
@@ -10,32 +15,34 @@ const KNOWN_COLORS = [
 ];
 
 /**
- * Parses natural language styling prompt + optional occasion into a structured StylingIntent.
- * Reuses Mannequin context interpretation and resolves explicit garment and color constraints.
+ * Parses explicit natural-language prompt without chip interference and derives field provenance.
  */
-export function parseStylingIntent(
+export function parseExplicitUserText(
   rawPrompt: string,
-  selectedOccasion: string | null | undefined,
   wardrobe: WardrobeItem[],
-  existingIntent?: StylingIntent | null
-): StylingIntent {
+  lockedItemIds: string[] = []
+): { intent: StylingIntent; provenance: ExplicitTextProvenance } {
   const prompt = (rawPrompt || '').trim();
-  const occ = (selectedOccasion || '').trim();
   const lowerPrompt = prompt.toLowerCase();
 
-  // 1. Reuse existing Mannequin context interpretation
-  const ctx: OutfitContextInterpretation = interpretOutfitContext({
-    occasion: occ || (prompt.length > 0 ? prompt : 'Casual'),
-    additionalContext: prompt,
-  });
+  const provenance: ExplicitTextProvenance = {
+    hasExplicitOccasion: false,
+    hasExplicitFormality: false,
+    hasExplicitWeather: false,
+    hasExplicitTemperature: false,
+    hasExplicitComfort: false,
+    hasExplicitModesty: false,
+    hasExplicitColors: false,
+    hasExplicitGarments: false,
+  };
 
-  const preferredColors = new Set<string>(existingIntent?.preferredColors || []);
-  const avoidedColors = new Set<string>(existingIntent?.avoidedColors || []);
-  const mustUseItemIds = new Set<string>(existingIntent?.mustUseItemIds || []);
-  const excludedItemIds = new Set<string>(existingIntent?.excludedItemIds || []);
+  const preferredColors = new Set<string>();
+  const avoidedColors = new Set<string>();
+  const mustUseItemIds = new Set<string>();
+  const excludedItemIds = new Set<string>();
   const conflictingConstraints: string[] = [];
 
-  // 2. Color extraction: Avoided vs. Preferred
+  // Color extraction: Avoided vs. Preferred
   for (const color of KNOWN_COLORS) {
     const avoidRegex = new RegExp(
       `\\b(?:avoid|no|not|without|don't want|dont want|never|steer clear of|except)\\s+(?:any\\s+)?${color}\\b`,
@@ -48,13 +55,15 @@ export function parseStylingIntent(
 
     if (avoidRegex.test(lowerPrompt)) {
       avoidedColors.add(color);
+      provenance.hasExplicitColors = true;
     }
     if (preferRegex.test(lowerPrompt) || new RegExp(`\\ball\\s+${color}\\b`, 'i').test(lowerPrompt)) {
       preferredColors.add(color);
+      provenance.hasExplicitColors = true;
     }
   }
 
-  // Check for direct color contradiction (e.g. "All black but avoid black")
+  // Check for direct color contradiction
   for (const color of preferredColors) {
     if (avoidedColors.has(color)) {
       conflictingConstraints.push(
@@ -63,8 +72,7 @@ export function parseStylingIntent(
     }
   }
 
-  // 3. Garment extraction from user's actual wardrobe
-  // Match phrases like "use my [piece]", "with my [piece]", "wear my [piece]"
+  // Garment extraction: must use
   const usePattern = /\b(?:use|wear|with|incorporate|feature|include|put on|style)\s+(?:my\s+)?([a-z0-9\s-]+?)(?=[,.]|\band\b|\bavoid\b|\bwith\b|\bfor\b|$)/gi;
   let useMatch: RegExpExecArray | null;
   while ((useMatch = usePattern.exec(lowerPrompt)) !== null) {
@@ -73,11 +81,12 @@ export function parseStylingIntent(
       const match = findWardrobeItemByPhrase(phrase, wardrobe);
       if (match) {
         mustUseItemIds.add(match.id);
+        provenance.hasExplicitGarments = true;
       }
     }
   }
 
-  // Match phrases like "avoid [piece]", "no [piece]", "without [piece]", "don't use [piece]"
+  // Garment extraction: avoid
   const avoidPattern = /\b(?:avoid|no|without|don't use|dont use|don't wear|dont wear|skip)\s+(?:my\s+)?([a-z0-9\s-]+?)(?=[,.]|\band\b|\bwith\b|\bfor\b|$)/gi;
   let avoidMatch: RegExpExecArray | null;
   while ((avoidMatch = avoidPattern.exec(lowerPrompt)) !== null) {
@@ -86,11 +95,12 @@ export function parseStylingIntent(
       const match = findWardrobeItemByPhrase(phrase, wardrobe);
       if (match) {
         excludedItemIds.add(match.id);
+        provenance.hasExplicitGarments = true;
       }
     }
   }
 
-  // Check for direct garment contradiction (e.g. must use item that was also excluded)
+  // Check for contradiction between prompt mustUse and prompt excluded
   for (const id of mustUseItemIds) {
     if (excludedItemIds.has(id)) {
       const item = wardrobe.find((w) => w.id === id);
@@ -101,32 +111,114 @@ export function parseStylingIntent(
     }
   }
 
-  // 4. Formality & Comfort detection
-  let formality = ctx.formalityExpectation;
-  if (/\b(formal|black.?tie|black tie|suit|tuxedo|gala|elegant|dressy)\b/i.test(lowerPrompt)) {
-    formality = 'formal';
-  } else if (/\b(casual|laid back|relaxed|low key|easy)\b/i.test(lowerPrompt)) {
-    formality = 'casual';
-  } else if (/\b(smart casual|business casual|polished casual)\b/i.test(lowerPrompt)) {
-    formality = 'elevatedCasual';
+  // Check for contradiction between locked items and prompt excluded items
+  for (const lockedId of lockedItemIds) {
+    if (excludedItemIds.has(lockedId)) {
+      const item = wardrobe.find((w) => w.id === lockedId);
+      const name = item?.sub_category || item?.category || 'locked garment';
+      conflictingConstraints.push(
+        `Contradictory request: you locked your ${name}, but also asked to avoid it in your prompt.`
+      );
+    }
   }
 
-  const comfortPriority =
-    existingIntent?.comfortPriority ||
-    /\b(comfortable|comfy|breathable|loose|relaxed|easy to move|walk a lot|walking)\b/i.test(lowerPrompt);
+  // Check for contradiction between locked items and avoided colors
+  for (const lockedId of lockedItemIds) {
+    const item = wardrobe.find((w) => w.id === lockedId);
+    if (!item) continue;
+    const itemColors = (item.color_tags || []).map((c) => c.toLowerCase());
+    for (const avoided of avoidedColors) {
+      if (itemColors.includes(avoided.toLowerCase())) {
+        const name = item.sub_category || item.category || 'locked garment';
+        conflictingConstraints.push(
+          `Prompt avoids color ${avoided} which conflicts with locked garment "${name}".`
+        );
+      }
+    }
+  }
 
-  const modestyPreference =
-    existingIntent?.modestyPreference ||
-    /\b(modest|not too revealing|more coverage|conservative|covered)\b/i.test(lowerPrompt);
+  // Formality detection
+  let formality: 'formal' | 'semiFormal' | 'elevatedCasual' | 'casual' | undefined;
+  if (/\b(formal|black.?tie|black tie|suit|tuxedo|gala|elegant|dressy)\b/i.test(lowerPrompt)) {
+    formality = 'formal';
+    provenance.hasExplicitFormality = true;
+  } else if (/\b(casual|laid back|relaxed|low key|easy)\b/i.test(lowerPrompt)) {
+    formality = 'casual';
+    provenance.hasExplicitFormality = true;
+  } else if (/\b(smart casual|business casual|polished casual)\b/i.test(lowerPrompt)) {
+    formality = 'elevatedCasual';
+    provenance.hasExplicitFormality = true;
+  }
 
-  return {
+  // Comfort & Modesty
+  let comfortPriority: boolean | undefined;
+  if (/\b(comfortable|comfy|breathable|loose|relaxed|easy to move|walk a lot|walking)\b/i.test(lowerPrompt)) {
+    comfortPriority = true;
+    provenance.hasExplicitComfort = true;
+  }
+
+  let modestyPreference: boolean | undefined;
+  if (/\b(modest|not too revealing|more coverage|conservative|covered)\b/i.test(lowerPrompt)) {
+    modestyPreference = true;
+    provenance.hasExplicitModesty = true;
+  }
+
+  // Weather & Temperature detection
+  let weather: string | undefined;
+  if (/\b(rain|rainy|raining|storm|stormy)\b/i.test(lowerPrompt)) {
+    weather = 'rain';
+    provenance.hasExplicitWeather = true;
+  } else if (/\b(snow|snowing|blizzard)\b/i.test(lowerPrompt)) {
+    weather = 'snow';
+    provenance.hasExplicitWeather = true;
+  } else if (/\b(sunny|sun|clear)\b/i.test(lowerPrompt)) {
+    weather = 'sunny';
+    provenance.hasExplicitWeather = true;
+  }
+
+  let temperatureNeeds: string | undefined;
+  if (/\b(hot|sweltering|summer heat|warm)\b/i.test(lowerPrompt)) {
+    temperatureNeeds = 'hot';
+    provenance.hasExplicitTemperature = true;
+  } else if (/\b(freezing|cold|chilly|winter cold|cool)\b/i.test(lowerPrompt)) {
+    temperatureNeeds = 'cold';
+    provenance.hasExplicitTemperature = true;
+  }
+
+  // Occasion detection in prompt
+  let detectedOccasion: string | undefined;
+  const occMatches = lowerPrompt.match(/\b(dinner|date night|date|work|office|interview|wedding|party|travel|flight|brunch|gym|running|gala|meeting|weekend|lounge|lounging|home)\b/i);
+  if (occMatches) {
+    detectedOccasion = occMatches[1];
+    provenance.hasExplicitOccasion = true;
+  }
+
+  // Use interpretOutfitContext as base if prompt exists
+  let ctx: OutfitContextInterpretation | undefined;
+  if (prompt.length > 0) {
+    ctx = interpretOutfitContext({
+      occasion: detectedOccasion || prompt,
+      additionalContext: prompt,
+    });
+    if (!formality && ctx.formalityExpectation) {
+      formality = ctx.formalityExpectation;
+    }
+    if (!weather && ctx.weather !== 'unknown') {
+      weather = ctx.weather;
+    }
+    if (!temperatureNeeds && ctx.temperatureRequirement !== 'unknown') {
+      temperatureNeeds = ctx.temperatureRequirement;
+    }
+  }
+
+  const intent: StylingIntent = {
     rawPrompt: prompt,
-    selectedOccasion: occ || null,
+    selectedOccasion: detectedOccasion || null,
     formality,
-    activity: ctx.activity,
-    weather: ctx.weather !== 'unknown' ? ctx.weather : undefined,
-    temperatureNeeds: ctx.temperatureRequirement !== 'unknown' ? ctx.temperatureRequirement : undefined,
-    isIndoor: ctx.isIndoorOverride,
+    activity: ctx?.activity,
+    weather,
+    temperatureNeeds,
+    isIndoor: ctx?.isIndoorOverride,
     mustUseItemIds: Array.from(mustUseItemIds),
     excludedItemIds: Array.from(excludedItemIds),
     preferredColors: Array.from(preferredColors),
@@ -135,6 +227,102 @@ export function parseStylingIntent(
     modestyPreference,
     conflictingConstraints: conflictingConstraints.length > 0 ? conflictingConstraints : undefined,
   };
+
+  return { intent, provenance };
+}
+
+/**
+ * Merges structured helper chips strictly into fields not explicitly supplied in prompt text.
+ */
+export function mergeIntentWithChips(
+  parsed: { intent: StylingIntent; provenance: ExplicitTextProvenance },
+  chipContext?: StyleAdvisorChipContext | null,
+  lockedItemIds: string[] = []
+): StylingIntent {
+  const nextIntent: StylingIntent = {
+    ...parsed.intent,
+    mustUseItemIds: Array.from(new Set([...(parsed.intent.mustUseItemIds || []), ...lockedItemIds])),
+  };
+
+  if (!chipContext) {
+    return nextIntent;
+  }
+
+  // Occasion: text overrides chip
+  if (!parsed.provenance.hasExplicitOccasion && chipContext.occasion) {
+    nextIntent.selectedOccasion = chipContext.occasion;
+  }
+
+  // Weather: text overrides chip
+  if (!parsed.provenance.hasExplicitWeather && chipContext.weather) {
+    nextIntent.weather = chipContext.weather;
+  }
+
+  // Temperature: text overrides chip
+  if (!parsed.provenance.hasExplicitTemperature && chipContext.temperature) {
+    nextIntent.temperatureNeeds = chipContext.temperature;
+  }
+
+  // Vibe / Formality: text overrides chip
+  if (!parsed.provenance.hasExplicitFormality && chipContext.vibe) {
+    switch (chipContext.vibe) {
+      case 'polished':
+        nextIntent.formality = 'elevatedCasual';
+        break;
+      case 'relaxed':
+        nextIntent.formality = 'casual';
+        break;
+      case 'comfortable':
+        nextIntent.comfortPriority = true;
+        break;
+      case 'minimal':
+        // Minimal does not alter formality directly
+        break;
+    }
+  }
+
+  // Comfort: text overrides chip
+  if (!parsed.provenance.hasExplicitComfort && chipContext.comfort) {
+    nextIntent.comfortPriority = true;
+  }
+
+  return nextIntent;
+}
+
+/**
+ * Main parser entry point: parses natural text and structured chips with explicit precedence.
+ */
+export function parseStylingIntent(
+  rawPrompt: string,
+  selectedOccasionOrChips: string | StyleAdvisorChipContext | null | undefined,
+  wardrobe: WardrobeItem[],
+  existingIntent?: StylingIntent | null,
+  lockedItemIds: string[] = []
+): StylingIntent {
+  const chipContext: StyleAdvisorChipContext | undefined =
+    typeof selectedOccasionOrChips === 'string'
+      ? selectedOccasionOrChips.trim() ? { occasion: selectedOccasionOrChips.trim() } : undefined
+      : selectedOccasionOrChips || undefined;
+
+  const parsed = parseExplicitUserText(rawPrompt, wardrobe, lockedItemIds);
+  const merged = mergeIntentWithChips(parsed, chipContext, lockedItemIds);
+
+  if (existingIntent) {
+    if (existingIntent.preferredColors) {
+      merged.preferredColors = Array.from(new Set([...(merged.preferredColors || []), ...existingIntent.preferredColors]));
+    }
+    if (existingIntent.avoidedColors) {
+      merged.avoidedColors = Array.from(new Set([...(merged.avoidedColors || []), ...existingIntent.avoidedColors]));
+    }
+    if (existingIntent.mustUseItemIds) {
+      merged.mustUseItemIds = Array.from(new Set([...(merged.mustUseItemIds || []), ...existingIntent.mustUseItemIds]));
+    }
+    if (existingIntent.excludedItemIds) {
+      merged.excludedItemIds = Array.from(new Set([...(merged.excludedItemIds || []), ...existingIntent.excludedItemIds]));
+    }
+  }
+
+  return merged;
 }
 
 /**

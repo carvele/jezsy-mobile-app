@@ -47,6 +47,16 @@ module.exports = {
   Dimensions: {
     get: jest.fn(() => ({ width: 375, height: 812 })),
   },
+  FlatList: 'FlatList',
+  UIManager: {
+    setLayoutAnimationEnabledExperimental: jest.fn(),
+  },
+  LayoutAnimation: {
+    configureNext: jest.fn(),
+    Presets: {
+      easeInEaseOut: {},
+    },
+  },
   Alert: {
     alert: jest.fn(),
   },

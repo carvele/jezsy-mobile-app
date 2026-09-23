@@ -13,6 +13,7 @@ import { IAIStylistProvider } from '../aiStylistProvider';
 
 export interface StylingSessionState {
   intent: StylingIntent;
+  lockedWardrobeItemIds: string[];
   options: StylingOption[];
   allCandidates: CandidateOutfit[];
   activeIndex: number;
@@ -75,21 +76,24 @@ export function applyDiversityScoring(
 }
 
 /**
- * Initializes and executes a new styling session from user prompt + optional occasion shortcut.
+ * Initializes and executes a new styling session from user prompt + optional occasion/chips shortcut + optional locked items.
  */
 export async function createStylingSession(
   rawPrompt: string,
-  selectedOccasion: string | null | undefined,
+  selectedOccasionOrChips: string | any | null | undefined,
   wardrobe: WardrobeItem[],
   profile?: UserStyleProfileDto | null,
-  provider?: IAIStylistProvider
+  provider?: IAIStylistProvider,
+  initialLockedItemIds: string[] = []
 ): Promise<StylingSessionState> {
-  const intent = parseStylingIntent(rawPrompt, selectedOccasion, wardrobe);
+  const lockedWardrobeItemIds = Array.from(new Set(initialLockedItemIds));
+  const intent = parseStylingIntent(rawPrompt, selectedOccasionOrChips, wardrobe, undefined, lockedWardrobeItemIds);
 
-  // If directly contradictory constraints were detected (e.g. "All black but avoid black")
+  // If directly contradictory constraints were detected (e.g. "All black but avoid black" or prompt opposes locked item)
   if (intent.conflictingConstraints && intent.conflictingConstraints.length > 0) {
     return {
       intent,
+      lockedWardrobeItemIds,
       options: [],
       allCandidates: [],
       activeIndex: 0,
@@ -106,6 +110,7 @@ export async function createStylingSession(
   if (candidates.length === 0) {
     return {
       intent,
+      lockedWardrobeItemIds,
       options: [],
       allCandidates: [],
       activeIndex: 0,
@@ -123,7 +128,7 @@ export async function createStylingSession(
     wardrobeLookup[item.id] = item;
   }
 
-  // 3. AI ranking and selection (with deterministic fallback)
+  // 3. AI ranking and selection (with deterministic fallback and supplemental fill)
   const options = await rankCandidatesWithAI(candidates, intent, wardrobeLookup, provider);
 
   // 4. Record chosen keys in seen history
@@ -134,6 +139,7 @@ export async function createStylingSession(
 
   return {
     intent,
+    lockedWardrobeItemIds,
     options,
     allCandidates: candidates,
     activeIndex: 0,
@@ -146,7 +152,8 @@ export async function createStylingSession(
 }
 
 /**
- * Refines the current styling session based on an action (e.g. "moreFormal", "tryAnother", "avoidItem").
+ * Refines the current styling session based on an action (e.g. "moreFormal", "tryAnother", "avoidItem", "useItem").
+ * Durably preserves lockedWardrobeItemIds across all refinements.
  */
 export async function refineStylingSession(
   currentState: StylingSessionState,
@@ -156,6 +163,7 @@ export async function refineStylingSession(
 ): Promise<StylingSessionState> {
   const nextIntent: StylingIntent = { ...currentState.intent };
   const nextSeenKeys = new Set(currentState.seenOutfitKeys);
+  const lockedIds = currentState.lockedWardrobeItemIds || [];
 
   // Mark all current options as seen to force diversification
   for (const opt of currentState.options) {
@@ -199,6 +207,13 @@ export async function refineStylingSession(
     }
     case 'avoidItem': {
       if (targetItemId) {
+        // Guard: cannot avoid a garment that is currently locked in session
+        if (lockedIds.includes(targetItemId)) {
+          return {
+            ...currentState,
+            error: 'This garment is currently locked for styling. Unlock it before excluding.',
+          };
+        }
         nextIntent.excludedItemIds = Array.from(
           new Set([...(nextIntent.excludedItemIds || []), targetItemId])
         );
@@ -215,6 +230,13 @@ export async function refineStylingSession(
       }
       break;
     }
+  }
+
+  // Ensure all durable locked items remain in mustUseItemIds
+  if (lockedIds.length > 0) {
+    nextIntent.mustUseItemIds = Array.from(
+      new Set([...(nextIntent.mustUseItemIds || []), ...lockedIds])
+    );
   }
 
   // Generate candidates with updated intent
@@ -249,6 +271,7 @@ export async function refineStylingSession(
   return {
     ...currentState,
     intent: nextIntent,
+    lockedWardrobeItemIds: lockedIds,
     options,
     allCandidates: diversifiedCandidates,
     activeIndex: 0,

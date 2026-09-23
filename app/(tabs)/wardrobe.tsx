@@ -35,6 +35,7 @@ import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutf
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
 
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
@@ -65,7 +66,7 @@ export default function WardrobeScreen() {
   const { showToast } = useToast();
   const { session } = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string; loadOutfit?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; loadOutfit?: string; transientToken?: string }>();
   const tourCoachmark = useTourCoachmark('wardrobe');
 
 
@@ -422,6 +423,28 @@ export default function WardrobeScreen() {
     }
   }, [session?.user?.id, showToast, fetchWardrobeData]);
 
+  const handleOpenInMannequin = useCallback(async (outfit: GeneratedOutfit) => {
+    if (!session?.user?.id || !outfit?.items || outfit.items.length === 0) return;
+
+    const res = await transientMannequinService.createToken({
+      userId: session.user.id,
+      itemIds: outfit.items.map((i) => i.id),
+      source: 'passive-outfits',
+    });
+
+    if (res.success && res.token) {
+      router.replace({
+        pathname: '/(tabs)/wardrobe',
+        params: {
+          tab: 'mannequin',
+          transientToken: res.token,
+        },
+      });
+    } else {
+      showToast('Could not open in Mannequin. Please try again.', 'error');
+    }
+  }, [session?.user?.id, router, showToast]);
+
   const renderItem = useCallback(({ item, index }: { item: WardrobeItem; index: number }) => {
     // Use the computed effective bucket so a stale garment_type column never shows wrong info.
     const displayLabel = item.sub_category || resolveEffectiveGarmentBucket(item) || item.category || 'Clothing';
@@ -711,7 +734,13 @@ export default function WardrobeScreen() {
           another tab is active, so switching tabs doesn't discard an
           in-progress mannequin styling session. */}
       <View style={{ flex: 1, display: activeTab === 'mannequin' ? 'flex' : 'none' }}>
-        <MannequinView wardrobeItems={items} onRefreshWardrobe={fetchWardrobeData} initialLoadOutfitId={params.loadOutfit} />
+        <MannequinView
+          wardrobeItems={items}
+          isWardrobeLoaded={!loading}
+          onRefreshWardrobe={fetchWardrobeData}
+          initialLoadOutfitId={params.loadOutfit}
+          initialTransientToken={params.transientToken}
+        />
       </View>
 
       {activeTab === 'mannequin' ? null : loading ? (
@@ -842,6 +871,7 @@ export default function WardrobeScreen() {
                       outfit={o}
                       onSave={handleSaveSuggestion}
                       onPass={handlePassSuggestion}
+                      onOpenMannequin={handleOpenInMannequin}
                       saving={savingKey === o.key}
                       variant="atelier"
                     />

@@ -51,6 +51,7 @@ import {
   SMART_SHUFFLE_SCORING_PROFILE,
   MAX_SESSION_SHUFFLE_HISTORY,
 } from '@/src/services/styling/mannequinSmartShuffle';
+import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
 
 // Enable layout animation for Android (Old Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
@@ -94,13 +95,22 @@ export const CANVAS_BACKDROPS = [
 
 interface Props {
   wardrobeItems: WardrobeItem[];
+  isWardrobeLoaded?: boolean;
   onRefreshWardrobe: () => void;
   /** A saved_outfits id to load onto the canvas automatically, e.g. from the
    * outfit detail screen's "Edit on Mannequin" button. Consumed once. */
   initialLoadOutfitId?: string;
+  /** A transient token from style-advisor or passive-outfits to load ephemeral look onto canvas. */
+  initialTransientToken?: string;
 }
 
-export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOutfitId }: Props) {
+export function MannequinView({
+  wardrobeItems,
+  isWardrobeLoaded = true,
+  onRefreshWardrobe,
+  initialLoadOutfitId,
+  initialTransientToken,
+}: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const wt = WardrobeTokens.theme[theme];
@@ -600,6 +610,73 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoadOutfitId, session?.user?.id]);
+
+  // Hardened transient token consumption lifecycle for ephemeral transfers from Style Advisor and Outfits tab.
+  // Gated strictly on wardrobe loading completion (isWardrobeLoaded), NOT wardrobeItems.length > 0!
+  const processedTransientTokenRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const isLoaded = typeof isWardrobeLoaded === 'boolean' ? isWardrobeLoaded : true;
+    if (!initialTransientToken || !session?.user?.id || !isLoaded) return;
+    if (processedTransientTokenRef.current.has(initialTransientToken)) return;
+    processedTransientTokenRef.current.add(initialTransientToken);
+
+    let isMounted = true;
+
+    async function handleTransientConsumption() {
+      const result = await transientMannequinService.consumeToken(initialTransientToken!, session!.user!.id);
+      if (!isMounted) return;
+
+      const clearRouteToken = () => {
+        router.setParams({ transientToken: undefined });
+      };
+
+      if (!result.valid || !result.itemIds) {
+        if (result.error === 'EXPIRED') {
+          showToast('This styling transfer has expired (5 minute limit).', 'info');
+        } else if (result.error === 'UNAUTHORIZED') {
+          showToast('This styling transfer link belongs to another account.', 'error');
+        } else if (result.error === 'STORAGE_ERROR') {
+          showToast('Could not load transferred items due to storage error.', 'error');
+        }
+        clearRouteToken();
+        return;
+      }
+
+      // Resolve IDs against current wardrobeItems
+      const resolvedItems = result.itemIds
+        .map((id) => wardrobeItems.find((w) => w.id === id))
+        .filter((w): w is WardrobeItem => Boolean(w));
+
+      if (resolvedItems.length === 0) {
+        // Zero valid items (empty wardrobe or deleted items): preserve canvas, show feedback, clear route
+        showToast('No matching garments found in your wardrobe for this transfer.', 'info');
+        clearRouteToken();
+        return;
+      }
+
+      if (resolvedItems.length < result.itemIds.length) {
+        const missingCount = result.itemIds.length - resolvedItems.length;
+        showToast(`${missingCount} garment${missingCount > 1 ? 's were' : ' was'} no longer in your wardrobe.`, 'info');
+      }
+
+      // Atomically mount transferred items onto canvas
+      const newCanvasItems: CanvasItemType[] = resolvedItems.map((item, idx) => {
+        return createMannequinItem(item, idx);
+      });
+
+      setCanvasItems(newCanvasItems);
+      setPinnedWardrobeItemIds(new Set());
+      setSelectedItemId(null);
+      clearRouteToken();
+      showToast('Loaded look onto mannequin', 'success');
+    }
+
+    handleTransientConsumption();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialTransientToken, session, isWardrobeLoaded, wardrobeItems, router, showToast]);
 
   return (
     <ScrollView

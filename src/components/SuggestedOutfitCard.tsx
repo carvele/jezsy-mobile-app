@@ -146,6 +146,18 @@ export function SuggestedOutfitCard({
             </TouchableOpacity>
           )}
 
+          {onOpenMannequin && (
+            <TouchableOpacity
+              style={[styles.passBtn, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+              onPress={() => { tapLight(); onOpenMannequin(outfit); }}
+              accessibilityRole="button"
+              accessibilityLabel="Open this outfit on Mannequin"
+            >
+              <IconSymbol name="sparkles" size={13} color={colors.secondaryText} />
+              <Text style={[styles.passBtnText, { color: colors.secondaryText }]}>Mannequin</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[
               styles.saveBtn,
@@ -224,6 +236,18 @@ export function SuggestedOutfitCard({
             accessibilityLabel="Pass on this look"
           >
             <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Pass</Text>
+          </TouchableOpacity>
+        )}
+
+        {onOpenMannequin && (
+          <TouchableOpacity
+            style={[atelierStyles.passBtn, { borderColor: wt.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+            onPress={() => { tapLight(); onOpenMannequin(outfit); }}
+            accessibilityRole="button"
+            accessibilityLabel="Open this outfit on Mannequin"
+          >
+            <IconSymbol name="sparkles" size={13} color={wt.actionSecondaryText} />
+            <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Mannequin</Text>
           </TouchableOpacity>
         )}
 

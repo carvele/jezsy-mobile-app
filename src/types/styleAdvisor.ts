@@ -20,6 +20,27 @@ export interface StylingIntent {
   conflictingConstraints?: string[];
 }
 
+export type StyleAdvisorVibe = 'polished' | 'relaxed' | 'comfortable' | 'minimal';
+
+export interface StyleAdvisorChipContext {
+  occasion?: string;
+  weather?: string;
+  temperature?: string;
+  vibe?: StyleAdvisorVibe;
+  comfort?: boolean;
+}
+
+export interface ExplicitTextProvenance {
+  hasExplicitOccasion: boolean;
+  hasExplicitFormality: boolean;
+  hasExplicitWeather: boolean;
+  hasExplicitTemperature: boolean;
+  hasExplicitComfort: boolean;
+  hasExplicitModesty: boolean;
+  hasExplicitColors: boolean;
+  hasExplicitGarments: boolean;
+}
+
 export interface CandidateGarmentSummary {
   wardrobeItemId: string;
   category: string;

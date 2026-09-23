@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Colors, Spacing, Radius, Type } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type, WardrobeTokens } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -60,8 +60,11 @@ export default function WardrobeItemDetailScreen() {
   const router = useRouter();
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const wt = WardrobeTokens.theme[theme];
 
   const [item, setItem] = useState<WardrobeItem | null>(null);
+  const effectiveBucket = useMemo(() => item ? resolveEffectiveGarmentBucket(item) : 'Unknown', [item]);
+  const isCoreStylingCategory = useMemo(() => ['Top', 'Bottom', 'Dress', 'Shoes', 'Outerwear'].includes(effectiveBucket), [effectiveBucket]);
   const [loading, setLoading] = useState(true);
   const [logging, setLogging] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -585,6 +588,32 @@ export default function WardrobeItemDetailScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
+          {item && (
+            isCoreStylingCategory ? (
+              <TouchableOpacity
+                style={[
+                  styles.styleAroundButton,
+                  { borderColor: wt.actionPrimary, backgroundColor: wt.cardSurfaceSubtle },
+                ]}
+                onPress={() => router.push(`/style-advisor?styleAroundItemId=${item.id}` as any)}
+                accessibilityRole="button"
+                accessibilityLabel={`Style outfits around this ${effectiveBucket}`}
+              >
+                <IconSymbol name="sparkles" size={18} color={wt.actionPrimary} />
+                <Text style={[styles.styleAroundButtonText, { color: wt.actionPrimary }]}>
+                  Style Around This Item
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.styleAroundDisabledBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                <IconSymbol name="info.circle.fill" size={15} color={colors.secondaryText} />
+                <Text style={[styles.styleAroundDisabledText, { color: colors.secondaryText }]}>
+                  Styling around accessories is coming in Phase F.
+                </Text>
+              </View>
+            )
+          )}
+
           <TouchableOpacity
             style={[styles.logButton, { backgroundColor: colors.tint, opacity: logging ? 0.6 : 1 }]}
             onPress={handleLogWear}
@@ -1044,5 +1073,34 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     textAlignVertical: 'top',
+  },
+  styleAroundButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  styleAroundButtonText: {
+    ...Type.bodyStrong,
+    fontWeight: '700',
+  },
+  styleAroundDisabledBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  styleAroundDisabledText: {
+    ...Type.caption,
+    fontSize: 12,
   },
 });
