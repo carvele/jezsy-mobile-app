@@ -93,7 +93,7 @@ function parseSuggestion(raw: unknown): GarmentTagSuggestion | null {
   return { category, subCategory, primaryColor, colorTags: tags, pattern, material, fit, lengthType, sleeveType, neckline, silhouette, confidence };
 }
 
-const DEFAULT_FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'] as const;
+const DEFAULT_FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'] as const;
 
 export function createHandler(deps: HandlerDeps) {
   return async function handle(req: Request): Promise<Response> {
