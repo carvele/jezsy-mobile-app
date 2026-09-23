@@ -1,0 +1,56 @@
+-- ============================================================================
+-- Rollback Migration: 20260924013600_outfit_planner_core.sql.rollback
+-- Description: Cleanly rolls back Phase H1 Outfit Planner Core: drops H1 RPCs,
+--              restores exact pre-H1 increment_wear_count implementation,
+--              drops internal record_item_wear, drops planned_outfits,
+--              and drops timezone and trigger helpers.
+-- ============================================================================
+
+-- 1. Restore exact pre-H1 implementation of public.increment_wear_count(uuid)
+-- Source: supabase/migrations/20260917010000_remove_user_streaks.sql (lines 9-32)
+CREATE OR REPLACE FUNCTION public.increment_wear_count(p_item_id uuid)
+ RETURNS wardrobe_items
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_row wardrobe_items;
+BEGIN
+  UPDATE wardrobe_items
+  SET wear_count = wear_count + 1,
+      last_worn_at = now()
+  WHERE id = p_item_id
+    AND user_id = auth.uid()
+    AND deleted = false
+  RETURNING * INTO v_row;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'wardrobe item % not found or not owned by caller', p_item_id;
+  END IF;
+
+  RETURN v_row;
+END;
+$function$;
+
+REVOKE EXECUTE ON FUNCTION public.increment_wear_count(uuid) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.increment_wear_count(uuid) TO authenticated;
+
+-- 2. Drop Canonical Planner RPCs
+DROP FUNCTION IF EXISTS public.confirm_planned_outfit_worn(UUID, INT);
+DROP FUNCTION IF EXISTS public.skip_planned_outfit(UUID, INT);
+DROP FUNCTION IF EXISTS public.cancel_planned_outfit(UUID, INT);
+DROP FUNCTION IF EXISTS public.create_planned_outfit(DATE, TEXT, TEXT, JSONB, TEXT, JSONB, TEXT, UUID, TEXT, UUID);
+DROP FUNCTION IF EXISTS public.update_planned_outfit_metadata(UUID, INT, TEXT, TEXT, JSONB);
+DROP FUNCTION IF EXISTS public.reschedule_planned_outfit(UUID, INT, DATE, TEXT);
+DROP FUNCTION IF EXISTS public.get_planned_outfits_range(DATE, DATE);
+
+-- 3. Drop Shared Internal Wear Primitive
+DROP FUNCTION IF EXISTS public.record_item_wear(UUID, TIMESTAMPTZ);
+
+-- 4. Drop planned_outfits Table (and dependent triggers, policies, and indices)
+DROP TABLE IF EXISTS public.planned_outfits CASCADE;
+
+-- 5. Drop Helper Functions
+DROP FUNCTION IF EXISTS public.check_planned_outfit_ownership();
+DROP FUNCTION IF EXISTS public.is_valid_timezone(TEXT);

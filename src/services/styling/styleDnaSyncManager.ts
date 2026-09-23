@@ -113,7 +113,8 @@ class StyleDnaSyncManager {
     userId: string,
     eventType: StylePreferenceEventType,
     payload: Record<string, unknown>,
-    preferenceActionId?: string | null
+    preferenceActionId?: string | null,
+    clientTimestamp?: string | null
   ): Promise<StylePreferenceEvent> {
     const event: StylePreferenceEvent = {
       id: randomUUID(),
@@ -122,7 +123,7 @@ class StyleDnaSyncManager {
       eventType,
       preferenceActionId: preferenceActionId || null,
       payload,
-      clientTimestamp: new Date().toISOString(),
+      clientTimestamp: clientTimestamp || new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
 
@@ -160,16 +161,23 @@ class StyleDnaSyncManager {
       silhouettes?: string[];
       formality?: string[];
       accessories?: string[];
-    }
+    },
+    clientTimestamp?: string | null
   ): Promise<StylePreferenceEvent> {
-    return this.recordEvent(userId, 'wear_outfit', {
-      outfit_id: outfitId,
-      item_ids: itemIds,
-      palette: aestheticTokens.palette || [],
-      silhouettes: aestheticTokens.silhouettes || [],
-      formality: aestheticTokens.formality || [],
-      accessories: aestheticTokens.accessories || [],
-    });
+    return this.recordEvent(
+      userId,
+      'wear_outfit',
+      {
+        outfit_id: outfitId,
+        item_ids: itemIds,
+        palette: aestheticTokens.palette || [],
+        silhouettes: aestheticTokens.silhouettes || [],
+        formality: aestheticTokens.formality || [],
+        accessories: aestheticTokens.accessories || [],
+      },
+      null,
+      clientTimestamp
+    );
   }
 
   /**
