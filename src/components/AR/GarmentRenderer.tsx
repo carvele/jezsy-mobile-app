@@ -193,6 +193,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
           let scene, camera, renderer, garmentModel, garmentGroup;
           let measuredMeshWidth = 0.4;
+          let measuredMeshHeight = 1.0;
           let skeletonBones = {};
           let boneCorrection = {};
           let debugFrameCount = 0;
@@ -660,6 +661,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               // known unreliable for a SkinnedMesh in this Three.js version (r128) per the
               // master plan's own history, but seeing the actual number beats guessing blind.
               const boxSize = box.getSize(new THREE.Vector3());
+              measuredMeshHeight = boxSize.y;
               console.log('[AR-DEBUG-BBOX] Box3.setFromObject (rest pose, load time): size=' + JSON.stringify({x:+boxSize.x.toFixed(4), y:+boxSize.y.toFixed(4), z:+boxSize.z.toFixed(4)})
                 + ' min=' + JSON.stringify({x:+box.min.x.toFixed(4), y:+box.min.y.toFixed(4), z:+box.min.z.toFixed(4)})
                 + ' max=' + JSON.stringify({x:+box.max.x.toFixed(4), y:+box.max.y.toFixed(4), z:+box.max.z.toFixed(4)}));
@@ -1017,10 +1019,18 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     let yawCosCorrection = 1;
                     const rotValidForYaw = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w);
                     if (rotValidForYaw) {
-                      const yawEuler = new THREE.Euler().setFromQuaternion(
-                        new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w), 'YXZ'
-                      );
-                      const rawCosYaw = Math.abs(Math.cos(yawEuler.y));
+                      let rawCosYaw;
+                      if (IS_BOTTOM_GARMENT && worldLandmarks && worldLandmarks[23] && worldLandmarks[24]) {
+                        const hipDx = worldLandmarks[24].x - worldLandmarks[23].x;
+                        const hipDz = worldLandmarks[24].z - worldLandmarks[23].z;
+                        const hipYaw = Math.atan2(hipDz, hipDx);
+                        rawCosYaw = Math.abs(Math.cos(hipYaw));
+                      } else {
+                        const yawEuler = new THREE.Euler().setFromQuaternion(
+                          new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w), 'YXZ'
+                        );
+                        rawCosYaw = Math.abs(Math.cos(yawEuler.y));
+                      }
                       // Smooth the extracted cos(yaw) itself, before the #17 floor logic
                       // below sees it -- see the smoothedCosYaw declaration above for why.
                       // Same blend factor as smoothedPos/smoothedScale/smoothedQuat use.
@@ -1136,115 +1146,91 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     const targetR = unprojectToZ0(rCrop.nx, rCrop.ny);
                     
                     if (targetPos && targetL && targetR) {
-                      // Phase B, reverted: tried using MediaPipe's worldLandmarks (real
-                      // metres) here to make width distance/yaw-invariant. Confirmed live via
-                      // model-viewer's independently-computed real dimensions (mesh height
-                      // genuinely ~0.60m, not a broken/tiny mesh) that the resulting math was
-                      // internally consistent yet still rendered too small on screen -- because
-                      // this scene's virtual camera (45deg FOV, fixed z=5) was never calibrated
-                      // to convert real metres into correct on-screen pixels; it only ever
-                      // worked *self-consistently* with a 2D screen-projected width, since both
-                      // measuring and rendering went through the same uncalibrated camera.
-                      // Swapping only the measurement side broke that self-consistency.
-                      //
-                      // Phase 3: real camera intrinsics (the actual fix this comment used to
-                      // call out as still-needed) now exist above whenever CAMERA_CALIBRATION is
-                      // present -- both the FOV and camera.position.z (distance) are real, so
-                      // this unprojection is measuring real metres correctly rather than only
-                      // self-consistently. Without calibration data (web, or no saved wearer
-                      // measurement), FOV=45/z=5 and this remains exactly the prior
-                      // self-consistent-but-arbitrary behavior. Phase B2's fit modifier is
-                      // unaffected either way -- it never depended on this.
-                      // Fix for open item #2 in the AR audit plan: targetWorldWidth (the
-                      // on-screen shoulder separation unprojected onto z=0) already shrinks
-                      // by cos(yaw) as the wearer turns. exactScale was then applied to
-                      // garmentGroup, whose quaternion (rot, the full torso orientation)
-                      // foreshortens the garment's own shoulder line by cos(yaw) a SECOND
-                      // time -- the garment rendered progressively too narrow while turning,
-                      // worse than either correction alone. Normalize the measured width back
-                      // out by the same cos(yaw) so the foreshortening is applied exactly
-                      // once, via the 3D rotation itself. Same 0.65 floor convention as
-                      // garmentFitter's 2D-path correctedShoulderWidthPx, for consistency.
-                      // yawCosCorrection itself is now computed once, earlier in this handler,
-                      // and shared with the #27 distance-triangulation fix above.
-                      const targetWorldWidth = targetL.distanceTo(targetR) / yawCosCorrection;
+                      // Lower-body silhouette expansion: MediaPipe landmarks 23 and 24 represent internal femoral
+                      // head joint centers (~18-20cm on adults). The outer hip silhouette spans ~1.78x this
+                      // joint distance (~33-36cm), matching authored waistband boundaries.
+                      const HIP_TO_SILHOUETTE_RATIO = IS_BOTTOM_GARMENT ? 1.78 : 1.0;
+                      // Phase 4: Category-specific clothing ease (8% for pants so garment rests naturally over silhouette)
+                      const GARMENT_EASE = IS_BOTTOM_GARMENT ? 1.08 : 1.0;
+
+                      // Normalize the measured width back out by cos(yaw) so foreshortening
+                      // is applied exactly once, via 3D rotation itself.
+                      const targetWorldWidth = ((targetL.distanceTo(targetR) * HIP_TO_SILHOUETTE_RATIO) / yawCosCorrection) * GARMENT_EASE;
 
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
                       // measured bounding-box width only when no calibration exists at all.
-                      // A "fail-safe" here used to cross-check a calibrated value against
-                      // measuredMeshWidth and override it if too different -- removed after
-                      // confirming live that THREE.Box3.setFromObject() does not account for
-                      // a SkinnedMesh's actual skeleton-driven scale in this Three.js version
-                      // (r128), so measuredMeshWidth can be wildly wrong (measured 0.0068 on
-                      // this rig, vs. a correct calibrated 0.119) -- the fail-safe was using a
-                      // broken measurement to override a correct one, producing an ~88x
-                      // oversized, effectively invisible/off-frustum render.
                       const garmentMetricWidth = ${safeRestPoseMetricWidth !== undefined ? safeRestPoseMetricWidth : 'measuredMeshWidth'};
-                      // Phase B2: real-measurement fit modifier, delivered by message (see
-                      // FIT_MODIFIER above) since it depends on the same async sizing profile
-                      // as CAMERA_CALIBRATION. 1 = today's pure silhouette-match behavior
-                      // (default/fallback, and this const's own name is now local shadowing
-                      // for clarity -- FIT_MODIFIER itself is reassigned by the message
-                      // handler, this just snapshots its current value for this frame).
                       const fitModifier = FIT_MODIFIER;
-                      const exactScale = (targetWorldWidth / garmentMetricWidth) * fitModifier;
+                      const exactScaleX = (targetWorldWidth / garmentMetricWidth) * fitModifier;
+                      const exactScaleZ = exactScaleX;
+                      let exactScaleY = exactScaleX;
+
+                      // Phase 6: Vertical Fit / Leg Length scaling for trousers/pants
+                      if (IS_BOTTOM_GARMENT && normalizedLandmarks[25] && normalizedLandmarks[27] && normalizedLandmarks[26] && normalizedLandmarks[28]) {
+                        const kneeL = unprojectToZ0(mapCoverCrop(normalizedLandmarks[25].x, normalizedLandmarks[25].y).nx, mapCoverCrop(normalizedLandmarks[25].x, normalizedLandmarks[25].y).ny);
+                        const ankleL = unprojectToZ0(mapCoverCrop(normalizedLandmarks[27].x, normalizedLandmarks[27].y).nx, mapCoverCrop(normalizedLandmarks[27].x, normalizedLandmarks[27].y).ny);
+                        const kneeR = unprojectToZ0(mapCoverCrop(normalizedLandmarks[26].x, normalizedLandmarks[26].y).nx, mapCoverCrop(normalizedLandmarks[26].x, normalizedLandmarks[26].y).ny);
+                        const ankleR = unprojectToZ0(mapCoverCrop(normalizedLandmarks[28].x, normalizedLandmarks[28].y).nx, mapCoverCrop(normalizedLandmarks[28].x, normalizedLandmarks[28].y).ny);
+                        let legLen = 0;
+                        let count = 0;
+                        if (kneeL && ankleL && targetL) {
+                          legLen += targetL.distanceTo(kneeL) + kneeL.distanceTo(ankleL);
+                          count++;
+                        }
+                        if (kneeR && ankleR && targetR) {
+                          legLen += targetR.distanceTo(kneeR) + kneeR.distanceTo(ankleR);
+                          count++;
+                        }
+                        if (count > 0 && measuredMeshHeight > 0) {
+                          legLen /= count;
+                          const rawScaleY = (legLen / measuredMeshHeight) * fitModifier;
+                          // Bound Y-scaling within 15% under to 25% over X-scale to prevent skinny/wide distortion
+                          exactScaleY = Math.max(exactScaleX * 0.85, Math.min(exactScaleX * 1.25, rawScaleY));
+                        }
+                      }
 
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
-                      const transformValid = !isNaN(exactScale) && isFinite(exactScale) && exactScale > 0 && !isNaN(targetPos.x) && hipAnchorConfident;
-                      // rot NaN protection, added separately from transformValid on purpose: a
-                      // NaN quaternion (from poseNormalizer's quaternionFromBasis under a large
-                      // bend -- see its own hardening comment) must never reach smoothedQuat.slerp
-                      // below. slerp always mixes in its OWN current value, so one bad frame
-                      // poisons every future frame permanently -- confirmed live as "vanishes on
-                      // a bend and never comes back without a reload". Skip only the rotation
-                      // update for a bad frame; position/scale still update normally, and the
-                      // garment holds its last good orientation instead of going NaN forever.
+                      const transformValid = !isNaN(exactScaleX) && isFinite(exactScaleX) && exactScaleX > 0 && !isNaN(targetPos.x) && hipAnchorConfident;
                       const rotValid = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w);
                       if (!rotValid && shouldLog) {
                         console.warn('[AR-DEBUG-BONE] non-finite orientation3D this frame, holding last good rotation: ' + JSON.stringify(rot));
                       }
 
-                      // A scale/position plausibility guard (reject a frame whose exactScale
-                      // jumped implausibly far from the current smoothed value) was tried here and
-                      // reverted. It was calibrated against one captured bad episode and verified to
-                      // suppress that exact sequence, but it coupled position, scale, AND rotation
-                      // to a single scale-ratio check -- so a LEGITIMATE fast width change (turning
-                      // to face the camera goes from profile-narrow to frontal-wide; raising the
-                      // arms makes MediaPipe's own shoulder-landmark estimate noisier from
-                      // self-occlusion) could exceed the same ratio bound a glitch would, freezing
-                      // the entire transform mid-motion. Confirmed live as a real regression: turning
-                      // and raising both arms, both previously working, started disappearing.
                       if (transformValid) {
-                        // Smooth position/scale across frames (simple exponential moving
-                        // average) instead of snapping straight to this frame's raw value.
-                        // Confirmed live: exactScale swung wildly frame to frame (observed
-                        // 1.7x to 8.9x within a handful of logged samples, from ordinary
-                        // MediaPipe landmark jitter -- there was no temporal filtering on
-                        // this code path at all), causing the garment to flash visible for
-                        // an instant then jump off-frame/to an absurd size the very next
-                        // frame -- reads as "appears then disappears" even though tracking
-                        // itself never actually dropped out.
                         const smoothing = 0.25; // higher = follows new frames faster
                         const targetQuat = rotValid ? new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w) : null;
                         if (!smoothedPos) {
                           smoothedPos = targetPos.clone();
-                          smoothedScale = exactScale;
+                          smoothedScale = { x: exactScaleX, y: exactScaleY, z: exactScaleZ };
                           if (targetQuat) smoothedQuat = targetQuat.clone();
                         } else {
                           smoothedPos.lerp(targetPos, smoothing);
-                          smoothedScale = smoothedScale + (exactScale - smoothedScale) * smoothing;
-                          // rot now carries the FULL torso orientation (pitch and yaw as
-                          // well as roll -- see poseNormalizer), so it needs the same
-                          // temporal filtering position and scale already get. Pitch in
-                          // particular comes from MediaPipe depth, its noisiest channel;
-                          // slerping keeps that noise off the garment. targetQuat is null
-                          // on a bad frame (rotValid=false) -- skip only this frame's
-                          // rotation update rather than feeding NaN into slerp.
+                          if (typeof smoothedScale === 'number') {
+                            smoothedScale = { x: smoothedScale, y: smoothedScale, z: smoothedScale };
+                          }
+                          smoothedScale.x += (exactScaleX - smoothedScale.x) * smoothing;
+                          smoothedScale.y += (exactScaleY - smoothedScale.y) * smoothing;
+                          smoothedScale.z += (exactScaleZ - smoothedScale.z) * smoothing;
                           if (targetQuat) smoothedQuat.slerp(targetQuat, smoothing);
                         }
                         garmentGroup.position.copy(smoothedPos);
-                        garmentGroup.scale.set(smoothedScale, smoothedScale, smoothedScale);
+                        garmentGroup.scale.set(smoothedScale.x, smoothedScale.y, smoothedScale.z);
                         if (smoothedQuat) garmentGroup.quaternion.copy(smoothedQuat);
+
+                        // DEV-only diagnostic logging for lower-body fitting validation
+                        if (AR_DEBUG && IS_BOTTOM_GARMENT && shouldLog) {
+                          console.log('[AR-PANTS-FIT]', JSON.stringify({
+                            liveHipWidth: +(targetL.distanceTo(targetR) * HIP_TO_SILHOUETTE_RATIO).toFixed(3),
+                            calibratedReferenceWidth: +garmentMetricWidth.toFixed(3),
+                            yawCosCorrection: +yawCosCorrection.toFixed(3),
+                            distance: camera.position.z ? +camera.position.z.toFixed(2) : null,
+                            sizeFitModifier: +fitModifier.toFixed(3),
+                            targetScaleX: +exactScaleX.toFixed(3),
+                            targetScaleY: +exactScaleY.toFixed(3),
+                            pelvisCenter: targetPos ? { x: +targetPos.x.toFixed(3), y: +targetPos.y.toFixed(3), z: +targetPos.z.toFixed(3) } : null,
+                            trackingConfidence: hipAnchorConfident ? 1.0 : 0.0
+                          }));
+                        }
                       }
 
                       // Occlusion Compositor Uniforms (Phase 2 Tier 1).

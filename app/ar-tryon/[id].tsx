@@ -304,16 +304,23 @@ function correctNormalized2DLandmarkRotation(p: any) {
 
 function buildFallbackMetadata(p: Product | null | undefined): import('@/src/types/garment').GarmentMetadata {
   const cat = (p?.category || 'shirt').toLowerCase();
+  const isBottom = cat === 'pants' || cat === 'skirt' || cat === 'trousers' || cat === 'shorts' || cat === 'jeans';
   return {
     id: p?.id || 'mock',
     category: cat as any,
     calibrationVersion: '1.0.0',
     ingestionStatus: 'DEMO_RIG',
-    anatomicalAnchorOffset: { x: 0, y: 1.35, z: 0 },
+    anatomicalAnchorOffset: isBottom ? { x: 0, y: 0.95, z: 0 } : { x: 0, y: 1.35, z: 0 },
     anchorConfidence: 'inferred',
-    anchorType: 'SHOULDER_CENTER',
-    restPoseMetricWidth: cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35),
-    boneMap: {
+    anchorType: isBottom ? 'WAIST' : 'SHOULDER_CENTER',
+    restPoseMetricWidth: isBottom ? 0.34 : (cat === 'dress' ? 0.38 : (cat === 'jacket' ? 0.42 : 0.35)),
+    boneMap: isBottom ? {
+      'Hips': 'mixamorigHips',
+      'LeftUpLeg': 'mixamorigLeftUpLeg',
+      'LeftLeg': 'mixamorigLeftLeg',
+      'RightUpLeg': 'mixamorigRightUpLeg',
+      'RightLeg': 'mixamorigRightLeg'
+    } : {
       'Spine': 'mixamorigSpine',
       'Spine1': 'mixamorigSpine1',
       'Spine2': 'mixamorigSpine2',

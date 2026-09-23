@@ -131,30 +131,53 @@ export const SceneViewScene = forwardRef<GarmentRendererRef, SceneViewExperiment
           _segmentation,
           landmarks
         ) {
+          const isBottomGarment = metadata?.category === 'pants' || metadata?.category === 'skirt';
+          const hip23 = landmarks?.[23];
+          const hip24 = landmarks?.[24];
+          const sh11 = landmarks?.[11];
+          const sh12 = landmarks?.[12];
+
           if (
             !modelUrl ||
             loadFailed ||
             !metadata ||
-            !landmarks?.[11] ||
-            !landmarks?.[12] ||
-            !visible
+            !visible ||
+            (isBottomGarment ? (!hip23 || !hip24) : (!sh11 || !sh12))
           ) {
             return;
           }
 
+          const anchorL = isBottomGarment ? hip23 : sh11;
+          const anchorR = isBottomGarment ? hip24 : sh12;
+
           const projected = projection.update(
-            landmarks[11],
-            landmarks[12],
+            anchorL,
+            anchorR,
             rotation,
             stageWidth,
             stageHeight,
             metadata.restPoseMetricWidth,
-            fitModifier
+            fitModifier,
+            {
+              isBottomGarment,
+              shoulders: (sh11 && sh12) ? { left: sh11, right: sh12 } : undefined,
+              legLength: (landmarks?.[25] && landmarks?.[27] && landmarks?.[26] && landmarks?.[28])
+                ? {
+                    kneeL: landmarks[25],
+                    ankleL: landmarks[27],
+                    kneeR: landmarks[26],
+                    ankleR: landmarks[28],
+                    authoredLength: 1.0,
+                  }
+                : undefined,
+            }
           );
 
           if (!projected) return;
 
+          // For bottom garments, preserve authored waist anchor offset rather than overriding to 1.35m (neck height)
           const effectiveAnchor =
+            !isBottomGarment &&
             (metadata.anatomicalAnchorOffset?.y ?? 0) <= 0.6 &&
             Object.values(metadata.boneMap || {}).some(
               (b) => typeof b === 'string' && (b.toLowerCase().includes('mixamo') || b.toLowerCase().includes('spine'))
@@ -210,7 +233,7 @@ export const SceneViewScene = forwardRef<GarmentRendererRef, SceneViewExperiment
               modelUrl,
               pos: rootPosition,
               rot: projected.rotationEulerDeg,
-              scale: projected.scale,
+              scale: [projected.scaleX, projected.scaleY, projected.scaleZ],
               distance: projected.distance,
             });
           }
@@ -219,7 +242,7 @@ export const SceneViewScene = forwardRef<GarmentRendererRef, SceneViewExperiment
             src: modelUrl,
             position: rootPosition,
             rotation: projected.rotationEulerDeg,
-            scale: projected.scale,
+            scale: [projected.scaleX, projected.scaleY, projected.scaleZ],
           });
 
           if (!hasTransform) {

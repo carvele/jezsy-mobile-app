@@ -9,6 +9,9 @@ export interface SceneViewProjectionResult {
   rotation: Quaternion;
   rotationEulerDeg: [number, number, number];
   scale: number;
+  scaleX: number;
+  scaleY: number;
+  scaleZ: number;
   distance: number;
   fov: number;
   aspect: number;
@@ -108,7 +111,12 @@ export class SceneViewProjection {
     width: number,
     height: number,
     metricWidth: number,
-    fitModifier: number = 1
+    fitModifier: number = 1,
+    options?: {
+      isBottomGarment?: boolean;
+      shoulders?: { left: Joint; right: Joint };
+      legLength?: { kneeL?: Joint; ankleL?: Joint; kneeR?: Joint; ankleR?: Joint; authoredLength?: number };
+    }
   ): SceneViewProjectionResult | null {
     if (
       ![left.x, left.y, right.x, right.y, rotation.x, rotation.y, rotation.z, rotation.w, width, height, metricWidth, fitModifier]
@@ -132,8 +140,10 @@ export class SceneViewProjection {
 
     const c = this.calibration;
     if (c) {
-      const dx = (right.x - left.x) * c.videoWidthPx;
-      const dy = (right.y - left.y) * c.videoHeightPx;
+      const distJointL = options?.shoulders ? options.shoulders.left : left;
+      const distJointR = options?.shoulders ? options.shoulders.right : right;
+      const dx = (distJointR.x - distJointL.x) * c.videoWidthPx;
+      const dy = (distJointR.y - distJointL.y) * c.videoHeightPx;
       const pixels = Math.hypot(dx, dy);
       const raw = ((c.wearerShoulderWidthM * c.focalLengthPx) / pixels) * this.reliableCos;
       if (pixels > 1 && Math.abs(dx) > Math.abs(dy) && raw > 0.2 && raw < 2.5) {
@@ -160,9 +170,40 @@ export class SceneViewProjection {
     const position = unproject({ x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 });
     const l = unproject(left);
     const r = unproject(right);
-    const scale = (Math.hypot(l.x - r.x, l.y - r.y) / this.reliableCos / metricWidth) * fitModifier;
 
-    if (!Number.isFinite(scale) || scale <= 0) return null;
+    const isBottom = options?.isBottomGarment ?? false;
+    const HIP_TO_SILHOUETTE_RATIO = isBottom ? 1.78 : 1.0;
+    const GARMENT_EASE = isBottom ? 1.08 : 1.0;
+
+    const baseWorldWidth = Math.hypot(l.x - r.x, l.y - r.y) * HIP_TO_SILHOUETTE_RATIO * GARMENT_EASE;
+    const scaleX = (baseWorldWidth / this.reliableCos / metricWidth) * fitModifier;
+    const scaleZ = scaleX;
+    let scaleY = scaleX;
+
+    if (isBottom && options?.legLength) {
+      const { kneeL, ankleL, kneeR, ankleR, authoredLength } = options.legLength;
+      let legLen = 0;
+      let count = 0;
+      if (kneeL && ankleL) {
+        const uKneeL = unproject(kneeL);
+        const uAnkleL = unproject(ankleL);
+        legLen += Math.hypot(uKneeL.x - l.x, uKneeL.y - l.y) + Math.hypot(uAnkleL.x - uKneeL.x, uAnkleL.y - uKneeL.y);
+        count++;
+      }
+      if (kneeR && ankleR) {
+        const uKneeR = unproject(kneeR);
+        const uAnkleR = unproject(ankleR);
+        legLen += Math.hypot(uKneeR.x - r.x, uKneeR.y - r.y) + Math.hypot(uAnkleR.x - uKneeR.x, uAnkleR.y - uKneeR.y);
+        count++;
+      }
+      if (count > 0 && authoredLength && authoredLength > 0) {
+        legLen /= count;
+        const rawScaleY = (legLen / authoredLength) * fitModifier;
+        scaleY = Math.max(scaleX * 0.85, Math.min(scaleX * 1.25, rawScaleY));
+      }
+    }
+
+    if (!Number.isFinite(scaleX) || scaleX <= 0) return null;
 
     const prev = this.previous;
     const smoothedPos: Vec3 = prev
@@ -173,7 +214,10 @@ export class SceneViewProjection {
         }
       : position;
 
-    const smoothedScale = prev ? prev.scale + (scale - prev.scale) * 0.25 : scale;
+    const smoothedScale = prev ? prev.scale + (scaleX - prev.scale) * 0.25 : scaleX;
+    const smoothedScaleX = prev ? prev.scaleX + (scaleX - prev.scaleX) * 0.25 : scaleX;
+    const smoothedScaleY = prev ? prev.scaleY + (scaleY - prev.scaleY) * 0.25 : scaleY;
+    const smoothedScaleZ = prev ? prev.scaleZ + (scaleZ - prev.scaleZ) * 0.25 : scaleZ;
     const smoothedRot = prev ? slerpQuaternion(prev.rotation, rotation, 0.25) : rotation;
     const eulerDeg = quaternionToSceneViewEulerDeg(smoothedRot);
 
@@ -182,6 +226,9 @@ export class SceneViewProjection {
       rotation: smoothedRot,
       rotationEulerDeg: eulerDeg,
       scale: smoothedScale,
+      scaleX: smoothedScaleX,
+      scaleY: smoothedScaleY,
+      scaleZ: smoothedScaleZ,
       distance: this.distance,
       aspect,
       fov,
@@ -200,8 +247,8 @@ export function computeSceneViewAnchoredPosition(
 ): [number, number, number] {
   const offset = applyQuatToVec(projection.rotation, anchor);
   return [
-    projection.position.x - offset.x * projection.scale,
-    projection.position.y - offset.y * projection.scale,
-    projection.position.z - offset.z * projection.scale,
+    projection.position.x - offset.x * (projection.scaleX ?? projection.scale),
+    projection.position.y - offset.y * (projection.scaleY ?? projection.scale),
+    projection.position.z - offset.z * (projection.scaleZ ?? projection.scale),
   ];
 }
