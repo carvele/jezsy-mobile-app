@@ -55,16 +55,27 @@ export function validateGarmentRig(
   log(`Bone count: ${boneCount}`);
 
   // Resolve required bone names from metadata or standard Mixamo map
+  const isBottom = metadata?.category === 'pants' || metadata?.category === 'skirt';
   const requiredBones: string[] = [];
   if (metadata?.boneMap) {
     for (const [canonicalName, mappedName] of Object.entries(metadata.boneMap)) {
-      if (canonicalName.includes('Arm') || canonicalName.includes('ForeArm') || canonicalName.includes('Spine')) {
-        requiredBones.push(mappedName || canonicalName);
+      if (isBottom) {
+        if (canonicalName.includes('Leg') || canonicalName.includes('Hips')) {
+          requiredBones.push(mappedName || canonicalName);
+        }
+      } else {
+        if (canonicalName.includes('Arm') || canonicalName.includes('ForeArm') || canonicalName.includes('Spine')) {
+          requiredBones.push(mappedName || canonicalName);
+        }
       }
     }
   }
   if (requiredBones.length === 0) {
-    requiredBones.push(...DEFAULT_REQUIRED_BONES);
+    if (isBottom) {
+      requiredBones.push('mixamorigLeftUpLeg', 'mixamorigRightUpLeg', 'mixamorigLeftLeg', 'mixamorigRightLeg');
+    } else {
+      requiredBones.push(...DEFAULT_REQUIRED_BONES);
+    }
   }
 
   const nodeNames = new Set(

@@ -1,9 +1,8 @@
-import type { Quaternion, Vec3 } from '../types/pose';
+import type { Quaternion } from '../types/pose';
 import type { GarmentMetadata } from '../types/garment';
 import {
   multiplyQuat,
   invertQuat,
-  applyQuatToVec,
   IDENTITY_QUAT,
 } from './poseNormalizer';
 
@@ -44,6 +43,14 @@ export const REQUIRED_GARMENT_BONES = [
   'mixamorigSpine',
 ] as const;
 
+export const REQUIRED_BOTTOM_GARMENT_BONES = [
+  'mixamorigLeftUpLeg',
+  'mixamorigRightUpLeg',
+  'mixamorigLeftLeg',
+  'mixamorigRightLeg',
+  'mixamorigHips',
+] as const;
+
 /**
  * Resolves canonical bone names to authored GLB bone names using garment_metadata.boneMap.
  * Cached once on model load to avoid per-frame string lookups.
@@ -61,6 +68,11 @@ export function resolveBoneMapIndicesOnce(
     LeftForeArm: 'mixamorigLeftForeArm',
     RightForeArm: 'mixamorigRightForeArm',
     Spine: 'mixamorigSpine',
+    LeftUpLeg: 'mixamorigLeftUpLeg',
+    RightUpLeg: 'mixamorigRightUpLeg',
+    LeftLeg: 'mixamorigLeftLeg',
+    RightLeg: 'mixamorigRightLeg',
+    Hips: 'mixamorigHips',
   };
 
   for (const [canonicalKey, defaultName] of Object.entries(canonicalAliases)) {
@@ -191,12 +203,20 @@ export class SceneViewSkeletalRetargeter {
   ): BoneLocalTransform[] {
     const transforms: BoneLocalTransform[] = [];
 
-    for (const canonicalName of REQUIRED_GARMENT_BONES) {
+    const isBottom = this.metadata?.category === 'pants' || this.metadata?.category === 'skirt';
+    const targetBones = isBottom ? REQUIRED_BOTTOM_GARMENT_BONES : REQUIRED_GARMENT_BONES;
+
+    for (const canonicalName of targetBones) {
       const mappedName = this.resolvedBoneMap.get(canonicalName) || canonicalName;
       const bind = this.bindTransforms.get(mappedName);
 
       // Default to bind pose if bone has no delta or bind transform not yet registered
-      const delta = boneRotations[canonicalName] || boneRotations[mappedName] || IDENTITY_QUAT;
+      const shortName = canonicalName.replace(/^mixamorig/, '');
+      const delta =
+        boneRotations[shortName] ||
+        boneRotations[canonicalName] ||
+        boneRotations[mappedName] ||
+        IDENTITY_QUAT;
 
       const bindLocal = bind ? bind.localRotation : IDENTITY_QUAT;
       const bindWorld = bind ? bind.worldRotation : IDENTITY_QUAT;

@@ -12,10 +12,10 @@ import type { UserMeasurements } from './sizeRecommender';
  */
 export function calculateGarmentFit(
   pose: BodyPose,
-  profile: GarmentFitProfile,
-  screenWidth: number,
-  screenHeight: number,
-  metadata?: import('../types/garment').GarmentMetadata,
+  profileOrMetadata?: GarmentFitProfile | import('../types/garment').GarmentMetadata,
+  screenWidth: number = 390,
+  screenHeight: number = 844,
+  metadataArg?: import('../types/garment').GarmentMetadata,
   /**
    * Canonical pose for this same frame. Pass the one the caller already built rather
    * than normalizing the same landmarks twice; derived here only as a convenience.
@@ -29,7 +29,7 @@ export function calculateGarmentFit(
    * Missing either one degrades to today's pure silhouette-match behavior.
    */
   userMeasurements?: UserMeasurements,
-  garmentSizeMeasurements?: { shoulderWidth?: number }
+  garmentSizeMeasurements?: { shoulderWidth?: number; hips?: number; length?: number }
 ): GarmentFitState {
 
   if (pose.confidence < 0.3 || pose.trackingState === 'TRACKING_LOST' || pose.trackingState === 'FULL_BODY_REQUIRED') {
@@ -43,6 +43,10 @@ export function calculateGarmentFit(
     };
   }
 
+  const isProfile = profileOrMetadata && 'anchors' in profileOrMetadata;
+  const profile = isProfile ? (profileOrMetadata as GarmentFitProfile) : undefined;
+  const metadata = metadataArg || (!isProfile ? (profileOrMetadata as import('../types/garment').GarmentMetadata) : undefined);
+
   const canonicalPose = canonical ?? normalizePose(pose.worldLandmarks);
 
   // Pants/skirt anchor at the hips (landmarks 23/24), not the shoulders --
@@ -53,10 +57,20 @@ export function calculateGarmentFit(
   const isBottomGarment = metadata?.category === 'pants' || metadata?.category === 'skirt';
 
   // Use the canonical stage-mapped landmarks for 2D UI positioning only
-  const L = pose.stageLandmarks;
+  const L = pose.stageLandmarks || (pose as any).landmarks || pose.normalizedLandmarks;
+  if (!L) {
+    return {
+      anchor: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      rotation: IDENTITY_QUAT,
+      orientation3D: IDENTITY_QUAT,
+      dimensions: { shoulderWidthPx: 0, chestWidthPx: 0, lengthPx: 0 },
+      confidence: 0
+    };
+  }
   const useHipAnchor = isBottomGarment && L[23] && L[24];
-  const leftAnchorPoint = useHipAnchor ? L[23] : L[11];
-  const rightAnchorPoint = useHipAnchor ? L[24] : L[12];
+  const leftAnchorPoint = useHipAnchor ? L[23] : (L[11] || L[23]);
+  const rightAnchorPoint = useHipAnchor ? L[24] : (L[12] || L[24]);
 
   // A bag hangs from one shoulder, not the shoulder midpoint -- but the
   // apparentShoulderWidthPx/scale math below still needs a real two-point
@@ -67,21 +81,29 @@ export function calculateGarmentFit(
   const bagAnchorPoint = isBag && L[12] ? L[12] : null;
 
   // Calculate apparent 2D pixel width of the anchor pair (shoulders, or hips for bottoms)
-  const apparentShoulderWidthPx = Math.abs(leftAnchorPoint.x - rightAnchorPoint.x);
+  const apparentAnchorWidthPx = Math.abs(leftAnchorPoint.x - rightAnchorPoint.x);
+
+  // Lower-body silhouette expansion: MediaPipe landmarks 23 and 24 represent internal femoral
+  // head joint centers (~18-20cm on human adults). The outer hip silhouette spans ~1.78x this
+  // joint distance (~33-36cm), matching authored pants waistband boundaries.
+  const HIP_TO_SILHOUETTE_RATIO = 1.78;
+  const apparentWidthPx = isBottomGarment
+    ? apparentAnchorWidthPx * HIP_TO_SILHOUETTE_RATIO
+    : apparentAnchorWidthPx;
 
   // Foreshortening correction using orientation
   // Orientation was established robustly in BodyCoordinateFrame
   const cosYaw = Math.max(0.65, Math.abs(Math.cos(pose.orientation.yawRad)));
-  const correctedShoulderWidthPx = apparentShoulderWidthPx / cosYaw;
+  const correctedWidthPx = apparentWidthPx / cosYaw;
+  const correctedShoulderWidthPx = (isBottomGarment ? apparentAnchorWidthPx : apparentWidthPx) / cosYaw;
 
   // 1. Anchoring Logic driven by GarmentFitProfile (2D pixel coordinates for HUD)
   let anchorX = bagAnchorPoint ? bagAnchorPoint.x : (leftAnchorPoint.x + rightAnchorPoint.x) / 2;
   let anchorY = bagAnchorPoint ? bagAnchorPoint.y : (leftAnchorPoint.y + rightAnchorPoint.y) / 2;
 
-  if (profile.anchors.neck) {
+  if (profile?.anchors?.neck) {
      // example override if rig provides specific attachment offsets
   }
-
 
   // 2. Metric Anthropometric Scaling (Phase 3 -> Phase 6 3D)
   const wl = pose.worldLandmarks;
@@ -94,23 +116,53 @@ export function calculateGarmentFit(
     userShoulderWidthMeters = Math.sqrt(dx*dx + dy*dy + dz*dz);
   }
 
-  const garmentShoulderWidthMeters = metadata?.restPoseMetricWidth || profile.dimensions.shoulderWidth || 0.4;
+  const garmentMetricWidthMeters = metadata?.restPoseMetricWidth || (isBottomGarment ? 0.34 : (profile?.dimensions?.shoulderWidth || 0.4));
   
-  // Phase 6 True 3D Scale:
-  // The Three.js renderer uses `pos.x / 100` to map pixels to 3D units.
-  // Therefore, the target 3D width of the garment must be `correctedShoulderWidthPx / 100` units.
-  // Since the base 3D width is `garmentShoulderWidthMeters`, the required scale is:
-  const targetScale3D = (correctedShoulderWidthPx / 100) / garmentShoulderWidthMeters;
+  // Phase 4: Category-specific clothing ease (8% for pants so garment rests naturally over silhouette)
+  const garmentEase = isBottomGarment ? 1.08 : 1.0;
 
-  // Phase B2: real-measurement fit modifier, same formula as GarmentRenderer.tsx's
-  // own fitModifier so the legacy 2D overlay and the 3D WebGL overlay never disagree.
-  const wearerWidthCm = userMeasurements?.shoulderWidth ?? (userShoulderWidthMeters > 0 ? userShoulderWidthMeters * 100 : null);
-  const garmentWidthCm = garmentSizeMeasurements?.shoulderWidth ?? null;
+  // Horizontal target 3D scale
+  const targetScaleX = ((correctedWidthPx / 100) * garmentEase) / garmentMetricWidthMeters;
+
+  // Phase 6: Vertical Fit / Leg Length scaling for trousers
+  let targetScaleY = targetScaleX;
+  if (isBottomGarment && L[23] && L[24]) {
+    const kneeL = L[25];
+    const ankleL = L[27];
+    const kneeR = L[26];
+    const ankleR = L[28];
+    let legLenPx = 0;
+    let legCount = 0;
+    if (kneeL && ankleL) {
+      legLenPx += Math.hypot(kneeL.x - L[23].x, kneeL.y - L[23].y) + Math.hypot(ankleL.x - kneeL.x, ankleL.y - kneeL.y);
+      legCount++;
+    }
+    if (kneeR && ankleR) {
+      legLenPx += Math.hypot(kneeR.x - L[24].x, kneeR.y - L[24].y) + Math.hypot(ankleR.x - kneeR.x, ankleR.y - kneeR.y);
+      legCount++;
+    }
+    if (legCount > 0) {
+      legLenPx /= legCount;
+      const authoredLength = profile?.dimensions?.length || 1.0;
+      const rawScaleY = (legLenPx / 100) / authoredLength;
+      targetScaleY = Math.max(targetScaleX * 0.85, Math.min(targetScaleX * 1.25, rawScaleY));
+    }
+  }
+
+  // Phase B2: real-measurement fit modifier, matching hips for bottoms
+  const wearerWidthCm = isBottomGarment
+    ? (userMeasurements?.hips ? userMeasurements.hips / 2.85 : (userShoulderWidthMeters * HIP_TO_SILHOUETTE_RATIO * 100))
+    : (userMeasurements?.shoulderWidth ?? (userShoulderWidthMeters > 0 ? userShoulderWidthMeters * 100 : null));
+  const garmentWidthCm = isBottomGarment
+    ? (garmentSizeMeasurements?.hips ? garmentSizeMeasurements.hips / 2.85 : (garmentSizeMeasurements?.shoulderWidth ?? null))
+    : (garmentSizeMeasurements?.shoulderWidth ?? null);
   const fitModifier = wearerWidthCm && garmentWidthCm && wearerWidthCm > 0
     ? Math.min(1.4, Math.max(0.7, garmentWidthCm / wearerWidthCm))
     : 1;
 
-  const targetScale = targetScale3D * fitModifier;
+  const targetScaleFinalX = targetScaleX * fitModifier;
+  const targetScaleFinalY = targetScaleY * fitModifier;
+  const targetScaleFinalZ = targetScaleFinalX;
 
 
   // 3. Rotation.
@@ -177,9 +229,9 @@ export function calculateGarmentFit(
       z: 0 // Z-translation for true 3D will be implemented in Phase 4
     },
     scale: {
-      x: targetScale,
-      y: targetScale,
-      z: targetScale
+      x: targetScaleFinalX,
+      y: targetScaleFinalY,
+      z: targetScaleFinalZ
     },
     rotation: rollQuat,
     orientation3D,
