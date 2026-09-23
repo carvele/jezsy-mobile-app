@@ -16,11 +16,12 @@ import {
   LayoutAnimation,
   UIManager,
   useWindowDimensions,
+  AccessibilityInfo,
 } from 'react-native';
 import { Image } from 'expo-image';
 // react-native-view-shot is not available on web — share is handled via showToast guidance
 import { useRouter } from 'expo-router';
-import { Colors, Spacing, Radius, Type } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type, WardrobeTokens } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/src/lib/supabase';
@@ -45,6 +46,7 @@ import { MannequinCanvasItem } from './MannequinCanvasItem';
 import { styleProfileService } from '@/src/services/styleProfileService';
 import { updateProfileFromFeedback } from '@/src/utils/personalStyleEngine';
 import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import { executeSmartShuffle, SMART_SHUFFLE_SCORING_PROFILE } from '@/src/services/styling/mannequinSmartShuffle';
 
 // Enable layout animation for Android (Old Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
@@ -97,6 +99,7 @@ interface Props {
 export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOutfitId }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const wt = WardrobeTokens.theme[theme];
   const isDark = theme === 'dark';
   const router = useRouter();
   const { session } = useAuth();
@@ -125,11 +128,29 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   // Canvas & Drawer States
   const [canvasItems, setCanvasItems] = useState<CanvasItemType[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [pinnedWardrobeItemIds, setPinnedWardrobeItemIds] = useState<Set<string>>(new Set());
+  const recentShuffleKeysRef = useRef<string[]>([]);
+  const MAX_SESSION_SHUFFLE_HISTORY = 10;
   const [isDrawerMinimized, setIsDrawerMinimized] = useState<boolean>(false);
   const [canvasBgColor, setCanvasBgColor] = useState<string>(isDark ? '#1A1A1C' : '#FFFFFF');
   const canvasHeightBase = isTablet ? 520 : CANVAS_HEIGHT;
   const canvasHeightExpanded = Math.min(canvasHeightBase + 160, Math.round(viewportHeight * 0.58));
   const canvasHeight = isDrawerMinimized ? canvasHeightExpanded : canvasHeightBase;
+
+  // Toggle explicit pin state for a garment
+  const handleTogglePin = useCallback((wardrobeItemId: string) => {
+    setPinnedWardrobeItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(wardrobeItemId)) {
+        next.delete(wardrobeItemId);
+        showToast('Unpinned garment from Smart Shuffle', 'info');
+      } else {
+        next.add(wardrobeItemId);
+        showToast('Pinned garment for Smart Shuffle', 'info');
+      }
+      return next;
+    });
+  }, [showToast]);
 
   // Filter State
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
@@ -222,7 +243,17 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
 
   // Remove from canvas
   const handleRemoveFromCanvas = useCallback((id: string) => {
-    setCanvasItems((prev) => prev.filter((item) => item.id !== id));
+    setCanvasItems((prev) => {
+      const removed = prev.find((item) => item.id === id);
+      if (removed) {
+        setPinnedWardrobeItemIds((pPrev) => {
+          const next = new Set(pPrev);
+          next.delete(removed.wardrobe_item_id);
+          return next;
+        });
+      }
+      return prev.filter((item) => item.id !== id);
+    });
     setSelectedItemId((current) => (current === id ? null : current));
   }, []);
 
@@ -313,13 +344,18 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   // Clear all
   const handleClearCanvas = () => {
     if (canvasItems.length === 0) return;
+    const performClear = () => {
+      setCanvasItems([]);
+      setPinnedWardrobeItemIds(new Set());
+      setSelectedItemId(null);
+    };
     if (Platform.OS === 'web') {
       const ok = typeof window !== 'undefined' ? window.confirm('Clear all garments from the mannequin?') : true;
-      if (ok) { setCanvasItems([]); setSelectedItemId(null); }
+      if (ok) performClear();
     } else {
       Alert.alert('Clear Mannequin', 'Clear all garments from the mannequin?', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear All', style: 'destructive', onPress: () => { setCanvasItems([]); setSelectedItemId(null); } },
+        { text: 'Clear All', style: 'destructive', onPress: performClear },
       ]);
     }
   };
@@ -351,72 +387,40 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
     }
   };
 
-  // Shuffle — randomly compose a look from available wardrobe items
-  const handleShuffle = useCallback(() => {
-    if (wardrobeItems.length === 0) {
-      showToast('Add items to your wardrobe first to shuffle.', 'info');
+  // Smart Shuffle — Canonical styling engine composition with exact pinned transform preservation
+  const handleSmartShuffle = useCallback(() => {
+    const outcome = executeSmartShuffle({
+      wardrobe: wardrobeItems,
+      currentCanvasItems: canvasItems,
+      pinnedWardrobeItemIds,
+      recentKeys: recentShuffleKeysRef.current,
+      profile: null, // Deterministic profile-null mode per execution contract
+      scoringProfile: SMART_SHUFFLE_SCORING_PROFILE,
+    });
+
+    if (!outcome.success) {
+      showToast(outcome.message, outcome.errorType === 'EMPTY_WARDROBE' ? 'info' : 'error');
+      AccessibilityInfo.announceForAccessibility(outcome.message);
       return;
     }
 
-    const bucketMap: Record<string, WardrobeItem[]> = {
-      Top: [],
-      Bottom: [],
-      Dress: [],
-      Outerwear: [],
-      Shoes: [],
-      Accessory: [],
-    };
-
-    for (const item of wardrobeItems) {
-      const b = resolveEffectiveGarmentBucket(item);
-      if (b && bucketMap[b]) {
-        bucketMap[b].push(item);
-      }
+    // Record outfit key in 10-entry session ring buffer
+    const current = recentShuffleKeysRef.current.filter((k) => k !== outcome.outfitKey);
+    current.push(outcome.outfitKey);
+    if (current.length > MAX_SESSION_SHUFFLE_HISTORY) {
+      current.shift();
     }
+    recentShuffleKeysRef.current = current;
 
-    const picks: WardrobeItem[] = [];
-    const hasDress = bucketMap.Dress.length > 0;
-    const hasTop = bucketMap.Top.length > 0;
-    const hasBottom = bucketMap.Bottom.length > 0;
-
-    const chooseDress = hasDress && (!hasTop || !hasBottom || Math.random() < 0.25);
-
-    if (chooseDress) {
-      picks.push(bucketMap.Dress[Math.floor(Math.random() * bucketMap.Dress.length)]);
-    } else {
-      if (hasTop) {
-        picks.push(bucketMap.Top[Math.floor(Math.random() * bucketMap.Top.length)]);
-      }
-      if (hasBottom) {
-        picks.push(bucketMap.Bottom[Math.floor(Math.random() * bucketMap.Bottom.length)]);
-      }
-    }
-
-    if (bucketMap.Shoes.length > 0) {
-      picks.push(bucketMap.Shoes[Math.floor(Math.random() * bucketMap.Shoes.length)]);
-    }
-
-    if (bucketMap.Outerwear.length > 0 && Math.random() < 0.4) {
-      picks.push(bucketMap.Outerwear[Math.floor(Math.random() * bucketMap.Outerwear.length)]);
-    }
-
-    if (bucketMap.Accessory.length > 0 && Math.random() < 0.4) {
-      picks.push(bucketMap.Accessory[Math.floor(Math.random() * bucketMap.Accessory.length)]);
-    }
-
-    if (picks.length === 0) {
-      const shuffled = [...wardrobeItems].sort(() => Math.random() - 0.5);
-      picks.push(...shuffled.slice(0, Math.min(3, shuffled.length)));
-    }
-
-    const newCanvasItems: CanvasItemType[] = picks.map((item, idx) =>
-      createMannequinItem(item, idx)
-    );
-
-    setCanvasItems(newCanvasItems);
+    setCanvasItems(outcome.newCanvasItems);
     setSelectedItemId(null);
-    showToast('Shuffled your outfit!', 'success');
-  }, [wardrobeItems, showToast]);
+
+    const toastMsg = outcome.retainedCount > 0
+      ? `Styled around pinned piece (${outcome.newCanvasItems.length} items on canvas)`
+      : 'Smart Shuffle composed a new outfit!';
+    showToast(toastMsg, 'success');
+    AccessibilityInfo.announceForAccessibility(toastMsg);
+  }, [wardrobeItems, canvasItems, pinnedWardrobeItemIds, showToast]);
 
   // Save
   const handleSaveLook = async () => {
@@ -557,6 +561,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
           };
         });
         setCanvasItems(reconstructed);
+        setPinnedWardrobeItemIds(new Set());
       }
       setLoadModalVisible(false);
       showToast(`Loaded "${outfit.name}"`, 'success');
@@ -603,66 +608,90 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      {/* ── Top Action Toolbar ── */}
-      <View style={styles.toolbar}>
-        <View style={styles.toolbarRow}>
-          <TouchableOpacity
-            style={[styles.toolBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => setMoreMenuVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel="More actions: Load, Clear, Share"
-          >
-            <IconSymbol name="ellipsis" size={14} color={colors.text} />
-            <Text style={[styles.toolBtnText, { color: colors.text }]}>More</Text>
-          </TouchableOpacity>
+      {/* ── Top Header Bar (Save & More) ── */}
+      <View style={styles.topHeaderBar}>
+        <TouchableOpacity
+          style={[styles.moreBtn, { backgroundColor: wt.cardSurface, borderColor: wt.cardBorder }]}
+          onPress={() => setMoreMenuVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="More actions: Load, Clear, Share"
+        >
+          <IconSymbol name="ellipsis" size={14} color={colors.text} />
+          <Text style={[styles.toolBtnText, { color: colors.text }]}>More</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.toolBtn,
-              { backgroundColor: colors.card, borderColor: colors.border, opacity: wardrobeItems.length === 0 ? 0.4 : 1 },
-            ]}
-            onPress={handleShuffle}
-            disabled={wardrobeItems.length === 0}
-            accessibilityRole="button"
-            accessibilityLabel="Shuffle outfit from wardrobe"
-          >
-            <IconSymbol name="shuffle" size={14} color={colors.tint} />
-            <Text style={[styles.toolBtnText, { color: colors.text }]}>Shuffle</Text>
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.saveBtn,
+            {
+              backgroundColor: wt.actionPrimary,
+              opacity: canvasItems.length === 0 ? 0.4 : 1,
+            },
+          ]}
+          onPress={() => canvasItems.length > 0 && setSaveModalVisible(true)}
+          disabled={canvasItems.length === 0}
+          accessibilityRole="button"
+          accessibilityLabel="Save styled look"
+        >
+          <IconSymbol name="heart.fill" size={13} color={wt.actionPrimaryText} />
+          <Text style={[styles.saveBtnText, { color: wt.actionPrimaryText }]}>Save Look</Text>
+        </TouchableOpacity>
+      </View>
 
-          <TouchableOpacity
-            style={[
-              styles.stylistBtn,
-              {
-                backgroundColor: colors.tint + '18',
-                borderColor: colors.tint + '60',
-                opacity: canvasItems.length === 0 ? 0.4 : 1,
-              },
-            ]}
-            onPress={() => {
-              if (canvasItems.length === 0) {
-                showToast('Add garments to the mannequin first!', 'info');
-              } else {
-                setOutfitContextVisible(true);
-              }
-            }}
-            disabled={canvasItems.length === 0}
-            accessibilityRole="button"
-            accessibilityLabel="JeZsy Stylist — evaluate outfit"
-          >
-            <IconSymbol name="sparkles" size={13} color={colors.tint} />
-            <Text style={[styles.stylistBtnText, { color: colors.tint }]}>Stylist</Text>
-          </TouchableOpacity>
+      {/* ── Primary Action Toolbar (+ Add Garment, Smart Shuffle, Stylist Analysis) ── */}
+      <View style={styles.primaryActionBar}>
+        <TouchableOpacity
+          style={[styles.addGarmentBtn, { backgroundColor: wt.cardSurface, borderColor: wt.cardBorder }]}
+          onPress={toggleDrawer}
+          accessibilityRole="button"
+          accessibilityLabel={isDrawerMinimized ? 'Open wardrobe drawer to add garment' : 'Close wardrobe drawer'}
+        >
+          <IconSymbol name="tshirt" size={14} color={wt.actionPrimary} />
+          <Text style={[styles.actionBtnText, { color: colors.text }]}>+ Add Garment</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.saveBtn, { backgroundColor: colors.tint, opacity: canvasItems.length === 0 ? 0.4 : 1 }]}
-            onPress={() => canvasItems.length > 0 && setSaveModalVisible(true)}
-            disabled={canvasItems.length === 0}
-          >
-            <IconSymbol name="heart.fill" size={13} color={colors.onTint} />
-            <Text style={[styles.saveBtnText, { color: colors.onTint }]}>Save</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={[
+            styles.smartShuffleBtn,
+            {
+              backgroundColor: wt.accentGoldSubtle,
+              borderColor: wt.actionPrimary,
+              opacity: wardrobeItems.length === 0 ? 0.4 : 1,
+            },
+          ]}
+          onPress={handleSmartShuffle}
+          disabled={wardrobeItems.length === 0}
+          accessibilityRole="button"
+          accessibilityLabel="Smart Shuffle outfit from wardrobe"
+          accessibilityHint="Composes a coordinated outfit based on color harmony and style rules"
+        >
+          <IconSymbol name="shuffle" size={14} color={wt.actionPrimary} />
+          <Text style={[styles.actionBtnText, { color: wt.actionPrimary, fontWeight: '700' }]}>Smart Shuffle</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.stylistAnalysisBtn,
+            {
+              backgroundColor: wt.actionPrimary,
+              opacity: canvasItems.length === 0 ? 0.4 : 1,
+            },
+          ]}
+          onPress={() => {
+            if (canvasItems.length === 0) {
+              showToast('Add garments to the mannequin first!', 'info');
+            } else {
+              setOutfitContextVisible(true);
+            }
+          }}
+          disabled={canvasItems.length === 0}
+          accessibilityRole="button"
+          accessibilityLabel="Stylist Analysis — evaluate outfit"
+          accessibilityHint="Evaluates current outfit for occasion appropriateness and color harmony"
+        >
+          <IconSymbol name="sparkles" size={13} color={wt.actionPrimaryText} />
+          <Text style={[styles.stylistAnalysisBtnText, { color: wt.actionPrimaryText }]}>Stylist Analysis</Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── Compact Appearance Bar (Silhouette + Studio Backdrop) ── */}
@@ -768,6 +797,35 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
             </View>
 
             <View style={styles.controlGroup}>
+              {/* Pin / Unpin */}
+              <TouchableOpacity
+                style={[
+                  styles.layerBtn,
+                  {
+                    backgroundColor: pinnedWardrobeItemIds.has(activeSelectedItem.wardrobe_item_id)
+                      ? (isDark ? 'rgba(201,169,110,0.25)' : 'rgba(138,109,59,0.18)')
+                      : colors.surface,
+                  },
+                ]}
+                onPress={() => handleTogglePin(activeSelectedItem.wardrobe_item_id)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  pinnedWardrobeItemIds.has(activeSelectedItem.wardrobe_item_id)
+                    ? 'Unpin garment from Smart Shuffle'
+                    : 'Pin garment for Smart Shuffle'
+                }
+              >
+                <IconSymbol
+                  name={pinnedWardrobeItemIds.has(activeSelectedItem.wardrobe_item_id) ? 'pin.fill' : 'pin'}
+                  size={12}
+                  color={
+                    pinnedWardrobeItemIds.has(activeSelectedItem.wardrobe_item_id)
+                      ? (isDark ? '#C9A96E' : '#8A6D3B')
+                      : colors.text
+                  }
+                />
+              </TouchableOpacity>
+
               {/* Rotate */}
               <TouchableOpacity
                 style={[styles.layerBtn, { backgroundColor: colors.surface }]}
@@ -885,7 +943,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
             </Text>
           </View>
           {canvasItems.length > 0 && (
-            <TouchableOpacity onPress={() => setCanvasItems([])} style={styles.clearMiniBtn} accessibilityRole="button" accessibilityLabel="Clear all garments">
+            <TouchableOpacity onPress={handleClearCanvas} style={styles.clearMiniBtn} accessibilityRole="button" accessibilityLabel="Clear all garments">
               <Text style={[styles.clearMiniText, { color: colors.notification }]}>Clear all</Text>
             </TouchableOpacity>
           )}
@@ -899,6 +957,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectedScroll}>
             {canvasItems.map((ci) => {
               const isSelected = selectedItemId === ci.id;
+              const isPinned = pinnedWardrobeItemIds.has(ci.wardrobe_item_id);
               return (
                 <TouchableOpacity
                   key={ci.id}
@@ -910,12 +969,15 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                   onPress={() => setSelectedItemId(isSelected ? null : ci.id)}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={`${ci.name}, tap to adjust`}
+                  accessibilityLabel={`${ci.name}${isPinned ? ', pinned' : ''}, tap to adjust`}
                 >
                   <Image source={{ uri: ci.image_url }} style={styles.selectedPieceThumb} contentFit="contain" />
                   <Text style={[styles.selectedPieceName, { color: colors.text }]} numberOfLines={1}>
                     {ci.name || ci.garment_type}
                   </Text>
+                  {isPinned && (
+                    <IconSymbol name="pin.fill" size={10} color={isDark ? '#C9A96E' : '#8A6D3B'} />
+                  )}
                   <TouchableOpacity
                     style={styles.selectedPieceRemove}
                     onPress={() => handleRemoveFromCanvas(ci.id)}
@@ -1275,53 +1337,83 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
-  /* ── Toolbar ── */
-  toolbar: {
+  /* ── Header Bar ── */
+  topHeaderBar: {
     paddingHorizontal: Spacing.lg,
     paddingTop: 6,
-    paddingBottom: Spacing.sm,
-  },
-  toolbarRow: {
+    paddingBottom: Spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'space-between',
   },
-  toolBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-  },
-  toolBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  stylistBtn: {
+  moreBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: Spacing.md,
+    height: 38,
     borderRadius: Radius.md,
     borderWidth: 1,
-  },
-  stylistBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
+    paddingHorizontal: Spacing.lg,
+    height: 38,
     borderRadius: Radius.md,
-    marginLeft: 'auto',
   },
   saveBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  toolBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  /* ── Primary Action Toolbar (+ Add Garment, Smart Shuffle, Stylist Analysis) ── */
+  primaryActionBar: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: 4,
+    paddingBottom: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addGarmentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: 12,
+    height: WardrobeTokens.actionButtonHeight,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  smartShuffleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: 14,
+    height: WardrobeTokens.actionButtonHeight,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  stylistAnalysisBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: 14,
+    height: WardrobeTokens.actionButtonHeight,
+    borderRadius: Radius.md,
+  },
+  actionBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  stylistAnalysisBtnText: {
     fontSize: 12,
     fontWeight: '700',
   },

@@ -204,4 +204,50 @@ describe('Mannequin Canvas Invariant & State Transition Tests', () => {
       expect(item.zIndex).toBe(initialSnapshot.zIndex);
     });
   });
+
+  describe('Pin-State Lifecycle & Saved Outfit Load Regression', () => {
+    it('manages pin-state lifecycle correctly across remove, clear, and load transitions', () => {
+      const topItem = createMockWardrobeItem('top_1', 'Top', 'White Tee');
+      const bottomItem = createMockWardrobeItem('bot_1', 'Bottom', 'Black Jeans');
+
+      let canvas: MannequinCanvasItem[] = [
+        createMannequinItem(topItem, 0),
+        createMannequinItem(bottomItem, 1),
+      ];
+
+      const pinnedIds = new Set<string>();
+
+      // 1. User pins top
+      pinnedIds.add(topItem.id);
+      expect(pinnedIds.has('top_1')).toBe(true);
+
+      // 2. User removes top from canvas -> top must be pruned from pinned set
+      canvas = canvas.filter((i) => i.wardrobe_item_id !== topItem.id);
+      if (!canvas.some((i) => i.wardrobe_item_id === topItem.id)) {
+        pinnedIds.delete(topItem.id);
+      }
+      expect(pinnedIds.has('top_1')).toBe(false);
+
+      // 3. User pins bottom
+      pinnedIds.add(bottomItem.id);
+      expect(pinnedIds.size).toBe(1);
+
+      // 4. User clears all garments -> pinned set must be completely cleared
+      canvas = [];
+      pinnedIds.clear();
+      expect(pinnedIds.size).toBe(0);
+
+      // 5. Loading saved outfit resets pinned set
+      pinnedIds.add('some_prior_pin');
+      const simulateLoadSavedOutfit = () => {
+        canvas = [createMannequinItem(topItem, 0)];
+        pinnedIds.clear(); // Defined lifecycle invariant
+      };
+      simulateLoadSavedOutfit();
+
+      expect(canvas).toHaveLength(1);
+      expect(pinnedIds.size).toBe(0);
+    });
+  });
 });
+

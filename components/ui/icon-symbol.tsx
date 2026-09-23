@@ -77,6 +77,7 @@ const MAPPING = {
   'info.circle.fill': 'info',
   'hand.thumbsup.fill': 'thumb-up',
   'hand.thumbsdown.fill': 'thumb-down',
+  'pin': 'push-pin',
   'pin.fill': 'push-pin',
   'shield': 'shield',
 
