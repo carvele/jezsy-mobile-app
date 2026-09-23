@@ -66,17 +66,79 @@ export function invertBoneMap(rawBoneMap: unknown): Record<string, string> {
  * not judge whether the values are sane (see `adaptGarmentMetadata`).
  */
 export function mapRawGarmentMetadata(raw: any): GarmentMetadata {
+  const isBottom = raw.category === 'pants' || raw.category === 'skirt';
+  const isDress = raw.category === 'dress';
+  const region = isDress ? 'full' : isBottom ? 'lower' : 'upper';
+  const primaryW = Number(raw.rest_pose_metric_width) || (isBottom ? 0.34 : 0.4);
+  const anchorOffset = raw.anatomical_anchor_offset || { x: 0, y: isBottom ? 0.9 : 0.5, z: 0 };
+  const rootType = raw.anchor_type || (isBottom ? 'WAIST' : 'SHOULDER_CENTER');
+
+  let fitProfileV2 = raw.fit_profile_v2 || raw.fitProfileV2;
+  const fitProfileVersion: 1 | 2 =
+    raw.garment_fit_profile_version === 2 || raw.garmentFitProfileVersion === 2 || fitProfileV2
+      ? 2
+      : 1;
+
+  if (fitProfileV2) {
+    if (fitProfileV2.boneMap) {
+      fitProfileV2 = {
+        ...fitProfileV2,
+        boneMap: invertBoneMap(fitProfileV2.boneMap),
+      };
+    }
+  } else {
+    // Upward compatibility: synthesize valid V2 profile from V1 fields
+    fitProfileV2 = {
+      version: 2,
+      region,
+      category: raw.category,
+      rootAnchor: {
+        type: rootType,
+        offset: anchorOffset,
+      },
+      skeletonProfile: {
+        requiredBones: isBottom
+          ? ['Hips', 'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg']
+          : ['Spine', 'LeftArm', 'RightArm'],
+        optionalBones: isBottom ? ['LeftFoot', 'RightFoot', 'Spine'] : ['Spine1', 'Spine2', 'LeftForeArm', 'RightForeArm'],
+        unusedBones: [],
+      },
+      boneMap: invertBoneMap(raw.bone_map),
+      controlPoints: {
+        anchor: anchorOffset,
+      },
+      fitBands: [
+        { name: isBottom ? 'WAIST' : 'SHOULDER', heightRatio: 0.9, authoredWidthMeters: primaryW },
+        { name: isBottom ? 'HIP' : 'CHEST', heightRatio: 0.75, authoredWidthMeters: primaryW * 1.1 },
+        { name: isBottom ? 'HEM' : 'HEM', heightRatio: 0.05, authoredWidthMeters: primaryW * 0.9 },
+      ],
+      coverageProfile: {
+        extent: 'regular',
+        authoredLengthMeters: 0.85,
+      },
+      referenceMeasurements: {
+        primaryWidthMeters: primaryW,
+        widthBasis: isBottom ? 'waist' : 'shoulder',
+        totalLengthMeters: 0.85,
+        waistWidthMeters: isBottom ? primaryW : undefined,
+        hipWidthMeters: isBottom ? primaryW * 1.1 : undefined,
+      },
+    };
+  }
+
   return {
     id: raw.id,
     category: raw.category,
     calibrationVersion: raw.calibration_version,
     ingestionStatus: raw.ingestion_status,
-    anatomicalAnchorOffset: raw.anatomical_anchor_offset,
+    anatomicalAnchorOffset: anchorOffset,
     anchorConfidence: raw.anchor_confidence,
-    anchorType: raw.anchor_type,
-    restPoseMetricWidth: raw.rest_pose_metric_width,
+    anchorType: rootType,
+    restPoseMetricWidth: primaryW,
     boneMap: invertBoneMap(raw.bone_map),
     restPose: raw.rest_pose,
+    garmentFitProfileVersion: fitProfileVersion,
+    fitProfileV2,
   };
 }
 

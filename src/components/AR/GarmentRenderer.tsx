@@ -267,9 +267,9 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // garment's category never changes mid-session for a given GLB, so there's
           // no async-value-arrives-after-mount race to avoid here. Drives which body
           // landmarks this scene anchors/scales the garment against -- hips for
-          // pants/skirt, shoulders (the original, only) behavior for everything else.
           const GARMENT_CATEGORY = ${metadata ? safeStringify(metadata.category) : 'null'};
           const IS_BOTTOM_GARMENT = GARMENT_CATEGORY === 'pants' || GARMENT_CATEGORY === 'skirt';
+          const V2_PROFILE = ${metadata?.fitProfileV2 ? safeStringify(metadata.fitProfileV2) : 'null'};
 
           // Same reasoning and same fix as CAMERA_CALIBRATION above, for the same root
           // cause: fitModifier is ALSO computed from the async Supabase sizing profile
@@ -1157,9 +1157,17 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // is applied exactly once, via 3D rotation itself.
                       const targetWorldWidth = ((targetL.distanceTo(targetR) * HIP_TO_SILHOUETTE_RATIO) / yawCosCorrection) * GARMENT_EASE;
 
+                      // V2 Profile Awareness: Read authored fit bands and coverage profile
+                      const v2HipBand = V2_PROFILE && V2_PROFILE.fitBands ? V2_PROFILE.fitBands.find(function(b) { return b.name === 'HIP'; }) : null;
+                      const v2WaistBand = V2_PROFILE && V2_PROFILE.fitBands ? V2_PROFILE.fitBands.find(function(b) { return b.name === 'WAIST'; }) : null;
+                      const v2ShoulderBand = V2_PROFILE && V2_PROFILE.fitBands ? V2_PROFILE.fitBands.find(function(b) { return b.name === 'SHOULDER'; }) : null;
+                      const v2MetricWidth = IS_BOTTOM_GARMENT
+                        ? (v2HipBand && v2HipBand.authoredWidthMeters || v2WaistBand && v2WaistBand.authoredWidthMeters)
+                        : (v2ShoulderBand && v2ShoulderBand.authoredWidthMeters);
+
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
                       // measured bounding-box width only when no calibration exists at all.
-                      const garmentMetricWidth = ${safeRestPoseMetricWidth !== undefined ? safeRestPoseMetricWidth : 'measuredMeshWidth'};
+                      const garmentMetricWidth = v2MetricWidth || ${safeRestPoseMetricWidth !== undefined ? safeRestPoseMetricWidth : 'measuredMeshWidth'};
                       const fitModifier = FIT_MODIFIER;
                       const exactScaleX = (targetWorldWidth / garmentMetricWidth) * fitModifier;
                       const exactScaleZ = exactScaleX;
@@ -1181,9 +1189,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           legLen += targetR.distanceTo(kneeR) + kneeR.distanceTo(ankleR);
                           count++;
                         }
-                        if (count > 0 && measuredMeshHeight > 0) {
+                        const authoredHeight = (V2_PROFILE && V2_PROFILE.coverageProfile && V2_PROFILE.coverageProfile.authoredLengthMeters) || measuredMeshHeight;
+                        if (count > 0 && authoredHeight > 0) {
                           legLen /= count;
-                          const rawScaleY = (legLen / measuredMeshHeight) * fitModifier;
+                          const rawScaleY = (legLen / authoredHeight) * fitModifier;
                           // Bound Y-scaling within 15% under to 25% over X-scale to prevent skinny/wide distortion
                           exactScaleY = Math.max(exactScaleX * 0.85, Math.min(exactScaleX * 1.25, rawScaleY));
                         }

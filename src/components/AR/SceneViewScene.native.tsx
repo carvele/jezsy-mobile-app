@@ -150,13 +150,24 @@ export const SceneViewScene = forwardRef<GarmentRendererRef, SceneViewExperiment
           const anchorL = isBottomGarment ? hip23 : sh11;
           const anchorR = isBottomGarment ? hip24 : sh12;
 
+          const v2 = metadata.fitProfileV2;
+          const v2HipBand = v2?.fitBands?.find(b => b.name === 'HIP');
+          const v2WaistBand = v2?.fitBands?.find(b => b.name === 'WAIST');
+          const v2ShoulderBand = v2?.fitBands?.find(b => b.name === 'SHOULDER');
+
+          const effectiveMetricWidth = isBottomGarment
+            ? (v2HipBand?.authoredWidthMeters || v2WaistBand?.authoredWidthMeters || metadata.restPoseMetricWidth)
+            : (v2ShoulderBand?.authoredWidthMeters || metadata.restPoseMetricWidth);
+
+          const effectiveAuthoredLength = v2?.coverageProfile?.authoredLengthMeters || 1.0;
+
           const projected = projection.update(
             anchorL,
             anchorR,
             rotation,
             stageWidth,
             stageHeight,
-            metadata.restPoseMetricWidth,
+            effectiveMetricWidth,
             fitModifier,
             {
               isBottomGarment,
@@ -167,7 +178,7 @@ export const SceneViewScene = forwardRef<GarmentRendererRef, SceneViewExperiment
                     ankleL: landmarks[27],
                     kneeR: landmarks[26],
                     ankleR: landmarks[28],
-                    authoredLength: 1.0,
+                    authoredLength: effectiveAuthoredLength,
                   }
                 : undefined,
             }
