@@ -131,7 +131,7 @@ export default function UserProfileScreen() {
     if (item.product) {
       return (
         <View style={styles.cardContainer}>
-          <ProductCard product={item.product} />
+          <ProductCard product={item.product} layout="fill" />
         </View>
       );
     }
@@ -163,7 +163,7 @@ export default function UserProfileScreen() {
     if (!item.product) return null;
     return (
       <View style={styles.cardContainer}>
-        <ProductCard product={item.product} />
+        <ProductCard product={item.product} layout="fill" />
       </View>
     );
   };

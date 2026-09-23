@@ -1,19 +1,20 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, ViewStyle, DimensionValue } from 'react-native';
+import { StyleSheet, View, ViewStyle, DimensionValue, StyleProp } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming, Easing } from 'react-native-reanimated';
 import { Colors, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
+import { useGridCardWidth } from '@/src/utils/layout';
 
 interface SkeletonProps {
   width?: DimensionValue;
-  height?: number;
+  height?: DimensionValue;
   radius?: number;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
 }
 
 /** A single shimmering placeholder block. */
-export function Skeleton({ width = '100%', height = 16, radius = 8, style }: SkeletonProps) {
+export function Skeleton({ width = '100%', height, radius = 8, style }: SkeletonProps) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const pulse = useSharedValue(0.4);
@@ -28,11 +29,29 @@ export function Skeleton({ width = '100%', height = 16, radius = 8, style }: Ske
   }, [pulse, reduceMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  const hasRatio = (() => {
+    if (!style) return false;
+    if (Array.isArray(style)) {
+      return style.some((s) => s && typeof s === 'object' && 'aspectRatio' in s && s.aspectRatio !== undefined);
+    }
+    return typeof style === 'object' && 'aspectRatio' in style && style.aspectRatio !== undefined;
+  })();
+
+  const resolvedHeight = height !== undefined
+    ? height
+    : hasRatio
+    ? undefined
+    : 16;
 
   return (
     <Animated.View
       style={[
-        { width, height, borderRadius: radius, backgroundColor: colors.imagePlaceholder },
+        {
+          width,
+          ...(resolvedHeight !== undefined ? { height: resolvedHeight } : {}),
+          borderRadius: radius,
+          backgroundColor: colors.imagePlaceholder,
+        },
         animatedStyle,
         style,
       ]}
@@ -40,13 +59,32 @@ export function Skeleton({ width = '100%', height = 16, radius = 8, style }: Ske
   );
 }
 
+export type ProductCardSkeletonLayout = 'grid' | 'fill';
+
+export interface ProductCardSkeletonProps {
+  width?: DimensionValue;
+  layout?: ProductCardSkeletonLayout;
+  style?: StyleProp<ViewStyle>;
+}
+
 /** Grid card placeholder, matching the Explore/Home product card shape. */
-export function ProductCardSkeleton({ width = 160 }: { width?: number }) {
+export function ProductCardSkeleton({
+  width: customWidth,
+  layout = 'grid',
+  style,
+}: ProductCardSkeletonProps = {}) {
+  const { cardWidth } = useGridCardWidth();
+  const isFill = layout === 'fill';
+
+  const containerStyle: ViewStyle = isFill
+    ? { flexGrow: 1, flexBasis: 0, minWidth: 0, marginBottom: Spacing.xl }
+    : { width: customWidth ?? cardWidth, marginBottom: Spacing.xl };
+
   return (
-    <View style={{ width, marginBottom: Spacing.xl }}>
-      <Skeleton width={width} height={width * 1.3} radius={12} />
-      <Skeleton width={width * 0.8} height={13} style={{ marginTop: 10 }} />
-      <Skeleton width={width * 0.45} height={13} style={{ marginTop: 6 }} />
+    <View style={[containerStyle, style]}>
+      <Skeleton width="100%" radius={12} style={{ aspectRatio: 3 / 4 }} />
+      <Skeleton width="80%" height={13} style={{ marginTop: 10 }} />
+      <Skeleton width="45%" height={13} style={{ marginTop: 6 }} />
     </View>
   );
 }

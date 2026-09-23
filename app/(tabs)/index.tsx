@@ -28,10 +28,19 @@ import { useToast } from '@/src/context/ToastContext';
 import { cacheProductCatalog, getCachedCatalog, OfflineProduct } from '@/src/services/offlineSync';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
-import { GRID_GUTTER, GRID_COLUMN_GAP, useGridCardWidth } from '@/src/utils/layout';
+import { TwoColumnRow } from '@/src/components/ui/TwoColumnRow';
+import { GRID_GUTTER } from '@/src/utils/layout';
 import { isInStock } from '@/src/utils/stock';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
-import { Skeleton, ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { Skeleton, ProductCardSkeleton } from '@/src/components/Skeleton';
+
+function chunkIntoPairs<T>(items: T[]): T[][] {
+  const pairs: T[][] = [];
+  for (let i = 0; i < items.length; i += 2) {
+    pairs.push(items.slice(i, i + 2));
+  }
+  return pairs;
+}
 import { ErrorRetryState } from '@/src/components/ErrorRetryState';
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { getCategoryAffinity, recordCategoryVisit, sortByAffinity } from '@/src/utils/categoryAffinity';
@@ -95,7 +104,6 @@ export default function HomeScreen() {
   }, []);
   const screenWidth = mounted ? rawScreenWidth : 400; // default to mobile size during SSR
   const heroCardWidth = screenWidth / GOLDEN_RATIO;
-  const { cardWidth } = useGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
   const { showToast } = useToast();
@@ -438,10 +446,13 @@ export default function HomeScreen() {
             <View style={{ paddingHorizontal: GRID_GUTTER, marginBottom: Spacing.lg }}>
               <Skeleton width={140} height={22} />
             </View>
-            <View style={styles.trendingGrid}>
-              <SkeletonList count={4}>
-                <ProductCardSkeleton width={typeof cardWidth === 'number' ? cardWidth : (screenWidth - GRID_GUTTER * 2 - GRID_COLUMN_GAP) / 2} />
-              </SkeletonList>
+            <View style={{ paddingHorizontal: GRID_GUTTER }}>
+              {Array.from({ length: 2 }).map((_, rowIndex) => (
+                <TwoColumnRow key={`trending-skel-${rowIndex}`}>
+                  <ProductCardSkeleton layout="fill" />
+                  <ProductCardSkeleton layout="fill" />
+                </TwoColumnRow>
+              ))}
             </View>
           </View>
         </ScrollView>
@@ -788,13 +799,18 @@ export default function HomeScreen() {
               message="New pieces are on their way. Check back soon."
             />
           ) : (
-            <View style={styles.trendingGrid}>
-              {trendingProducts.map((item) => (
-                <ProductCard
-                  key={item.id}
-                  product={item}
-                  variant="grid"
-                />
+            <View style={{ paddingHorizontal: GRID_GUTTER }}>
+              {chunkIntoPairs(trendingProducts).map((pair, rowIndex) => (
+                <TwoColumnRow key={`trending-row-${rowIndex}`}>
+                  {pair.map((item) => (
+                    <ProductCard
+                      key={item.id}
+                      product={item}
+                      variant="grid"
+                      layout="fill"
+                    />
+                  ))}
+                </TwoColumnRow>
               ))}
             </View>
           )}
@@ -1025,13 +1041,6 @@ const styles = StyleSheet.create({
   // Edits Section
   sectionContainer: {
     marginBottom: 40,
-  },
-  trendingGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: GRID_COLUMN_GAP,
-    paddingHorizontal: GRID_GUTTER,
-    justifyContent: 'flex-start',
   },
   sectionTitle: {
     ...Type.title,

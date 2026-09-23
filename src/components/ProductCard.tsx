@@ -1,6 +1,6 @@
 import type { Database } from '@/src/types/database.types';
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Platform, StyleProp, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
@@ -17,6 +17,7 @@ import { isNewArrival } from '@/src/utils/newArrival';
 // horizontal strips. Both share one set of internals -- the point of this
 // component is that there is only one place to change a product card.
 export type ProductCardVariant = 'grid' | 'rail';
+export type ProductCardLayout = 'grid' | 'fill';
 
 const RAIL_WIDTH = 164;
 const LOW_STOCK_THRESHOLD = 5;
@@ -24,6 +25,8 @@ const LOW_STOCK_THRESHOLD = 5;
 type Props = {
   product: Database['public']['Tables']['products']['Row'] & { categories?: any, category?: any };
   variant?: ProductCardVariant;
+  layout?: ProductCardLayout;
+  style?: StyleProp<ViewStyle>;
   /** Shown as a "Your size" chip when the fit recommender has a match. */
   recommendedSize?: string | null;
   showStock?: boolean;
@@ -33,6 +36,8 @@ type Props = {
 export function ProductCard({
   product,
   variant = 'grid',
+  layout = 'grid',
+  style,
   recommendedSize,
   showStock = true,
   aspectRatio,
@@ -80,13 +85,20 @@ export function ProductCard({
     .filter(Boolean)
     .join(', ');
 
+  const variantStyle = variant === 'rail'
+    ? styles.cardRail
+    : layout === 'fill'
+    ? styles.cardFill
+    : [styles.cardGrid, { width: cardWidth }];
+
   return (
     // Layout lives on this wrapper, not on the Touchable: <Link asChild>
     // clones its child and passes its own style prop down, which silently
     // discarded the card's width and margins entirely.
-    <View style={[styles.card, variant === 'rail' ? styles.cardRail : [styles.cardGrid, { width: cardWidth }]]}>
+    <View style={[styles.card, variantStyle, style]}>
     <Link href={`/product/${product.id}`} asChild>
       <TouchableOpacity
+        style={styles.touchable}
         activeOpacity={0.85}
         accessibilityRole={Platform.OS === 'web' ? undefined : 'button'}
         accessibilityLabel={accessibilityLabel}
@@ -217,6 +229,14 @@ export function ProductCard({
 const styles = StyleSheet.create({
   card: { marginBottom: Spacing.xl },
   cardGrid: {},
+  cardFill: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 0,
+  },
+  touchable: {
+    width: '100%',
+  },
   cardRail: { width: RAIL_WIDTH, marginBottom: 0 },
   imageWrap: {
     width: '100%',
@@ -271,12 +291,12 @@ const styles = StyleSheet.create({
   infoMuted: { opacity: 0.7 },
   category: { ...Type.label },
   name: { ...Type.body },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   price: { ...Type.bodyStrong },
   priceMuted: { opacity: 0.55 },
   priceWas: { ...Type.caption, textDecorationLine: 'line-through' },
-  fitRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  fitText: { ...Type.caption, fontWeight: '700' },
+  fitRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flexShrink: 1 },
+  fitText: { ...Type.caption, fontWeight: '700', flexShrink: 1 },
   stock: { ...Type.caption, fontWeight: '600' },
   notifyText: { ...Type.caption, fontWeight: '600', fontStyle: 'italic', color: '#888' },
 });
