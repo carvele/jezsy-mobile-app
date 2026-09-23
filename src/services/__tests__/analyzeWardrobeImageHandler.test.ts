@@ -127,7 +127,8 @@ describe('analyze-wardrobe-image', () => {
     const body = await response.json();
     expect(body.success).toBe(true);
     expect(body.suggestion.category).toBe('Top');
-    expect(d.log).toHaveBeenCalledWith('provider fallback succeeded', expect.objectContaining({ requestedModel: 'gemini-1.5-flash', activeModel: 'gemini-3.6-flash' }));
+    expect(d.log).toHaveBeenCalledWith('provider fallback succeeded', expect.objectContaining({ requestedModel: 'gemini-1.5-flash', activeModel: 'gemini-3.8-flash' }));
+    expect(callCount).toBe(2);
   });
 
   test('dynamically adopts recommended model from provider deprecation error', async () => {
@@ -177,5 +178,6 @@ describe('analyze-wardrobe-image', () => {
     expect(body.success).toBe(true);
     expect(body.suggestion.category).toBe('Bottom');
     expect(d.log).toHaveBeenCalledWith('provider fallback succeeded', expect.objectContaining({ requestedModel: 'old-model' }));
+    expect(callCount).toBe(2);
   });
 });
