@@ -97,3 +97,55 @@ describe.each(['web', 'android'] as const)('garment visibility on %s', (platform
     }
   });
 });
+
+describe('GarmentRenderer generated document syntax', () => {
+  it('does not redeclare anchorOffset or produce duplicate lexical declarations', () => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    let renderer: any;
+    try {
+      act(() => {
+        renderer = create(React.createElement(GarmentRenderer, {
+          modelUrl: 'https://example.com/pants.glb',
+          metadata: {
+            id: 'pants-1',
+            category: 'pants',
+            calibrationVersion: '2.0',
+            anchorConfidence: 'merchant_confirmed',
+            anchorType: 'HIP',
+            restPoseMetricWidth: 0.35,
+            boneMap: {},
+            restPose: 'A_POSE',
+            ingestionStatus: 'AR_READY',
+            anatomicalAnchorOffset: { x: 0, y: 0.95, z: 0 },
+            garmentFitProfileVersion: 2,
+            fitProfileV2: {
+              version: 2,
+              category: 'pants',
+              universalSkeleton: {},
+              fitBands: [],
+              rootAnchor: {
+                bone: 'Hips',
+                confidence: 'high',
+                offset: { x: 0, y: 0.95, z: 0 },
+              },
+            } as any,
+          },
+        }));
+      });
+      const document = renderer.root.findByType('iframe').props.srcDoc as string;
+      const scriptMatches = Array.from(document.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi));
+      expect(scriptMatches.length).toBeGreaterThan(0);
+      const scriptCode = scriptMatches[0][1];
+
+      // Extract all top-level / function-level `let anchorOffset` or `const anchorOffset` declarations
+      const anchorDeclarations = scriptCode.match(/\b(let|const|var)\s+anchorOffset\b/g) || [];
+      expect(anchorDeclarations.length).toBe(1);
+
+      // Verify the script can be parsed without SyntaxError by the JavaScript engine
+      expect(() => new Function(scriptCode)).not.toThrow();
+    } finally {
+      if (renderer) act(() => renderer.unmount());
+      delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
+    }
+  });
+});

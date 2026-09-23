@@ -13,7 +13,9 @@ import type { BodyFitState } from '../../types/arRenderState';
 // to. < is JSON-legal and decodes back to '<' when parsed, so this only affects
 // the raw source text the browser scans for a closing tag, never the resulting value.
 function safeStringify(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, '\\u003c');
+  if (value === undefined) return 'null';
+  const str = JSON.stringify(value);
+  return str ? str.replace(/</g, '\\u003c') : 'null';
 }
 
 export interface GarmentRendererRef {
@@ -730,7 +732,6 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 return 'mixamorig' + canonical;
               };
 
-              let anchorOffset = null;
               const armLeft = skeletonBones[resolveBindBoneName('LeftArm')];
               const armRight = skeletonBones[resolveBindBoneName('RightArm')];
               const shoulderLeft = skeletonBones[resolveBindBoneName('LeftShoulder')];
