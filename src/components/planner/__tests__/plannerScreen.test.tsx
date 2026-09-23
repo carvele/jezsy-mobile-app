@@ -46,6 +46,15 @@ jest.mock('@/src/services/wardrobeService', () => ({
   getWardrobeItemsPage: jest.fn(),
 }));
 
+jest.mock('@/src/utils/plannerDateTime', () => {
+  const actual = jest.requireActual('@/src/utils/plannerDateTime');
+  return {
+    ...actual,
+    getTodayCalendarDate: () => '2026-09-24',
+    resolveDeviceTimezone: () => 'Asia/Manila',
+  };
+});
+
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('PlannerScreen (Phase H2)', () => {
