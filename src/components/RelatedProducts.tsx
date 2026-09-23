@@ -96,7 +96,8 @@ export function RelatedProducts({
       // Falling back to the in-stock pool matters on a small catalog, where
       // excluding everything the user has touched can empty the strip.
       const candidates = unseen.length > 0 ? unseen : inStockData;
-      const signals = { currentSubCategoryId, affinityCategoryIds };
+      const parentSubCategoryIds = new Set(subIds);
+      const signals = { currentSubCategoryId, affinityCategoryIds, parentSubCategoryIds };
       setProducts(rankCandidates(candidates, signals, VISIBLE_COUNT));
     };
 

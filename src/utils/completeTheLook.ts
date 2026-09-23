@@ -249,7 +249,7 @@ export function classifyOccasion(item: CatalogItem): OccasionArchetype {
   }
 
   // Formal / evening
-  if (/\b(formal|evening|gown|cocktail|black tie|gala|luxury|silk|satin|clutch|stiletto|pumps|chiffon|velvet)\b/.test(text)) {
+  if (/\b(formal|evening|gown|cocktail|black tie|gala|luxury|silk|satin|clutch|stiletto|pumps|chiffon|velvet|pearl|pearls|rhinestone|rhinestones|brooch|crystal|chandelier|diamond|gem)\b/.test(text)) {
     return 'formal';
   }
 
@@ -349,11 +349,12 @@ export function recommendCompleteTheLook(
   });
 
   const slotWinners: LookRecommendation[] = [];
+  const chosenProductIds = new Set<string>();
 
   // For each blueprint requirement in priority order, select AT MOST ONE best item
   for (const requirement of blueprint) {
     const slotCandidates = candidatePool.filter(
-      (item) => classifyClothingSlot(item) === requirement.slot,
+      (item) => classifyClothingSlot(item) === requirement.slot && !chosenProductIds.has(item.id),
     );
 
     if (slotCandidates.length === 0) continue;
@@ -414,8 +415,73 @@ export function recommendCompleteTheLook(
 
     // Select the single highest-scoring item for this slot
     slotWinners.push(scoredInSlot[0]);
+    chosenProductIds.add(scoredInSlot[0].product.id);
 
     if (slotWinners.length >= limit) break;
+  }
+
+  // Fallback pass: If primary blueprint slots couldn't fill `limit` (e.g. store has no footwear or outerwear in stock),
+  // pick additional harmonious accessory/bag/outerwear candidates so the section doesn't starve to 1-2 items.
+  if (slotWinners.length < limit) {
+    const allowedRepeatSlots = new Set<ClothingSlot>(['accessory', 'bag', 'outerwear']);
+    const remainingCandidates: LookRecommendation[] = [];
+
+    for (const item of candidatePool) {
+      if (chosenProductIds.has(item.id)) continue;
+      const slot = classifyClothingSlot(item);
+
+      // Invariants: Never repeat primary body slots (never 2 bottoms, never 2 tops, never top/bottom with one_piece)
+      if (slot === 'bottom' || slot === 'top' || slot === 'one_piece' || slot === 'intimates') {
+        continue;
+      }
+      if (!allowedRepeatSlots.has(slot)) continue;
+
+      const itemOccasion = classifyOccasion(item);
+      const occasionFit = getOccasionCompatibility(targetOccasion, itemOccasion);
+      if (occasionFit <= 0) continue;
+
+      const styleFit = calculateStyleFit(targetProduct, item, targetOccasion, itemOccasion);
+      const itemColor = item.color || 'black';
+      const harmony = evaluateColors([targetColor, itemColor]);
+      const colorHarmony = Math.max(0, Math.min(1, harmony.score / 100));
+      const tierBalance = calculateTierBalance(targetProduct.price, item.price);
+      const merchBoost = item.on_sale ? 1.0 : 0.0;
+
+      const score = Math.round(
+        occasionFit * 40 +
+        styleFit * 25 +
+        colorHarmony * 20 +
+        tierBalance * 10 +
+        merchBoost * 5,
+      );
+
+      if (score < MIN_SLOT_SCORE) continue;
+
+      const reason = `${harmony.label} • Complementary accent`;
+
+      remainingCandidates.push({
+        product: item,
+        slot,
+        harmony,
+        score,
+        reason,
+      });
+    }
+
+    remainingCandidates.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const bSale = b.product.on_sale ? 1 : 0;
+      const aSale = a.product.on_sale ? 1 : 0;
+      if (bSale !== aSale) return bSale - aSale;
+      if (b.product.price !== a.product.price) return b.product.price - a.product.price;
+      return a.product.id.localeCompare(b.product.id);
+    });
+
+    for (const rec of remainingCandidates) {
+      if (slotWinners.length >= limit) break;
+      slotWinners.push(rec);
+      chosenProductIds.add(rec.product.id);
+    }
   }
 
   return slotWinners.slice(0, limit);

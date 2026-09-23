@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Colors } from "@/constants/theme";
 import { getCompleteTheLook, CompleteTheLookItem } from "@/src/services/completeTheLookService";
@@ -20,12 +21,12 @@ interface Props {
 
 /**
  * Teaser row on the product detail page: a preview of the Complete the Look
- * hierarchy (Curated -> Styled Look Siblings -> Algorithmic, see
- * completeTheLookService.ts). Tapping any card opens the full shoppable
- * CompleteTheLookSheet rather than navigating away, since this is meant to
- * be an in-context commerce flow, not a link-out.
+ * hierarchy (Curated -> Styled Look Siblings -> Algorithmic).
+ * Tapping any individual card navigates to that product's detail page,
+ * while tapping the header row opens the shoppable CompleteTheLookSheet.
  */
 export default function CompleteTheLookSection({ currentProduct }: Props) {
+  const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const styles = React.useMemo(() => createStyles(colors), [colors]);
@@ -88,10 +89,10 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
           <TouchableOpacity
             key={item.product.id}
             style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => setSheetVisible(true)}
+            onPress={() => router.push(`/product/${item.product.id}` as any)}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel={`${item.product.name}, view in Complete the Look`}
+            accessibilityLabel={`${item.product.name}, view product details`}
           >
             <Image
               source={item.product.image_url ? { uri: item.product.image_url } : undefined}
@@ -114,6 +115,7 @@ export default function CompleteTheLookSection({ currentProduct }: Props) {
         productId={currentProduct.id}
         visible={sheetVisible}
         onClose={() => setSheetVisible(false)}
+        initialItems={items}
       />
     </View>
   );
