@@ -9,7 +9,8 @@ import {
   domainFail,
   errorReporting,
 } from './observability';
-import { resolveEffectiveGarmentBucket, inferSystemBucket } from '../utils/garmentSemanticClassifier';
+import { resolveEffectiveGarmentBucket, inferSystemBucket, resolveAccessorySubtype } from '../utils/garmentSemanticClassifier';
+import { styleDnaSyncManager } from './styling/styleDnaSyncManager';
 
 export type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 export type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
@@ -268,6 +269,54 @@ export async function logItemsWorn(itemIds: string[]): Promise<{ succeeded: stri
     else failed.push(ids[i]);
   });
   return { succeeded, failed };
+}
+
+/**
+ * 1 action = 1 event wear logging:
+ * Records individual item wear counts atomically via increment_wear_count RPC,
+ * and emits a single consolidated wear_outfit preference event for the whole ensemble.
+ */
+export async function logOutfitWorn(
+  userId: string,
+  outfit: {
+    id?: string | null;
+    items: WardrobeItem[];
+    occasion?: string;
+  }
+): Promise<{ succeeded: string[]; failed: string[] }> {
+  const itemIds = outfit.items.map((i) => i.id).filter(Boolean);
+  const result = await logItemsWorn(itemIds);
+
+  if (userId && result.succeeded.length > 0) {
+    try {
+      const palette = Array.from(
+        new Set(outfit.items.flatMap((i) => i.color_tags || []).filter(Boolean))
+      );
+      const silhouettes = Array.from(
+        new Set(
+          outfit.items
+            .map((i) => (i.ai_attributes as any)?.fit || (i.ai_attributes as any)?.silhouette)
+            .filter(Boolean)
+        )
+      );
+      const formality = outfit.occasion ? [outfit.occasion] : [];
+      const accessories = outfit.items
+        .filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory')
+        .map((i) => resolveAccessorySubtype(i) || i.description || '')
+        .filter(Boolean);
+
+      styleDnaSyncManager.recordWearOutfit(userId, outfit.id || null, itemIds, {
+        palette,
+        silhouettes,
+        formality,
+        accessories,
+      }).catch(() => {});
+    } catch {
+      // Non-blocking telemetry
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -695,6 +744,7 @@ export const wardrobeService = {
   saveItemVerified,
   removeWardrobeImage,
   logItemsWorn,
+  logOutfitWorn,
   getItemsPage: getWardrobeItemsPage,
   getOutfitsPage: getWardrobeOutfitsPage,
   getCapsulesPage: getWardrobeCapsulesPage,

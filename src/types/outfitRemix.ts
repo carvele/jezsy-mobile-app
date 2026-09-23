@@ -43,6 +43,7 @@ export interface OutfitRemixResult {
   label: string;
   whyThisWorks: WhyThisWorksDetails;
   isRemixedDraft: boolean;
+  preferenceActionId?: string;
 }
 
 export interface OutfitRemixState {

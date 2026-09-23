@@ -25,6 +25,8 @@ import {
   resolveAccessorySubtype,
   AccessorySubtype,
 } from '@/src/utils/garmentSemanticClassifier';
+import { randomUUID } from 'expo-crypto';
+import { styleDnaSyncManager } from './styleDnaSyncManager';
 
 const MAX_REMIX_HISTORY = 10;
 
@@ -664,6 +666,69 @@ export function createRemixResult(state: OutfitRemixState): OutfitRemixResult {
     whyThisWorks: grounded.whyThisWorks,
     isRemixedDraft: state.isDirty,
   };
+}
+
+/**
+  * Commits the current remix state: records a 'remix_commit' event with a stable preference_action_id,
+  * allowing subsequent save_look events to be linked and deduplicated on the server.
+  */
+export async function commitRemixState(
+  userId: string,
+  state: OutfitRemixState,
+  actionId?: string
+): Promise<{ preferenceActionId: string; result: OutfitRemixResult }> {
+  const preferenceActionId = actionId || randomUUID();
+  const baseResult = createRemixResult(state);
+  const result: OutfitRemixResult = {
+    ...baseResult,
+    preferenceActionId,
+  };
+
+  if (userId) {
+    try {
+      const palette = Array.from(
+        new Set(result.items.flatMap((i) => i.color_tags || []).filter(Boolean))
+      );
+      const silhouettes = Array.from(
+        new Set(
+          result.items
+            .map((i) => (i.ai_attributes as any)?.fit || (i.ai_attributes as any)?.silhouette)
+            .filter(Boolean)
+        )
+      );
+      const formality = state.intent.formality ? [state.intent.formality] : [];
+      const accessories = result.items
+        .filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory')
+        .map((i) => resolveAccessorySubtype(i) || i.description || '')
+        .filter(Boolean);
+
+      const replacedSlots: string[] = [];
+      if (state.history && state.history.length > 1) {
+        // Track slots that differ from original if dirty
+        for (const [slotKey, slotData] of Object.entries(state.slots)) {
+          if (slotData?.item) replacedSlots.push(slotKey);
+        }
+      }
+
+      await styleDnaSyncManager.recordEvent(
+        userId,
+        'remix_commit',
+        {
+          item_ids: result.items.map((i) => i.id),
+          palette,
+          silhouettes,
+          formality,
+          accessories,
+          replaced_slots: replacedSlots,
+        },
+        preferenceActionId
+      );
+    } catch {
+      // Non-blocking telemetry
+    }
+  }
+
+  return { preferenceActionId, result };
 }
 
 // ── Source Adapters ──

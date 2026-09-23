@@ -1,0 +1,12 @@
+-- ============================================================================
+-- Rollback Migration: 20260923230000_persistent_style_dna.sql.rollback
+-- Description: Teardown for local/test verification environments ONLY.
+--              DO NOT EXECUTE AGAINST PRODUCTION WITH LIVE USER DATA.
+-- ============================================================================
+
+DROP FUNCTION IF EXISTS public.refresh_style_profile(BOOLEAN);
+DROP FUNCTION IF EXISTS public.sync_and_aggregate_style_dna(JSONB);
+DROP FUNCTION IF EXISTS public.aggregate_user_style_dna(UUID, TIMESTAMPTZ);
+
+DROP TABLE IF EXISTS public.user_style_profiles CASCADE;
+DROP TABLE IF EXISTS public.style_preference_events CASCADE;

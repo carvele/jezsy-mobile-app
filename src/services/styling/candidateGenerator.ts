@@ -248,7 +248,10 @@ export function generateCandidateOutfits(
   const scoreCoreCombo = (items: WardrobeItem[]): { score: number; colorMatch: any; personal: any } => {
     const colors = colorsOf(items);
     const colorMatch = evaluateColors(colors);
-    const personal = computePersonalAffinity(items, profile, intent.selectedOccasion);
+    const personal = computePersonalAffinity(items, profile, intent.selectedOccasion, {
+      rawPrompt: intent.rawPrompt,
+      selectedOccasion: intent.selectedOccasion,
+    });
     const types = items.map((i) => resolveEffectiveGarmentBucket(i));
     const hasDress = types.includes('Dress');
     const hasShoes = types.includes('Shoes');

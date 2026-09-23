@@ -1,5 +1,7 @@
 import { CandidateOutfit, StylingIntent, WhyThisWorksDetails } from '@/src/types/styleAdvisor';
 import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import { UserStyleProfileDto } from '@/src/types/dto/styleProfile';
+import { isDimensionGrounded } from '@/src/utils/personalStyleEngine';
 
 /**
  * Produces genuine, garment-grounded explanations without fake boilerplate.
@@ -7,7 +9,8 @@ import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassi
  */
 export function generateGroundedExplanation(
   candidate: CandidateOutfit,
-  intent: StylingIntent
+  intent: StylingIntent,
+  profile?: UserStyleProfileDto | null
 ): { whyThisWorks: WhyThisWorksDetails; headline: string; intentMatch: string; proTip?: string } {
   const items = candidate.items;
 
@@ -63,6 +66,15 @@ export function generateGroundedExplanation(
     const main = allColors.slice(0, 2).join(' and ');
     palette = `${main.charAt(0).toUpperCase() + main.slice(1)} tones establish clean contrast without competing for attention.`;
   }
+  if (profile?.styleDna?.paletteAffinities) {
+    for (const color of allColors) {
+      const aff = profile.styleDna.paletteAffinities[color];
+      if (aff && isDimensionGrounded(aff)) {
+        palette = `${palette} Features your signature preferred palette: ${color}.`;
+        break;
+      }
+    }
+  }
 
   // 4. Silhouette
   let silhouette = 'Balanced proportions between upper and lower body.';
@@ -70,6 +82,16 @@ export function generateGroundedExplanation(
     silhouette = `The one-piece ${dressName} creates an uninterrupted vertical flow and streamlined silhouette.`;
   } else if (tops.length > 0 && bottoms.length > 0) {
     silhouette = `The ${topName} pairs cleanly with the ${bottomName}, creating a distinct waistline and balanced frame.`;
+  }
+  if (profile?.styleDna?.silhouetteAffinities) {
+    for (const item of items) {
+      const sil = (item as any).ai_attributes?.silhouette || (item as any).silhouette;
+      const aff = sil ? profile.styleDna.silhouetteAffinities[sil] : undefined;
+      if (aff && isDimensionGrounded(aff)) {
+        silhouette = `${silhouette} Aligns with your signature preference for ${sil} styling.`;
+        break;
+      }
+    }
   }
 
   // 5. Occasion Fit

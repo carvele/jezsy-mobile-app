@@ -14,6 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
+      style_preference_events: {
+        Row: {
+          client_timestamp: string
+          created_at: string
+          event_schema_version: number
+          event_type: string
+          id: string
+          payload: Json
+          preference_action_id: string | null
+          signal_weight: number
+          user_id: string
+        }
+        Insert: {
+          client_timestamp: string
+          created_at?: string
+          event_schema_version?: number
+          event_type: string
+          id: string
+          payload?: Json
+          preference_action_id?: string | null
+          signal_weight?: number
+          user_id: string
+        }
+        Update: {
+          client_timestamp?: string
+          created_at?: string
+          event_schema_version?: number
+          event_type?: string
+          id?: string
+          payload?: Json
+          preference_action_id?: string | null
+          signal_weight?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_style_profiles: {
+        Row: {
+          accessory_affinities: Json
+          created_at: string
+          event_count: number
+          explicit_preferences: Json
+          formality_affinities: Json
+          global_confidence: number
+          last_event_timestamp: string | null
+          learning_reset_at: string | null
+          palette_affinities: Json
+          projection_computed_at: string
+          schema_version: number
+          silhouette_affinities: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accessory_affinities?: Json
+          created_at?: string
+          event_count?: number
+          explicit_preferences?: Json
+          formality_affinities?: Json
+          global_confidence?: number
+          last_event_timestamp?: string | null
+          learning_reset_at?: string | null
+          palette_affinities?: Json
+          projection_computed_at?: string
+          schema_version?: number
+          silhouette_affinities?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accessory_affinities?: Json
+          created_at?: string
+          event_count?: number
+          explicit_preferences?: Json
+          formality_affinities?: Json
+          global_confidence?: number
+          last_event_timestamp?: string | null
+          learning_reset_at?: string | null
+          palette_affinities?: Json
+          projection_computed_at?: string
+          schema_version?: number
+          silhouette_affinities?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       _backup_product_style_codes_20260915: {
         Row: {
           new_style_code: string | null
@@ -3845,6 +3932,20 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      sync_and_aggregate_style_dna: {
+        Args: {
+          p_events: Json
+          p_as_of?: string
+        }
+        Returns: Json
+      }
+      refresh_style_profile: {
+        Args: {
+          p_user_id?: string
+          p_force?: boolean
+        }
+        Returns: Json
       }
       is_admin_or_owner: { Args: never; Returns: boolean }
       is_awaiting_payment_status: {
