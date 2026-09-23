@@ -93,7 +93,7 @@ function parseSuggestion(raw: unknown): GarmentTagSuggestion | null {
   return { category, subCategory, primaryColor, colorTags: tags, pattern, material, fit, lengthType, sleeveType, neckline, silhouette, confidence };
 }
 
-const DEFAULT_FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'] as const;
+const DEFAULT_FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'] as const;
 
 export function createHandler(deps: HandlerDeps) {
   return async function handle(req: Request): Promise<Response> {
@@ -130,7 +130,7 @@ export function createHandler(deps: HandlerDeps) {
       if (withinLimit === null) return respond({ success: false, reason: 'RATE_LIMIT_UNAVAILABLE' }, 503);
       if (!withinLimit) return respond({ success: false, reason: 'RATE_LIMITED' }, 429);
 
-      const candidates = configuredModel
+      const candidates: string[] = configuredModel
         ? [configuredModel, ...DEFAULT_FALLBACK_MODELS.filter((m) => m !== configuredModel)]
         : [...DEFAULT_FALLBACK_MODELS];
 
@@ -139,7 +139,8 @@ export function createHandler(deps: HandlerDeps) {
       let parsedSuggestion: GarmentTagSuggestion | null = null;
       let rawTextReceived = false;
 
-      for (const model of candidates) {
+      for (let i = 0; i < candidates.length; i++) {
+        const model = candidates[i];
         const result = await deps.fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -165,6 +166,10 @@ export function createHandler(deps: HandlerDeps) {
           lastErrorStatus = result.status === 429 ? 429 : 503;
 
           if (result.status === 404 || (result.status === 400 && errorText.includes('models/'))) {
+            const recommended = errorText.match(/models\/([A-Za-z0-9._-]+)/i)?.[1];
+            if (recommended && MODEL_NAME_RE.test(recommended) && !candidates.includes(recommended)) {
+              candidates.push(recommended);
+            }
             continue;
           }
           break;
