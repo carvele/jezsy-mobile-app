@@ -13,6 +13,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // being restated here, so retokenising the screen's padding resizes the card
 // instead of breaking the two-column layout.
 
+const GRID_CARD_ASPECT = 1.5;
+
 export type CategoryCardVariant = 'grid' | 'rail';
 
 type Props = {
@@ -26,12 +28,20 @@ export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
   const colors = Colors[theme];
   const isRail = variant === 'rail';
   const { cardWidth } = useGridCardWidth();
+  // Every child of the card is absolutely positioned, so its height comes only
+  // from the aspect ratio. Inside the wrapping grid row, Android collapsed that
+  // to zero and the whole Explore category grid vanished. An explicit height
+  // removes the dependency on aspectRatio resolution.
+  const gridStyle =
+    typeof cardWidth === 'number'
+      ? { width: cardWidth, height: Math.round(cardWidth / GRID_CARD_ASPECT) }
+      : { width: cardWidth, aspectRatio: GRID_CARD_ASPECT };
 
   return (
     <TouchableOpacity
       style={[
         styles.card,
-        isRail ? styles.cardRail : [styles.cardGrid, { width: cardWidth, aspectRatio: 1.5 }],
+        isRail ? styles.cardRail : [styles.cardGrid, gridStyle],
         { backgroundColor: colors.imagePlaceholder },
       ]}
       onPress={onPress}
