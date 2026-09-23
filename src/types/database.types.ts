@@ -14,6 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      _backup_accessory_inventory_20260924: {
+        Row: {
+          available: number | null
+          backed_up_at: string | null
+          color: string | null
+          deleted: boolean | null
+          deleted_at: string | null
+          id: string
+          item: string | null
+          product_doc_id: string | null
+          reserved: number | null
+          size: string | null
+          total: number | null
+          variant_sku: string | null
+        }
+        Insert: {
+          available?: number | null
+          backed_up_at?: string | null
+          color?: string | null
+          deleted?: boolean | null
+          deleted_at?: string | null
+          id: string
+          item?: string | null
+          product_doc_id?: string | null
+          reserved?: number | null
+          size?: string | null
+          total?: number | null
+          variant_sku?: string | null
+        }
+        Update: {
+          available?: number | null
+          backed_up_at?: string | null
+          color?: string | null
+          deleted?: boolean | null
+          deleted_at?: string | null
+          id?: string
+          item?: string | null
+          product_doc_id?: string | null
+          reserved?: number | null
+          size?: string | null
+          total?: number | null
+          variant_sku?: string | null
+        }
+        Relationships: []
+      }
+      _backup_accessory_products_20260924: {
+        Row: {
+          backed_up_at: string | null
+          id: string
+          sizes: string[] | null
+          status: string | null
+          stock: number | null
+        }
+        Insert: {
+          backed_up_at?: string | null
+          id: string
+          sizes?: string[] | null
+          status?: string | null
+          stock?: number | null
+        }
+        Update: {
+          backed_up_at?: string | null
+          id?: string
+          sizes?: string[] | null
+          status?: string | null
+          stock?: number | null
+        }
+        Relationships: []
+      }
       _backup_product_style_codes_20260915: {
         Row: {
           new_style_code: string | null
@@ -1551,6 +1620,77 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planned_outfits: {
+        Row: {
+          climate_context: Json
+          confirmed_at: string | null
+          created_at: string
+          id: string
+          items: Json
+          notes: string | null
+          occasion: string | null
+          plan_timezone: string
+          planned_date: string
+          revision: number
+          saved_outfit_id: string | null
+          slot: string
+          source_ref_id: string | null
+          source_type: string
+          status: string
+          updated_at: string
+          user_id: string
+          worn_at: string | null
+        }
+        Insert: {
+          climate_context?: Json
+          confirmed_at?: string | null
+          created_at?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          occasion?: string | null
+          plan_timezone: string
+          planned_date: string
+          revision?: number
+          saved_outfit_id?: string | null
+          slot?: string
+          source_ref_id?: string | null
+          source_type?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          worn_at?: string | null
+        }
+        Update: {
+          climate_context?: Json
+          confirmed_at?: string | null
+          created_at?: string
+          id?: string
+          items?: Json
+          notes?: string | null
+          occasion?: string | null
+          plan_timezone?: string
+          planned_date?: string
+          revision?: number
+          saved_outfit_id?: string | null
+          slot?: string
+          source_ref_id?: string | null
+          source_type?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          worn_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planned_outfits_saved_outfit_id_fkey"
+            columns: ["saved_outfit_id"]
+            isOneToOne: false
+            referencedRelation: "saved_outfits"
             referencedColumns: ["id"]
           },
         ]
@@ -3595,6 +3735,10 @@ export type Database = {
         Args: { _reservation_id: string }
         Returns: Json
       }
+      cancel_planned_outfit: {
+        Args: { p_expected_revision: number; p_plan_id: string }
+        Returns: Json
+      }
       cancel_reservation_after_ready: {
         Args: { _reservation_id: string }
         Returns: Json
@@ -3657,6 +3801,25 @@ export type Database = {
       compute_reservation_payment_due_at: {
         Args: { _appointment: string }
         Returns: string
+      }
+      confirm_planned_outfit_worn: {
+        Args: { p_expected_revision: number; p_plan_id: string }
+        Returns: Json
+      }
+      create_planned_outfit: {
+        Args: {
+          p_climate_context?: Json
+          p_items: Json
+          p_notes?: string
+          p_occasion?: string
+          p_plan_timezone: string
+          p_planned_date: string
+          p_saved_outfit_id?: string
+          p_slot: string
+          p_source_ref_id?: string
+          p_source_type?: string
+        }
+        Returns: Json
       }
       create_reservation: {
         Args: {
@@ -3833,6 +3996,35 @@ export type Database = {
         Returns: string
       }
       get_outfit_privacy: { Args: { p_user_id: string }; Returns: string }
+      get_planned_outfits_range: {
+        Args: { p_end_date: string; p_start_date: string }
+        Returns: {
+          climate_context: Json
+          confirmed_at: string | null
+          created_at: string
+          id: string
+          items: Json
+          notes: string | null
+          occasion: string | null
+          plan_timezone: string
+          planned_date: string
+          revision: number
+          saved_outfit_id: string | null
+          slot: string
+          source_ref_id: string | null
+          source_type: string
+          status: string
+          updated_at: string
+          user_id: string
+          worn_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "planned_outfits"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_pose_guides_for_product: {
         Args: { p_product_id: string }
         Returns: {
@@ -4038,6 +4230,7 @@ export type Database = {
         Returns: boolean
       }
       is_staff_or_admin: { Args: never; Returns: boolean }
+      is_valid_timezone: { Args: { tz: string }; Returns: boolean }
       lock_reservation_capacity_dates: {
         Args: { _a: string; _b?: string }
         Returns: undefined
@@ -4159,6 +4352,35 @@ export type Database = {
         }
         Returns: Json
       }
+      record_item_wear: {
+        Args: { p_effective_wear_at: string; p_item_id: string }
+        Returns: {
+          ai_attributes: Json | null
+          category: string | null
+          color_tags: string[] | null
+          created_at: string
+          deleted: boolean | null
+          description: string | null
+          embedding: Json | null
+          garment_type: string | null
+          id: string
+          image_url: string | null
+          last_worn_at: string | null
+          occasions: string[] | null
+          product_id: string | null
+          seasons: string[] | null
+          sub_category: string | null
+          user_id: string | null
+          user_notes: string | null
+          wear_count: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "wardrobe_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_legal_document_view: {
         Args: { _client_platform: string; _document_id: string }
         Returns: Json
@@ -4256,6 +4478,15 @@ export type Database = {
       }
       require_aal2: { Args: never; Returns: undefined }
       require_recent_mfa: { Args: never; Returns: undefined }
+      reschedule_planned_outfit: {
+        Args: {
+          p_expected_revision: number
+          p_new_date: string
+          p_new_slot?: string
+          p_plan_id: string
+        }
+        Returns: Json
+      }
       reschedule_reservation_as_manager: {
         Args: {
           _expected_status: string
@@ -4480,6 +4711,10 @@ export type Database = {
         Args: { _method?: string; _reservation_id: string }
         Returns: Json
       }
+      skip_planned_outfit: {
+        Args: { p_expected_revision: number; p_plan_id: string }
+        Returns: Json
+      }
       submit_reservation_balance_receipt: {
         Args: {
           _amount_claimed: number
@@ -4560,6 +4795,16 @@ export type Database = {
       }
       update_app_version_policy: {
         Args: { p_confirmation: string; p_platform: string; p_policy: Json }
+        Returns: Json
+      }
+      update_planned_outfit_metadata: {
+        Args: {
+          p_climate_context?: Json
+          p_expected_revision: number
+          p_notes?: string
+          p_plan_id: string
+          p_slot?: string
+        }
         Returns: Json
       }
       update_profile_and_measurements: {
