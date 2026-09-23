@@ -11,6 +11,7 @@ import {
   domainFail,
   errorReporting,
 } from './observability';
+import { styleDnaSyncManager } from './styling/styleDnaSyncManager';
 
 /** Order-independent identity of an outfit's contents, for duplicate detection. */
 export function outfitSignature(items: OutfitItemDto[]): string {
@@ -41,7 +42,26 @@ export const outfitService = {
         throw error;
       }
 
-      return domainOk({ id: data?.id || '' });
+      const savedId = data?.id || '';
+      if (savedId && input.userId) {
+        try {
+          const palette = Array.from(new Set(input.items.flatMap((i) => i.color_tags || [])));
+          const accessories = input.items
+            .filter((i) => i.slot === 'accessory')
+            .map((i) => i.name)
+            .filter(Boolean);
+          styleDnaSyncManager.recordSaveLook(
+            input.userId,
+            savedId,
+            { palette, accessories },
+            (input as any).preferenceActionId || null
+          ).catch(() => {});
+        } catch {
+          // Best effort Style DNA recording
+        }
+      }
+
+      return domainOk({ id: savedId });
     } catch (err: any) {
       const domainError = new DomainError({
         code: err?.code || 'ERR_OUTFIT_SAVE_FAILED',

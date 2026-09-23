@@ -22,6 +22,8 @@ import { computePersonalAffinity } from './personalStyleEngine';
 import {
   normalizeGarment,
   resolveEffectiveGarmentBucket,
+  resolveAccessorySubtype,
+  AccessorySubtype,
   ThermalLevel,
   CoverageLevel,
   FunctionalRole,
@@ -191,6 +193,7 @@ export interface GarmentSemanticProfile {
     isOuterwear: boolean;
     isFootwear: boolean;
     isAccessory: boolean;
+    accessorySubtype?: AccessorySubtype | null;
   };
   styleSignals: {
     casual: boolean;
@@ -241,6 +244,7 @@ export interface OccasionRequirementProfile {
   allowsAthletic: boolean;
   timeOfDay: TimeOfDay;
   weather: WeatherCondition;
+  isIndoorOverride?: boolean;
   summary: string;
 }
 
@@ -984,6 +988,7 @@ export function buildGarmentSemanticProfile(
       isOuterwear,
       isFootwear,
       isAccessory,
+      accessorySubtype: isAccessory ? resolveAccessorySubtype(wardrobeItem || (item as any)) : null,
     },
     styleSignals: {
       casual: !isFormal && !isElevated,
@@ -1026,7 +1031,7 @@ export function buildGarmentSemanticProfile(
 // PHASE 6: OCCASION REQUIREMENT PROFILES
 // ============================================================================
 
-export function buildOccasionRequirements(
+function _buildOccasionRequirements(
   context: OutfitContextInterpretation
 ): OccasionRequirementProfile {
   const {
@@ -1257,6 +1262,16 @@ export function buildOccasionRequirements(
   };
 }
 
+export function buildOccasionRequirements(
+  context: OutfitContextInterpretation
+): OccasionRequirementProfile {
+  const profile = _buildOccasionRequirements(context);
+  return {
+    ...profile,
+    isIndoorOverride: context.isIndoorOverride,
+  };
+}
+
 // ============================================================================
 // PHASE 8: CONTRADICTION ENGINE (Contradiction-First, No Score Averaging)
 // ============================================================================
@@ -1268,13 +1283,27 @@ export interface OutfitStructure {
   onePieces: GarmentSemanticProfile[];
   shoes: GarmentSemanticProfile[];
   accessories: GarmentSemanticProfile[];
+  bags: GarmentSemanticProfile[];
+  belts: GarmentSemanticProfile[];
+  jewelry: GarmentSemanticProfile[];
+  headwear: GarmentSemanticProfile[];
+  eyewear: GarmentSemanticProfile[];
+  scarves: GarmentSemanticProfile[];
+  gloves: GarmentSemanticProfile[];
+  watches: GarmentSemanticProfile[];
   hasOnePiece: boolean;
   hasTop: boolean;
   hasBottom: boolean;
   hasOuterwear: boolean;
   hasShoes: boolean;
+  hasBag: boolean;
+  hasBelt: boolean;
+  accessoryCount: number;
   isOvercrowded: boolean;
   overcrowdingNote: string;
+  isOverAccessorized?: boolean;
+  overAccessorizedNote?: string;
+  underAccessorizedNote?: string;
 }
 
 export function buildOutfitStructure(garments: GarmentSemanticProfile[]): OutfitStructure {
@@ -1284,6 +1313,14 @@ export function buildOutfitStructure(garments: GarmentSemanticProfile[]): Outfit
   const onePieces: GarmentSemanticProfile[] = [];
   const shoes: GarmentSemanticProfile[] = [];
   const accessories: GarmentSemanticProfile[] = [];
+  const bags: GarmentSemanticProfile[] = [];
+  const belts: GarmentSemanticProfile[] = [];
+  const jewelry: GarmentSemanticProfile[] = [];
+  const headwear: GarmentSemanticProfile[] = [];
+  const eyewear: GarmentSemanticProfile[] = [];
+  const scarves: GarmentSemanticProfile[] = [];
+  const gloves: GarmentSemanticProfile[] = [];
+  const watches: GarmentSemanticProfile[] = [];
 
   for (const g of garments) {
     const fam = g.garmentStructure.garmentFamily;
@@ -1292,7 +1329,18 @@ export function buildOutfitStructure(garments: GarmentSemanticProfile[]): Outfit
     else if (fam === 'lowerBody') bottoms.push(g);
     else if (fam === 'footwear') shoes.push(g);
     else if (fam === 'upperBody') baseTops.push(g);
-    else accessories.push(g);
+    else {
+      accessories.push(g);
+      const sub = g.garmentStructure.accessorySubtype;
+      if (sub === 'bag') bags.push(g);
+      else if (sub === 'belt') belts.push(g);
+      else if (sub === 'jewelry') jewelry.push(g);
+      else if (sub === 'headwear') headwear.push(g);
+      else if (sub === 'eyewear') eyewear.push(g);
+      else if (sub === 'scarf') scarves.push(g);
+      else if (sub === 'gloves') gloves.push(g);
+      else if (sub === 'watch') watches.push(g);
+    }
   }
 
   const hasOnePiece = onePieces.length > 0;
@@ -1300,6 +1348,9 @@ export function buildOutfitStructure(garments: GarmentSemanticProfile[]): Outfit
   const hasBottom = bottoms.length > 0;
   const hasOuterwear = outers.length > 0;
   const hasShoes = shoes.length > 0;
+  const hasBag = bags.length > 0;
+  const hasBelt = belts.length > 0;
+  const accessoryCount = accessories.length;
 
   let isOvercrowded = false;
   let overcrowdingNote = '';
@@ -1315,6 +1366,14 @@ export function buildOutfitStructure(garments: GarmentSemanticProfile[]): Outfit
       'A dress or jumpsuit already provides full body coverage; separate tops or bottoms create conflicting bulk.';
   }
 
+  // Soft over-accessorizing check (>3 statement accessories)
+  let isOverAccessorized = false;
+  let overAccessorizedNote: string | undefined;
+  if (accessories.length > 3) {
+    isOverAccessorized = true;
+    overAccessorizedNote = 'Consider removing 1–2 accessories to keep the focus balanced.';
+  }
+
   return {
     baseTops,
     outers,
@@ -1322,13 +1381,26 @@ export function buildOutfitStructure(garments: GarmentSemanticProfile[]): Outfit
     onePieces,
     shoes,
     accessories,
+    bags,
+    belts,
+    jewelry,
+    headwear,
+    eyewear,
+    scarves,
+    gloves,
+    watches,
     hasOnePiece,
     hasTop,
     hasBottom,
     hasOuterwear,
     hasShoes,
+    hasBag,
+    hasBelt,
+    accessoryCount,
     isOvercrowded,
     overcrowdingNote,
+    isOverAccessorized,
+    overAccessorizedNote,
   };
 }
 
@@ -1597,6 +1669,103 @@ export function detectContradictions(
       whyItMatters: 'A jacket or blazer frames the torso but does not substitute for a base upper-body layer.',
       suggestedFix: 'Add a dress shirt, blouse, or tee underneath the outerwear.',
     });
+  }
+
+  // 6. ACCESSORY CONTRADICTIONS (Phase F Complete Ensemble Critique)
+  // (a) Active swimming with leather bags, backpacks, or non-waterproof/delicate watches
+  if (reqs.prohibitsSwimwearConflicts || reqs.requiresSwimwear) {
+    for (const g of structure.accessories) {
+      const name = g.identity.name;
+      const sub = g.garmentStructure.accessorySubtype;
+      const isLeather = g.materialSignals.includes('leather');
+      const isNonSwimWatch =
+        sub === 'watch' &&
+        (isLeather ||
+          /\b(leather|dress|delicate|formal|gold|vintage|mechanical|non.?waterproof)\b/i.test(g.combinedText));
+
+      // Unknown waterproof capability or generic sports watch does NOT trigger a hard contradiction
+      if (sub === 'bag' || (sub === 'belt' && isLeather) || isNonSwimWatch) {
+        contradictions.push({
+          severity: 'severe',
+          category: 'activity_water',
+          garmentName: name,
+          reason: `${name} is not compatible with active pool swimming immersion.`,
+          whyItMatters:
+            'Carrying bags, wearing leather belts, or wearing non-swimwear timepieces in the pool creates hazards and water damage.',
+          suggestedFix: 'Leave accessories at the locker or poolside lounge.',
+        });
+      }
+    }
+  }
+
+  // (b) Formal belts paired with athletic bottoms
+  // Requires verified elastic-waist athletic construction; unknown waistband construction remains neutral
+  const hasAthleticBottom = structure.bottoms.some(
+    (b) =>
+      (b.styleSignals.athletic ||
+        b.functionalRole === 'athleticPerformance' ||
+        /\b(running shorts|athletic shorts|gym shorts|sweatpants|track pants|joggers)\b/i.test(b.combinedText)) &&
+      !/\b(belt loops?|tailored|chinos?|slacks)\b/i.test(b.combinedText)
+  );
+  if (hasAthleticBottom && structure.hasBelt) {
+    for (const b of structure.belts) {
+      const isFormalOrLeather =
+        b.materialSignals.includes('leather') || /\b(leather|dress|formal|tailored)\b/i.test(b.combinedText);
+      if (isFormalOrLeather) {
+        contradictions.push({
+          severity: 'severe',
+          category: 'formality_dresscode',
+          garmentName: b.identity.name,
+          reason: `${b.identity.name} is a formal/leather belt that cannot be paired with elastic-waist athletic bottoms.`,
+          whyItMatters:
+            'Athletic running shorts and sweatpants lack belt loops and functional waistbands for dress belts.',
+          suggestedFix: 'Remove the belt when styling athletic shorts or sweatpants.',
+        });
+      }
+    }
+  }
+
+  // (c) Sunglasses in strictly indoor or nighttime contexts
+  if ((reqs.isIndoorOverride || reqs.timeOfDay === 'night') && structure.eyewear.length > 0) {
+    for (const eye of structure.eyewear) {
+      if (/\b(sunglass(?:es)?|shades|dark lenses|tinted)\b/i.test(eye.combinedText)) {
+        contradictions.push({
+          severity: 'minor',
+          category: 'occasion_context',
+          garmentName: eye.identity.name,
+          reason: `${eye.identity.name} is designed for outdoor daylight and is unnecessary in an indoor or night setting.`,
+          whyItMatters: 'Wearing sunglasses indoors or at night reduces visibility and conflicts with social engagement.',
+          suggestedFix: 'Remove sunglasses or switch to clear optical frames indoors.',
+        });
+      }
+    }
+  }
+
+  // (d) Heavy cold-weather accessories in warm/hot weather
+  if (reqs.weather === 'hot' || reqs.weather === 'warm') {
+    const warmAccessories = [...structure.scarves, ...structure.headwear, ...structure.gloves];
+    for (const acc of warmAccessories) {
+      const isLightweightFabric =
+        acc.materialSignals.includes('silk') ||
+        acc.materialSignals.includes('linen') ||
+        /\b(silk|linen|cotton|chiffon|thin|lightweight|summer|neckerchief)\b/i.test(acc.combinedText);
+      const isWinterPiece =
+        !isLightweightFabric &&
+        (acc.materialSignals.includes('knit') ||
+          acc.materialSignals.includes('wool') ||
+          acc.thermal === 'heavyWarmth' ||
+          /\b(winter|heavy|wool|knit|fleece|beanie|mittens|cashmere|shearling|puffer)\b/i.test(acc.combinedText));
+      if (isWinterPiece) {
+        contradictions.push({
+          severity: 'severe',
+          category: 'weather_thermal',
+          garmentName: acc.identity.name,
+          reason: `${acc.identity.name} creates excessive warmth and overheating in warm/hot weather.`,
+          whyItMatters: 'Winter knit accessories trap heat and are uncomfortable in warm temperatures.',
+          suggestedFix: 'Leave winter knit accessories for cold weather.',
+        });
+      }
+    }
   }
 
   return contradictions;
@@ -2490,6 +2659,18 @@ export function gradeOutfit(
     if (hasHighHeels) {
       tips.push('Your context mentions a lot of walking — high heels may cause discomfort over extended periods.');
     }
+  }
+
+  // Soft Accessory Advisories (Phase F Complete Ensemble Critique)
+  if (structure.isOverAccessorized && structure.overAccessorizedNote) {
+    whatCouldBeBetter = [whatCouldBeBetter, structure.overAccessorizedNote].filter(Boolean).join(' ');
+  }
+  if (reqs.requiresFormalAttire && structure.accessories.length === 0) {
+    tips.push('An optional structured clutch or refined watch could complete this formal look.');
+  }
+  if (structure.accessories.length > 0 && assessment === 'Appropriate for this occasion' && whatWorks) {
+    const accNames = structure.accessories.map((a) => a.identity.name).join(' and ');
+    whatWorks = `${whatWorks} Your ${accNames} add intentional detail.`;
   }
 
   // Determine Vibe

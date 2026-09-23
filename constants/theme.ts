@@ -190,3 +190,51 @@ export const Fonts = Platform.select({
     mono: 'monospace',
   },
 });
+
+/**
+ * Wardrobe & Atelier styling tokens for Phase B discovery surfaces.
+ */
+export const WardrobeTokens = {
+  flatLayCanvasHeight: 320,
+  garmentCardRadius: Radius.md,
+  actionButtonHeight: 48,
+
+  theme: {
+    light: {
+      canvasBackground: '#FBFBF9',
+      cardSurface: '#FFFFFF',
+      cardSurfaceSubtle: '#F7F7F5',
+      cardBorder: 'rgba(0,0,0,0.06)',
+      divider: 'rgba(0,0,0,0.08)',
+      actionPrimary: '#8A6D3B', // Antique Gold (WCAG AA compliant)
+      actionPrimaryText: '#FFFFFF',
+      actionSecondary: '#F3F4F6',
+      actionSecondaryText: '#11181C',
+      accentGoldSubtle: 'rgba(138,109,59,0.10)',
+      statusAppropriateBg: 'rgba(15,138,95,0.12)',
+      statusAppropriateText: '#0F8A5F',
+      statusConsiderBg: 'rgba(180,83,9,0.12)',
+      statusConsiderText: '#B45309',
+      statusConflictBg: 'rgba(220,38,38,0.12)',
+      statusConflictText: '#DC2626',
+    },
+    dark: {
+      canvasBackground: '#121212',
+      cardSurface: '#1C1C1E',
+      cardSurfaceSubtle: '#252528',
+      cardBorder: 'rgba(255,255,255,0.08)',
+      divider: 'rgba(255,255,255,0.10)',
+      actionPrimary: '#C9A96E', // Luxury Gold
+      actionPrimaryText: '#0D0D0D',
+      actionSecondary: '#2C2C2E',
+      actionSecondaryText: '#F5F5F5',
+      accentGoldSubtle: 'rgba(201,169,110,0.15)',
+      statusAppropriateBg: 'rgba(6,214,160,0.15)',
+      statusAppropriateText: '#06D6A0',
+      statusConsiderBg: 'rgba(255,183,3,0.15)',
+      statusConsiderText: '#FFB703',
+      statusConflictBg: 'rgba(239,71,111,0.15)',
+      statusConflictText: '#EF476F',
+    },
+  },
+} as const;

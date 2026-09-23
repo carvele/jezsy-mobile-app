@@ -3,11 +3,12 @@ import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, FlatLi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { Colors, Spacing, Radius, Type, Elevation } from '@/constants/theme';
+import { Colors, Spacing, Radius, Type, Elevation, WardrobeTokens } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { outfitService } from '@/src/services';
 import { outfitFeedbackService } from '@/src/services/outfitFeedbackService';
+import { localExposureService, LocalExposureHistory } from '@/src/services/styling/localExposureService';
 import { useAuth } from '@/src/context/AuthContext';
 import { Image } from 'expo-image';
 import { CapsuleCard } from '@/src/components/CapsuleCard';
@@ -26,7 +27,6 @@ import { generateOutfits, computeStats, GeneratedOutfit } from '@/src/utils/outf
 import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { FadeInView } from '@/src/components/FadeInView';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
-import { FlourishDivider } from '@/src/components/BrandFlourish';
 import { tapLight } from '@/src/utils/haptics';
 import { useGridCardWidth, GRID_COLUMN_GAP, GRID_GUTTER } from '@/src/utils/layout';
 import { useToast } from '@/src/context/ToastContext';
@@ -35,6 +35,10 @@ import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutf
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
+import { OutfitRemixModal } from '@/src/components/styling/OutfitRemixModal';
+import { adaptPassiveOutfitToRemix } from '@/src/services/styling/outfitRemixService';
+import { OutfitRemixState, OutfitRemixResult } from '@/src/types/outfitRemix';
 
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
@@ -47,7 +51,6 @@ type Tab = 'items' | 'outfits' | 'capsules' | 'mannequin';
 
 const VALID_TABS: Tab[] = ['items', 'outfits', 'capsules', 'mannequin'];
 const STORAGE_KEY = 'jezsy_wardrobe_active_tab';
-const PASSED_SUGGESTIONS_KEY_PREFIX = 'jezsy_wardrobe_passed_suggestions_';
 
 function persistTab(tab: Tab) {
   AsyncStorage.setItem(STORAGE_KEY, tab).catch(() => {});
@@ -62,10 +65,11 @@ export default function WardrobeScreen() {
   const { cardWidth, columns } = useGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const wt = WardrobeTokens.theme[theme];
   const { showToast } = useToast();
   const { session } = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string; loadOutfit?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; loadOutfit?: string; transientToken?: string }>();
   const tourCoachmark = useTourCoachmark('wardrobe');
 
 
@@ -280,54 +284,111 @@ export default function WardrobeScreen() {
 
   const stats = useMemo(() => computeStats(items), [items]);
   // Pulled from a larger pool than what's shown, so "Pass" on one of the
-  // visible 3 can reveal the next-best candidate instead of just shrinking
-  // the list.
+  // visible 3 can reveal the next-best candidate instead of just shrinking the list.
   const suggestionPool = useMemo(() => generateOutfits(items, 20), [items]);
-  const [passedKeys, setPassedKeys] = useState<Set<string>>(new Set());
+  const [exposureHistory, setExposureHistory] = useState<LocalExposureHistory | null>(null);
+  const presentedKeysRef = useRef<Set<string>>(new Set());
   const SUGGESTION_DISPLAY_LIMIT = 3;
-  const suggestions = useMemo(
-    () => suggestionPool.filter((o) => !passedKeys.has(o.key)).slice(0, SUGGESTION_DISPLAY_LIMIT),
-    [suggestionPool, passedKeys]
-  );
-  // Loaded once per user so a passed suggestion stays passed across app
-  // restarts and page reloads, not just within one in-memory session --
-  // outfit keys are a sorted join of wardrobe_item ids (outfitGenerator.ts),
-  // stable across reloads, so they still match after this loads.
+
+  // Outfit Remix state for Suggested for You
+  const [remixModalVisible, setRemixModalVisible] = useState(false);
+  const [remixInitialState, setRemixInitialState] = useState<OutfitRemixState | null>(null);
+  const [remixTargetOutfitKey, setRemixTargetOutfitKey] = useState<string | null>(null);
+  const [remixedDrafts, setRemixedDrafts] = useState<Map<string, GeneratedOutfit>>(new Map());
+
+  // Load exposure history from localExposureService (with non-destructive legacy migration)
   useEffect(() => {
     const userId = session?.user?.id;
     if (!userId) return;
-    AsyncStorage.getItem(`${PASSED_SUGGESTIONS_KEY_PREFIX}${userId}`)
-      .then((saved: string | null) => {
-        if (saved) setPassedKeys(new Set(JSON.parse(saved)));
-      })
+    localExposureService.getExposureHistory(userId)
+      .then(setExposureHistory)
       .catch(() => {});
   }, [session?.user?.id]);
-  const handlePassSuggestion = useCallback((outfit: GeneratedOutfit) => {
-    setPassedKeys((prev) => {
-      const next = new Set(prev).add(outfit.key);
-      const userId = session?.user?.id;
-      if (userId) {
-        AsyncStorage.setItem(`${PASSED_SUGGESTIONS_KEY_PREFIX}${userId}`, JSON.stringify([...next])).catch(() => {});
-        outfitFeedbackService.logFeedback(
-          {
-            userId,
-            feedbackType: 'rejected',
-          },
-          outfit.items as any
-        ).catch(() => {});
-      }
-      return next;
+
+  // Dynamic suggestion ranking using cooldowns and exposure decay penalties
+  const suggestions = useMemo(() => {
+    if (!suggestionPool || suggestionPool.length === 0) return [];
+    if (!exposureHistory) {
+      return suggestionPool.slice(0, SUGGESTION_DISPLAY_LIMIT);
+    }
+    const available = suggestionPool.filter(
+      (o) => !localExposureService.isOutfitCooldownActive(o.key, exposureHistory)
+    );
+    const scored = available.map((o) => {
+      const itemIds = o.items.map((i) => i.id);
+      const penalty = localExposureService.calculateExposurePenalty(o.key, itemIds, exposureHistory);
+      return {
+        ...o,
+        effectiveScore: o.score - penalty,
+      };
     });
+    scored.sort((a, b) => b.effectiveScore - a.effectiveScore);
+    return scored.slice(0, SUGGESTION_DISPLAY_LIMIT);
+  }, [suggestionPool, exposureHistory]);
+
+  // Idempotent presentation logging: candidate selected into active Suggested for You set = presented/viewed
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId || suggestions.length === 0) return;
+    for (const o of suggestions) {
+      if ((o as any).isRemixedDraft) continue; // Phase E: Zero presentation exposure for remixed drafts
+      if (!presentedKeysRef.current.has(o.key)) {
+        presentedKeysRef.current.add(o.key);
+        const itemIds = o.items.map((i) => i.id);
+        localExposureService.logPresentation(userId, o.key, itemIds).catch(() => {});
+      }
+    }
+  }, [session?.user?.id, suggestions]);
+
+  // Passive candidate cache synchronization with deterministic fingerprint
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId || items.length === 0) return;
+    const fingerprint = localExposureService.computeWardrobeGenerationFingerprint(items);
+    localExposureService.getPassiveCache(userId, fingerprint).then((cached) => {
+      if (!cached && suggestionPool.length > 0) {
+        localExposureService.setPassiveCache(userId, {
+          userId,
+          schemaVersion: 1,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + 4 * 60 * 60 * 1000,
+          wardrobeFingerprint: fingerprint,
+          candidateSummaries: suggestionPool.map((o) => ({
+            key: o.key,
+            itemIds: o.items.map((i) => i.id),
+            score: o.score,
+            label: o.label,
+            headline: (o as any).headline,
+            reason: o.reason,
+            assessment: o.assessment,
+            whyThisWorks: (o as any).whyThisWorks,
+            isAiRanked: (o as any).isAiRanked,
+          })),
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  }, [session?.user?.id, items, suggestionPool]);
+
+  const handlePassSuggestion = useCallback((outfit: GeneratedOutfit) => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+
+    // Phase E: Strictly DO NOT log exposure interaction for remixed drafts
+    if (!(outfit as any).isRemixedDraft) {
+      const itemIds = outfit.items.map((i) => i.id);
+      localExposureService.logInteraction(userId, outfit.key, 'passed', itemIds).then(() => {
+        localExposureService.getExposureHistory(userId).then(setExposureHistory).catch(() => {});
+      }).catch(() => {});
+    }
+
+    outfitFeedbackService.logFeedback(
+      {
+        userId,
+        feedbackType: 'rejected',
+      },
+      outfit.items as any
+    ).catch(() => {});
   }, [session?.user?.id]);
-  // Deliberately no effect resetting passedKeys on `items` changing: the
-  // wardrobe refetches on every screen focus (useFocusEffect below), which
-  // hands back a brand-new array reference each time even when the
-  // underlying data is identical. An earlier version reset passedKeys
-  // whenever that reference changed, which meant navigating away and back
-  // to this tab silently un-dismissed everything the user had just passed
-  // on -- confirmed live, reported as suggestions "ghosting" back after
-  // being passed. A passed suggestion now stays passed for good, the same
-  // as dismissing anything else, persisted per-user via AsyncStorage above.
 
   const handleSaveSuggestion = useCallback(async (outfit: GeneratedOutfit) => {
     if (!session?.user?.id) return;
@@ -360,6 +421,14 @@ export default function WardrobeScreen() {
         outfit.items as any
       ).catch(() => {});
 
+      // Phase E: Strictly DO NOT log exposure interaction for remixed drafts
+      if (!(outfit as any).isRemixedDraft) {
+        const itemIds = outfit.items.map((i) => i.id);
+        localExposureService.logInteraction(session.user.id, outfit.key, 'saved', itemIds).then(() => {
+          localExposureService.getExposureHistory(session.user.id).then(setExposureHistory).catch(() => {});
+        }).catch(() => {});
+      }
+
       showToast('Outfit saved to your wardrobe.', 'success');
       fetchWardrobeData();
     } catch (err) {
@@ -369,6 +438,87 @@ export default function WardrobeScreen() {
       setSavingKey(null);
     }
   }, [session?.user?.id, showToast, fetchWardrobeData]);
+
+  const handleOpenInMannequin = useCallback(async (outfit: GeneratedOutfit) => {
+    if (!session?.user?.id || !outfit?.items || outfit.items.length === 0) return;
+
+    const res = await transientMannequinService.createToken({
+      userId: session.user.id,
+      itemIds: outfit.items.map((i) => i.id),
+      source: 'passive-outfits',
+    });
+
+    if (res.success && res.token) {
+      router.replace({
+        pathname: '/(tabs)/wardrobe',
+        params: {
+          tab: 'mannequin',
+          transientToken: res.token,
+        },
+      });
+    } else {
+      showToast('Could not open in Mannequin. Please try again.', 'error');
+    }
+  }, [session?.user?.id, router, showToast]);
+
+  // Outfit Remix Handlers for Suggested for You
+  const handleOpenRemix = useCallback((outfit: GeneratedOutfit) => {
+    const initial = adaptPassiveOutfitToRemix(outfit, items);
+    setRemixInitialState(initial);
+    setRemixTargetOutfitKey(outfit.key);
+    setRemixModalVisible(true);
+  }, [items]);
+
+  const handleApplyRemix = useCallback((result: OutfitRemixResult) => {
+    if (!remixTargetOutfitKey) return;
+    const remixedOutfit: GeneratedOutfit = {
+      key: result.outfitKey,
+      items: result.items as any,
+      score: result.score,
+      label: result.label,
+      headline: result.headline,
+      reason: result.whyThisWorks?.summary || 'Remixed combination',
+      whyThisWorks: result.whyThisWorks as any,
+      isAiRanked: false,
+      assessment: 'Appropriate for this occasion',
+      isRemixedDraft: true,
+    } as any;
+
+    setRemixedDrafts((prev) => new Map(prev).set(remixTargetOutfitKey, remixedOutfit));
+    showToast('Outfit updated in feed.', 'success');
+  }, [remixTargetOutfitKey, showToast]);
+
+  const handleSaveRemix = useCallback((result: OutfitRemixResult) => {
+    const remixedOutfit: GeneratedOutfit = {
+      key: result.outfitKey,
+      items: result.items as any,
+      score: result.score,
+      label: result.label,
+      headline: result.headline,
+      reason: result.whyThisWorks?.summary || 'Remixed combination',
+      whyThisWorks: result.whyThisWorks as any,
+      isAiRanked: false,
+      assessment: 'Appropriate for this occasion',
+      isRemixedDraft: true,
+    } as any;
+    handleSaveSuggestion(remixedOutfit);
+  }, [handleSaveSuggestion]);
+
+  const handleMannequinRemix = useCallback((result: OutfitRemixResult) => {
+    const remixedOutfit: GeneratedOutfit = {
+      key: result.outfitKey,
+      items: result.items as any,
+      score: result.score,
+      label: result.label,
+      headline: result.headline,
+      reason: result.whyThisWorks?.summary || 'Remixed combination',
+      whyThisWorks: result.whyThisWorks as any,
+      isAiRanked: false,
+      assessment: 'Appropriate for this occasion',
+      isRemixedDraft: true,
+    } as any;
+    handleOpenInMannequin(remixedOutfit);
+  }, [handleOpenInMannequin]);
 
   const renderItem = useCallback(({ item, index }: { item: WardrobeItem; index: number }) => {
     // Use the computed effective bucket so a stale garment_type column never shows wrong info.
@@ -526,26 +676,6 @@ export default function WardrobeScreen() {
     </View>
   );
 
-  const outfitsHeader = suggestions.length > 0 ? (
-    <View style={styles.suggestBlock}>
-      <View style={styles.suggestHeader}>
-        <IconSymbol name="sparkles" size={18} color={colors.tint} />
-        <Text style={[styles.suggestTitle, { color: colors.text }]}>Suggested for you</Text>
-      </View>
-      <Text style={[styles.suggestSub, { color: colors.secondaryText }]}>
-        Built from your own pieces and scored on colour harmony, favouring items you have not reached for.
-      </Text>
-      {suggestions.map((o, i) => (
-        <FadeInView key={o.key} index={i}>
-          <SuggestedOutfitCard outfit={o} onSave={handleSaveSuggestion} onPass={handlePassSuggestion} saving={savingKey === o.key} />
-        </FadeInView>
-      ))}
-      <View style={styles.dividerWrap}>
-        <FlourishDivider color={colors.tint} width={140} />
-      </View>
-      <Text style={[styles.savedHeading, { color: colors.text }]}>Saved outfits</Text>
-    </View>
-  ) : null;
 
   if (!session?.user?.id) {
     return (
@@ -601,6 +731,19 @@ export default function WardrobeScreen() {
         <Text style={[styles.headerTitle, { color: colors.tint }]}>Digital Wardrobe</Text>
         
         <View style={styles.headerRightActions}>
+          {/* Planner Calendar Button */}
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+            onPress={() => {
+              tapLight();
+              router.push('/planner' as any);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open Outfit Planner"
+          >
+            <IconSymbol name="calendar" size={18} color={colors.tint} />
+          </TouchableOpacity>
+
           {/* Add (+) Button */}
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.tint }]}
@@ -646,6 +789,7 @@ export default function WardrobeScreen() {
                   setActiveTab(tabItem.key);
                 }}
                 accessibilityRole="tab"
+                accessibilityLabel={`${tabItem.label} tab`}
                 accessibilityState={{ selected: isSelected }}
               >
                 <View style={styles.tabInner}>
@@ -679,7 +823,13 @@ export default function WardrobeScreen() {
           another tab is active, so switching tabs doesn't discard an
           in-progress mannequin styling session. */}
       <View style={{ flex: 1, display: activeTab === 'mannequin' ? 'flex' : 'none' }}>
-        <MannequinView wardrobeItems={items} onRefreshWardrobe={fetchWardrobeData} initialLoadOutfitId={params.loadOutfit} />
+        <MannequinView
+          wardrobeItems={items}
+          isWardrobeLoaded={!loading}
+          onRefreshWardrobe={fetchWardrobeData}
+          initialLoadOutfitId={params.loadOutfit}
+          initialTransientToken={params.transientToken}
+        />
       </View>
 
       {activeTab === 'mannequin' ? null : loading ? (
@@ -735,61 +885,121 @@ export default function WardrobeScreen() {
           }
         />
       ) : activeTab === 'outfits' ? (
-        outfits.length > 0 || suggestions.length > 0 ? (
+        outfits.length > 0 || suggestions.length > 0 || items.length >= 2 ? (
           <ScrollView
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} colors={[colors.tint]} />
             }
           >
-            {outfitsHeader}
+            {/* Outfit Planner Banner */}
+            <TouchableOpacity
+              style={[styles.plannerBanner, { backgroundColor: wt.cardSurface, borderColor: wt.cardBorder }]}
+              onPress={() => {
+                tapLight();
+                router.push('/planner' as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Outfit Planner — Schedule your week, plan upcoming looks"
+            >
+              <View style={[styles.plannerBannerIcon, { backgroundColor: colors.glass }]}>
+                <IconSymbol name="calendar" size={20} color={colors.tint} />
+              </View>
+              <View style={styles.plannerBannerContent}>
+                <Text style={[styles.plannerBannerTitle, { color: colors.text }]}>Outfit Planner</Text>
+                <Text style={[styles.plannerBannerSubtitle, { color: colors.secondaryText }]}>
+                  Schedule your week, plan upcoming looks.
+                </Text>
+              </View>
+              <IconSymbol name="chevron.right" size={16} color={colors.secondaryText} />
+            </TouchableOpacity>
 
-            {outfits.length > 0 ? (
-              <FlatList
-                key="saved-outfits-row"
-                horizontal
-                data={outfits}
-                renderItem={renderOutfitItem}
-                keyExtractor={(item) => item.id}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.savedOutfitsRow}
-                snapToInterval={SAVED_OUTFIT_CARD_WIDTH + Spacing.lg}
-                decelerationRate="fast"
-                initialNumToRender={4}
-                onEndReached={loadMoreOutfits}
-                onEndReachedThreshold={0.5}
-                ListFooterComponent={
-                  loadingMoreOutfits ? (
-                    <ActivityIndicator color={colors.tint} style={{ marginHorizontal: Spacing.lg }} />
-                  ) : null
-                }
-              />
-            ) : (
-              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                No saved outfits yet -- save one of the suggestions above, or build your own.
-              </Text>
-            )}
-
-            {/* Create Outfit — two clear choices */}
-            <View style={[styles.createOutfitRow, { borderTopColor: colors.border }]}>
+            {/* 1. Creation Fork at the TOP */}
+            <View style={styles.createOutfitRowTop}>
               <TouchableOpacity
-                style={[styles.createChoice, { backgroundColor: colors.tint }]}
-                onPress={() => { tapLight(); setActiveTab('mannequin'); }}
-                accessibilityRole="button"
-                accessibilityLabel="Build outfit yourself on the mannequin"
-              >
-                <IconSymbol name="person.fill" size={16} color={colors.onTint} />
-                <Text style={[styles.createChoiceText, { color: colors.onTint }]}>Build Yourself</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.createChoice, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.tint }]}
+                style={[styles.createChoice, { backgroundColor: wt.actionPrimary }]}
                 onPress={() => { tapLight(); router.push('/style-advisor' as any); }}
                 accessibilityRole="button"
                 accessibilityLabel="Style It For Me — JeZsy picks a look from your wardrobe"
               >
-                <IconSymbol name="sparkles" size={16} color={colors.tint} />
-                <Text style={[styles.createChoiceText, { color: colors.tint }]}>Style It For Me</Text>
+                <IconSymbol name="sparkles" size={16} color={wt.actionPrimaryText} />
+                <Text style={[styles.createChoiceText, { color: wt.actionPrimaryText }]}>Style It For Me</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createChoice, { backgroundColor: wt.cardSurface, borderWidth: 1, borderColor: wt.cardBorder }]}
+                onPress={() => { tapLight(); setActiveTab('mannequin'); }}
+                accessibilityRole="button"
+                accessibilityLabel="Build outfit yourself on the mannequin"
+              >
+                <IconSymbol name="person.fill" size={16} color={wt.actionSecondaryText} />
+                <Text style={[styles.createChoiceText, { color: wt.actionSecondaryText }]}>Build Yourself</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 2. Saved Outfits in the MIDDLE */}
+            <View style={styles.savedSection}>
+              <Text style={[styles.savedHeading, { color: colors.text }]}>Saved Outfits</Text>
+              {outfits.length > 0 ? (
+                <FlatList
+                  key="saved-outfits-row"
+                  horizontal
+                  data={outfits}
+                  renderItem={renderOutfitItem}
+                  keyExtractor={(item) => item.id}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.savedOutfitsRow}
+                  snapToInterval={SAVED_OUTFIT_CARD_WIDTH + Spacing.lg}
+                  decelerationRate="fast"
+                  initialNumToRender={4}
+                  onEndReached={loadMoreOutfits}
+                  onEndReachedThreshold={0.5}
+                  ListFooterComponent={
+                    loadingMoreOutfits ? (
+                      <ActivityIndicator color={colors.tint} style={{ marginHorizontal: Spacing.lg }} />
+                    ) : null
+                  }
+                />
+              ) : (
+                <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
+                  No saved outfits yet — save one of the suggestions below, or build your own.
+                </Text>
+              )}
+            </View>
+
+            {/* 3. Suggested for You discovery section at the BOTTOM */}
+            <View style={styles.suggestBlock}>
+              <View style={styles.suggestHeader}>
+                <IconSymbol name="sparkles" size={18} color={wt.actionPrimary} />
+                <Text style={[styles.suggestTitle, { color: colors.text }]}>Suggested for You</Text>
+              </View>
+              <Text style={[styles.suggestSub, { color: colors.secondaryText }]}>
+                Curated looks composed from your wardrobe and scored for color and style harmony.
+              </Text>
+              {suggestions.length > 0 ? (
+                suggestions.map((o, i) => {
+                  const displayOutfit = remixedDrafts.get(o.key) || o;
+                  return (
+                    <FadeInView key={o.key} index={i}>
+                      <SuggestedOutfitCard
+                        outfit={displayOutfit}
+                        onSave={handleSaveSuggestion}
+                        onPass={handlePassSuggestion}
+                        onOpenMannequin={handleOpenInMannequin}
+                        onRemix={handleOpenRemix}
+                        saving={savingKey === o.key}
+                        variant="atelier"
+                      />
+                    </FadeInView>
+                  );
+                })
+              ) : (
+                <View style={[styles.exhaustedBox, { backgroundColor: wt.cardSurfaceSubtle, borderColor: wt.cardBorder }]}>
+                  <Text style={[styles.exhaustedTitle, { color: colors.text }]}>All Caught Up</Text>
+                  <Text style={[styles.exhaustedSub, { color: colors.secondaryText }]}>
+                    You’ve reviewed all current suggestions. Add new garments or check back as cooldowns refresh.
+                  </Text>
+                </View>
+              )}
             </View>
           </ScrollView>
         ) : (
@@ -937,6 +1147,17 @@ export default function WardrobeScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <OutfitRemixModal
+        visible={remixModalVisible}
+        onClose={() => setRemixModalVisible(false)}
+        initialState={remixInitialState}
+        wardrobe={items}
+        onApply={handleApplyRemix}
+        onSave={handleSaveRemix}
+        onOpenMannequin={handleMannequinRemix}
+        saving={savingKey !== null}
+      />
     </SafeAreaView>
   );
 }
@@ -1207,6 +1428,34 @@ const styles = StyleSheet.create({
   outfitMoreText: {
     fontWeight: '700',
   },
+  plannerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  plannerBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plannerBannerContent: {
+    flex: 1,
+  },
+  plannerBannerTitle: {
+    ...Type.bodyStrong,
+    fontSize: 14,
+  },
+  plannerBannerSubtitle: {
+    ...Type.caption,
+    fontSize: 12,
+    marginTop: 2,
+  },
   createOutfitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1328,5 +1577,32 @@ const styles = StyleSheet.create({
   sheetCancelText: {
     ...Type.bodyStrong,
     fontSize: 14,
+  },
+  createOutfitRowTop: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.xl,
+  },
+  savedSection: {
+    marginBottom: Spacing.xl,
+  },
+  exhaustedBox: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  exhaustedTitle: {
+    ...Type.bodyStrong,
+    fontSize: 16,
+    marginBottom: Spacing.xs,
+  },
+  exhaustedSub: {
+    ...Type.body,
+    fontSize: 13,
+    textAlign: 'center',
   },
 });

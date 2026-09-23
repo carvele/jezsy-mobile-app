@@ -210,6 +210,105 @@ const TOP_SUBTYPES: SubtypeRow[] = [
   { pattern: /\bbras?\b/i,                          type: 'Bra',      subtype: null },
 ];
 
+export type AccessorySubtype =
+  | 'bag'
+  | 'belt'
+  | 'watch'
+  | 'jewelry'
+  | 'headwear'
+  | 'eyewear'
+  | 'scarf'
+  | 'gloves';
+
+const ACCESSORY_SUBTYPES: SubtypeRow[] = [
+  // Compound string precedence overrides first:
+  { pattern: /\bbelt\s+bags?\b/i,                  type: 'Bag',      subtype: 'Belt Bag' },
+  { pattern: /\bfanny\s+packs?\b/i,                 type: 'Bag',      subtype: 'Belt Bag' },
+  { pattern: /\bchain\s+belts?\b/i,                 type: 'Belt',     subtype: 'Chain Belt' },
+  { pattern: /\bwatch\s+bands?\b/i,                 type: 'Watch',    subtype: 'Watch Band' },
+  { pattern: /\bsunglass(?:es)?\s+cases?\b/i,       type: 'Eyewear',  subtype: 'Sunglasses Case' },
+
+  // Bags
+  { pattern: /\bhandbags?\b/i,                      type: 'Bag',      subtype: 'Handbag' },
+  { pattern: /\btote\s+bags?\b/i,                   type: 'Bag',      subtype: 'Tote Bag' },
+  { pattern: /\btotes?\b/i,                         type: 'Bag',      subtype: 'Tote' },
+  { pattern: /\bcrossbody(?:\s+bags?)?\b/i,         type: 'Bag',      subtype: 'Crossbody Bag' },
+  { pattern: /\bclutch(?:es)?\b/i,                  type: 'Bag',      subtype: 'Clutch' },
+  { pattern: /\bbackpacks?\b/i,                     type: 'Bag',      subtype: 'Backpack' },
+  { pattern: /\bpurses?\b/i,                        type: 'Bag',      subtype: 'Purse' },
+  { pattern: /\bsatchels?\b/i,                      type: 'Bag',      subtype: 'Satchel' },
+  { pattern: /\bshoulder\s+bags?\b/i,               type: 'Bag',      subtype: 'Shoulder Bag' },
+  { pattern: /\bduffle(?:\s+bags?)?\b/i,            type: 'Bag',      subtype: 'Duffle Bag' },
+  { pattern: /\bbags?\b/i,                          type: 'Bag',      subtype: null },
+
+  // Belts
+  { pattern: /\bleather\s+belts?\b/i,               type: 'Belt',     subtype: 'Leather Belt' },
+  { pattern: /\bwaist\s+belts?\b/i,                 type: 'Belt',     subtype: 'Waist Belt' },
+  { pattern: /\bdress\s+belts?\b/i,                 type: 'Belt',     subtype: 'Dress Belt' },
+  { pattern: /\bwoven\s+belts?\b/i,                 type: 'Belt',     subtype: 'Woven Belt' },
+  { pattern: /\bsash(?:es)?\b/i,                    type: 'Belt',     subtype: 'Sash' },
+  { pattern: /\bbelts?\b/i,                         type: 'Belt',     subtype: null },
+
+  // Watches
+  { pattern: /\bdress\s+watch(?:es)?\b/i,           type: 'Watch',    subtype: 'Dress Watch' },
+  { pattern: /\bsport\s+watch(?:es)?\b/i,           type: 'Watch',    subtype: 'Sport Watch' },
+  { pattern: /\bsmart\s*watch(?:es)?\b/i,           type: 'Watch',    subtype: 'Smartwatch' },
+  { pattern: /\bchronographs?\b/i,                  type: 'Watch',    subtype: 'Chronograph' },
+  { pattern: /\btimepieces?\b/i,                    type: 'Watch',    subtype: 'Timepiece' },
+  { pattern: /\bwrist\s*watch(?:es)?\b/i,           type: 'Watch',    subtype: 'Wristwatch' },
+  { pattern: /\bwatches?\b/i,                       type: 'Watch',    subtype: null },
+
+  // Eyewear
+  { pattern: /\bsunglasses?\b/i,                    type: 'Eyewear',  subtype: 'Sunglasses' },
+  { pattern: /\bshades\b/i,                         type: 'Eyewear',  subtype: 'Sunglasses' },
+  { pattern: /\baviators?\b/i,                      type: 'Eyewear',  subtype: 'Aviators' },
+  { pattern: /\boptical\s+frames?\b/i,              type: 'Eyewear',  subtype: 'Optical Frames' },
+  { pattern: /\breading\s+glasses\b/i,              type: 'Eyewear',  subtype: 'Reading Glasses' },
+  { pattern: /\beyeglasses\b/i,                     type: 'Eyewear',  subtype: 'Eyeglasses' },
+  { pattern: /\beyewear\b/i,                        type: 'Eyewear',  subtype: null },
+
+  // Headwear
+  { pattern: /\bbeanies?\b/i,                       type: 'Headwear', subtype: 'Beanie' },
+  { pattern: /\bberets?\b/i,                        type: 'Headwear', subtype: 'Beret' },
+  { pattern: /\bfedoras?\b/i,                       type: 'Headwear', subtype: 'Fedora' },
+  { pattern: /\bbucket\s+hats?\b/i,                 type: 'Headwear', subtype: 'Bucket Hat' },
+  { pattern: /\bsun\s+hats?\b/i,                    type: 'Headwear', subtype: 'Sun Hat' },
+  { pattern: /\bvisors?\b/i,                        type: 'Headwear', subtype: 'Visor' },
+  { pattern: /\bbaseball\s+caps?\b/i,               type: 'Headwear', subtype: 'Baseball Cap' },
+  { pattern: /\bcaps?\b/i,                          type: 'Headwear', subtype: 'Cap' },
+  { pattern: /\bhats?\b/i,                          type: 'Headwear', subtype: null },
+  { pattern: /\bheadwear\b/i,                       type: 'Headwear', subtype: null },
+
+  // Scarf
+  { pattern: /\bknit\s+scar(?:f|ves)\b/i,           type: 'Scarf',    subtype: 'Knit Scarf' },
+  { pattern: /\bsilk\s+scar(?:f|ves)\b/i,           type: 'Scarf',    subtype: 'Silk Scarf' },
+  { pattern: /\bneckerchiefs?\b/i,                  type: 'Scarf',    subtype: 'Neckerchief' },
+  { pattern: /\bpashminas?\b/i,                     type: 'Scarf',    subtype: 'Pashmina' },
+  { pattern: /\bshawls?\b/i,                        type: 'Scarf',    subtype: 'Shawl' },
+  { pattern: /\bwraps?\b/i,                         type: 'Scarf',    subtype: 'Wrap' },
+  { pattern: /\bscar(?:f|ves)\b/i,                  type: 'Scarf',    subtype: null },
+
+  // Gloves
+  { pattern: /\bleather\s+gloves?\b/i,              type: 'Gloves',   subtype: 'Leather Gloves' },
+  { pattern: /\bwinter\s+gloves?\b/i,               type: 'Gloves',   subtype: 'Winter Gloves' },
+  { pattern: /\bdriving\s+gloves?\b/i,              type: 'Gloves',   subtype: 'Driving Gloves' },
+  { pattern: /\bmittens?\b/i,                       type: 'Gloves',   subtype: 'Mittens' },
+  { pattern: /\bgloves?\b/i,                        type: 'Gloves',   subtype: null },
+
+  // Jewelry
+  { pattern: /\bnecklaces?\b/i,                     type: 'Jewelry',  subtype: 'Necklace' },
+  { pattern: /\bpendants?\b/i,                      type: 'Jewelry',  subtype: 'Pendant' },
+  { pattern: /\bchokers?\b/i,                       type: 'Jewelry',  subtype: 'Choker' },
+  { pattern: /\bearrings?\b/i,                      type: 'Jewelry',  subtype: 'Earrings' },
+  { pattern: /\bbracelets?\b/i,                     type: 'Jewelry',  subtype: 'Bracelet' },
+  { pattern: /\bbangles?\b/i,                       type: 'Jewelry',  subtype: 'Bangle' },
+  { pattern: /\bcuffs?\b/i,                         type: 'Jewelry',  subtype: 'Cuff' },
+  { pattern: /\brings?\b/i,                         type: 'Jewelry',  subtype: 'Ring' },
+  { pattern: /\bbrooches?\b/i,                      type: 'Jewelry',  subtype: 'Brooch' },
+  { pattern: /\bjewelry\b/i,                        type: 'Jewelry',  subtype: null },
+  { pattern: /\bjewellery\b/i,                      type: 'Jewelry',  subtype: null },
+];
+
 const ACCESSORY_PATTERNS: RegExp[] = [
   /\bbags?\b/i, /\bpurses?\b/i, /\bclutch\b/i, /\btotes?\b/i,
   /\bbelts?\b/i, /\bhats?\b/i, /\bcaps?\b/i,
@@ -428,6 +527,12 @@ export function extractGarmentEvidence(
     if (botMatch) return { fam: 'Bottom' as GarmentFamily, ...botMatch };
 
     // 5. Accessory
+    // Vision ambiguity safeguard: zero-shot neural classifier 'eyewear or jewelry' is ambiguous
+    if (/\beyewear\s+or\s+jewelry\b/i.test(text) && !/\b(?:sunglasses?|glasses|frames|shades|necklace|earrings?|bracelets?|rings?|pendants?)\b/i.test(text)) {
+      return { fam: 'Accessory' as GarmentFamily, type: 'Accessory', subtype: null };
+    }
+    const accMatch = matchSubtypeInTable(text, ACCESSORY_SUBTYPES);
+    if (accMatch) return { fam: 'Accessory' as GarmentFamily, ...accMatch };
     if (ACCESSORY_PATTERNS.some((p) => p.test(text))) {
       return { fam: 'Accessory' as GarmentFamily, type: 'Accessory', subtype: null };
     }
@@ -752,5 +857,53 @@ export function resolveEffectiveGarmentBucket(item: {
 
   return norm.systemBucket || 'Top';
 }
+
+/**
+ * Resolves the canonical typed accessory subtype for a wardrobe item.
+ * Returns null if the item is not an accessory or if subtype cannot be resolved.
+ */
+export function resolveAccessorySubtype(item: {
+  category?: string | null;
+  sub_category?: string | null;
+  description?: string | null;
+  user_notes?: string | null;
+  color_tags?: string[] | null;
+  ai_attributes?: any;
+}): AccessorySubtype | null {
+  const norm = normalizeGarment(
+    item.category || '',
+    item.sub_category || '',
+    (item.color_tags && item.color_tags.length > 0 ? item.color_tags.join(', ') : '') || (item as any)?.ai_attributes?.rawColor || '',
+    '',
+    item.description || (item as any)?.ai_attributes?.description || '',
+    item.user_notes || (item as any)?.ai_attributes?.userNotes || ''
+  );
+  if (norm.family !== 'Accessory') return null;
+
+  const t = (norm.type || '').toLowerCase();
+  switch (t) {
+    case 'bag': return 'bag';
+    case 'belt': return 'belt';
+    case 'watch': return 'watch';
+    case 'jewelry': return 'jewelry';
+    case 'headwear': return 'headwear';
+    case 'eyewear': return 'eyewear';
+    case 'scarf': return 'scarf';
+    case 'gloves': return 'gloves';
+    default: {
+      const sub = `${norm.subtype || ''} ${item.sub_category || ''} ${item.description || ''}`.toLowerCase();
+      if (/\b(?:belt\s+bag|fanny\s+pack|bag|purse|tote|clutch|satchel|backpack|crossbody|duffle)\b/i.test(sub)) return 'bag';
+      if (/\b(?:chain\s+belt|waist\s+belt|leather\s+belt|belt|sash)\b/i.test(sub)) return 'belt';
+      if (/\b(?:watch\s+band|dress\s+watch|sport\s+watch|smartwatch|watch|chronograph|timepiece)\b/i.test(sub)) return 'watch';
+      if (/\b(?:necklace|pendant|choker|earrings?|bracelets?|bangles?|cuff|ring|brooch|jewelry)\b/i.test(sub)) return 'jewelry';
+      if (/\b(?:beanie|beret|fedora|bucket\s+hat|sun\s+hat|visor|cap|hat|headwear)\b/i.test(sub)) return 'headwear';
+      if (/\b(?:sunglass(?:es)?|shades|aviators|optical\s+frames|reading\s+glasses|glasses|eyewear)\b/i.test(sub)) return 'eyewear';
+      if (/\b(?:knit\s+scarf|silk\s+scarf|neckerchief|pashmina|shawl|wrap|scarf|scarves)\b/i.test(sub)) return 'scarf';
+      if (/\b(?:leather\s+gloves|winter\s+gloves|driving\s+gloves|mittens?|gloves?)\b/i.test(sub)) return 'gloves';
+      return null;
+    }
+  }
+}
+
 
 

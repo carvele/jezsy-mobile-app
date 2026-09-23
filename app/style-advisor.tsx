@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,19 +11,16 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Colors, Radius, Spacing, Type, WardrobeTokens } from '@/constants/theme';
 import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { supabase } from '@/src/lib/supabase';
 import { outfitService } from '@/src/services';
-import { wardrobeService, WARDROBE_LIST_COLUMNS } from '@/src/services/wardrobeService';
-import { describeWearLogResult } from '@/src/utils/wearLog';
+import { WARDROBE_LIST_COLUMNS } from '@/src/services/wardrobeService';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { Database } from '@/src/types/database.types';
-import { SuggestedOutfitCard } from '@/src/components/SuggestedOutfitCard';
 import { styleProfileService } from '@/src/services/styleProfileService';
 import { outfitFeedbackService } from '@/src/services/outfitFeedbackService';
 import { UserStyleProfileDto } from '@/src/types/dto/styleProfile';
@@ -34,34 +31,35 @@ import {
   refineStylingSession,
   StylingSessionState,
 } from '@/src/services/styling/stylingSessionService';
-import { StylingOption, StylingRefinementType } from '@/src/types/styleAdvisor';
+import {
+  StylingOption,
+  StylingRefinementType,
+  StyleAdvisorChipContext,
+  StyleAdvisorVibe,
+} from '@/src/types/styleAdvisor';
+import { StyleAdvisorLookCard } from '@/src/components/styling/StyleAdvisorLookCard';
+import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
+import { OutfitRemixModal } from '@/src/components/styling/OutfitRemixModal';
+import { adaptStyleAdvisorLookToRemix } from '@/src/services/styling/outfitRemixService';
+import { OutfitRemixState, OutfitRemixResult } from '@/src/types/outfitRemix';
+import { supabase } from '@/src/lib/supabase';
+import { PlanOutfitModal } from '@/src/components/planner/PlanOutfitModal';
+import { buildPlannerItemSnapshots } from '@/src/utils/plannerSnapshotAdapter';
+import { PlanLaterPayload } from '@/src/types/planner';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
-type OccasionKey = 'work' | 'casual' | 'date' | 'party' | 'formal' | 'interview' | 'dinner' | 'travel';
-
-interface Occasion {
-  key: OccasionKey;
-  label: string;
-  icon: string;
-  tip: string;
-}
-
-const OCCASIONS: Occasion[] = [
-  { key: 'work', label: 'Work', icon: 'bag.fill', tip: 'Keep it polished: a neutral base with one structured layer reads as professional.' },
-  { key: 'casual', label: 'Casual', icon: 'tshirt', tip: 'Fewer pieces, more comfort — casual looks work best without over-layering.' },
-  { key: 'date', label: 'Date Night', icon: 'heart.fill', tip: 'Lead with your best color pairing; this is the one place to take a chance on contrast.' },
-  { key: 'party', label: 'Party', icon: 'sparkles', tip: 'An accessory does the work here — let one piece stand out against the rest.' },
-  { key: 'formal', label: 'Formal', icon: 'star.fill', tip: 'A dress alone, or a top and bottom under a proper outer layer, is the safest formal formula.' },
-  { key: 'interview', label: 'Interview', icon: 'briefcase.fill', tip: 'Crisp, structured tailoring with minimal distractions builds immediate confidence.' },
-  { key: 'dinner', label: 'Dinner', icon: 'fork.knife', tip: 'Smart casual elegance that transitions effortlessly into ambient evening lighting.' },
-  { key: 'travel', label: 'Travel', icon: 'airplane', tip: 'Wrinkle-resistant breathable layers designed for mobility and temperature changes.' },
-];
+const OCCASION_CHIPS = ['Dinner', 'Work', 'Casual', 'Date Night', 'Event', 'Travel'];
+const WEATHER_CHIPS = ['Sunny', 'Rain', 'Snow'];
+const TEMPERATURE_CHIPS = ['Warm', 'Mild', 'Cool'];
+const VIBE_CHIPS: StyleAdvisorVibe[] = ['polished', 'relaxed', 'comfortable', 'minimal'];
 
 export default function StyleAdvisorScreen() {
   const theme = useColorScheme();
   const colors = Colors[theme];
+  const wt = WardrobeTokens.theme[theme];
   const router = useRouter();
+  const params = useLocalSearchParams<{ styleAroundItemId?: string }>();
   const { session } = useAuth();
   const { showToast } = useToast();
   const bottomInset = useSharedBottomInset();
@@ -72,15 +70,46 @@ export default function StyleAdvisorScreen() {
 
   // Styling inputs
   const [prompt, setPrompt] = useState('');
-  const [occasion, setOccasion] = useState<OccasionKey | null>(null);
+  const [selectedOccasion, setSelectedOccasion] = useState<string | null>(null);
+  const [selectedWeather, setSelectedWeather] = useState<string | null>(null);
+  const [selectedTemperature, setSelectedTemperature] = useState<string | null>(null);
+  const [selectedVibe, setSelectedVibe] = useState<StyleAdvisorVibe | null>(null);
+  const [comfortPriority, setComfortPriority] = useState<boolean>(false);
+
+  // Locked item for "Style Around This Item"
+  const [lockedGarment, setLockedGarment] = useState<WardrobeItem | null>(null);
+  const validatedLockRef = useRef<string | null>(null);
 
   // Active session and options
   const [sessionState, setSessionState] = useState<StylingSessionState | null>(null);
-  const [activeOptionIndex, setActiveOptionIndex] = useState(0);
   const [isStyling, setIsStyling] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [showExplanation, setShowExplanation] = useState(true);
+  const [transferringKey, setTransferringKey] = useState<string | null>(null);
+
+  // Outfit Remix state
+  const [remixModalVisible, setRemixModalVisible] = useState(false);
+  const [remixInitialState, setRemixInitialState] = useState<OutfitRemixState | null>(null);
+  const [remixLookIndex, setRemixLookIndex] = useState<number>(-1);
+
+  // Planner Plan Later state
+  const [planLaterPayload, setPlanLaterPayload] = useState<PlanLaterPayload | null>(null);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  const handlePlanLook = useCallback(
+    (look: StylingOption) => {
+      const snapshots = buildPlannerItemSnapshots(look.items, { authoritativeInventory: items });
+      setPlanLaterPayload({
+        items: snapshots,
+        sourceType: 'style_advisor',
+        occasion: look.whyThisWorks?.occasion || sessionState?.intent?.selectedOccasion || undefined,
+        name: 'Style Advisor Look',
+      });
+      setIsPlanModalOpen(true);
+    },
+    [items, sessionState]
+  );
 
   // Load wardrobe & profile
   useEffect(() => {
@@ -118,21 +147,106 @@ export default function StyleAdvisorScreen() {
     };
   }, [session?.user?.id]);
 
-  const activeOccasion = OCCASIONS.find((o) => o.key === occasion) || null;
+  // Gate Style Around validation strictly until wardrobe loading completes
+  useEffect(() => {
+    if (loadingWardrobe || !params.styleAroundItemId) return;
+    const targetId = params.styleAroundItemId;
+    if (validatedLockRef.current === targetId) return;
+    validatedLockRef.current = targetId;
 
-  // Primary action: Style Me
-  const handleStyleMe = useCallback(async () => {
+    const targetItem = items.find((w) => w.id === targetId);
+    if (!targetItem) {
+      showToast('The selected item is no longer available in your wardrobe.', 'info');
+      router.setParams({ styleAroundItemId: undefined });
+      return;
+    }
+
+    const bucket = resolveEffectiveGarmentBucket(targetItem);
+    const isCoreCategory = ['Top', 'Bottom', 'Dress', 'Shoes', 'Outerwear'].includes(bucket);
+    if (!isCoreCategory) {
+      showToast('Accessories cannot currently be used as anchor garments for styling.', 'info');
+      router.setParams({ styleAroundItemId: undefined });
+      return;
+    }
+
+    setLockedGarment(targetItem);
+  }, [loadingWardrobe, params.styleAroundItemId, items, router, showToast]);
+
+  // Remove lock affordance: clears locked state, intent mustUseItemIds, and route parameter
+  const handleRemoveLock = useCallback(() => {
+    tapLight();
+    const removedItemId = lockedGarment?.id;
+    setLockedGarment(null);
+    validatedLockRef.current = null;
+    router.setParams({ styleAroundItemId: undefined });
+
+    if (sessionState) {
+      setSessionState((prev) => {
+        if (!prev) return null;
+        const toRemove = new Set(prev.lockedWardrobeItemIds || []);
+        if (removedItemId) toRemove.add(removedItemId);
+        return {
+          ...prev,
+          lockedWardrobeItemIds: [],
+          intent: {
+            ...prev.intent,
+            mustUseItemIds: (prev.intent.mustUseItemIds || []).filter((id) => !toRemove.has(id)),
+          },
+        };
+      });
+    }
+  }, [router, sessionState, lockedGarment]);
+
+  // Chip toggles: single-select within semantic group, multi-select across groups
+  const handleToggleOccasion = useCallback((occ: string) => {
+    tapLight();
+    setSelectedOccasion((prev) => (prev === occ ? null : occ));
+  }, []);
+
+  const handleToggleWeather = useCallback((w: string) => {
+    tapLight();
+    setSelectedWeather((prev) => (prev === w ? null : w));
+  }, []);
+
+  const handleToggleTemperature = useCallback((t: string) => {
+    tapLight();
+    setSelectedTemperature((prev) => (prev === t ? null : t));
+  }, []);
+
+  const handleToggleVibe = useCallback((vibe: StyleAdvisorVibe) => {
+    tapLight();
+    setSelectedVibe((prev) => (prev === vibe ? null : vibe));
+  }, []);
+
+  const handleToggleComfort = useCallback(() => {
+    tapLight();
+    setComfortPriority((prev) => !prev);
+  }, []);
+
+  // Primary action: Style My Wardrobe
+  const handleStyleMyWardrobe = useCallback(async () => {
     if (items.length === 0 || isStyling) return;
     tapMedium();
     setIsStyling(true);
-    setActiveOptionIndex(0);
+
+    const chipContext: StyleAdvisorChipContext = {
+      occasion: selectedOccasion || undefined,
+      weather: selectedWeather ? selectedWeather.toLowerCase() : undefined,
+      temperature: selectedTemperature ? selectedTemperature.toLowerCase() : undefined,
+      vibe: selectedVibe || undefined,
+      comfort: comfortPriority || undefined,
+    };
+
+    const initialLocks = lockedGarment ? [lockedGarment.id] : [];
 
     try {
       const state = await createStylingSession(
         prompt,
-        activeOccasion?.label || null,
+        chipContext,
         items,
-        profile
+        profile,
+        undefined,
+        initialLocks
       );
       setSessionState(state);
       if (state.error) {
@@ -144,21 +258,21 @@ export default function StyleAdvisorScreen() {
     } finally {
       setIsStyling(false);
     }
-  }, [items, isStyling, prompt, activeOccasion, profile, showToast]);
+  }, [
+    items,
+    isStyling,
+    prompt,
+    selectedOccasion,
+    selectedWeather,
+    selectedTemperature,
+    selectedVibe,
+    comfortPriority,
+    lockedGarment,
+    profile,
+    showToast,
+  ]);
 
-  // Occasion chip toggle
-  const handleOccasionPress = useCallback((key: OccasionKey) => {
-    tapLight();
-    setOccasion((prev) => (prev === key ? null : key));
-  }, []);
-
-  // Active outfit option
-  const currentOption: StylingOption | null = useMemo(() => {
-    if (!sessionState || sessionState.options.length === 0) return null;
-    return sessionState.options[activeOptionIndex] || sessionState.options[0];
-  }, [sessionState, activeOptionIndex]);
-
-  // Interactive Refinements
+  // Interactive session refinements (durable locked items preserved)
   const handleRefine = useCallback(
     async (type: StylingRefinementType, targetItemId?: string) => {
       if (!sessionState || isRefining) return;
@@ -168,7 +282,6 @@ export default function StyleAdvisorScreen() {
       try {
         const nextState = await refineStylingSession(sessionState, type, targetItemId);
         setSessionState(nextState);
-        setActiveOptionIndex(0);
         if (nextState.error) {
           showToast(nextState.error, 'info');
         } else {
@@ -184,10 +297,10 @@ export default function StyleAdvisorScreen() {
     [sessionState, isRefining, showToast]
   );
 
-  // Save Outfit
-  const handleSave = useCallback(
+  // Legitimate user Save Look action
+  const handleSaveLook = useCallback(
     async (outfit: StylingOption) => {
-      if (!session?.user?.id) return;
+      if (!session?.user?.id || savedKeys.has(outfit.key)) return;
       setSavingKey(outfit.key);
       try {
         const payload = outfit.items.map((i) => ({
@@ -201,17 +314,19 @@ export default function StyleAdvisorScreen() {
 
         const result = await outfitService.saveOutfitOnce({
           userId: session.user.id,
-          name: `${outfit.label || activeOccasion?.label || 'Advisor'} look`,
+          name: `${outfit.label || 'Advisor'} look`,
           items: payload,
         });
 
         if (!result.ok) throw result.error;
 
+        setSavedKeys((prev) => new Set([...prev, outfit.key]));
+
         await outfitFeedbackService.logFeedback(
           {
             userId: session.user.id,
             feedbackType: 'saved',
-            occasion: activeOccasion?.label || sessionState?.intent.selectedOccasion || undefined,
+            occasion: selectedOccasion || sessionState?.intent.selectedOccasion || undefined,
           },
           outfit.items as any
         );
@@ -224,120 +339,126 @@ export default function StyleAdvisorScreen() {
         setSavingKey(null);
       }
     },
-    [session?.user?.id, activeOccasion, sessionState?.intent, showToast]
+    [session?.user?.id, savedKeys, selectedOccasion, sessionState?.intent, showToast]
   );
 
-  // Wear This
-  const wearLogInFlight = useRef(false);
-  const handleLogWorn = useCallback(async () => {
-    if (!session?.user?.id || !currentOption || wearLogInFlight.current) return;
-    wearLogInFlight.current = true;
-    tapMedium();
-    try {
-      const outcome = await wardrobeService.logItemsWorn(currentOption.items.map((i) => i.id));
-      const summary = describeWearLogResult(outcome, currentOption.items.length);
-      if (summary.recorded) {
-        await outfitFeedbackService.logFeedback(
-          {
-            userId: session.user.id,
-            feedbackType: 'worn',
-            occasion: activeOccasion?.label || sessionState?.intent.selectedOccasion || undefined,
-            wardrobeItemIds: outcome.succeeded,
-          },
-          currentOption.items.filter((i) => outcome.succeeded.includes(i.id)) as any
-        );
-      }
-      showToast(summary.message, summary.kind);
-    } catch {
-      showToast('Could not record wear.', 'error');
-    } finally {
-      wearLogInFlight.current = false;
-    }
-  }, [session?.user?.id, currentOption, activeOccasion, sessionState?.intent, showToast]);
+  // Hardened Mannequin Transfer Bridge (ZERO database writes)
+  const handleOpenInMannequin = useCallback(
+    async (look: StylingOption) => {
+      if (!session?.user?.id || transferringKey) return;
+      setTransferringKey(look.key);
 
-  // Pass
-  const handlePass = useCallback(async () => {
-    if (!session?.user?.id || !currentOption) return;
-    tapLight();
-    try {
-      await outfitFeedbackService.logFeedback(
-        {
+      try {
+        const tokenRes = await transientMannequinService.createToken({
           userId: session.user.id,
-          feedbackType: 'rejected',
-          occasion: activeOccasion?.label || sessionState?.intent.selectedOccasion || undefined,
-        },
-        currentOption.items as any
-      );
-    } catch {
-      // background error ignored
-    }
+          itemIds: look.items.map((i) => i.id),
+          source: 'style-advisor',
+        });
 
-    if (sessionState && sessionState.options.length > 1) {
-      // Advance to next option
-      setActiveOptionIndex((prev) => (prev + 1) % sessionState.options.length);
-      showToast('Showing next option.', 'info');
-    } else {
-      // Regenerate fresh options
-      handleRefine('tryAnother');
-    }
-  }, [session?.user?.id, currentOption, activeOccasion, sessionState, handleRefine, showToast]);
-
-  // Send to Mannequin
-  const sendInFlight = useRef(false);
-  const handleSendToMannequin = useCallback(async () => {
-    if (!session?.user?.id || !currentOption || sendInFlight.current) return;
-    sendInFlight.current = true;
-    setSavingKey(currentOption.key);
-    tapMedium();
-    try {
-      const payload = currentOption.items.map((i) => ({
-        slot: (resolveEffectiveGarmentBucket(i) || i.garment_type || 'accessory').toLowerCase(),
-        product_id: i.product_id,
-        wardrobe_item_id: i.id,
-        image_url: i.image_url,
-        name: i.sub_category || resolveEffectiveGarmentBucket(i) || i.category || 'Item',
-        color_tags: i.color_tags,
-      }));
-
-      const result = await outfitService.saveOutfitOnce({
-        userId: session.user.id,
-        name: `${currentOption.label || 'Advisor'} look`,
-        items: payload,
-      });
-
-      if (result.ok && result.data?.id) {
-        router.push(`/wardrobe?tab=mannequin&loadOutfit=${result.data.id}` as any);
-      } else {
-        showToast('Could not open this look in the Mannequin.', 'error');
+        if (tokenRes.success && tokenRes.token) {
+          router.push(`/(tabs)/wardrobe?tab=mannequin&transientToken=${tokenRes.token}` as any);
+        } else {
+          showToast('Could not transfer look to Mannequin. Please try again.', 'error');
+        }
+      } catch (err) {
+        console.error('Failed to transfer look to Mannequin:', err);
+        showToast('Could not transfer look to Mannequin. Please try again.', 'error');
+      } finally {
+        setTransferringKey(null);
       }
-    } catch {
-      showToast('Could not open this look in the Mannequin.', 'error');
-    } finally {
-      sendInFlight.current = false;
-      setSavingKey(null);
-    }
-  }, [session?.user?.id, currentOption, router, showToast]);
+    },
+    [session?.user?.id, transferringKey, router, showToast]
+  );
 
-  // Occasion advice tips
-  const tips = useMemo(() => {
-    if (!activeOccasion) return [];
-    const list: string[] = [activeOccasion.tip];
-    const types = new Set(items.map((i) => resolveEffectiveGarmentBucket(i)));
-    if (!types.has('Shoes')) list.push('Add shoes to your wardrobe to complete full looks.');
-    if (occasion === 'work' && !types.has('Outerwear')) {
-      list.push('A blazer or cardigan would round this out for work.');
-    }
-    if (occasion === 'formal' && !types.has('Dress') && !(types.has('Top') && types.has('Bottom'))) {
-      list.push('Add a formal dress, or an elevated top and bottom.');
-    }
-    return list;
-  }, [activeOccasion, items, occasion]);
+  // Outfit Remix Handlers
+  const handleOpenRemix = useCallback(
+    (look: StylingOption, index: number) => {
+      if (!sessionState) return;
+      const initial = adaptStyleAdvisorLookToRemix(
+        look,
+        items,
+        sessionState.intent,
+        sessionState.lockedWardrobeItemIds
+      );
+      setRemixInitialState(initial);
+      setRemixLookIndex(index);
+      setRemixModalVisible(true);
+    },
+    [sessionState, items]
+  );
 
-  const canStyle = (prompt.trim().length > 0 || occasion !== null) && items.length > 0;
+  const handleApplyRemix = useCallback(
+    (result: OutfitRemixResult) => {
+      if (!sessionState || remixLookIndex < 0) return;
+      const currentLook = sessionState.options[remixLookIndex];
+      if (!currentLook) return;
+
+      const updatedLook: StylingOption = {
+        ...currentLook,
+        items: result.items,
+        key: result.outfitKey,
+        score: result.score,
+        headline: result.headline,
+        label: result.label,
+        whyThisWorks: result.whyThisWorks,
+      };
+
+      const nextOptions = [...sessionState.options];
+      nextOptions[remixLookIndex] = updatedLook;
+      setSessionState({
+        ...sessionState,
+        options: nextOptions,
+      });
+      showToast('Outfit updated.', 'success');
+    },
+    [sessionState, remixLookIndex, showToast]
+  );
+
+  const handleSaveRemix = useCallback(
+    async (result: OutfitRemixResult) => {
+      if (!sessionState || remixLookIndex < 0) return;
+      const currentLook = sessionState.options[remixLookIndex];
+      const remixedOption: StylingOption = {
+        candidateId: result.outfitKey,
+        items: result.items,
+        key: result.outfitKey,
+        score: result.score,
+        headline: result.headline,
+        label: result.label,
+        whyThisWorks: result.whyThisWorks,
+        intentMatch: currentLook?.intentMatch || 'Remixed match',
+        isAiRanked: false,
+        assessment: currentLook?.assessment || 'Appropriate for this occasion',
+      };
+      await handleSaveLook(remixedOption);
+    },
+    [sessionState, remixLookIndex, handleSaveLook]
+  );
+
+  const handleMannequinRemix = useCallback(
+    async (result: OutfitRemixResult) => {
+      const dummyOption: StylingOption = {
+        candidateId: result.outfitKey,
+        items: result.items,
+        key: result.outfitKey,
+        score: result.score,
+        headline: result.headline,
+        label: result.label,
+        whyThisWorks: result.whyThisWorks,
+        intentMatch: 'Match',
+        isAiRanked: false,
+        assessment: 'Appropriate for this occasion',
+      };
+      await handleOpenInMannequin(dummyOption);
+    },
+    [handleOpenInMannequin]
+  );
+
+  const canStyle = (prompt.trim().length > 0 || selectedOccasion !== null || lockedGarment !== null) && items.length > 0;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      {/* Header */}
+      {/* ── Quiet Luxury Header ── */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -349,9 +470,8 @@ export default function StyleAdvisorScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Style Advisor</Text>
-          <View style={styles.aiBadge}>
-            <IconSymbol name="sparkles" size={11} color={colors.tint} />
-            <Text style={[styles.aiBadgeText, { color: colors.tint }]}>AI Stylist</Text>
+          <View style={styles.headerSubBadge}>
+            <Text style={[styles.headerSubText, { color: wt.actionSecondaryText }]}>JezSy Stylist</Text>
           </View>
         </View>
         <View style={{ width: 40 }} />
@@ -366,344 +486,278 @@ export default function StyleAdvisorScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Primary Prompt Input */}
-          <View style={[styles.promptBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {/* ── Natural Language Primary Input Box ── */}
+          <View style={[styles.promptBox, { backgroundColor: wt.cardSurface, borderColor: wt.cardBorder }]}>
             <Text style={[styles.inputLabel, { color: colors.text }]}>What are you dressing for?</Text>
             <TextInput
-              style={[styles.textInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              placeholder="Dinner with clients, polished but comfortable. Use my black blazer and avoid red."
+              style={[
+                styles.textInput,
+                { color: colors.text, borderColor: colors.border, backgroundColor: colors.background },
+              ]}
+              placeholder="Dinner somewhere nice, but we'll probably walk after. Keep it comfortable and use my navy blazer."
               placeholderTextColor={colors.secondaryText}
               value={prompt}
               onChangeText={setPrompt}
               multiline
-              numberOfLines={2}
-              maxLength={300}
+              numberOfLines={3}
+              maxLength={400}
               editable={!isStyling && !isRefining}
+              accessibilityLabel="Describe what you want to wear"
             />
 
-            {/* Quick Context Shortcuts */}
-            <Text style={[styles.quickLabel, { color: colors.secondaryText }]}>Quick context shortcuts:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chipContainer}>
-              {OCCASIONS.map((o) => {
-                const active = occasion === o.key;
+            {/* ── Durable Locked Garment Banner (Style Around This Item) ── */}
+            {lockedGarment && (
+              <View style={[styles.lockedBanner, { backgroundColor: wt.accentGoldSubtle, borderColor: wt.cardBorder }]}>
+                <View style={styles.lockedBannerLeft}>
+                  <IconSymbol name="sparkles" size={14} color={wt.actionPrimary} />
+                  <Text style={[styles.lockedBannerText, { color: colors.text }]} numberOfLines={1}>
+                    Styling around:{' '}
+                    <Text style={{ fontWeight: '700', color: wt.actionPrimary }}>
+                      {lockedGarment.sub_category || lockedGarment.category || 'Selected Garment'}
+                    </Text>
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={handleRemoveLock}
+                  style={styles.lockedCloseBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove garment lock"
+                >
+                  <IconSymbol name="xmark" size={14} color={colors.secondaryText} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ── Helpful Context Chips (Single-select per group, multi across groups) ── */}
+            <Text style={[styles.chipsHeading, { color: colors.secondaryText }]}>Helpful context (optional):</Text>
+
+            {/* Occasion chips */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chipScrollContent}>
+              {OCCASION_CHIPS.map((occ) => {
+                const active = selectedOccasion === occ;
                 return (
                   <TouchableOpacity
-                    key={o.key}
+                    key={occ}
                     style={[
-                      styles.chip,
-                      { backgroundColor: active ? colors.tint : colors.surface, borderColor: active ? colors.tint : colors.border },
+                      styles.contextChip,
+                      {
+                        backgroundColor: active ? wt.actionPrimary : wt.cardSurfaceSubtle,
+                        borderColor: active ? wt.actionPrimary : wt.cardBorder,
+                      },
                     ]}
-                    onPress={() => handleOccasionPress(o.key)}
+                    onPress={() => handleToggleOccasion(occ)}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
                   >
-                    <IconSymbol name={o.icon as any} size={14} color={active ? colors.onTint : colors.secondaryText} />
-                    <Text style={[styles.chipText, { color: active ? colors.onTint : colors.text }]}>{o.label}</Text>
+                    <Text style={[styles.contextChipText, { color: active ? wt.actionPrimaryText : colors.text }]}>
+                      {occ}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
 
-            {/* Primary Action Button */}
+            {/* Weather & Vibe chips */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={styles.chipScrollContent}>
+              {WEATHER_CHIPS.map((w) => {
+                const active = selectedWeather === w;
+                return (
+                  <TouchableOpacity
+                    key={w}
+                    style={[
+                      styles.contextChip,
+                      {
+                        backgroundColor: active ? wt.actionPrimary : wt.cardSurfaceSubtle,
+                        borderColor: active ? wt.actionPrimary : wt.cardBorder,
+                      },
+                    ]}
+                    onPress={() => handleToggleWeather(w)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.contextChipText, { color: active ? wt.actionPrimaryText : colors.text }]}>
+                      {w}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {TEMPERATURE_CHIPS.map((t) => {
+                const active = selectedTemperature === t;
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    style={[
+                      styles.contextChip,
+                      {
+                        backgroundColor: active ? wt.actionPrimary : wt.cardSurfaceSubtle,
+                        borderColor: active ? wt.actionPrimary : wt.cardBorder,
+                      },
+                    ]}
+                    onPress={() => handleToggleTemperature(t)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.contextChipText, { color: active ? wt.actionPrimaryText : colors.text }]}>
+                      {t}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {VIBE_CHIPS.map((vibe) => {
+                const active = selectedVibe === vibe;
+                const label = vibe.charAt(0).toUpperCase() + vibe.slice(1);
+                return (
+                  <TouchableOpacity
+                    key={vibe}
+                    style={[
+                      styles.contextChip,
+                      {
+                        backgroundColor: active ? wt.actionPrimary : wt.cardSurfaceSubtle,
+                        borderColor: active ? wt.actionPrimary : wt.cardBorder,
+                      },
+                    ]}
+                    onPress={() => handleToggleVibe(vibe)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.contextChipText, { color: active ? wt.actionPrimaryText : colors.text }]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={[
+                  styles.contextChip,
+                  {
+                    backgroundColor: comfortPriority ? wt.actionPrimary : wt.cardSurfaceSubtle,
+                    borderColor: comfortPriority ? wt.actionPrimary : wt.cardBorder,
+                  },
+                ]}
+                onPress={handleToggleComfort}
+                accessibilityRole="button"
+                accessibilityState={{ selected: comfortPriority }}
+              >
+                <Text style={[styles.contextChipText, { color: comfortPriority ? wt.actionPrimaryText : colors.text }]}>
+                  Comfort Priority
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            {/* ── Primary Action Button ── */}
             <TouchableOpacity
               style={[
                 styles.styleMeBtn,
-                { backgroundColor: canStyle ? colors.tint : colors.surface, opacity: canStyle ? 1 : 0.6 },
+                {
+                  backgroundColor: canStyle ? wt.actionPrimary : wt.cardSurfaceSubtle,
+                  opacity: canStyle ? 1 : 0.6,
+                },
               ]}
-              onPress={handleStyleMe}
+              onPress={handleStyleMyWardrobe}
               disabled={!canStyle || isStyling}
               accessibilityRole="button"
-              accessibilityLabel="Style Me"
+              accessibilityLabel="Style My Wardrobe"
             >
               {isStyling ? (
                 <View style={styles.btnLoadingRow}>
-                  <ActivityIndicator size="small" color={colors.onTint} />
-                  <Text style={[styles.styleMeBtnText, { color: colors.onTint }]}>Styling from your wardrobe...</Text>
+                  <ActivityIndicator size="small" color={wt.actionPrimaryText} />
+                  <Text style={[styles.styleMeBtnText, { color: wt.actionPrimaryText }]}>
+                    Styling from your wardrobe...
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.btnLoadingRow}>
-                  <IconSymbol name="sparkles" size={16} color={canStyle ? colors.onTint : colors.secondaryText} />
-                  <Text style={[styles.styleMeBtnText, { color: canStyle ? colors.onTint : colors.secondaryText }]}>
-                    {sessionState ? 'Re-Style Looks' : 'Style Me'}
+                  <IconSymbol name="sparkles" size={16} color={canStyle ? wt.actionPrimaryText : colors.secondaryText} />
+                  <Text style={[styles.styleMeBtnText, { color: canStyle ? wt.actionPrimaryText : colors.secondaryText }]}>
+                    {sessionState ? 'Re-Style Looks ✨' : 'Style My Wardrobe ✨'}
                   </Text>
                 </View>
               )}
             </TouchableOpacity>
           </View>
 
-          {/* Body content based on state */}
+          {/* ── Body Content: Vertical Multi-Look Editorial Layout ── */}
           {loadingWardrobe ? (
-            <ActivityIndicator size="large" color={colors.tint} style={{ marginTop: Spacing.xxxl }} />
+            <ActivityIndicator size="large" color={wt.actionPrimary} style={{ marginTop: Spacing.xxxl }} />
           ) : items.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <IconSymbol name="hanger" size={36} color={colors.tint} />
+            <View style={[styles.emptyCard, { backgroundColor: wt.cardSurface, borderColor: wt.cardBorder }]}>
+              <IconSymbol name="hanger" size={36} color={wt.actionPrimary} />
               <Text style={[styles.emptyTitle, { color: colors.text }]}>Your Wardrobe is Empty</Text>
               <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                Add garments to your wardrobe first, and your AI stylist will curate complete looks for you.
+                Add garments to your wardrobe first, and your Style Advisor will curate complete looks for you.
               </Text>
             </View>
           ) : sessionState?.error ? (
-            <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: '#EF4444' + '40' }]}>
+            <View style={[styles.emptyCard, { backgroundColor: wt.cardSurface, borderColor: '#EF4444' + '40' }]}>
               <IconSymbol name="exclamationmark.triangle.fill" size={32} color="#EF4444" />
               <Text style={[styles.emptyTitle, { color: colors.text }]}>Styling Constraint Issue</Text>
               <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
                 {sessionState.error}
               </Text>
             </View>
-          ) : currentOption ? (
-            <>
-              {/* Option Selector Tabs (2-3 Curated Looks) */}
-              {sessionState && sessionState.options.length > 1 && (
-                <View style={styles.optionsRow}>
-                  {sessionState.options.map((opt, idx) => {
-                    const active = idx === activeOptionIndex;
-                    return (
-                      <TouchableOpacity
-                        key={opt.key + idx}
-                        style={[
-                          styles.optionTab,
-                          {
-                            backgroundColor: active ? colors.tint : colors.card,
-                            borderColor: active ? colors.tint : colors.border,
-                          },
-                        ]}
-                        onPress={() => {
-                          tapLight();
-                          setActiveOptionIndex(idx);
-                        }}
-                        accessibilityRole="tab"
-                        accessibilityState={{ selected: active }}
-                      >
-                        <Text
-                          style={[
-                            styles.optionTabText,
-                            { color: active ? colors.onTint : colors.text, fontWeight: active ? '700' : '500' },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-
-              {/* Outfit Card */}
-              <SuggestedOutfitCard
-                outfit={currentOption}
-                onSave={handleSave}
-                saving={savingKey === currentOption.key}
-              />
-
-              {/* "Why This Works" Garment-Grounded Card */}
-              {currentOption.whyThisWorks && (
-                <View style={[styles.explanationCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <TouchableOpacity
-                    style={styles.explanationHeader}
-                    onPress={() => setShowExplanation(!showExplanation)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Toggle Why This Works details"
-                  >
-                    <View style={styles.explanationTitleRow}>
-                      <IconSymbol name="sparkles" size={16} color={colors.tint} />
-                      <Text style={[styles.explanationTitle, { color: colors.tint }]}>
-                        Why This Works
-                      </Text>
-                    </View>
-                    <IconSymbol
-                      name={showExplanation ? 'chevron.up' : 'chevron.down'}
-                      size={16}
-                      color={colors.secondaryText}
-                    />
-                  </TouchableOpacity>
-
-                  {showExplanation && (
-                    <View style={styles.explanationBody}>
-                      <Text style={[styles.explanationSummary, { color: colors.text }]}>
-                        {currentOption.whyThisWorks.summary}
-                      </Text>
-
-                      {currentOption.intentMatch ? (
-                        <View style={[styles.intentPill, { backgroundColor: colors.tint + '12', borderColor: colors.tint + '30' }]}>
-                          <Text style={[styles.intentText, { color: colors.tint }]}>
-                            {currentOption.intentMatch}
-                          </Text>
-                        </View>
-                      ) : null}
-
-                      <View style={styles.pillarsRow}>
-                        {currentOption.whyThisWorks.palette ? (
-                          <View style={[styles.pillarChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                            <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>Palette</Text>
-                            <Text style={[styles.pillarValue, { color: colors.text }]}>
-                              {currentOption.whyThisWorks.palette}
-                            </Text>
-                          </View>
-                        ) : null}
-
-                        {currentOption.whyThisWorks.silhouette ? (
-                          <View style={[styles.pillarChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                            <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>Silhouette</Text>
-                            <Text style={[styles.pillarValue, { color: colors.text }]}>
-                              {currentOption.whyThisWorks.silhouette}
-                            </Text>
-                          </View>
-                        ) : null}
-
-                        {currentOption.whyThisWorks.occasion ? (
-                          <View style={[styles.pillarChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                            <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>Occasion</Text>
-                            <Text style={[styles.pillarValue, { color: colors.text }]}>
-                              {currentOption.whyThisWorks.occasion}
-                            </Text>
-                          </View>
-                        ) : null}
-
-                        {currentOption.whyThisWorks.layering ? (
-                          <View style={[styles.pillarChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                            <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>Layering</Text>
-                            <Text style={[styles.pillarValue, { color: colors.text }]}>
-                              {currentOption.whyThisWorks.layering}
-                            </Text>
-                          </View>
-                        ) : null}
-
-                        {currentOption.whyThisWorks.footwear ? (
-                          <View style={[styles.pillarChip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                            <Text style={[styles.pillarLabel, { color: colors.secondaryText }]}>Footwear</Text>
-                            <Text style={[styles.pillarValue, { color: colors.text }]}>
-                              {currentOption.whyThisWorks.footwear}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-
-                      {currentOption.proTip ? (
-                        <View style={[styles.proTipBox, { backgroundColor: colors.background }]}>
-                          <Text style={[styles.proTipText, { color: colors.tint }]}>
-                            Pro Tip: {currentOption.proTip}
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Primary Actions Row */}
-              <View style={styles.actionRow}>
-                <TouchableOpacity
-                  style={[styles.feedbackBtn, { borderColor: '#10B981', backgroundColor: '#10B981' + '18' }]}
-                  onPress={handleLogWorn}
-                  accessibilityRole="button"
-                  accessibilityLabel="Wear this outfit"
-                >
-                  <IconSymbol name="checkmark.circle.fill" size={16} color="#10B981" />
-                  <Text style={[styles.feedbackBtnText, { color: '#10B981' }]}>Wear This</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.feedbackBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
-                  onPress={handlePass}
-                  accessibilityRole="button"
-                  accessibilityLabel="Pass on this recommendation"
-                >
-                  <IconSymbol name="xmark.circle.fill" size={16} color="#EF4444" />
-                  <Text style={[styles.feedbackBtnText, { color: colors.text }]}>Pass</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.feedbackBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
-                  onPress={handleSendToMannequin}
-                  accessibilityRole="button"
-                  accessibilityLabel="Send outfit to mannequin"
-                >
-                  <IconSymbol name="person.fill" size={16} color={colors.tint} />
-                  <Text style={[styles.feedbackBtnText, { color: colors.tint }]}>Mannequin</Text>
-                </TouchableOpacity>
+          ) : sessionState && sessionState.options.length > 0 ? (
+            <View style={styles.editorialStream}>
+              <View style={styles.resultsHeader}>
+                <Text style={[styles.resultsTitle, { color: colors.text }]}>Curated Looks for You</Text>
+                <Text style={[styles.resultsCount, { color: wt.actionSecondaryText }]}>
+                  {sessionState.options.length} distinct looks
+                </Text>
               </View>
 
-              {/* Interactive Refinement Pills */}
-              <View style={styles.refinementSection}>
-                <Text style={[styles.refineTitle, { color: colors.secondaryText }]}>Refine this look:</Text>
-                <View style={styles.refineChipsRow}>
-                  <TouchableOpacity
-                    style={[styles.refineChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    onPress={() => handleRefine('moreFormal')}
-                    disabled={isRefining}
-                  >
-                    <IconSymbol name="bag.fill" size={13} color={colors.tint} />
-                    <Text style={[styles.refineChipText, { color: colors.text }]}>More Formal</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.refineChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    onPress={() => handleRefine('moreRelaxed')}
-                    disabled={isRefining}
-                  >
-                    <IconSymbol name="tshirt" size={13} color={colors.tint} />
-                    <Text style={[styles.refineChipText, { color: colors.text }]}>More Relaxed</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.refineChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    onPress={() => handleRefine('moreComfortable')}
-                    disabled={isRefining}
-                  >
-                    <IconSymbol name="sparkles" size={13} color={colors.tint} />
-                    <Text style={[styles.refineChipText, { color: colors.text }]}>More Comfortable</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.refineChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    onPress={() => handleRefine('tryAnother')}
-                    disabled={isRefining}
-                  >
-                    <IconSymbol name="shuffle" size={13} color={colors.tint} />
-                    <Text style={[styles.refineChipText, { color: colors.text }]}>Try Another</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Stylist Occasion Advice Card */}
-              {tips.length > 0 && (
-                <View style={[styles.tipsCard, { backgroundColor: colors.card, borderColor: colors.border, marginTop: Spacing.lg }]}>
-                  {tips.map((tip, i) => (
-                    <View key={i} style={styles.tipRow}>
-                      <IconSymbol name="sparkles" size={14} color={colors.tint} />
-                      <Text style={[styles.tipText, { color: colors.text }]}>{tip}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </>
-          ) : (
-            /* Idle initial state */
-            <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={[styles.emptyIconBadge, { backgroundColor: colors.tint + '18' }]}>
-                <IconSymbol name="sparkles" size={32} color={colors.tint} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>Personalized AI Stylist</Text>
-              <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-                Describe what you need above or select a quick shortcut. JeZsy will assemble and rank complete looks from your own wardrobe.
-              </Text>
+              {sessionState.options.map((opt, idx) => (
+                <StyleAdvisorLookCard
+                  key={opt.key}
+                  look={opt}
+                  index={idx}
+                  onSave={handleSaveLook}
+                  onOpenMannequin={handleOpenInMannequin}
+                  onRefine={handleRefine}
+                  onRemix={(look) => handleOpenRemix(look, idx)}
+                  onPlan={handlePlanLook}
+                  isSaved={savedKeys.has(opt.key)}
+                  isSaving={savingKey === opt.key}
+                  isTransferring={transferringKey === opt.key}
+                />
+              ))}
             </View>
-          )}
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <OutfitRemixModal
+        visible={remixModalVisible}
+        onClose={() => setRemixModalVisible(false)}
+        initialState={remixInitialState}
+        wardrobe={items}
+        onApply={handleApplyRemix}
+        onSave={handleSaveRemix}
+        onOpenMannequin={handleMannequinRemix}
+        saving={savingKey !== null}
+      />
+
+      <PlanOutfitModal
+        visible={isPlanModalOpen}
+        payload={planLaterPayload}
+        authoritativeInventory={items}
+        onClose={() => setIsPlanModalOpen(false)}
+        onSuccess={() => {
+          showToast('Outfit scheduled in planner!');
+        }}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   backBtn: {
     width: 40,
@@ -712,271 +766,148 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerCenter: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
   },
   headerTitle: {
-    ...Type.headline,
-    fontSize: 18,
+    ...Type.subtitle,
     fontWeight: '700',
   },
-  aiBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radius.pill,
-    backgroundColor: '#CA8A04' + '18',
+  headerSubBadge: {
+    marginTop: 2,
   },
-  aiBadgeText: {
+  headerSubText: {
+    ...Type.caption,
     fontSize: 11,
-    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
   content: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
-    gap: Spacing.md,
   },
   promptBox: {
     borderRadius: Radius.lg,
     borderWidth: 1,
-    padding: Spacing.md,
-    gap: Spacing.sm,
+    padding: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
   inputLabel: {
     ...Type.bodyStrong,
     fontWeight: '700',
-    fontSize: 15,
+    marginBottom: Spacing.sm,
   },
   textInput: {
-    borderWidth: 1,
+    minHeight: 88,
     borderRadius: Radius.md,
+    borderWidth: 1,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
+    ...Type.body,
     fontSize: 14,
-    minHeight: 52,
+    lineHeight: 20,
     textAlignVertical: 'top',
+    marginBottom: Spacing.md,
   },
-  quickLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  chipScroll: {
-    marginHorizontal: -Spacing.xs,
-  },
-  chipContainer: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  chip: {
+  lockedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  lockedBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flex: 1,
+  },
+  lockedBannerText: {
+    ...Type.caption,
+    fontSize: 12,
+  },
+  lockedCloseBtn: {
+    padding: Spacing.xs,
+  },
+  chipsHeading: {
+    ...Type.caption,
+    fontWeight: '600',
+    marginBottom: Spacing.xs,
+  },
+  chipRow: {
+    marginBottom: Spacing.sm,
+  },
+  chipScrollContent: {
+    gap: Spacing.xs,
+  },
+  contextChip: {
+    paddingHorizontal: Spacing.md,
     paddingVertical: 7,
     borderRadius: Radius.pill,
     borderWidth: 1,
   },
-  chipText: {
-    fontSize: 13,
+  contextChipText: {
+    ...Type.caption,
     fontWeight: '600',
+    fontSize: 12,
   },
   styleMeBtn: {
-    height: 46,
+    height: 48,
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
+    marginTop: Spacing.sm,
   },
   btnLoadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   styleMeBtnText: {
     ...Type.bodyStrong,
     fontWeight: '700',
-    fontSize: 15,
-  },
-  optionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginVertical: Spacing.xs,
-  },
-  optionTab: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionTabText: {
-    fontSize: 13,
-  },
-  explanationCard: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    padding: Spacing.md,
-  },
-  explanationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  explanationTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  explanationTitle: {
-    ...Type.bodyStrong,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  explanationBody: {
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  explanationSummary: {
-    ...Type.body,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  intentPill: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-  },
-  intentText: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
-  },
-  pillarsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginVertical: 4,
-  },
-  pillarChip: {
-    flexDirection: 'column',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    gap: 2,
-    minWidth: '47%',
-    flexGrow: 1,
-  },
-  pillarLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  pillarValue: {
-    fontSize: 13,
-    fontWeight: '500',
-    lineHeight: 18,
-  },
-  proTipBox: {
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    marginTop: 4,
-  },
-  proTipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: Spacing.xs,
-  },
-  feedbackBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-  },
-  feedbackBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  refinementSection: {
-    marginTop: Spacing.xs,
-    gap: Spacing.xs,
-  },
-  refineTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  refineChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  refineChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-  },
-  refineChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  tipsCard: {
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    padding: Spacing.md,
-    gap: Spacing.sm,
-  },
-  tipRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  tipText: {
-    ...Type.caption,
-    fontSize: 13,
-    lineHeight: 18,
-    flex: 1,
   },
   emptyCard: {
+    padding: Spacing.xxl,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    padding: Spacing.xxl,
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  emptyIconBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginTop: Spacing.xl,
+    gap: Spacing.sm,
   },
   emptyTitle: {
-    ...Type.headline,
-    fontSize: 18,
+    ...Type.subtitle,
     fontWeight: '700',
-    textAlign: 'center',
+    marginTop: Spacing.xs,
   },
-  emptyText: { ...Type.body, textAlign: 'center', maxWidth: 360 },
+  emptyText: {
+    ...Type.body,
+    textAlign: 'center',
+    maxWidth: 280,
+    lineHeight: 20,
+  },
+  editorialStream: {
+    marginTop: Spacing.md,
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
+    paddingHorizontal: 2,
+  },
+  resultsTitle: {
+    ...Type.subtitle,
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  resultsCount: {
+    ...Type.caption,
+    fontWeight: '600',
+  },
 });

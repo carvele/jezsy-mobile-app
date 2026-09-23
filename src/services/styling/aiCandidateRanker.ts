@@ -97,14 +97,35 @@ function deriveVariationLabels(intent: StylingIntent, count: number): string[] {
 }
 
 /**
+ * Computes deterministic target look count for any candidate pool size.
+ * Guarantees:
+ * - 0 for pool <= 0
+ * - 1 for pool = 1
+ * - 2 for pool = 2
+ * - 3 for pool = 3..5
+ * - 4 for pool = 6..8
+ * - 5 for pool = 9+
+ * Never exceeds candidate pool size; never exceeds 5; never produces filler.
+ */
+export function computeTargetLookCount(poolSize: number): number {
+  if (poolSize <= 0) return 0;
+  if (poolSize === 1) return 1;
+  if (poolSize === 2) return 2;
+  if (poolSize <= 5) return 3;
+  if (poolSize <= 8) return 4;
+  return 5;
+}
+
+/**
  * Deterministic fallback ranker and explainer when AI is unavailable, times out, or returns invalid IDs.
  */
 export function rankCandidatesDeterministic(
   candidates: CandidateOutfit[],
   intent: StylingIntent,
-  limit = 3
+  limit?: number
 ): StylingOption[] {
-  const chosen = candidates.slice(0, limit);
+  const targetCount = typeof limit === 'number' ? limit : computeTargetLookCount(candidates.length);
+  const chosen = candidates.slice(0, targetCount);
   const labels = deriveVariationLabels(intent, chosen.length);
 
   return chosen.map((cand, idx) => {
@@ -136,8 +157,8 @@ export async function rankCandidatesWithAI(
 ): Promise<StylingOption[]> {
   if (!candidates || candidates.length === 0) return [];
 
-  // Bounded target: 2 to 3 options
-  const targetCount = Math.min(3, Math.max(1, candidates.length));
+  // Deterministic target count based on candidate pool size (up to 5)
+  const targetCount = computeTargetLookCount(candidates.length);
   const candidateMap = new Map<string, CandidateOutfit>(candidates.map((c) => [c.candidateId, c]));
   const activeProvider = provider || defaultAIStylistProvider;
 

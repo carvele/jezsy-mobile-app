@@ -1,31 +1,31 @@
 /**
- * Builds outfit suggestions from the user's own wardrobe.
- *
- * Deterministic and local: it enumerates valid garment combinations, scores
- * each on colour harmony, personal preference affinity, occasion fit, and neglect bonus.
+ * Backward-compatible adapter for legacy outfit generator callers.
+ * Delegates combination generation to CanonicalCandidateEngine (candidateGenerator.ts)
+ * and wear stats to wardrobeStats.ts.
  */
 
 import { Database } from '@/src/types/database.types';
-import { evaluateColors, ColorMatchResult } from './colorMatcher';
+import { ColorMatchResult, evaluateColors } from './colorMatcher';
 import { UserStyleProfileDto } from '../types/dto/styleProfile';
-import { computePersonalAffinity } from './personalStyleEngine';
 import { explainOutfit, OutfitExplanation } from './outfitExplainer';
-import { resolveEffectiveGarmentBucket } from './garmentSemanticClassifier';
+import { computePersonalAffinity } from './personalStyleEngine';
 import {
   evaluateWardrobeOutfit,
-  interpretOutfitContext,
-  buildGarmentSemanticProfile,
-  buildOccasionRequirements,
-  buildOutfitStructure,
-  detectContradictions,
   OverallAssessment,
   Contradiction,
   StylistCritique,
-  OccasionRequirementProfile,
   OutfitContext,
 } from './aiStylistAdvisor';
+import {
+  generateCandidateOutfits,
+  CandidateGenerationOptions,
+} from '../services/styling/candidateGenerator';
+import { StylingIntent, CandidateOutfit } from '../types/styleAdvisor';
+import { computeStats, WardrobeStats } from './wardrobeStats';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
+
+export { computeStats, WardrobeStats };
 
 export interface GeneratedOutfit {
   key: string;
@@ -47,181 +47,42 @@ export interface GenerateOutfitsOptions {
   occasion?: string | null;
   additionalContext?: string | null;
   profile?: UserStyleProfileDto | null;
-  requiredItemId?: string | null; // When styling a specific item
+  requiredItemId?: string | null;
 }
 
-const PER_SLOT = 8;
-const NEGLECT_DAYS = 60;
-
-/** Minimal canvas-item shim so buildGarmentSemanticProfile can work from a bare WardrobeItem. */
-function toCanvasShim(item: WardrobeItem) {
+/** Normalizes legacy options into a complete StylingIntent without silent default inventions. */
+function buildPassiveStylingIntent(options: GenerateOutfitsOptions): StylingIntent {
   return {
-    wardrobe_item_id: item.id,
-    garment_type: item.category || '',
-    name: item.sub_category || item.category || 'Item',
-    image_url: (item as any).photo_url || '',
-    id: item.id,
-  } as any;
+    rawPrompt: options.additionalContext || '',
+    selectedOccasion: options.occasion || null,
+    // Do NOT invent 'formality: casual' for callers that had no formality target
+    formality: undefined,
+    mustUseItemIds: options.requiredItemId ? [options.requiredItemId] : [],
+    excludedItemIds: [],
+    preferredColors: [],
+    avoidedColors: [],
+  };
 }
 
-/**
- * Returns slot items sorted neglect-first.
- * When occasion requirements are provided, items with severe individual
- * contradictions are placed in a fallback pool and excluded when compatible
- * candidates exist. This makes candidate selection context-first.
- */
-function bySlot(
-  items: WardrobeItem[],
-  type: string,
-  reqs?: OccasionRequirementProfile
-): WardrobeItem[] {
-  const slotItems = items
-    .filter((i) => resolveEffectiveGarmentBucket(i) === type)
-    .sort((a, b) => neglect(b) - neglect(a));
-
-  if (!reqs || slotItems.length === 0) {
-    return slotItems.slice(0, PER_SLOT);
-  }
-
-  const compatible: WardrobeItem[] = [];
-  const incompatible: WardrobeItem[] = [];
-
-  for (const item of slotItems) {
-    const profile = buildGarmentSemanticProfile(toCanvasShim(item), item);
-    const structure = buildOutfitStructure([profile]);
-    const contradictions = detectContradictions([profile], reqs, structure);
-    const hasSevere = contradictions.some((c) => c.severity === 'severe');
-    if (hasSevere) {
-      incompatible.push(item);
-    } else {
-      compatible.push(item);
-    }
-  }
-
-  // Use only occasion-compatible candidates; fall back to full pool if none qualify
-  // so we never return an empty slot (graceful degradation for sparse wardrobes).
-  const pool = compatible.length >= 1 ? compatible : slotItems;
-  return pool.slice(0, PER_SLOT);
-}
-
-// 0..1, higher means the item has been ignored longer.
-function neglect(item: WardrobeItem): number {
-  if (!item.wear_count) return 1;
-  if (!item.last_worn_at) return 0.6;
-  const days = (Date.now() - new Date(item.last_worn_at).getTime()) / 86_400_000;
-  return Math.max(0, Math.min(1, days / NEGLECT_DAYS));
-}
-
-function colorsOf(items: WardrobeItem[]): string[] {
-  return items.flatMap((i) => i.color_tags || []);
-}
-
-function build(
-  items: WardrobeItem[],
-  options?: GenerateOutfitsOptions
+/** Maps a canonical CandidateOutfit to the legacy GeneratedOutfit contract. */
+function mapCandidateToGeneratedOutfit(
+  cand: CandidateOutfit,
+  options: GenerateOutfitsOptions
 ): GeneratedOutfit {
-  const match = evaluateColors(colorsOf(items));
-  const avgNeglect = items.reduce((sum, i) => sum + neglect(i), 0) / items.length;
-  const neverWorn = items.filter((i) => !i.wear_count);
+  const items = cand.items;
+  const colors = items.flatMap((i) => i.color_tags || []);
+  const match = evaluateColors(colors);
+  const personal = computePersonalAffinity(items, options.profile, options.occasion);
 
-  const personal = computePersonalAffinity(items, options?.profile, options?.occasion);
-
-  // Run the shared deterministic Stylist reasoning engine
-  const context: OutfitContext | undefined = options?.occasion
+  const context: OutfitContext | undefined = options.occasion
     ? { occasion: options.occasion, additionalContext: options.additionalContext ?? undefined }
     : undefined;
-  const critique = evaluateWardrobeOutfit(items, undefined, context, options?.profile);
+  const critique = evaluateWardrobeOutfit(items, undefined, context, options.profile);
 
-  // 1. Composition Score
-  let compScore = 85;
-  const types = items.map((i) => resolveEffectiveGarmentBucket(i));
-  const hasDress = types.includes('Dress');
-  const hasShoes = types.includes('Shoes');
-  const hasOuter = types.includes('Outerwear');
+  const explanation = explainOutfit(items, match, personal, options.occasion);
+  const neverWorn = items.filter((i) => !i.wear_count);
 
-  if (hasDress || (types.includes('Top') && types.includes('Bottom'))) {
-    compScore += 5;
-  }
-  if (hasShoes) compScore += 5;
-  if (hasOuter) compScore += 5;
-
-  // 2. Pattern Clash Guard
-  let patternedCount = 0;
-  for (const item of items) {
-    const pattern = (item as any).pattern;
-    if (pattern && pattern !== 'Solid' && pattern !== 'Plain') {
-      patternedCount++;
-    }
-  }
-  if (patternedCount > 1) {
-    compScore -= 15; // penalize clashing loud patterns
-  }
-
-  // 3. Occasion Suitability & Contradiction Penalization
-  let occasionBonus = 0;
-  const severeContradictions = (critique.rawContradictions || []).filter((c) => c.severity === 'severe');
-  const majorContradictions = (critique.rawContradictions || []).filter((c) => c.severity === 'major');
-
-  if (options?.occasion) {
-    if (severeContradictions.length > 0) {
-      occasionBonus -= 60;
-    } else if (majorContradictions.length > 0) {
-      occasionBonus -= 25;
-    } else if (critique.assessment === 'Appropriate for this occasion') {
-      occasionBonus += 15;
-    } else {
-      const target = options.occasion.toLowerCase();
-      for (const item of items) {
-        const occs: string[] = (item as any).occasions || [];
-        if (occs.some((o) => o.toLowerCase().includes(target) || target.includes(o.toLowerCase()))) {
-          occasionBonus += 6;
-        }
-      }
-      occasionBonus = Math.min(15, occasionBonus);
-    }
-  }
-
-  const NEUTRALS = new Set(['black', 'white', 'charcoal', 'grey', 'gray', 'navy', 'beige', 'cream', 'brown', 'tan', 'camel', 'khaki']);
-  const statement = items.find((i) => {
-    const pat = (((i as any).pattern || (i as any).ai_attributes?.pattern) || '').toLowerCase();
-    const desc = (i.description || (i as any).ai_attributes?.description || '').toLowerCase();
-    const sub = (i.sub_category || '').toLowerCase();
-    const tags = i.color_tags || [];
-    return pat.includes('graphic') || pat.includes('floral') || pat.includes('plaid') || sub.includes('graphic') || desc.includes('graphic') || tags.length >= 3;
-  });
-  const hasNeutralOuter = items.some((i) => {
-    if (resolveEffectiveGarmentBucket(i) !== 'Outerwear') return false;
-    const name = (i.sub_category || i.category || '').toLowerCase();
-    const isBlazer = name.includes('blazer') || name.includes('jacket') || name.includes('coat');
-    const tags = (i.color_tags || []).map((c) => c.toLowerCase());
-    return isBlazer && (tags.length === 0 || tags.some((c) => NEUTRALS.has(c)));
-  });
-  const isStatementAnchored = !!statement && hasNeutralOuter;
-  let adjustedColorScore = match.score;
-  if (isStatementAnchored && (match.label === 'Clashing Colors' || adjustedColorScore < 75)) {
-    adjustedColorScore = 86;
-  }
-
-  // 4. Weight Calculation
-  const w = options?.profile?.preferenceWeights || {
-    colorHarmony: 0.40,
-    composition: 0.35,
-    personalStyle: 0.25,
-  };
-
-  const rawScore =
-    adjustedColorScore * w.colorHarmony +
-    compScore * w.composition +
-    personal.score * w.personalStyle +
-    occasionBonus +
-    avgNeglect * 10;
-
-  const finalScore = Math.max(10, Math.min(100, Math.round(rawScore)));
-
-  // 5. Stylist Explanation
-  const explanation = explainOutfit(items, match, personal, options?.occasion);
-
-  let reason = (options?.occasion && critique.whyJezsySaysThis) ? critique.whyJezsySaysThis : explanation.summary;
+  let reason = (options.occasion && critique.whyJezsySaysThis) ? critique.whyJezsySaysThis : explanation.summary;
   if (neverWorn.length === 1) {
     reason += ` Includes a piece you have never worn.`;
   } else if (neverWorn.length > 1) {
@@ -229,14 +90,14 @@ function build(
   }
 
   return {
-    key: items.map((i) => i.id).sort().join('|'),
-    items,
-    score: finalScore,
-    label: match.label,
+    key: cand.key,
+    items: cand.items,
+    score: cand.baseScore,
+    label: (cand.colorMatchLabel as ColorMatchResult['label']) || match.label,
     reason,
     explanation,
     personalScore: personal.score,
-    occasion: options?.occasion,
+    occasion: options.occasion,
     assessment: critique.assessment,
     critique,
     contradictions: critique.contradictions,
@@ -246,8 +107,9 @@ function build(
 
 /**
  * Returns ranked outfit suggestions, best first.
- * Supports backward-compatible call: generateOutfits(items, 6)
- * As well as options object: generateOutfits(items, { limit: 6, occasion: 'Work', profile })
+ * Supports backward-compatible calls:
+ * - generateOutfits(items, 6)
+ * - generateOutfits(items, { limit: 6, occasion: 'Work', profile })
  */
 export function generateOutfits(
   items: WardrobeItem[],
@@ -258,105 +120,13 @@ export function generateOutfits(
       ? { limit: optionsOrLimit }
       : optionsOrLimit;
 
-  const limit = options.limit || 6;
-
-  // If a specific required item was requested (e.g. "Style this item"), filter pools
-  let eligibleItems = items;
-  if (options.requiredItemId) {
-    const targetItem = items.find((i) => i.id === options.requiredItemId);
-    if (targetItem) {
-      const targetBucket = resolveEffectiveGarmentBucket(targetItem);
-      eligibleItems = items.filter(
-        (i) => i.id === options.requiredItemId || resolveEffectiveGarmentBucket(i) !== targetBucket
-      );
-    }
-  }
-
-  // Pre-compute occasion requirements once so bySlot() can filter candidates
-  // using the same contradiction engine as the Mannequin Stylist (context-first).
-  let occasionReqs: OccasionRequirementProfile | undefined;
-  if (options.occasion) {
-    const ctxInterp = interpretOutfitContext({
-      occasion: options.occasion,
-      additionalContext: options.additionalContext ?? undefined,
-    });
-    occasionReqs = buildOccasionRequirements(ctxInterp);
-  }
-
-  const tops = bySlot(eligibleItems, 'Top', occasionReqs);
-  const bottoms = bySlot(eligibleItems, 'Bottom', occasionReqs);
-  const dresses = bySlot(eligibleItems, 'Dress', occasionReqs);
-  const shoes = bySlot(eligibleItems, 'Shoes', occasionReqs);
-  const outerwear = bySlot(eligibleItems, 'Outerwear', occasionReqs);
-
-  const bases: WardrobeItem[][] = [];
-  for (const d of dresses) bases.push([d]);
-  for (const t of tops) for (const b of bottoms) bases.push([t, b]);
-
-  if (bases.length === 0) return [];
-
-  const candidates: GeneratedOutfit[] = [];
-  for (const base of bases) {
-    const withShoes = shoes.length ? shoes.map((s) => [...base, s]) : [base];
-    for (const combo of withShoes) {
-      if (!options.requiredItemId || combo.some((i) => i.id === options.requiredItemId)) {
-        candidates.push(build(combo, options));
-      }
-      for (const o of outerwear.slice(0, 2)) {
-        const layered = [...combo, o];
-        if (!options.requiredItemId || layered.some((i) => i.id === options.requiredItemId)) {
-          candidates.push(build(layered, options));
-        }
-      }
-    }
-  }
-
-  // STEP 10: Generation after validation — filter candidates with severe contradictions
-  let viableCandidates = candidates;
-  if (options.occasion) {
-    const unconflicted = candidates.filter((c) => {
-      const severe = (c.rawContradictions || []).some((con) => con.severity === 'severe');
-      return !severe && c.assessment !== 'Not appropriate for this occasion';
-    });
-    if (unconflicted.length > 0) {
-      viableCandidates = unconflicted;
-    }
-  }
-
-  const seen = new Set<string>();
-  return viableCandidates
-    .sort((a, b) => b.score - a.score)
-    .filter((o) => {
-      if (seen.has(o.key)) return false;
-      seen.add(o.key);
-      return true;
-    })
-    .slice(0, limit);
-}
-
-export interface WardrobeStats {
-  total: number;
-  neverWorn: number;
-  neglected: number;
-  mostWorn: WardrobeItem | null;
-  totalWears: number;
-}
-
-/** Aggregates the wear data the app already records. */
-export function computeStats(items: WardrobeItem[]): WardrobeStats {
-  const neverWorn = items.filter((i) => !i.wear_count).length;
-  const neglected = items.filter((i) => i.wear_count > 0 && neglect(i) >= 1).length;
-  const mostWorn = items.reduce<WardrobeItem | null>(
-    (best, i) => (!best || i.wear_count > best.wear_count ? i : best),
-    null
-  );
-  const totalWears = items.reduce((sum, i) => sum + (i.wear_count || 0), 0);
-
-  return {
-    total: items.length,
-    neverWorn,
-    neglected,
-    mostWorn,
-    totalWears,
+  const intent = buildPassiveStylingIntent(options);
+  const candidateOptions: CandidateGenerationOptions = {
+    limit: options.limit || 6,
+    profile: options.profile,
+    scoringProfile: 'legacy-passive',
   };
+
+  const candidates = generateCandidateOutfits(items, intent, candidateOptions);
+  return candidates.map((c) => mapCandidateToGeneratedOutfit(c, options));
 }

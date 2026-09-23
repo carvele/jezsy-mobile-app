@@ -24,6 +24,7 @@ const MAPPING = {
   'arrow.up': 'arrow-upward',
   'arrow.down': 'arrow-downward',
   'arrow.up.arrow.down': 'swap-vert',
+  'arrow.triangle.2.circlepath': 'sync',
   'xmark': 'close',
   'folder': 'folder',
   'folder.fill': 'folder',
@@ -41,6 +42,8 @@ const MAPPING = {
   'bag.fill': 'shopping-bag',
   'bag.badge.plus': 'add-shopping-cart',
   'tag.fill': 'local-offer',
+  'bookmark': 'bookmark',
+  'bookmark.fill': 'bookmark',
 
   // Media & Camera
   'camera': 'camera-alt',
@@ -77,6 +80,7 @@ const MAPPING = {
   'info.circle.fill': 'info',
   'hand.thumbsup.fill': 'thumb-up',
   'hand.thumbsdown.fill': 'thumb-down',
+  'pin': 'push-pin',
   'pin.fill': 'push-pin',
   'shield': 'shield',
 
@@ -84,6 +88,7 @@ const MAPPING = {
   'person.fill': 'person',
   'person.2.fill': 'people',
   'lock.fill': 'lock',
+  'lock.open': 'lock-open',
   'eye.fill': 'visibility',
   'eye.slash.fill': 'visibility-off',
   'gear': 'settings',

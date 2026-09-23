@@ -23,6 +23,16 @@ import { useToast } from '@/src/context/ToastContext';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
 import { ConfirmModal } from '@/src/components/ConfirmModal';
+import { OutfitRemixModal } from '@/src/components/styling/OutfitRemixModal';
+import { adaptSavedOutfitToRemix } from '@/src/services/styling/outfitRemixService';
+import { OutfitRemixState, OutfitRemixResult } from '@/src/types/outfitRemix';
+import { outfitService } from '@/src/services';
+import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
+import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import { WardrobeItem } from '@/src/services/wardrobeService';
+import { PlanOutfitModal } from '@/src/components/planner/PlanOutfitModal';
+import { buildPlannerItemSnapshots } from '@/src/utils/plannerSnapshotAdapter';
+import { PlanLaterPayload } from '@/src/types/planner';
 
 type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
 type OutfitSlotItem = {
@@ -74,21 +84,53 @@ export default function OutfitDetailScreen() {
   const [loggingWear, setLoggingWear] = useState(false);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
 
+  // Outfit Remix state
+  const [wardrobe, setWardrobe] = useState<WardrobeItem[]>([]);
+  const [remixModalVisible, setRemixModalVisible] = useState(false);
+  const [remixInitialState, setRemixInitialState] = useState<OutfitRemixState | null>(null);
+  const [isSavingRemix, setIsSavingRemix] = useState(false);
+
+  // Planner Plan Later state
+  const [planLaterPayload, setPlanLaterPayload] = useState<PlanLaterPayload | null>(null);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  const handlePlanLater = useCallback((item: SavedOutfit) => {
+    const rawItems = Array.isArray(item.items) ? (item.items as any[]) : [];
+    const snapshots = buildPlannerItemSnapshots(rawItems, { authoritativeInventory: wardrobe });
+    setPlanLaterPayload({
+      items: snapshots,
+      sourceType: 'saved_outfit',
+      sourceRefId: item.id,
+      name: item.name || 'Saved Outfit',
+    });
+    setIsPlanModalOpen(true);
+  }, [wardrobe]);
+
   const fetchOutfits = useCallback(async () => {
     if (!session?.user?.id) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('saved_outfits')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .eq('deleted', false)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      const list = data || [];
+      const [outfitsRes, itemsRes] = await Promise.all([
+        supabase
+          .from('saved_outfits')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('deleted', false)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('wardrobe_items')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('deleted', false),
+      ]);
+      if (outfitsRes.error) throw outfitsRes.error;
+      const list = outfitsRes.data || [];
       setOutfits(list);
       const idx = list.findIndex((o) => o.id === id);
       setCurrentIndex(idx >= 0 ? idx : 0);
+      if (itemsRes.data) {
+        setWardrobe(itemsRes.data as unknown as WardrobeItem[]);
+      }
     } catch (err) {
       console.error('Error fetching outfits:', err);
       setOutfits([]);
@@ -132,6 +174,83 @@ export default function OutfitDetailScreen() {
       showToast('Could not delete this outfit. Please try again.', 'error');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Outfit Remix Handlers
+  const handleOpenRemix = () => {
+    if (!outfit) return;
+    const initial = adaptSavedOutfitToRemix(outfit, wardrobe);
+    setRemixInitialState(initial);
+    setRemixModalVisible(true);
+  };
+
+  const handleApplyRemix = (result: OutfitRemixResult) => {
+    if (!outfit) return;
+    const updatedItems = result.items.map((i) => ({
+      slot: (resolveEffectiveGarmentBucket(i) || i.garment_type || 'accessory').toLowerCase(),
+      product_id: i.product_id,
+      wardrobe_item_id: i.id,
+      image_url: i.image_url,
+      name: i.sub_category || resolveEffectiveGarmentBucket(i) || i.category || 'Item',
+      color_tags: i.color_tags,
+    }));
+
+    const updatedOutfit = {
+      ...outfit,
+      items: updatedItems,
+    };
+
+    setOutfits((prev) => {
+      const next = [...prev];
+      next[currentIndex] = updatedOutfit;
+      return next;
+    });
+
+    showToast('Remixed look applied to preview.', 'success');
+  };
+
+  const handleSaveRemixAsNew = async (result: OutfitRemixResult) => {
+    if (!session?.user?.id) return;
+    setIsSavingRemix(true);
+    try {
+      const payload = result.items.map((i) => ({
+        slot: (resolveEffectiveGarmentBucket(i) || i.garment_type || 'accessory').toLowerCase(),
+        product_id: i.product_id,
+        wardrobe_item_id: i.id,
+        image_url: i.image_url,
+        name: i.sub_category || resolveEffectiveGarmentBucket(i) || i.category || 'Item',
+        color_tags: i.color_tags,
+      }));
+
+      const res = await outfitService.saveOutfit({
+        userId: session.user.id,
+        name: `${outfit?.name || 'Outfit'} (Remix)`,
+        items: payload,
+      });
+
+      if (!res.ok) throw res.error;
+      showToast('Saved as a new outfit.', 'success');
+      await fetchOutfits();
+    } catch (err) {
+      console.error('Error saving remixed outfit as new:', err);
+      showToast('Could not save remixed outfit.', 'error');
+    } finally {
+      setIsSavingRemix(false);
+    }
+  };
+
+  const handleMannequinRemix = async (result: OutfitRemixResult) => {
+    if (!session?.user?.id) return;
+    const res = await transientMannequinService.createToken({
+      userId: session.user.id,
+      itemIds: result.items.map((i) => i.id),
+      source: 'saved-outfits',
+    });
+    if (res.success && res.token) {
+      router.push(`/(tabs)/wardrobe?tab=mannequin&transientToken=${res.token}` as any);
+    } else {
+      showToast('Could not open in Mannequin.', 'error');
     }
   };
 
@@ -290,6 +409,17 @@ export default function OutfitDetailScreen() {
 
           {/* Action CTAs */}
           <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={[styles.remixBtn, { backgroundColor: colors.tint, borderColor: colors.tint }]}
+              onPress={() => handlePlanLater(item)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Plan Later — Schedule this outfit in your planner"
+            >
+              <IconSymbol name="calendar" size={18} color={colors.onTint} />
+              <Text style={[styles.remixBtnText, { color: colors.onTint }]}>Plan Later</Text>
+            </TouchableOpacity>
+
             <PrimaryButton
               label="Log Outfit Wear"
               onPress={() => handleLogWear(item)}
@@ -363,15 +493,26 @@ export default function OutfitDetailScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity
-          onPress={() => setConfirmDeleteVisible(true)}
-          disabled={deleting}
-          style={[styles.iconBtn, { backgroundColor: isDark ? 'rgba(255,69,58,0.15)' : '#FFF0F0', borderColor: isDark ? 'rgba(255,69,58,0.3)' : '#FFD2D2' }]}
-          accessibilityRole="button"
-          accessibilityLabel="Delete outfit"
-        >
-          <IconSymbol name="trash.fill" size={18} color="#FF453A" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+          <TouchableOpacity
+            onPress={handleOpenRemix}
+            style={[styles.iconBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Remix outfit"
+          >
+            <IconSymbol name="shuffle" size={18} color={colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setConfirmDeleteVisible(true)}
+            disabled={deleting}
+            style={[styles.iconBtn, { backgroundColor: isDark ? 'rgba(255,69,58,0.15)' : '#FFF0F0', borderColor: isDark ? 'rgba(255,69,58,0.3)' : '#FFD2D2' }]}
+            accessibilityRole="button"
+            accessibilityLabel="Delete outfit"
+          >
+            <IconSymbol name="trash.fill" size={18} color="#FF453A" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {outfits.length > 1 && (
@@ -412,6 +553,27 @@ export default function OutfitDetailScreen() {
           />
         )}
       </View>
+
+      <OutfitRemixModal
+        visible={remixModalVisible}
+        onClose={() => setRemixModalVisible(false)}
+        initialState={remixInitialState}
+        wardrobe={wardrobe}
+        onApply={handleApplyRemix}
+        onSave={handleSaveRemixAsNew}
+        onOpenMannequin={handleMannequinRemix}
+        saving={isSavingRemix}
+      />
+
+      <PlanOutfitModal
+        visible={isPlanModalOpen}
+        payload={planLaterPayload}
+        authoritativeInventory={wardrobe}
+        onClose={() => setIsPlanModalOpen(false)}
+        onSuccess={() => {
+          showToast('Outfit scheduled in planner!');
+        }}
+      />
     </SafeAreaView>
   );
 }

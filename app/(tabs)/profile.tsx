@@ -406,6 +406,12 @@ export default function ProfileScreen() {
               'Height, Weight, Fit preferences',
               () => router.push('/profile/measurements'),
             )}
+            {renderSettingItem(
+              'sparkles',
+              'Style Preferences & DNA',
+              'Colors, silhouettes, learned style',
+              () => router.push('/profile/style-preferences' as any),
+            )}
           </View>
         </View>
 
