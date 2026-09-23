@@ -17,6 +17,8 @@ export function generateGroundedExplanation(
   const shoes = items.filter((i) => resolveEffectiveGarmentBucket(i) === 'Shoes');
   const outers = items.filter((i) => resolveEffectiveGarmentBucket(i) === 'Outerwear');
 
+  const accessories = items.filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory');
+
   const topName = tops[0]?.sub_category || tops[0]?.category || 'top';
   const bottomName = bottoms[0]?.sub_category || bottoms[0]?.category || 'bottom';
   const dressName = dresses[0]?.sub_category || dresses[0]?.category || 'dress';
@@ -35,6 +37,9 @@ export function generateGroundedExplanation(
     headline = 'Expressive Contrast Ensemble';
   } else if (outerName) {
     headline = `Layered ${outerName.charAt(0).toUpperCase() + outerName.slice(1)} Look`;
+  } else if (accessories.length > 0) {
+    const mainAcc = accessories[0].sub_category || accessories[0].category || 'Accessory';
+    headline = `Accessorized ${mainAcc} Look`;
   }
 
   // 2. Intent Match
@@ -93,7 +98,14 @@ export function generateGroundedExplanation(
     }
   }
 
-  // 8. Summary
+  // 8. Accessories
+  let accessoriesText: string | undefined;
+  if (accessories.length > 0) {
+    const accNames = accessories.map((a) => a.sub_category || a.category || 'accessory').join(' and ');
+    accessoriesText = `Accented with your ${accNames} to bring personal finish to the ensemble.`;
+  }
+
+  // 9. Summary
   let summary = '';
   if (dresses.length > 0) {
     summary = `Your ${dressName} anchors this ensemble, complemented by ${shoeName} for an intentional look.`;
@@ -103,7 +115,7 @@ export function generateGroundedExplanation(
     summary = `The ${topName} pairs with the ${bottomName}, balanced by ${shoeName} for a versatile aesthetic.`;
   }
 
-  // 9. Pro Tip
+  // 10. Pro Tip
   let proTip = 'Add a minimal watch or subtle belt to define the transition line.';
   if (outerName && outerName.includes('blazer')) {
     proTip = 'Cuff or push the blazer sleeves up slightly for a relaxed, modern posture.';
@@ -111,6 +123,8 @@ export function generateGroundedExplanation(
     proTip = 'Keep accessories lightweight so the focus stays on easy mobility.';
   } else if (intent.formality === 'formal') {
     proTip = 'Keep jewelry refined and understated to let the tailoring lead the look.';
+  } else if (accessories.length > 0) {
+    proTip = 'Let the accessory anchor the look without adding competing secondary pieces.';
   }
 
   return {
@@ -123,6 +137,7 @@ export function generateGroundedExplanation(
       occasion,
       layering,
       footwear,
+      accessories: accessoriesText,
     },
     proTip,
   };

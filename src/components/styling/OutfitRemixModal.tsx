@@ -21,6 +21,7 @@ import {
   RemixedSlotItem,
 } from '@/src/types/outfitRemix';
 import { WardrobeItem } from '@/src/types/styleAdvisor';
+import { AccessorySubtype } from '@/src/utils/garmentSemanticClassifier';
 import {
   toggleSlotLock,
   getCanonicalSlotReplacements,
@@ -61,7 +62,7 @@ export function OutfitRemixModal({
   const wt = WardrobeTokens.theme[theme];
 
   const [remixState, setRemixState] = useState<OutfitRemixState | null>(initialState);
-  const [swappingSlot, setSwappingSlot] = useState<OutfitRemixSlotType | null>(null);
+  const [swappingSlotKey, setSwappingSlotKey] = useState<string | null>(null);
   const [isShuffling, setIsShuffling] = useState(false);
   const isMountedRef = useRef(true);
 
@@ -75,7 +76,7 @@ export function OutfitRemixModal({
   useEffect(() => {
     if (visible && initialState) {
       setRemixState(initialState);
-      setSwappingSlot(null);
+      setSwappingSlotKey(null);
     }
   }, [visible, initialState]);
 
@@ -87,29 +88,29 @@ export function OutfitRemixModal({
   const previewItems = remixState.activeCandidate?.items || [];
 
   // Handlers
-  const handleToggleLock = (slot: OutfitRemixSlotType) => {
+  const handleToggleLock = (slot: OutfitRemixSlotType, itemId?: string) => {
     tapLight();
-    const next = toggleSlotLock(remixState, slot);
+    const next = toggleSlotLock(remixState, slot, itemId);
     setRemixState(next);
   };
 
-  const handleToggleSwapRow = (slot: OutfitRemixSlotType) => {
+  const handleToggleSwapRow = (slotKey: string) => {
     tapLight();
-    setSwappingSlot((prev) => (prev === slot ? null : slot));
+    setSwappingSlotKey((prev) => (prev === slotKey ? null : slotKey));
   };
 
   const handleSelectReplacement = (candidate: any) => {
     tapLight();
     const next = replaceSlotItemWithCandidate(remixState, candidate);
     setRemixState(next);
-    setSwappingSlot(null);
+    setSwappingSlotKey(null);
   };
 
   const handleSwitchStructure = (target: 'dress' | 'separates') => {
     tapLight();
     const next = switchBaseStructure(remixState, target, wardrobe);
     setRemixState(next);
-    setSwappingSlot(null);
+    setSwappingSlotKey(null);
   };
 
   const handleShuffleUnlocked = () => {
@@ -123,7 +124,7 @@ export function OutfitRemixModal({
         const next = shuffleUnlockedSlots(remixState, wardrobe);
         if (isMountedRef.current) {
           setRemixState(next);
-          setSwappingSlot(null);
+          setSwappingSlotKey(null);
         }
       } finally {
         if (isMountedRef.current) {
@@ -149,8 +150,8 @@ export function OutfitRemixModal({
     tapLight();
     const next = removeOuterwear(remixState);
     setRemixState(next);
-    if (swappingSlot === 'outerwear') {
-      setSwappingSlot(null);
+    if (swappingSlotKey === 'outerwear') {
+      setSwappingSlotKey(null);
     }
   };
 
@@ -177,7 +178,7 @@ export function OutfitRemixModal({
   const renderSlotCard = (slotType: OutfitRemixSlotType, slotData: RemixedSlotItem | null) => {
     const isSlotLocked = !!slotData?.isLocked;
     const canUnlock = slotData?.canUnlockInRemix ?? false;
-    const isSwapping = swappingSlot === slotType;
+    const isSwapping = swappingSlotKey === slotType;
     const replacements = isSwapping && slotData
       ? getCanonicalSlotReplacements(remixState, slotType, wardrobe)
       : [];
@@ -408,6 +409,188 @@ export function OutfitRemixModal({
     );
   };
 
+  // Render accessory card (Phase F)
+  const renderAccessoryCard = (accSub: AccessorySubtype, slotData: RemixedSlotItem) => {
+    const isSlotLocked = !!slotData.isLocked;
+    const canUnlock = slotData.canUnlockInRemix ?? false;
+    const slotKey = `${accSub}:${slotData.item.id}`;
+    const isSwapping = swappingSlotKey === slotKey;
+    const replacements = isSwapping
+      ? getCanonicalSlotReplacements(remixState, accSub, wardrobe, slotData.item.id)
+      : [];
+
+    const slotTitle = accSub.charAt(0).toUpperCase() + accSub.slice(1);
+    const { item, lockReason } = slotData;
+    const itemName = item.sub_category || item.category || 'Accessory';
+    const itemColor = (item.color_tags && item.color_tags.length > 0) ? item.color_tags.join(', ') : '';
+
+    return (
+      <View
+        key={slotKey}
+        style={[styles.slotCard, { backgroundColor: wt.cardSurface, borderColor: wt.cardBorder }]}
+      >
+        <View style={styles.slotHeaderRow}>
+          {/* Thumbnail */}
+          <View style={[styles.thumbWrap, { backgroundColor: wt.cardSurfaceSubtle, borderColor: wt.cardBorder }]}>
+            {item.image_url ? (
+              <Image source={{ uri: item.image_url }} style={styles.thumbImage} contentFit="contain" />
+            ) : (
+              <IconSymbol name="sparkles" size={20} color={colors.secondaryText} />
+            )}
+          </View>
+
+          {/* Details */}
+          <View style={styles.slotDetails}>
+            <View style={styles.slotTitleRow}>
+              <Text style={[styles.slotName, { color: colors.secondaryText }]}>{slotTitle}</Text>
+              {lockReason === 'style-around' && (
+                <Text style={[styles.provenancePill, { color: wt.statusConsiderText }]}>Session Anchor</Text>
+              )}
+              {lockReason === 'parent-must-use' && (
+                <Text style={[styles.provenancePill, { color: wt.statusConsiderText }]}>Required</Text>
+              )}
+            </View>
+            <Text style={[styles.slotItemName, { color: colors.text }]} numberOfLines={1}>
+              {itemName}
+            </Text>
+            {itemColor ? (
+              <Text style={[styles.slotItemDesc, { color: colors.secondaryText }]} numberOfLines={1}>
+                {itemColor}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Lock Action */}
+          <TouchableOpacity
+            style={[
+              styles.lockBtn,
+              {
+                borderColor: wt.cardBorder,
+                backgroundColor: isSlotLocked ? wt.cardSurfaceSubtle : 'transparent',
+                opacity: canUnlock ? 1 : 0.6,
+              },
+            ]}
+            onPress={() => handleToggleLock(accSub, item.id)}
+            disabled={!canUnlock}
+            accessibilityRole="button"
+            accessibilityLabel={
+              !canUnlock
+                ? `${slotTitle} locked by ${lockReason}`
+                : isSlotLocked
+                ? `Unlock ${slotTitle}`
+                : `Lock ${slotTitle}`
+            }
+          >
+            <IconSymbol
+              name={isSlotLocked ? 'lock.fill' : 'lock.open'}
+              size={14}
+              color={isSlotLocked ? wt.statusConsiderText : colors.secondaryText}
+            />
+            <Text
+              style={[
+                styles.lockBtnText,
+                { color: isSlotLocked ? wt.statusConsiderText : colors.secondaryText },
+              ]}
+            >
+              {isSlotLocked ? 'Locked' : 'Lock'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Slot Controls: Swap */}
+        <View style={styles.slotControlsRow}>
+          {!isSlotLocked ? (
+            <TouchableOpacity
+              style={[
+                styles.swapToggleBtn,
+                {
+                  borderColor: wt.cardBorder,
+                  backgroundColor: isSwapping ? wt.accentGoldSubtle : wt.cardSurfaceSubtle,
+                },
+              ]}
+              onPress={() => handleToggleSwapRow(slotKey)}
+              accessibilityRole="button"
+              accessibilityLabel={`Swap ${slotTitle}`}
+            >
+              <IconSymbol
+                name="arrow.triangle.2.circlepath"
+                size={12}
+                color={isSwapping ? wt.actionPrimary : wt.actionSecondaryText}
+              />
+              <Text
+                style={[
+                  styles.swapToggleText,
+                  { color: isSwapping ? wt.actionPrimary : wt.actionSecondaryText },
+                ]}
+              >
+                {isSwapping ? 'Hide Alternatives' : 'Swap Piece'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.lockedHintWrap}>
+              <Text style={[styles.lockedHintText, { color: colors.secondaryText }]}>
+                {canUnlock ? 'Unlock piece to swap' : 'Fixed for this session'}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Replacement Carousel */}
+        {isSwapping && !isSlotLocked && (
+          <View style={[styles.replacementsContainer, { borderTopColor: wt.cardBorder }]}>
+            {replacements.length === 0 ? (
+              <Text style={[styles.emptyReplacementsText, { color: colors.secondaryText }]}>
+                No alternative {slotTitle.toLowerCase()} options match your styling constraints.
+              </Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.replacementsScroll}
+              >
+                {replacements.map((r) => {
+                  const repItem = r.replacementItem;
+                  return (
+                    <TouchableOpacity
+                      key={repItem.id}
+                      style={[
+                        styles.replacementPill,
+                        { backgroundColor: wt.cardSurfaceSubtle, borderColor: wt.cardBorder },
+                      ]}
+                      onPress={() => handleSelectReplacement(r.candidate)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select ${repItem.sub_category || repItem.category}, score ${r.candidate.baseScore}`}
+                    >
+                      <View style={styles.repThumbWrap}>
+                        {repItem.image_url ? (
+                          <Image
+                            source={{ uri: repItem.image_url }}
+                            style={styles.repThumb}
+                            contentFit="contain"
+                          />
+                        ) : (
+                          <IconSymbol name="sparkles" size={14} color={colors.secondaryText} />
+                        )}
+                      </View>
+                      <View style={styles.repInfo}>
+                        <Text style={[styles.repName, { color: colors.text }]} numberOfLines={1}>
+                          {repItem.sub_category || repItem.category}
+                        </Text>
+                        <Text style={[styles.repScore, { color: wt.actionPrimary }]}>
+                          Score {r.candidate.baseScore}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <Modal
       visible={visible}
@@ -521,13 +704,44 @@ export function OutfitRemixModal({
               )}
             </View>
 
-            {/* Preserved Passthrough Accessories (Phase F passthrough) */}
+            {/* Accessory Slots (Phase F) */}
+            {(() => {
+              const activeAccessories: { subtype: AccessorySubtype; slotItem: RemixedSlotItem }[] = [];
+              if (remixState.accessorySlots) {
+                for (const [sub, accState] of Object.entries(remixState.accessorySlots)) {
+                  if (accState && accState.items) {
+                    for (const it of accState.items) {
+                      activeAccessories.push({ subtype: sub as AccessorySubtype, slotItem: it });
+                    }
+                  }
+                }
+              }
+
+              if (activeAccessories.length === 0) return null;
+
+              return (
+                <View style={styles.accessoriesSection}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+                      Accessories ({activeAccessories.length})
+                    </Text>
+                  </View>
+                  <View style={styles.slotsContainer}>
+                    {activeAccessories.map(({ subtype, slotItem }) =>
+                      renderAccessoryCard(subtype, slotItem)
+                    )}
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Preserved Passthrough Items */}
             {remixState.passthroughItems.length > 0 && (
               <View style={[styles.passthroughSection, { borderColor: wt.cardBorder, backgroundColor: wt.cardSurfaceSubtle }]}>
                 <View style={styles.passthroughHeader}>
                   <IconSymbol name="sparkles" size={13} color={wt.actionPrimary} />
                   <Text style={[styles.passthroughTitle, { color: colors.secondaryText }]}>
-                    Preserved Accessories (Phase F)
+                    Preserved Uncategorized Items
                   </Text>
                 </View>
                 <View style={styles.passthroughList}>
@@ -951,5 +1165,18 @@ const styles = StyleSheet.create({
   applyBtnText: {
     fontSize: 15,
     fontWeight: '700',
+  },
+  accessoriesSection: {
+    gap: Spacing.xs,
+  },
+  sectionHeader: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

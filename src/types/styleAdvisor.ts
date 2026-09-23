@@ -65,7 +65,28 @@ export interface CandidateOutfit {
   hasDress: boolean;
   hasShoes: boolean;
   hasOuterwear: boolean;
+  hasBag?: boolean;
+  hasBelt?: boolean;
+  accessoryCount?: number;
 }
+
+export interface CandidateGeneratorConfig {
+  perSlotMax: number;             // default 8
+  coreBaseLimit: number;          // default 12 (Top K core ensembles)
+  accessoryCandidateLimit: number;// default 8 per subtype
+  maxAccessoryBundlesPerCore: number; // default 6
+  maxJewelryCount: number;        // default 2
+  neglectDays: number;            // default 60
+}
+
+export const DEFAULT_GENERATOR_CONFIG: CandidateGeneratorConfig = {
+  perSlotMax: 8,
+  coreBaseLimit: 12,
+  accessoryCandidateLimit: 8,
+  maxAccessoryBundlesPerCore: 6,
+  maxJewelryCount: 2,
+  neglectDays: 60,
+};
 
 export interface WhyThisWorksDetails {
   summary: string;
@@ -74,6 +95,7 @@ export interface WhyThisWorksDetails {
   occasion: string;
   layering?: string;
   footwear?: string;
+  accessories?: string;
 }
 
 export interface StylingAIRecommendation {

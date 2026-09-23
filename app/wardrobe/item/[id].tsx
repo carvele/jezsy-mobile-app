@@ -25,6 +25,7 @@ import { ConfirmModal } from '@/src/components/ConfirmModal';
 import {
   normalizeGarment,
   resolveEffectiveGarmentBucket,
+  resolveAccessorySubtype,
 } from '@/src/utils/garmentSemanticClassifier';
 import { wardrobeService } from '@/src/services/wardrobeService';
 
@@ -65,6 +66,12 @@ export default function WardrobeItemDetailScreen() {
   const [item, setItem] = useState<WardrobeItem | null>(null);
   const effectiveBucket = useMemo(() => item ? resolveEffectiveGarmentBucket(item) : 'Unknown', [item]);
   const isCoreStylingCategory = useMemo(() => ['Top', 'Bottom', 'Dress', 'Shoes', 'Outerwear'].includes(effectiveBucket), [effectiveBucket]);
+  const accessorySubtype = useMemo(() => (item ? resolveAccessorySubtype(item) : null), [item]);
+  const isStylableAccessory = useMemo(
+    () => accessorySubtype === 'bag' || accessorySubtype === 'belt',
+    [accessorySubtype]
+  );
+  const canStyleAround = isCoreStylingCategory || isStylableAccessory;
   const [loading, setLoading] = useState(true);
   const [logging, setLogging] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -589,7 +596,7 @@ export default function WardrobeItemDetailScreen() {
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
           {item && (
-            isCoreStylingCategory ? (
+            canStyleAround ? (
               <TouchableOpacity
                 style={[
                   styles.styleAroundButton,
@@ -608,7 +615,7 @@ export default function WardrobeItemDetailScreen() {
               <View style={[styles.styleAroundDisabledBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
                 <IconSymbol name="info.circle.fill" size={15} color={colors.secondaryText} />
                 <Text style={[styles.styleAroundDisabledText, { color: colors.secondaryText }]}>
-                  Styling around accessories is coming in Phase F.
+                  Styling around small accessories is available through custom prompts in Style Advisor.
                 </Text>
               </View>
             )

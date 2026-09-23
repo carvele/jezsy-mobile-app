@@ -1,5 +1,14 @@
-import { WardrobeItem, CandidateOutfit, StylingIntent } from '@/src/types/styleAdvisor';
-import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import {
+  WardrobeItem,
+  CandidateOutfit,
+  StylingIntent,
+  CandidateGeneratorConfig,
+  DEFAULT_GENERATOR_CONFIG,
+} from '@/src/types/styleAdvisor';
+import {
+  resolveEffectiveGarmentBucket,
+  resolveAccessorySubtype,
+} from '@/src/utils/garmentSemanticClassifier';
 import { evaluateColors } from '@/src/utils/colorMatcher';
 import { computePersonalAffinity } from '@/src/utils/personalStyleEngine';
 import { UserStyleProfileDto } from '@/src/types/dto/styleProfile';
@@ -12,9 +21,6 @@ import {
   evaluateWardrobeOutfit,
 } from '@/src/utils/aiStylistAdvisor';
 
-const PER_SLOT_MAX = 8;
-const NEGLECT_DAYS = 60;
-
 function toCanvasShim(item: WardrobeItem) {
   return {
     wardrobe_item_id: item.id,
@@ -25,11 +31,11 @@ function toCanvasShim(item: WardrobeItem) {
   } as any;
 }
 
-function neglect(item: WardrobeItem): number {
+function neglect(item: WardrobeItem, neglectDays = 60): number {
   if (!item.wear_count) return 1;
   if (!item.last_worn_at) return 0.6;
   const days = (Date.now() - new Date(item.last_worn_at).getTime()) / 86_400_000;
-  return Math.max(0, Math.min(1, days / NEGLECT_DAYS));
+  return Math.max(0, Math.min(1, days / neglectDays));
 }
 
 function colorsOf(items: WardrobeItem[]): string[] {
@@ -43,11 +49,13 @@ export interface CandidateGenerationOptions {
   profile?: UserStyleProfileDto | null;
   /** Configurable scoring profile for empirical characterization */
   scoringProfile?: ScoringProfile;
+  /** Configurable generation bounds */
+  config?: Partial<CandidateGeneratorConfig>;
 }
 
 /**
  * Builds a bounded pool of verified, wardrobe-grounded candidate outfits satisfying user constraints.
- * Canonical implementation consolidated for both Style Advisor and passive discovery.
+ * Canonical two-stage implementation for Style Advisor, passive discovery, and Mannequin smart shuffle.
  */
 export function generateCandidateOutfits(
   wardrobe: WardrobeItem[],
@@ -59,6 +67,11 @@ export function generateCandidateOutfits(
   const limit = options?.limit || 10;
   const profile = options?.profile || null;
   const scoringProfile: ScoringProfile = options?.scoringProfile || 'intent-driven';
+  const config: CandidateGeneratorConfig = {
+    ...DEFAULT_GENERATOR_CONFIG,
+    ...(options?.config || {}),
+  };
+  const PER_SLOT_MAX = config.perSlotMax;
 
   // 1. Must-use item existence check:
   // If must-use constraint was provided but requested item is not in wardrobe (or deleted),
@@ -73,6 +86,8 @@ export function generateCandidateOutfits(
     }
   }
   const mustUseItems = wardrobe.filter((i) => mustUseIds.includes(i.id));
+  const mustUseAccessories = mustUseItems.filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory');
+  const mustUseCore = mustUseItems.filter((i) => resolveEffectiveGarmentBucket(i) !== 'Accessory');
 
   // 2. Hard exclusions:
   // Explicit excluded items AND explicit avoided colors are strict constraints.
@@ -101,10 +116,10 @@ export function generateCandidateOutfits(
   });
   const reqs = buildOccasionRequirements(contextInterp);
 
-  // 4. Partition eligible items by slot
+  // 4. Partition eligible core items by slot
   const getSlotPool = (slotType: string): WardrobeItem[] => {
     const items = filteredWardrobe.filter((i) => resolveEffectiveGarmentBucket(i) === slotType);
-    items.sort((a, b) => neglect(b) - neglect(a));
+    items.sort((a, b) => neglect(b, config.neglectDays) - neglect(a, config.neglectDays));
 
     const compatible: WardrobeItem[] = [];
     const fallback: WardrobeItem[] = [];
@@ -122,7 +137,14 @@ export function generateCandidateOutfits(
     }
 
     const chosen = compatible.length > 0 ? compatible : fallback;
-    return chosen.slice(0, PER_SLOT_MAX);
+    const pool = chosen.slice(0, PER_SLOT_MAX);
+    // Ensure any must-use item of this slot is present in the pool
+    for (const m of mustUseCore) {
+      if (resolveEffectiveGarmentBucket(m) === slotType && !pool.some((p) => p.id === m.id)) {
+        pool.unshift(m);
+      }
+    }
+    return pool;
   };
 
   const tops = getSlotPool('Top');
@@ -131,7 +153,9 @@ export function generateCandidateOutfits(
   const shoes = getSlotPool('Shoes');
   const outerwear = getSlotPool('Outerwear');
 
-  // 5. Form base combinations: Dress or Top + Bottom
+  // =========================================================================
+  // STAGE 1: Core Base & Silhouette Generation with Must-Use Co-Pruning
+  // =========================================================================
   const bases: WardrobeItem[][] = [];
   for (const d of dresses) {
     bases.push([d]);
@@ -144,33 +168,33 @@ export function generateCandidateOutfits(
 
   if (bases.length === 0) return [];
 
-  // 6. Assemble complete combinations
-  const rawCombos: WardrobeItem[][] = [];
+  const rawCoreCombos: WardrobeItem[][] = [];
   for (const base of bases) {
     const withShoes = shoes.length > 0 ? shoes.map((s) => [...base, s]) : [base];
     for (const combo of withShoes) {
-      rawCombos.push(combo);
+      rawCoreCombos.push(combo);
       // Layering: add up to 2 outerwear options if available
       for (const o of outerwear.slice(0, 2)) {
-        rawCombos.push([...combo, o]);
+        rawCoreCombos.push([...combo, o]);
       }
     }
   }
 
-  // 7. Enforce must-use items strictly
-  let eligibleCombos = rawCombos;
-  if (mustUseIds.length > 0) {
-    eligibleCombos = rawCombos.filter((combo) => {
+  // Filter core combinations against must-use core items
+  let eligibleCoreCombos = rawCoreCombos;
+  if (mustUseCore.length > 0) {
+    const mustUseCoreIds = mustUseCore.map((i) => i.id);
+    eligibleCoreCombos = rawCoreCombos.filter((combo) => {
       const comboIds = new Set(combo.map((i) => i.id));
-      return mustUseIds.every((mId) => comboIds.has(mId));
+      return mustUseCoreIds.every((mId) => comboIds.has(mId));
     });
 
-    // If no combination naturally contained all must-use items, attempt synthetic injection
-    if (eligibleCombos.length === 0 && mustUseItems.length > 0) {
+    if (eligibleCoreCombos.length === 0) {
+      // Synthetic core injection for must-use core items
       const syntheticCombos: WardrobeItem[][] = [];
       for (const base of bases) {
         let combo = [...base];
-        for (const mItem of mustUseItems) {
+        for (const mItem of mustUseCore) {
           const mBucket = resolveEffectiveGarmentBucket(mItem);
           combo = combo.filter((i) => resolveEffectiveGarmentBucket(i) !== mBucket);
           combo.push(mItem);
@@ -180,41 +204,51 @@ export function generateCandidateOutfits(
         }
         syntheticCombos.push(combo);
       }
-      eligibleCombos = syntheticCombos.filter((combo) => {
+      eligibleCoreCombos = syntheticCombos.filter((combo) => {
         const comboIds = new Set(combo.map((i) => i.id));
-        return mustUseIds.every((mId) => comboIds.has(mId));
+        return mustUseCoreIds.every((mId) => comboIds.has(mId));
       });
     }
   }
 
-  // If must-use requirement could not be satisfied, return empty (never violate must-use)
-  if (mustUseIds.length > 0 && eligibleCombos.length === 0) {
+  if (mustUseCore.length > 0 && eligibleCoreCombos.length === 0) {
     return [];
   }
 
-  // 8. Filter out severe contradictions across full ensemble
-  const validCombos = eligibleCombos.filter((combo) => {
+  // STAGE-1 MUST-USE ACCESSORY CO-PRUNING:
+  // If an accessory is required/locked, evaluate core candidate compatibility immediately.
+  // Cores that contradict a required accessory (e.g. running shorts with formal belt) are pruned.
+  if (mustUseAccessories.length > 0) {
+    eligibleCoreCombos = eligibleCoreCombos.filter((coreCombo) => {
+      const combined = [...coreCombo, ...mustUseAccessories];
+      const gProfiles = combined.map((item) => buildGarmentSemanticProfile(toCanvasShim(item), item));
+      const structure = buildOutfitStructure(gProfiles);
+      const contradictions = detectContradictions(gProfiles, reqs, structure);
+      return !contradictions.some((c) => c.severity === 'severe');
+    });
+
+    if (eligibleCoreCombos.length === 0) {
+      // Grounded no-match: locked accessory contradicts all available wardrobe core combinations
+      return [];
+    }
+  }
+
+  // Filter out core combinations that have severe contradictions on their own
+  const validCoreCombos = eligibleCoreCombos.filter((combo) => {
     const garmentProfiles = combo.map((item) => buildGarmentSemanticProfile(toCanvasShim(item), item));
     const structure = buildOutfitStructure(garmentProfiles);
     const contradictions = detectContradictions(garmentProfiles, reqs, structure);
     return !contradictions.some((c) => c.severity === 'severe');
   });
 
-  const finalPool = validCombos.length > 0 ? validCombos : eligibleCombos;
+  const survivingCorePool = validCoreCombos.length > 0 ? validCoreCombos : eligibleCoreCombos;
+  if (survivingCorePool.length === 0) return [];
 
-  // 9. Score and transform to CandidateOutfit objects
-  const seenKeys = new Set<string>();
-  const candidates: CandidateOutfit[] = [];
-
-  for (const items of finalPool) {
-    const key = items.map((i) => i.id).sort().join('|');
-    if (seenKeys.has(key)) continue;
-    seenKeys.add(key);
-
+  // Helper to score a core combination
+  const scoreCoreCombo = (items: WardrobeItem[]): { score: number; colorMatch: any; personal: any } => {
     const colors = colorsOf(items);
     const colorMatch = evaluateColors(colors);
     const personal = computePersonalAffinity(items, profile, intent.selectedOccasion);
-
     const types = items.map((i) => resolveEffectiveGarmentBucket(i));
     const hasDress = types.includes('Dress');
     const hasShoes = types.includes('Shoes');
@@ -223,7 +257,6 @@ export function generateCandidateOutfits(
     let finalScore = 75;
 
     if (scoringProfile === 'legacy-passive') {
-      // Legacy 40/35/25 weighting with statement anchoring and occasion adjustments
       let compScore = 85;
       if (hasDress || (types.includes('Top') && types.includes('Bottom'))) compScore += 5;
       if (hasShoes) compScore += 5;
@@ -272,7 +305,7 @@ export function generateCandidateOutfits(
       }
 
       const w = profile?.preferenceWeights || { colorHarmony: 0.40, composition: 0.35, personalStyle: 0.25 };
-      const avgNeglect = items.reduce((sum, i) => sum + neglect(i), 0) / items.length;
+      const avgNeglect = items.reduce((sum, i) => sum + neglect(i, config.neglectDays), 0) / items.length;
       const rawScore =
         adjustedColorScore * w.colorHarmony +
         compScore * w.composition +
@@ -281,7 +314,6 @@ export function generateCandidateOutfits(
         avgNeglect * 10;
       finalScore = Math.max(10, Math.min(100, Math.round(rawScore)));
     } else {
-      // Intent-driven additive scoring formula (calibrated to preserve neglect bonuses and clash penalties)
       let score = 40;
       score += Math.round(colorMatch.score * 0.3);
       score += Math.round(personal.score * 0.2);
@@ -294,7 +326,7 @@ export function generateCandidateOutfits(
         score += 10;
       }
 
-      const avgNeglect = items.reduce((sum, i) => sum + neglect(i), 0) / items.length;
+      const avgNeglect = items.reduce((sum, i) => sum + neglect(i, config.neglectDays), 0) / items.length;
       score += Math.round(avgNeglect * 8);
 
       let patterns = 0;
@@ -307,33 +339,182 @@ export function generateCandidateOutfits(
       finalScore = Math.min(100, Math.max(20, score));
     }
 
-    const isComfortFocused = items.some((i) => {
-      const sub = (i.sub_category || '').toLowerCase();
-      const desc = (i.description || '').toLowerCase();
-      return sub.includes('sneaker') || sub.includes('flat') || desc.includes('relaxed') || desc.includes('stretch');
-    });
+    return { score: finalScore, colorMatch, personal };
+  };
 
-    const isStatementFocused = items.some((i) => {
-      const p = ((i as any).pattern || '').toLowerCase();
-      const tags = i.color_tags || [];
-      return p.includes('graphic') || p.includes('floral') || tags.length >= 3;
-    });
+  // Rank core candidates and retain Top K
+  const scoredCores = survivingCorePool.map((combo) => ({
+    combo,
+    ...scoreCoreCombo(combo),
+  }));
+  scoredCores.sort((a, b) => b.score - a.score);
+  const topCoreCandidates = scoredCores.slice(0, config.coreBaseLimit);
 
-    candidates.push({
-      candidateId: `cand_${candidates.length + 1}`,
-      items,
-      key,
-      baseScore: finalScore,
-      colorMatchLabel: colorMatch.label,
-      formalityLevel: intent.formality || 'casual',
-      isComfortFocused,
-      isStatementFocused,
-      hasDress,
-      hasShoes,
-      hasOuterwear,
-    });
+  // =========================================================================
+  // STAGE 2: Bounded Canonical Ensemble Enrichment
+  // =========================================================================
+  // Extract accessory pools by subtype
+  const allAccessories = filteredWardrobe.filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory');
+
+  const getAccessoryPool = (subtype: string): WardrobeItem[] => {
+    return allAccessories
+      .filter((i) => resolveAccessorySubtype(i) === subtype)
+      .sort((a, b) => neglect(b, config.neglectDays) - neglect(a, config.neglectDays))
+      .slice(0, config.accessoryCandidateLimit);
+  };
+
+  const bagPool = getAccessoryPool('bag');
+  const beltPool = getAccessoryPool('belt');
+
+  // Contextual pools: only active when environmental/prompt cues trigger them
+  const isSunnyOrOutdoor =
+    contextInterp.weather === 'hot' ||
+    contextInterp.weather === 'warm' ||
+    contextInterp.environment === 'outdoors' ||
+    contextInterp.environment === 'beachResort' ||
+    /\b(sun|sunglasses?|beach|park|walk)\b/i.test(intent.rawPrompt || '');
+  const isColdOrWinter =
+    contextInterp.temperatureRequirement === 'warmthNeeded' ||
+    contextInterp.weather === 'cold' ||
+    /\b(cold|winter|snow|chilly|freezing)\b/i.test(intent.rawPrompt || '');
+
+  const eyewearPool = isSunnyOrOutdoor ? getAccessoryPool('eyewear') : [];
+  const scarfPool = isColdOrWinter ? getAccessoryPool('scarf') : [];
+  const headwearPool = isColdOrWinter || isSunnyOrOutdoor ? getAccessoryPool('headwear') : [];
+
+  const candidates: CandidateOutfit[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const { combo: coreCombo, score: coreScore, colorMatch: coreColorMatch } of topCoreCandidates) {
+    // Generate bounded accessory bundles for this core
+    let accessoryBundles: WardrobeItem[][] = [];
+
+    if (mustUseAccessories.length > 0) {
+      // Must-use accessories are strictly required in every bundle for this session
+      accessoryBundles = [mustUseAccessories];
+      // Optionally add a complementary bag or belt if not already locked
+      if (!mustUseAccessories.some((a) => resolveAccessorySubtype(a) === 'bag') && bagPool.length > 0) {
+        accessoryBundles.push([...mustUseAccessories, bagPool[0]]);
+      }
+      if (!mustUseAccessories.some((a) => resolveAccessorySubtype(a) === 'belt') && beltPool.length > 0) {
+        accessoryBundles.push([...mustUseAccessories, beltPool[0]]);
+      }
+    } else {
+      // Standard generative bundles:
+      // Bundle 1: [None] — Clean look with 0 accessories (always evaluated!)
+      accessoryBundles.push([]);
+
+      // Bundle 2: [Bag]
+      for (const bag of bagPool.slice(0, 2)) {
+        accessoryBundles.push([bag]);
+      }
+
+      // Bundle 3: [Belt]
+      for (const belt of beltPool.slice(0, 2)) {
+        accessoryBundles.push([belt]);
+      }
+
+      // Bundle 4: [Bag + Belt]
+      if (bagPool.length > 0 && beltPool.length > 0) {
+        accessoryBundles.push([bagPool[0], beltPool[0]]);
+      }
+
+      // Bundle 5: Contextual accessory (eyewear / scarf / hat) if triggered
+      if (eyewearPool.length > 0) {
+        accessoryBundles.push([eyewearPool[0]]);
+        if (bagPool.length > 0) accessoryBundles.push([bagPool[0], eyewearPool[0]]);
+      }
+      if (scarfPool.length > 0) {
+        accessoryBundles.push([scarfPool[0]]);
+      }
+      if (headwearPool.length > 0) {
+        accessoryBundles.push([headwearPool[0]]);
+      }
+    }
+
+    // Cap bundles per core candidate
+    const boundedBundles = accessoryBundles.slice(0, config.maxAccessoryBundlesPerCore);
+
+    for (const accBundle of boundedBundles) {
+      const fullItems = [...coreCombo, ...accBundle];
+      const key = fullItems.map((i) => i.id).sort().join('|');
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+
+      // Verify contradictions for full ensemble
+      const gProfiles = fullItems.map((item) => buildGarmentSemanticProfile(toCanvasShim(item), item));
+      const structure = buildOutfitStructure(gProfiles);
+      const contradictions = detectContradictions(gProfiles, reqs, structure);
+      if (contradictions.some((c) => c.severity === 'severe')) {
+        continue;
+      }
+
+      // Calculate bounded accessory score contribution
+      let accessoryDelta = 0;
+      if (accBundle.length > 0) {
+        const fullColors = colorsOf(fullItems);
+        const fullColorMatch = evaluateColors(fullColors);
+        // Harmony bonus: bounded to at most +5
+        if (fullColorMatch.score >= 85) {
+          accessoryDelta += Math.min(5, Math.round((fullColorMatch.score - 80) * 0.25));
+        } else if (fullColorMatch.score < 65) {
+          // Clash penalty: bounded to at most -5
+          accessoryDelta -= Math.min(5, Math.round((70 - fullColorMatch.score) * 0.25));
+        }
+
+        // Bound strictly to [-5, +5]
+        accessoryDelta = Math.max(-5, Math.min(5, accessoryDelta));
+      }
+
+      const totalScore = Math.max(20, Math.min(100, coreScore + accessoryDelta));
+
+      const types = fullItems.map((i) => resolveEffectiveGarmentBucket(i));
+      const hasDress = types.includes('Dress');
+      const hasShoes = types.includes('Shoes');
+      const hasOuterwear = types.includes('Outerwear');
+      const hasBag = fullItems.some((i) => resolveAccessorySubtype(i) === 'bag');
+      const hasBelt = fullItems.some((i) => resolveAccessorySubtype(i) === 'belt');
+      const accessoryCount = accBundle.length;
+
+      const isComfortFocused = fullItems.some((i) => {
+        const sub = (i.sub_category || '').toLowerCase();
+        const desc = (i.description || '').toLowerCase();
+        return sub.includes('sneaker') || sub.includes('flat') || desc.includes('relaxed') || desc.includes('stretch');
+      });
+
+      const isStatementFocused = fullItems.some((i) => {
+        const p = ((i as any).pattern || '').toLowerCase();
+        const tags = i.color_tags || [];
+        return p.includes('graphic') || p.includes('floral') || tags.length >= 3;
+      });
+
+      candidates.push({
+        candidateId: `cand_${candidates.length + 1}`,
+        items: fullItems,
+        key,
+        baseScore: totalScore,
+        colorMatchLabel: coreColorMatch.label,
+        formalityLevel: intent.formality || 'casual',
+        isComfortFocused,
+        isStatementFocused,
+        hasDress,
+        hasShoes,
+        hasOuterwear,
+        hasBag,
+        hasBelt,
+        accessoryCount,
+      });
+    }
   }
 
-  candidates.sort((a, b) => b.baseScore - a.baseScore);
+  // Simplicity / Restraint Tie-Break:
+  // When an accessorized candidate does not materially improve over a simpler look,
+  // prefer the simpler ensemble (penalize extra optional accessories by 0.01 per item as a tie-breaker).
+  candidates.sort((a, b) => {
+    const aEffective = a.baseScore - (a.accessoryCount || 0) * 0.01;
+    const bEffective = b.baseScore - (b.accessoryCount || 0) * 0.01;
+    return bEffective - aEffective;
+  });
+
   return candidates.slice(0, limit);
 }

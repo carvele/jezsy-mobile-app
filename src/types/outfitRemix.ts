@@ -1,7 +1,26 @@
 import { WardrobeItem, StylingIntent, CandidateOutfit, WhyThisWorksDetails } from './styleAdvisor';
 import { UserStyleProfileDto } from './dto/styleProfile';
+import { AccessorySubtype } from '@/src/utils/garmentSemanticClassifier';
 
-export type OutfitRemixSlotType = 'top' | 'bottom' | 'dress' | 'shoes' | 'outerwear';
+export type CoreRemixSlotType = 'top' | 'bottom' | 'dress' | 'shoes' | 'outerwear';
+export type OutfitRemixSlotType = CoreRemixSlotType | AccessorySubtype;
+
+export const ACCESSORY_SLOT_CAPACITIES: Record<AccessorySubtype, number> = {
+  bag: 1,
+  belt: 1,
+  watch: 1,
+  headwear: 1,
+  eyewear: 1,
+  scarf: 1,
+  gloves: 1,
+  jewelry: 2,
+};
+
+export interface AccessorySlotState {
+  subtype: AccessorySubtype;
+  capacity: number;
+  items: RemixedSlotItem[];
+}
 
 export type RemixLockReason =
   | 'style-around'     // Phase D session anchor ("Style Around This Item")
@@ -29,8 +48,12 @@ export interface OutfitRemixResult {
 export interface OutfitRemixState {
   sourceType: 'style-advisor' | 'passive-outfit' | 'saved-outfit';
   originalOutfitKey: string;
-  slots: Record<OutfitRemixSlotType, RemixedSlotItem | null>;
-  passthroughItems: WardrobeItem[]; // Accessories, unknown items (Phase F boundary)
+  /** Core slots: exactly 1 per core slot type */
+  slots: Record<CoreRemixSlotType, RemixedSlotItem | null>;
+  /** Typed accessory slots with explicit capacities */
+  accessorySlots?: Partial<Record<AccessorySubtype, AccessorySlotState>>;
+  /** Unassigned accessories, unknown items, or deleted snapshots */
+  passthroughItems: WardrobeItem[];
   history: string[]; // Bounded ring buffer (capacity 10) of newest-first outfit keys
   intent: StylingIntent;
   profile?: UserStyleProfileDto | null;
@@ -39,3 +62,4 @@ export interface OutfitRemixState {
   error?: string | null;
   missingItems?: { id: string; slot?: string; name?: string }[];
 }
+

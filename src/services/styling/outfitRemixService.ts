@@ -1,6 +1,6 @@
 /**
  * outfitRemixService.ts
- * Pure domain service for Phase E Interactive Remix & Slot-Level Garment Swapping.
+ * Pure domain service for Phase E & F Interactive Remix & Multi-Capacity Accessory Swapping.
  *
  * Invariant: ZERO second recommendation engine.
  * All replacements, structural transitions, and shuffles use the canonical generator (generateCandidateOutfits).
@@ -12,14 +12,34 @@ import { UserStyleProfileDto } from '@/src/types/dto/styleProfile';
 import {
   OutfitRemixState,
   OutfitRemixSlotType,
+  CoreRemixSlotType,
   RemixedSlotItem,
   OutfitRemixResult,
+  AccessorySlotState,
+  ACCESSORY_SLOT_CAPACITIES,
 } from '@/src/types/outfitRemix';
 import { generateCandidateOutfits } from './candidateGenerator';
 import { generateGroundedExplanation } from './groundedExplainer';
-import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import {
+  resolveEffectiveGarmentBucket,
+  resolveAccessorySubtype,
+  AccessorySubtype,
+} from '@/src/utils/garmentSemanticClassifier';
 
 const MAX_REMIX_HISTORY = 10;
+
+function createEmptyAccessorySlots(): Partial<Record<AccessorySubtype, AccessorySlotState>> {
+  const result: Partial<Record<AccessorySubtype, AccessorySlotState>> = {};
+  for (const [sub, cap] of Object.entries(ACCESSORY_SLOT_CAPACITIES)) {
+    const subtype = sub as AccessorySubtype;
+    result[subtype] = {
+      subtype,
+      capacity: cap,
+      items: [],
+    };
+  }
+  return result;
+}
 
 /**
  * Maps a candidate outfit into the remix slot model while preserving
@@ -29,9 +49,7 @@ export function applyCandidateToRemixState(
   state: OutfitRemixState,
   candidate: CandidateOutfit
 ): OutfitRemixState {
-  const passthroughItems = [...state.passthroughItems];
-
-  const newSlots: Record<OutfitRemixSlotType, RemixedSlotItem | null> = {
+  const newSlots: Record<CoreRemixSlotType, RemixedSlotItem | null> = {
     top: null,
     bottom: null,
     dress: null,
@@ -39,31 +57,67 @@ export function applyCandidateToRemixState(
     outerwear: null,
   };
 
+  const newAccessorySlots = createEmptyAccessorySlots();
+  const passthroughItems: WardrobeItem[] = [];
+
   for (const item of candidate.items) {
     const rawBucket = resolveEffectiveGarmentBucket(item).toLowerCase();
-    const bucket = (rawBucket === 'footwear' ? 'shoes' : rawBucket) as OutfitRemixSlotType;
+    const bucket = rawBucket === 'footwear' ? 'shoes' : rawBucket;
 
     if (bucket in newSlots) {
-      const existing = state.slots[bucket];
+      const coreSlot = bucket as CoreRemixSlotType;
+      const existing = state.slots[coreSlot];
       if (existing && existing.item.id === item.id) {
-        // Retain existing lock state and provenance for unchanged pieces
-        newSlots[bucket] = existing;
+        newSlots[coreSlot] = existing;
       } else {
-        // New piece in this slot defaults to an unlocked remix item
-        newSlots[bucket] = {
-          slotType: bucket,
+        newSlots[coreSlot] = {
+          slotType: coreSlot,
           item,
           isLocked: false,
           lockReason: 'remix',
           canUnlockInRemix: true,
         };
       }
+    } else if (rawBucket === 'accessory') {
+      const accSub = resolveAccessorySubtype(item);
+      if (accSub && newAccessorySlots[accSub]) {
+        const slotState = newAccessorySlots[accSub]!;
+        if (slotState.items.length < slotState.capacity) {
+          const existingSlot = state.accessorySlots?.[accSub];
+          const existingItem = existingSlot?.items.find((i) => i.item.id === item.id);
+          if (existingItem) {
+            slotState.items.push(existingItem);
+          } else {
+            slotState.items.push({
+              slotType: accSub,
+              item,
+              isLocked: false,
+              lockReason: 'remix',
+              canUnlockInRemix: true,
+            });
+          }
+        } else {
+          passthroughItems.push(item);
+        }
+      } else {
+        passthroughItems.push(item);
+      }
+    } else {
+      passthroughItems.push(item);
+    }
+  }
+
+  // Preserve passthroughs that were already in state
+  for (const p of state.passthroughItems) {
+    if (!candidate.items.some((i) => i.id === p.id) && !passthroughItems.some((i) => i.id === p.id)) {
+      passthroughItems.push(p);
     }
   }
 
   return {
     ...state,
     slots: newSlots,
+    accessorySlots: newAccessorySlots,
     passthroughItems,
     activeCandidate: candidate,
     isDirty: true,
@@ -72,33 +126,70 @@ export function applyCandidateToRemixState(
 }
 
 /**
- * Toggles the lock on a slot.
+ * Toggles the lock on a core slot or an accessory slot.
  * Rejects unlocking if the item is an authoritative parent constraint (style-around or parent-must-use).
  */
 export function toggleSlotLock(
   state: OutfitRemixState,
-  slotType: OutfitRemixSlotType
+  slotType: OutfitRemixSlotType,
+  itemId?: string
 ): OutfitRemixState {
-  const slotData = state.slots[slotType];
-  if (!slotData) return state;
+  const coreSlots = ['top', 'bottom', 'dress', 'shoes', 'outerwear'] as CoreRemixSlotType[];
+  if (coreSlots.includes(slotType as CoreRemixSlotType)) {
+    const coreKey = slotType as CoreRemixSlotType;
+    const slotData = state.slots[coreKey];
+    if (!slotData) return state;
 
-  if (slotData.isLocked && !slotData.canUnlockInRemix) {
+    if (slotData.isLocked && !slotData.canUnlockInRemix) {
+      return {
+        ...state,
+        error: 'This item is required by your styling session and cannot be unlocked in Remix.',
+      };
+    }
+
     return {
       ...state,
-      error: 'This item is required by your styling session and cannot be unlocked in Remix.',
+      slots: {
+        ...state.slots,
+        [coreKey]: {
+          ...slotData,
+          isLocked: !slotData.isLocked,
+        },
+      },
+      error: null,
     };
   }
 
-  const updatedSlot: RemixedSlotItem = {
-    ...slotData,
-    isLocked: !slotData.isLocked,
-  };
+  // Accessory slot toggle
+  const accSub = slotType as AccessorySubtype;
+  const accSlot = state.accessorySlots?.[accSub];
+  if (!accSlot || accSlot.items.length === 0) return state;
+
+  const targetItem = itemId
+    ? accSlot.items.find((i) => i.item.id === itemId)
+    : accSlot.items[0];
+
+  if (!targetItem) return state;
+
+  if (targetItem.isLocked && !targetItem.canUnlockInRemix) {
+    return {
+      ...state,
+      error: 'This accessory is required by your styling session and cannot be unlocked in Remix.',
+    };
+  }
+
+  const updatedItems = accSlot.items.map((i) =>
+    i.item.id === targetItem.item.id ? { ...i, isLocked: !i.isLocked } : i
+  );
 
   return {
     ...state,
-    slots: {
-      ...state.slots,
-      [slotType]: updatedSlot,
+    accessorySlots: {
+      ...state.accessorySlots,
+      [accSub]: {
+        ...accSlot,
+        items: updatedItems,
+      },
     },
     error: null,
   };
@@ -115,16 +206,43 @@ export function toggleSlotLock(
 export function getCanonicalSlotReplacements(
   state: OutfitRemixState,
   targetSlot: OutfitRemixSlotType,
-  wardrobe: WardrobeItem[]
+  wardrobe: WardrobeItem[],
+  targetItemId?: string
 ): { candidate: CandidateOutfit; replacementItem: WardrobeItem }[] {
-  const currentSlotItem = state.slots[targetSlot]?.item;
-  if (!currentSlotItem) return [];
+  const isCore = ['top', 'bottom', 'dress', 'shoes', 'outerwear'].includes(targetSlot);
+  let currentTargetItem: WardrobeItem | null = null;
+
+  if (isCore) {
+    currentTargetItem = state.slots[targetSlot as CoreRemixSlotType]?.item || null;
+  } else {
+    const accSub = targetSlot as AccessorySubtype;
+    const accSlot = state.accessorySlots?.[accSub];
+    if (accSlot && accSlot.items.length > 0) {
+      currentTargetItem = targetItemId
+        ? accSlot.items.find((i) => i.item.id === targetItemId)?.item || null
+        : accSlot.items[0].item;
+    }
+  }
+
+  if (!currentTargetItem) return [];
 
   // Retain all non-target garments as must-use
   const nonTargetItemIds: string[] = [];
   for (const [slotKey, slotData] of Object.entries(state.slots)) {
-    if (slotKey !== targetSlot && slotData?.item) {
+    if ((slotKey !== targetSlot || !isCore) && slotData?.item) {
       nonTargetItemIds.push(slotData.item.id);
+    }
+  }
+
+  if (state.accessorySlots) {
+    for (const accSlot of Object.values(state.accessorySlots)) {
+      if (accSlot?.items) {
+        for (const it of accSlot.items) {
+          if (it.item.id !== currentTargetItem.id) {
+            nonTargetItemIds.push(it.item.id);
+          }
+        }
+      }
     }
   }
 
@@ -132,7 +250,7 @@ export function getCanonicalSlotReplacements(
     new Set([...(state.intent.mustUseItemIds || []), ...nonTargetItemIds])
   );
   const mergedExcluded = Array.from(
-    new Set([...(state.intent.excludedItemIds || []), currentSlotItem.id])
+    new Set([...(state.intent.excludedItemIds || []), currentTargetItem.id])
   );
 
   const slotIntent: StylingIntent = {
@@ -152,11 +270,22 @@ export function getCanonicalSlotReplacements(
   const results: { candidate: CandidateOutfit; replacementItem: WardrobeItem }[] = [];
 
   for (const cand of candidates) {
-    const itemInSlot = cand.items.find((i) => {
-      const b = resolveEffectiveGarmentBucket(i).toLowerCase();
-      const mapped = b === 'footwear' ? 'shoes' : b;
-      return mapped === targetSlot;
-    });
+    let itemInSlot: WardrobeItem | undefined;
+    if (isCore) {
+      itemInSlot = cand.items.find((i) => {
+        const b = resolveEffectiveGarmentBucket(i).toLowerCase();
+        const mapped = b === 'footwear' ? 'shoes' : b;
+        return mapped === targetSlot;
+      });
+    } else {
+      itemInSlot = cand.items.find((i) => {
+        return (
+          resolveEffectiveGarmentBucket(i) === 'Accessory' &&
+          resolveAccessorySubtype(i) === targetSlot &&
+          !nonTargetItemIds.includes(i.id)
+        );
+      });
+    }
 
     if (itemInSlot && !seenIds.has(itemInSlot.id)) {
       seenIds.add(itemInSlot.id);
@@ -200,7 +329,6 @@ export function switchBaseStructure(
     return state;
   }
 
-  // Filter active wardrobe items (reject deleted/stale items)
   const activeWardrobe = wardrobe.filter((i) => !i.deleted);
 
   // 1. Check authoritative parent must-use constraints and session anchors
@@ -236,13 +364,24 @@ export function switchBaseStructure(
     return { ...state, error: 'Unlock your top and bottom before switching to a dress.' };
   }
 
-  // 3. Preserve compatible non-base must-use pieces (Shoes, Outerwear)
+  // 3. Preserve compatible non-base must-use pieces (Shoes, Outerwear, Accessories)
   const nonBaseItemIds: string[] = [];
   if (state.slots.shoes?.item && (state.slots.shoes.isLocked || parentMustUseIds.has(state.slots.shoes.item.id))) {
     nonBaseItemIds.push(state.slots.shoes.item.id);
   }
   if (state.slots.outerwear?.item && (state.slots.outerwear.isLocked || parentMustUseIds.has(state.slots.outerwear.item.id))) {
     nonBaseItemIds.push(state.slots.outerwear.item.id);
+  }
+  if (state.accessorySlots) {
+    for (const accSlot of Object.values(state.accessorySlots)) {
+      if (accSlot?.items) {
+        for (const it of accSlot.items) {
+          if (it.isLocked || parentMustUseIds.has(it.item.id)) {
+            nonBaseItemIds.push(it.item.id);
+          }
+        }
+      }
+    }
   }
 
   // 4. Filter wardrobe to force target base structure
@@ -304,11 +443,25 @@ export function shuffleUnlockedSlots(
     }
   }
 
+  if (state.accessorySlots) {
+    for (const accSlot of Object.values(state.accessorySlots)) {
+      if (accSlot?.items) {
+        for (const it of accSlot.items) {
+          if (it.isLocked) {
+            lockedItemIds.push(it.item.id);
+          } else {
+            unlockedItemIds.push(it.item.id);
+          }
+        }
+      }
+    }
+  }
+
   if (unlockedItemIds.length === 0) {
     return { ...state, error: 'All slots are locked. Unlock at least one piece to shuffle.' };
   }
 
-  // Preserve current base structure (never implicitly switch between Dress and Separates during shuffle)
+  // Preserve current base structure
   const isDress = !!state.slots.dress;
   const eligibleWardrobe = wardrobe.filter((item) => {
     const bucket = resolveEffectiveGarmentBucket(item);
@@ -330,8 +483,7 @@ export function shuffleUnlockedSlots(
     return { ...state, error: 'No alternative combinations found preserving your locked pieces.' };
   }
 
-  // Anti-repeat selection with TRUE deterministic LRU fallback:
-  // History is newest-first: index 0 is most recent, index 9 is oldest seen.
+  // Anti-repeat selection with TRUE deterministic LRU fallback
   const history = state.history;
   const unseen = candidates.filter((c) => !history.includes(c.key));
 
@@ -339,7 +491,6 @@ export function shuffleUnlockedSlots(
   if (unseen.length > 0) {
     chosen = unseen[0];
   } else {
-    // True LRU: select candidate whose key appears at the largest index (oldest) in history
     let maxHistoryIndex = -1;
     chosen = candidates[0];
     for (const cand of candidates) {
@@ -376,6 +527,15 @@ export function addOuterwear(
   for (const slotData of Object.values(state.slots)) {
     if (slotData?.item) currentItemIds.push(slotData.item.id);
   }
+  if (state.accessorySlots) {
+    for (const accSlot of Object.values(state.accessorySlots)) {
+      if (accSlot?.items) {
+        for (const it of accSlot.items) {
+          currentItemIds.push(it.item.id);
+        }
+      }
+    }
+  }
 
   const outerwearIntent: StylingIntent = {
     ...state.intent,
@@ -383,7 +543,7 @@ export function addOuterwear(
   };
 
   const candidates = generateCandidateOutfits(wardrobe, outerwearIntent, {
-    limit: 8,
+    limit: 5,
     profile: state.profile,
   });
 
@@ -392,46 +552,64 @@ export function addOuterwear(
   );
 
   if (!candWithOuter) {
-    return { ...state, error: 'No compatible outerwear found in your wardrobe for this look.' };
+    return { ...state, error: 'No compatible outerwear found in your wardrobe for this outfit.' };
   }
 
-  return applyCandidateToRemixState(state, candWithOuter);
+  return replaceSlotItemWithCandidate(state, candWithOuter);
 }
 
 /**
- * Removes outerwear without corrupting the base outfit.
- * Rejects removal if outerwear is an authoritative parent constraint.
+ * Removes the outerwear layer from the current remix look.
  */
 export function removeOuterwear(state: OutfitRemixState): OutfitRemixState {
-  if (state.slots.outerwear === null) return state;
+  const currentOuterwear = state.slots.outerwear;
+  if (!currentOuterwear) return state;
 
-  if (state.slots.outerwear.isLocked && !state.slots.outerwear.canUnlockInRemix) {
-    return { ...state, error: 'Cannot remove outerwear required by your Style Advisor session.' };
+  if (currentOuterwear.isLocked && !currentOuterwear.canUnlockInRemix) {
+    return {
+      ...state,
+      error: 'Cannot remove outerwear required by your Style Advisor session',
+    };
   }
 
-  const updatedSlots = { ...state.slots, outerwear: null };
-  const activeItems = Object.values(updatedSlots)
-    .filter((s): s is RemixedSlotItem => Boolean(s?.item))
-    .map((s) => s.item)
-    .concat(state.passthroughItems);
+  const nextSlots = { ...state.slots, outerwear: null };
+  const activeItems: WardrobeItem[] = [];
+  for (const s of Object.values(nextSlots)) {
+    if (s?.item) activeItems.push(s.item);
+  }
+  if (state.accessorySlots) {
+    for (const accSlot of Object.values(state.accessorySlots)) {
+      if (accSlot?.items) {
+        for (const it of accSlot.items) activeItems.push(it.item);
+      }
+    }
+  }
+  activeItems.push(...state.passthroughItems);
 
-  const candidateKey = activeItems.map((i) => i.id).sort().join('|');
+  const newKey = activeItems.map((i) => i.id).sort().join('|');
+
   const dummyCandidate: CandidateOutfit = {
-    candidateId: candidateKey,
+    candidateId: newKey,
     items: activeItems,
-    key: candidateKey,
-    baseScore: state.activeCandidate?.baseScore ?? 80,
-    colorMatchLabel: 'Balanced',
+    key: newKey,
+    baseScore: state.activeCandidate ? Math.max(50, state.activeCandidate.baseScore - 2) : 80,
+    colorMatchLabel: state.activeCandidate?.colorMatchLabel || 'Balanced',
     formalityLevel: state.intent.formality || 'balanced',
-    hasDress: activeItems.some((i) => resolveEffectiveGarmentBucket(i) === 'Dress'),
-    hasShoes: activeItems.some((i) => resolveEffectiveGarmentBucket(i) === 'Shoes'),
+    hasDress: !!nextSlots.dress,
+    hasShoes: !!nextSlots.shoes,
     hasOuterwear: false,
   };
 
+  const nextHistory = [newKey, ...state.history.filter((k) => k !== newKey)].slice(
+    0,
+    MAX_REMIX_HISTORY
+  );
+
   return {
     ...state,
-    slots: updatedSlots,
+    slots: nextSlots,
     activeCandidate: dummyCandidate,
+    history: nextHistory,
     isDirty: true,
     error: null,
   };
@@ -445,6 +623,15 @@ export function createRemixResult(state: OutfitRemixState): OutfitRemixResult {
   const activeItems: WardrobeItem[] = [];
   for (const slotData of Object.values(state.slots)) {
     if (slotData?.item) activeItems.push(slotData.item);
+  }
+  if (state.accessorySlots) {
+    for (const accSlot of Object.values(state.accessorySlots)) {
+      if (accSlot?.items) {
+        for (const it of accSlot.items) {
+          activeItems.push(it.item);
+        }
+      }
+    }
   }
   activeItems.push(...state.passthroughItems);
 
@@ -461,6 +648,9 @@ export function createRemixResult(state: OutfitRemixState): OutfitRemixResult {
     hasDress: activeItems.some((i) => resolveEffectiveGarmentBucket(i) === 'Dress'),
     hasShoes: activeItems.some((i) => resolveEffectiveGarmentBucket(i) === 'Shoes'),
     hasOuterwear: activeItems.some((i) => resolveEffectiveGarmentBucket(i) === 'Outerwear'),
+    hasBag: activeItems.some((i) => resolveAccessorySubtype(i) === 'bag'),
+    hasBelt: activeItems.some((i) => resolveAccessorySubtype(i) === 'belt'),
+    accessoryCount: activeItems.filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory').length,
   };
 
   const grounded = generateGroundedExplanation(candidateForExplainer, state.intent);
@@ -491,41 +681,62 @@ export function adaptStyleAdvisorLookToRemix(
   const sessionLockedSet = new Set(sessionLockedIds);
   const parentMustUseSet = new Set(intent.mustUseItemIds || []);
 
-  const slots: Record<OutfitRemixSlotType, RemixedSlotItem | null> = {
+  const slots: Record<CoreRemixSlotType, RemixedSlotItem | null> = {
     top: null,
     bottom: null,
     dress: null,
     shoes: null,
     outerwear: null,
   };
+  const accessorySlots = createEmptyAccessorySlots();
   const passthroughItems: WardrobeItem[] = [];
 
   for (const item of look.items) {
     const rawBucket = resolveEffectiveGarmentBucket(item).toLowerCase();
-    const bucket = (rawBucket === 'footwear' ? 'shoes' : rawBucket) as OutfitRemixSlotType;
+    const bucket = rawBucket === 'footwear' ? 'shoes' : rawBucket;
+
+    let isLocked = false;
+    let lockReason: 'style-around' | 'parent-must-use' | 'remix' = 'remix';
+    let canUnlockInRemix = true;
+
+    if (sessionLockedSet.has(item.id)) {
+      isLocked = true;
+      lockReason = 'style-around';
+      canUnlockInRemix = false;
+    } else if (parentMustUseSet.has(item.id)) {
+      isLocked = true;
+      lockReason = 'parent-must-use';
+      canUnlockInRemix = false;
+    }
 
     if (bucket in slots) {
-      let isLocked = false;
-      let lockReason: 'style-around' | 'parent-must-use' | 'remix' = 'remix';
-      let canUnlockInRemix = true;
-
-      if (sessionLockedSet.has(item.id)) {
-        isLocked = true;
-        lockReason = 'style-around';
-        canUnlockInRemix = false;
-      } else if (parentMustUseSet.has(item.id)) {
-        isLocked = true;
-        lockReason = 'parent-must-use';
-        canUnlockInRemix = false;
-      }
-
-      slots[bucket] = {
-        slotType: bucket,
+      const coreSlot = bucket as CoreRemixSlotType;
+      slots[coreSlot] = {
+        slotType: coreSlot,
         item,
         isLocked,
         lockReason,
         canUnlockInRemix,
       };
+    } else if (rawBucket === 'accessory') {
+      const accSub = resolveAccessorySubtype(item);
+      const isGenerativeSlot = accSub === 'bag' || accSub === 'belt' || accSub === 'jewelry';
+      if (
+        isGenerativeSlot &&
+        accSub &&
+        accessorySlots[accSub] &&
+        accessorySlots[accSub]!.items.length < accessorySlots[accSub]!.capacity
+      ) {
+        accessorySlots[accSub]!.items.push({
+          slotType: accSub,
+          item,
+          isLocked,
+          lockReason,
+          canUnlockInRemix,
+        });
+      } else {
+        passthroughItems.push(item);
+      }
     } else {
       passthroughItems.push(item);
     }
@@ -541,12 +752,16 @@ export function adaptStyleAdvisorLookToRemix(
     hasDress: !!slots.dress,
     hasShoes: !!slots.shoes,
     hasOuterwear: !!slots.outerwear,
+    hasBag: look.items.some((i) => resolveAccessorySubtype(i) === 'bag'),
+    hasBelt: look.items.some((i) => resolveAccessorySubtype(i) === 'belt'),
+    accessoryCount: look.items.filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory').length,
   };
 
   return {
     sourceType: 'style-advisor',
     originalOutfitKey: look.key,
     slots,
+    accessorySlots,
     passthroughItems,
     history: [look.key],
     intent,
@@ -567,22 +782,24 @@ export function adaptPassiveOutfitToRemix(
 ): OutfitRemixState {
   const outfitKey = outfit.key || outfit.items.map((i) => i.id).sort().join('|');
 
-  const slots: Record<OutfitRemixSlotType, RemixedSlotItem | null> = {
+  const slots: Record<CoreRemixSlotType, RemixedSlotItem | null> = {
     top: null,
     bottom: null,
     dress: null,
     shoes: null,
     outerwear: null,
   };
+  const accessorySlots = createEmptyAccessorySlots();
   const passthroughItems: WardrobeItem[] = [];
 
   for (const item of outfit.items) {
     const rawBucket = resolveEffectiveGarmentBucket(item).toLowerCase();
-    const bucket = (rawBucket === 'footwear' ? 'shoes' : rawBucket) as OutfitRemixSlotType;
+    const bucket = rawBucket === 'footwear' ? 'shoes' : rawBucket;
 
     if (bucket in slots) {
-      slots[bucket] = {
-        slotType: bucket,
+      const coreSlot = bucket as CoreRemixSlotType;
+      slots[coreSlot] = {
+        slotType: coreSlot,
         item,
         isLocked: false,
         lockReason: 'remix',
@@ -603,12 +820,16 @@ export function adaptPassiveOutfitToRemix(
     hasDress: !!slots.dress,
     hasShoes: !!slots.shoes,
     hasOuterwear: !!slots.outerwear,
+    hasBag: outfit.items.some((i) => resolveAccessorySubtype(i) === 'bag'),
+    hasBelt: outfit.items.some((i) => resolveAccessorySubtype(i) === 'belt'),
+    accessoryCount: outfit.items.filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory').length,
   };
 
   return {
     sourceType: 'passive-outfit',
     originalOutfitKey: outfitKey,
     slots,
+    accessorySlots,
     passthroughItems,
     history: [outfitKey],
     intent: { rawPrompt: '' }, // Neutral intent: never invent occasion
@@ -684,26 +905,47 @@ export function adaptSavedOutfitToRemix(
 
   const outfitKey = resolvedItems.map((i) => i.id).sort().join('|') || savedOutfit.id;
 
-  const slots: Record<OutfitRemixSlotType, RemixedSlotItem | null> = {
+  const slots: Record<CoreRemixSlotType, RemixedSlotItem | null> = {
     top: null,
     bottom: null,
     dress: null,
     shoes: null,
     outerwear: null,
   };
+  const accessorySlots = createEmptyAccessorySlots();
 
   for (const item of resolvedItems) {
     const rawBucket = resolveEffectiveGarmentBucket(item).toLowerCase();
-    const bucket = (rawBucket === 'footwear' ? 'shoes' : rawBucket) as OutfitRemixSlotType;
+    const bucket = rawBucket === 'footwear' ? 'shoes' : rawBucket;
 
     if (bucket in slots) {
-      slots[bucket] = {
-        slotType: bucket,
+      const coreSlot = bucket as CoreRemixSlotType;
+      slots[coreSlot] = {
+        slotType: coreSlot,
         item,
         isLocked: false,
         lockReason: 'remix',
         canUnlockInRemix: true,
       };
+    } else if (rawBucket === 'accessory') {
+      const accSub = resolveAccessorySubtype(item);
+      const isGenerativeSlot = accSub === 'bag' || accSub === 'belt' || accSub === 'jewelry';
+      if (
+        isGenerativeSlot &&
+        accSub &&
+        accessorySlots[accSub] &&
+        accessorySlots[accSub]!.items.length < accessorySlots[accSub]!.capacity
+      ) {
+        accessorySlots[accSub]!.items.push({
+          slotType: accSub,
+          item,
+          isLocked: false,
+          lockReason: 'remix',
+          canUnlockInRemix: true,
+        });
+      } else {
+        passthroughItems.push(item);
+      }
     } else {
       passthroughItems.push(item);
     }
@@ -719,12 +961,16 @@ export function adaptSavedOutfitToRemix(
     hasDress: !!slots.dress,
     hasShoes: !!slots.shoes,
     hasOuterwear: !!slots.outerwear,
+    hasBag: resolvedItems.some((i) => resolveAccessorySubtype(i) === 'bag'),
+    hasBelt: resolvedItems.some((i) => resolveAccessorySubtype(i) === 'belt'),
+    accessoryCount: resolvedItems.filter((i) => resolveEffectiveGarmentBucket(i) === 'Accessory').length,
   };
 
   return {
     sourceType: 'saved-outfit',
     originalOutfitKey: outfitKey,
     slots,
+    accessorySlots,
     passthroughItems,
     history: [outfitKey],
     intent: { rawPrompt: '' },

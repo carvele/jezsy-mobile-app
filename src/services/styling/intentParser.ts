@@ -5,7 +5,7 @@ import {
   ExplicitTextProvenance,
 } from '@/src/types/styleAdvisor';
 import { interpretOutfitContext, OutfitContextInterpretation } from '@/src/utils/aiStylistAdvisor';
-import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import { resolveEffectiveGarmentBucket, resolveAccessorySubtype } from '@/src/utils/garmentSemanticClassifier';
 
 const KNOWN_COLORS = [
   'black', 'white', 'cream', 'beige', 'navy', 'blue', 'denim', 'gray', 'grey',
@@ -73,7 +73,7 @@ export function parseExplicitUserText(
   }
 
   // Garment extraction: must use
-  const usePattern = /\b(?:use|wear|with|incorporate|feature|include|put on|style)\s+(?:my\s+)?([a-z0-9\s-]+?)(?=[,.]|\band\b|\bavoid\b|\bwith\b|\bfor\b|$)/gi;
+  const usePattern = /\b(?:use|wear|with|incorporate|feature|include|put on|style\s+around|style)\s+(?:my\s+)?([a-z0-9\s-]+?)(?=[,.]|\band\b|\bavoid\b|\bwith\b|\bfor\b|$)/gi;
   let useMatch: RegExpExecArray | null;
   while ((useMatch = usePattern.exec(lowerPrompt)) !== null) {
     const phrase = useMatch[1].trim();
@@ -326,35 +326,41 @@ export function parseStylingIntent(
 }
 
 /**
- * Searches the user's wardrobe for an item matching a natural phrase (e.g. "black blazer", "denim jacket", "loafers").
+ * Searches the user's wardrobe for an item matching a natural phrase (e.g. "black blazer", "red handbag", "gold watch").
  */
 function findWardrobeItemByPhrase(phrase: string, wardrobe: WardrobeItem[]): WardrobeItem | null {
   const clean = phrase.toLowerCase().replace(/^(my|a|an|the)\s+/, '').trim();
   if (!clean || clean.length < 3) return null;
 
-  // Exact matches first
+  // Exact substring matches first
   for (const item of wardrobe) {
     const sub = (item.sub_category || '').toLowerCase();
-    const desc = (item.description || '').toLowerCase();
+    const desc = (item.description || (item as any)?.ai_attributes?.description || '').toLowerCase();
     const cat = (item.category || '').toLowerCase();
     const bucket = resolveEffectiveGarmentBucket(item).toLowerCase();
+    const accSub = (resolveAccessorySubtype(item) || '').toLowerCase();
     const colors = (item.color_tags || []).map((c) => c.toLowerCase());
+    const material = ((item as any)?.ai_attributes?.material || (item as any)?.material || '').toLowerCase();
 
-    const itemTokens = `${colors.join(' ')} ${sub} ${bucket} ${cat} ${desc}`;
+    const itemTokens = `${colors.join(' ')} ${sub} ${bucket} ${accSub} ${cat} ${material} ${desc}`;
     if (itemTokens.includes(clean)) {
       return item;
     }
   }
 
-  // Substring / word matches
-  const phraseWords = clean.split(/\s+/).filter((w) => w.length >= 3);
-  if (phraseWords.length >= 2) {
+  // Word set matches
+  const phraseWords = clean.split(/\s+/).filter((w) => w.length >= 2);
+  if (phraseWords.length >= 1) {
     for (const item of wardrobe) {
       const sub = (item.sub_category || '').toLowerCase();
+      const desc = (item.description || (item as any)?.ai_attributes?.description || '').toLowerCase();
+      const cat = (item.category || '').toLowerCase();
       const bucket = resolveEffectiveGarmentBucket(item).toLowerCase();
+      const accSub = (resolveAccessorySubtype(item) || '').toLowerCase();
       const colors = (item.color_tags || []).map((c) => c.toLowerCase());
-      const itemTokens = `${colors.join(' ')} ${sub} ${bucket}`;
+      const material = ((item as any)?.ai_attributes?.material || (item as any)?.material || '').toLowerCase();
 
+      const itemTokens = `${colors.join(' ')} ${sub} ${bucket} ${accSub} ${cat} ${material} ${desc}`;
       if (phraseWords.every((w) => itemTokens.includes(w))) {
         return item;
       }

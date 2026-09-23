@@ -8,7 +8,10 @@ import { WardrobeItem, StylingIntent, CandidateOutfit } from '@/src/types/styleA
 import { MannequinCanvasItem, CATEGORY_PLACEMENT_DEFAULTS, createMannequinItem } from '@/src/utils/mannequinConfig';
 import { UserStyleProfileDto } from '@/src/types/dto/styleProfile';
 import { generateCandidateOutfits, ScoringProfile } from './candidateGenerator';
-import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
+import {
+  resolveEffectiveGarmentBucket,
+  resolveAccessorySubtype,
+} from '@/src/utils/garmentSemanticClassifier';
 
 export interface PinnedPartitionResult {
   valid: boolean;
@@ -43,8 +46,8 @@ export type SmartShuffleOutcome =
 /**
  * Validates pinned items against canonical generator slot cardinality.
  * Top: max 1, Bottom: max 1, Dress: max 1 (Dress exclusive with Top/Bottom),
- * Shoes: max 1, Outerwear: max 1.
- * Accessories are partitioned into canvasOnlyPinnedIds and not sent to the generator.
+ * Shoes: max 1, Outerwear: max 1, Bag: max 1, Belt: max 1.
+ * Other accessories are partitioned into canvasOnlyPinnedIds and not sent to the generator.
  */
 export function validateAndPartitionPinnedSet(
   pinnedWardrobeItemIds: Set<string>,
@@ -62,6 +65,8 @@ export function validateAndPartitionPinnedSet(
   let dressCount = 0;
   let shoesCount = 0;
   let outerwearCount = 0;
+  let bagCount = 0;
+  let beltCount = 0;
 
   for (const id of pinnedWardrobeItemIds) {
     const item = wardrobeMap.get(id);
@@ -77,7 +82,16 @@ export function validateAndPartitionPinnedSet(
     const bucket = resolveEffectiveGarmentBucket(item);
 
     if (bucket === 'Accessory') {
-      canvasOnlyPinnedIds.push(id);
+      const sub = resolveAccessorySubtype(item);
+      if (sub === 'bag') {
+        bagCount++;
+        generatorPinnedIds.push(id);
+      } else if (sub === 'belt') {
+        beltCount++;
+        generatorPinnedIds.push(id);
+      } else {
+        canvasOnlyPinnedIds.push(id);
+      }
       continue;
     }
 
@@ -151,6 +165,24 @@ export function validateAndPartitionPinnedSet(
     return {
       valid: false,
       reason: 'Multiple outerwear pieces are pinned. Please unpin one to shuffle.',
+      generatorPinnedIds: [],
+      canvasOnlyPinnedIds: [],
+    };
+  }
+
+  if (bagCount > 1) {
+    return {
+      valid: false,
+      reason: 'Multiple bags are pinned. Please unpin one bag to shuffle.',
+      generatorPinnedIds: [],
+      canvasOnlyPinnedIds: [],
+    };
+  }
+
+  if (beltCount > 1) {
+    return {
+      valid: false,
+      reason: 'Multiple belts are pinned. Please unpin one belt to shuffle.',
       generatorPinnedIds: [],
       canvasOnlyPinnedIds: [],
     };

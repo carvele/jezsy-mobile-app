@@ -1,8 +1,10 @@
 import { Database } from '@/src/types/database.types';
-import { resolveEffectiveGarmentBucket } from './garmentSemanticClassifier';
+import {
+  resolveEffectiveGarmentBucket,
+  resolveAccessorySubtype,
+} from './garmentSemanticClassifier';
 
 export type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
-
 
 export interface MannequinCanvasItem {
   id: string; // unique instance ID on the canvas
@@ -30,6 +32,7 @@ export interface SavedCanvasLayoutItem {
 }
 
 export interface CategoryPlacementDefault {
+  xPercent?: number;
   yPercent: number; // relative vertical starting position (0 to 1)
   scale: number;
   zIndex: number;
@@ -68,8 +71,8 @@ export const CATEGORY_PLACEMENT_DEFAULTS: Record<string, CategoryPlacementDefaul
     widthPercent: 0.26,
   },
   Accessory: {
-    yPercent: 0.05,
-    scale: 0.60,
+    yPercent: 0.88,
+    scale: 0.55,
     zIndex: 6,
     widthPercent: 0.20,
   },
@@ -87,7 +90,61 @@ export function createMannequinItem(
   currentMaxZIndex: number = 0
 ): MannequinCanvasItem {
   const gType = resolveEffectiveGarmentBucket(wardrobeItem) || 'Top';
+  const sub = resolveAccessorySubtype(wardrobeItem);
   const defaults = CATEGORY_PLACEMENT_DEFAULTS[gType] || DEFAULT_FALLBACK_PLACEMENT;
+
+  let x = defaults.xPercent ?? 0;
+  let y = defaults.yPercent;
+  let scale = defaults.scale;
+  let zIndex = defaults.zIndex;
+
+  if (gType === 'Accessory') {
+    // Check if asset has transparent background / alpha channel
+    const hasAlpha =
+      (wardrobeItem as any)?.ai_attributes?.hasAlpha === true ||
+      (wardrobeItem as any)?.has_transparent_background === true ||
+      Boolean(wardrobeItem.image_url && /\.png(\?|$)/i.test(wardrobeItem.image_url));
+
+    if (sub === 'bag') {
+      x = 0.26;
+      y = 0.48;
+      scale = 0.75;
+      zIndex = 6;
+    } else if (sub === 'belt') {
+      x = 0;
+      y = 0.42;
+      scale = 0.85;
+      zIndex = 4;
+    } else if (hasAlpha) {
+      if (sub === 'headwear' || sub === 'eyewear') {
+        x = 0;
+        y = 0.05;
+        scale = 0.55;
+        zIndex = 6;
+      } else if (sub === 'scarf') {
+        x = 0;
+        y = 0.15;
+        scale = 0.65;
+        zIndex = 6;
+      } else if (sub === 'watch' || sub === 'jewelry') {
+        x = 0.20;
+        y = 0.50;
+        scale = 0.50;
+        zIndex = 6;
+      } else {
+        x = 0;
+        y = 0.88;
+        scale = 0.55;
+        zIndex = 6;
+      }
+    } else {
+      // Opaque accessory -> safe flat-lay / shelf placement
+      x = 0;
+      y = 0.88;
+      scale = 0.55;
+      zIndex = 6;
+    }
+  }
 
   return {
     id: `item_${wardrobeItem.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -95,11 +152,11 @@ export function createMannequinItem(
     image_url: wardrobeItem.image_url || '',
     name: wardrobeItem.sub_category || wardrobeItem.category || gType,
     garment_type: gType,
-    x: 0, // centered
-    y: defaults.yPercent,
-    scale: defaults.scale,
+    x,
+    y,
+    scale,
     rotation: 0,
-    zIndex: Math.max(defaults.zIndex, currentMaxZIndex + 1),
+    zIndex: Math.max(zIndex, currentMaxZIndex + 1),
   };
 }
 
