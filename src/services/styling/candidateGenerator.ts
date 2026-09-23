@@ -9,6 +9,7 @@ import {
   buildOccasionRequirements,
   buildOutfitStructure,
   detectContradictions,
+  evaluateWardrobeOutfit,
 } from '@/src/utils/aiStylistAdvisor';
 
 const PER_SLOT_MAX = 8;
@@ -17,8 +18,8 @@ const NEGLECT_DAYS = 60;
 function toCanvasShim(item: WardrobeItem) {
   return {
     wardrobe_item_id: item.id,
-    garment_type: item.category || '',
-    name: item.sub_category || item.category || 'Item',
+    garment_type: item.category || item.garment_type || '',
+    name: item.sub_category || item.category || (item as any).name || 'Item',
     image_url: (item as any).photo_url || item.image_url || '',
     id: item.id,
   } as any;
@@ -35,13 +36,18 @@ function colorsOf(items: WardrobeItem[]): string[] {
   return items.flatMap((i) => i.color_tags || []);
 }
 
+export type ScoringProfile = 'intent-driven' | 'legacy-passive';
+
 export interface CandidateGenerationOptions {
   limit?: number;
   profile?: UserStyleProfileDto | null;
+  /** Configurable scoring profile for empirical characterization */
+  scoringProfile?: ScoringProfile;
 }
 
 /**
  * Builds a bounded pool of verified, wardrobe-grounded candidate outfits satisfying user constraints.
+ * Canonical implementation consolidated for both Style Advisor and passive discovery.
  */
 export function generateCandidateOutfits(
   wardrobe: WardrobeItem[],
@@ -52,46 +58,52 @@ export function generateCandidateOutfits(
 
   const limit = options?.limit || 10;
   const profile = options?.profile || null;
+  const scoringProfile: ScoringProfile = options?.scoringProfile || 'intent-driven';
 
-  // 1. Apply hard exclusions (excluded items & avoided colors)
+  // 1. Must-use item existence check:
+  // If must-use constraint was provided but requested item is not in wardrobe (or deleted),
+  // return empty result to distinguish constraint failure from unconstrained generation.
+  // Never fabricate an item.
+  const mustUseIds = intent.mustUseItemIds || [];
+  if (mustUseIds.length > 0) {
+    const wardrobeIdSet = new Set(wardrobe.map((i) => i.id));
+    const allFound = mustUseIds.every((id) => wardrobeIdSet.has(id));
+    if (!allFound) {
+      return [];
+    }
+  }
+  const mustUseItems = wardrobe.filter((i) => mustUseIds.includes(i.id));
+
+  // 2. Hard exclusions:
+  // Explicit excluded items AND explicit avoided colors are strict constraints.
+  // Never use an avoided color merely because a category would otherwise be empty.
   const excludedSet = new Set(intent.excludedItemIds || []);
   const avoidedColorSet = new Set((intent.avoidedColors || []).map((c) => c.toLowerCase()));
 
   const filteredWardrobe = wardrobe.filter((item) => {
     if (excludedSet.has(item.id)) return false;
-    // If avoided color is specified, filter item if its colors match avoided colors
     if (avoidedColorSet.size > 0 && item.color_tags && item.color_tags.length > 0) {
       const itemColors = item.color_tags.map((c) => c.toLowerCase());
-      const hasAvoided = itemColors.some((c) => avoidedColorSet.has(c));
-      // Only filter if there are other pieces in this bucket so we don't starve sparse wardrobes
-      if (hasAvoided) {
-        const bucket = resolveEffectiveGarmentBucket(item);
-        const alternativesInBucket = wardrobe.filter(
-          (w) =>
-            w.id !== item.id &&
-            !excludedSet.has(w.id) &&
-            resolveEffectiveGarmentBucket(w) === bucket &&
-            !(w.color_tags || []).some((c) => avoidedColorSet.has(c.toLowerCase()))
-        );
-        if (alternativesInBucket.length > 0) {
-          return false;
-        }
+      if (itemColors.some((c) => avoidedColorSet.has(c))) {
+        // Strict exclusion: never violate explicit avoided color
+        return false;
       }
     }
     return true;
   });
 
-  // 2. Prepare occasion requirements for contradiction filtering
+  if (filteredWardrobe.length === 0) return [];
+
+  // 3. Prepare occasion requirements for contradiction filtering
   const contextInterp = interpretOutfitContext({
     occasion: intent.selectedOccasion || intent.rawPrompt || 'Casual',
     additionalContext: intent.rawPrompt,
   });
   const reqs = buildOccasionRequirements(contextInterp);
 
-  // 3. Partition eligible items by slot
+  // 4. Partition eligible items by slot
   const getSlotPool = (slotType: string): WardrobeItem[] => {
     const items = filteredWardrobe.filter((i) => resolveEffectiveGarmentBucket(i) === slotType);
-    // Sort neglect first
     items.sort((a, b) => neglect(b) - neglect(a));
 
     const compatible: WardrobeItem[] = [];
@@ -119,10 +131,6 @@ export function generateCandidateOutfits(
   const shoes = getSlotPool('Shoes');
   const outerwear = getSlotPool('Outerwear');
 
-  // 4. Must-use item enforcement
-  const mustUseIds = intent.mustUseItemIds || [];
-  const mustUseItems = wardrobe.filter((i) => mustUseIds.includes(i.id));
-
   // 5. Form base combinations: Dress or Top + Bottom
   const bases: WardrobeItem[][] = [];
   for (const d of dresses) {
@@ -149,7 +157,7 @@ export function generateCandidateOutfits(
     }
   }
 
-  // 7. Enforce must-use items
+  // 7. Enforce must-use items strictly
   let eligibleCombos = rawCombos;
   if (mustUseIds.length > 0) {
     eligibleCombos = rawCombos.filter((combo) => {
@@ -157,15 +165,13 @@ export function generateCandidateOutfits(
       return mustUseIds.every((mId) => comboIds.has(mId));
     });
 
-    // If no combination naturally contained all must-use items (e.g. must-use blazer was outer),
-    // inject the must-use pieces into compatible bases
+    // If no combination naturally contained all must-use items, attempt synthetic injection
     if (eligibleCombos.length === 0 && mustUseItems.length > 0) {
       const syntheticCombos: WardrobeItem[][] = [];
       for (const base of bases) {
         let combo = [...base];
         for (const mItem of mustUseItems) {
           const mBucket = resolveEffectiveGarmentBucket(mItem);
-          // Replace matching slot in base or add outer/shoes
           combo = combo.filter((i) => resolveEffectiveGarmentBucket(i) !== mBucket);
           combo.push(mItem);
         }
@@ -174,11 +180,19 @@ export function generateCandidateOutfits(
         }
         syntheticCombos.push(combo);
       }
-      eligibleCombos = syntheticCombos;
+      eligibleCombos = syntheticCombos.filter((combo) => {
+        const comboIds = new Set(combo.map((i) => i.id));
+        return mustUseIds.every((mId) => comboIds.has(mId));
+      });
     }
   }
 
-  // 8. Filter out severe contradictions across full outfit
+  // If must-use requirement could not be satisfied, return empty (never violate must-use)
+  if (mustUseIds.length > 0 && eligibleCombos.length === 0) {
+    return [];
+  }
+
+  // 8. Filter out severe contradictions across full ensemble
   const validCombos = eligibleCombos.filter((combo) => {
     const garmentProfiles = combo.map((item) => buildGarmentSemanticProfile(toCanvasShim(item), item));
     const structure = buildOutfitStructure(garmentProfiles);
@@ -206,52 +220,110 @@ export function generateCandidateOutfits(
     const hasShoes = types.includes('Shoes');
     const hasOuterwear = types.includes('Outerwear');
 
-    // Base score calculation
-    let score = 75;
-    score += Math.round(colorMatch.score * 0.3);
-    score += Math.round(personal.score * 0.2);
-    if (hasDress || (types.includes('Top') && types.includes('Bottom'))) score += 5;
-    if (hasShoes) score += 5;
-    if (hasOuterwear) score += 5;
+    let finalScore = 75;
 
-    // Preferred colors bonus
-    const preferredSet = new Set((intent.preferredColors || []).map((c) => c.toLowerCase()));
-    if (preferredSet.size > 0 && colors.some((c) => preferredSet.has(c.toLowerCase()))) {
-      score += 10;
-    }
+    if (scoringProfile === 'legacy-passive') {
+      // Legacy 40/35/25 weighting with statement anchoring and occasion adjustments
+      let compScore = 85;
+      if (hasDress || (types.includes('Top') && types.includes('Bottom'))) compScore += 5;
+      if (hasShoes) compScore += 5;
+      if (hasOuterwear) compScore += 5;
 
-    // Neglect discovery bonus
-    const avgNeglect = items.reduce((sum, i) => sum + neglect(i), 0) / items.length;
-    score += Math.round(avgNeglect * 8);
+      let patterns = 0;
+      for (const it of items) {
+        const p = (it as any).pattern;
+        if (p && p !== 'Solid' && p !== 'Plain') patterns++;
+      }
+      if (patterns > 1) compScore -= 15;
 
-    // Pattern clash penalty
-    let patterns = 0;
-    for (const it of items) {
-      const p = (it as any).pattern;
-      if (p && p !== 'Solid' && p !== 'Plain') patterns++;
-    }
-    if (patterns > 1) score -= 15;
-
-    // Detect styling characteristics
-    const isComfortFocused =
-      items.some((i) => {
+      let adjustedColorScore = colorMatch.score;
+      const NEUTRALS = new Set(['black', 'white', 'charcoal', 'grey', 'gray', 'navy', 'beige', 'cream', 'brown', 'tan', 'camel', 'khaki']);
+      const statement = items.find((i) => {
+        const pat = (((i as any).pattern || (i as any).ai_attributes?.pattern) || '').toLowerCase();
+        const desc = (i.description || (i as any).ai_attributes?.description || '').toLowerCase();
         const sub = (i.sub_category || '').toLowerCase();
-        const desc = (i.description || '').toLowerCase();
-        return sub.includes('sneaker') || sub.includes('flat') || desc.includes('relaxed') || desc.includes('stretch');
-      });
-
-    const isStatementFocused =
-      items.some((i) => {
-        const p = ((i as any).pattern || '').toLowerCase();
         const tags = i.color_tags || [];
-        return p.includes('graphic') || p.includes('floral') || tags.length >= 3;
+        return pat.includes('graphic') || pat.includes('floral') || pat.includes('plaid') || sub.includes('graphic') || desc.includes('graphic') || tags.length >= 3;
       });
+      const hasNeutralOuter = items.some((i) => {
+        if (resolveEffectiveGarmentBucket(i) !== 'Outerwear') return false;
+        const name = (i.sub_category || i.category || '').toLowerCase();
+        const isBlazer = name.includes('blazer') || name.includes('jacket') || name.includes('coat');
+        const tags = (i.color_tags || []).map((c) => c.toLowerCase());
+        return isBlazer && (tags.length === 0 || tags.some((c) => NEUTRALS.has(c)));
+      });
+      if (!!statement && hasNeutralOuter && (colorMatch.label === 'Clashing Colors' || adjustedColorScore < 75)) {
+        adjustedColorScore = 86;
+      }
+
+      let occasionBonus = 0;
+      if (intent.selectedOccasion) {
+        const critique = evaluateWardrobeOutfit(
+          items,
+          undefined,
+          { occasion: intent.selectedOccasion, additionalContext: intent.rawPrompt ?? undefined },
+          profile
+        );
+        const severe = (critique.rawContradictions || []).some((c) => c.severity === 'severe');
+        const major = (critique.rawContradictions || []).some((c) => c.severity === 'major');
+        if (severe) occasionBonus -= 60;
+        else if (major) occasionBonus -= 25;
+        else if (critique.assessment === 'Appropriate for this occasion') occasionBonus += 15;
+      }
+
+      const w = profile?.preferenceWeights || { colorHarmony: 0.40, composition: 0.35, personalStyle: 0.25 };
+      const avgNeglect = items.reduce((sum, i) => sum + neglect(i), 0) / items.length;
+      const rawScore =
+        adjustedColorScore * w.colorHarmony +
+        compScore * w.composition +
+        personal.score * w.personalStyle +
+        occasionBonus +
+        avgNeglect * 10;
+      finalScore = Math.max(10, Math.min(100, Math.round(rawScore)));
+    } else {
+      // Intent-driven additive scoring formula (calibrated to preserve neglect bonuses and clash penalties)
+      let score = 40;
+      score += Math.round(colorMatch.score * 0.3);
+      score += Math.round(personal.score * 0.2);
+      if (hasDress || (types.includes('Top') && types.includes('Bottom'))) score += 5;
+      if (hasShoes) score += 5;
+      if (hasOuterwear) score += 5;
+
+      const preferredSet = new Set((intent.preferredColors || []).map((c) => c.toLowerCase()));
+      if (preferredSet.size > 0 && colors.some((c) => preferredSet.has(c.toLowerCase()))) {
+        score += 10;
+      }
+
+      const avgNeglect = items.reduce((sum, i) => sum + neglect(i), 0) / items.length;
+      score += Math.round(avgNeglect * 8);
+
+      let patterns = 0;
+      for (const it of items) {
+        const p = (it as any).pattern;
+        if (p && p !== 'Solid' && p !== 'Plain') patterns++;
+      }
+      if (patterns > 1) score -= 15;
+
+      finalScore = Math.min(100, Math.max(20, score));
+    }
+
+    const isComfortFocused = items.some((i) => {
+      const sub = (i.sub_category || '').toLowerCase();
+      const desc = (i.description || '').toLowerCase();
+      return sub.includes('sneaker') || sub.includes('flat') || desc.includes('relaxed') || desc.includes('stretch');
+    });
+
+    const isStatementFocused = items.some((i) => {
+      const p = ((i as any).pattern || '').toLowerCase();
+      const tags = i.color_tags || [];
+      return p.includes('graphic') || p.includes('floral') || tags.length >= 3;
+    });
 
     candidates.push({
       candidateId: `cand_${candidates.length + 1}`,
       items,
       key,
-      baseScore: Math.min(100, Math.max(20, score)),
+      baseScore: finalScore,
       colorMatchLabel: colorMatch.label,
       formalityLevel: intent.formality || 'casual',
       isComfortFocused,
@@ -262,7 +334,6 @@ export function generateCandidateOutfits(
     });
   }
 
-  // Sort best baseScore first and return top limit
   candidates.sort((a, b) => b.baseScore - a.baseScore);
   return candidates.slice(0, limit);
 }
