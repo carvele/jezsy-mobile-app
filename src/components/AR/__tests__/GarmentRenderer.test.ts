@@ -220,4 +220,54 @@ describe('GarmentRenderer generated document syntax', () => {
       delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
     }
   });
+
+  it('contains Phase 27 upper-body retargeting invariants and parent-aware hierarchy traversal', () => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    let renderer: any;
+    try {
+      act(() => {
+        renderer = create(React.createElement(GarmentRenderer, {
+          modelUrl: 'https://example.com/1788455887355_Long-sleeve1.glb',
+          metadata: {
+            id: 'long-sleeve-1',
+            category: 'jacket',
+            calibrationVersion: '1.0',
+            anchorConfidence: 'merchant_confirmed',
+            anchorType: 'SHOULDER_CENTER',
+            restPoseMetricWidth: 0.44,
+            boneMap: {},
+            restPose: 'T_POSE',
+            ingestionStatus: 'AR_READY',
+            anatomicalAnchorOffset: { x: 0, y: 1.34, z: 0 },
+          },
+        }));
+      });
+      const document = renderer.root.findByType('iframe').props.srcDoc as string;
+      const scriptMatches = Array.from(document.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi));
+      expect(scriptMatches.length).toBeGreaterThan(0);
+      const scriptCode = scriptMatches[0][1];
+
+      // Verifies isolation mode configuration is available
+      expect(scriptCode).toContain("const BONE_ISOLATION_MODE = 'ALL';");
+
+      // Verifies clavicle preservation (Mixamo clavicle bones LeftShoulder/RightShoulder kept at authored bind pose)
+      expect(scriptCode).toContain("if (boneName === 'LeftShoulder' || boneName === 'RightShoulder')");
+
+      // Verifies live parent hierarchy traversal and inverse multiplication
+      expect(scriptCode).toContain("const liveParentInGroup = getQuatInGroup(bone.parent);");
+      expect(scriptCode).toContain("const corrected = liveParentInGroup.clone().invert().multiply(targetInGroup);");
+      expect(scriptCode).toContain("bone.quaternion.copy(corrected);");
+
+      // Verifies damped camera distance triangulation for root stability
+      expect(scriptCode).toContain("const maxDelta = 0.05;");
+      expect(scriptCode).toContain("camera.position.z = smoothedCameraDistance;");
+
+      // JavaScript engine parses without syntax error
+      expect(() => new Function(scriptCode)).not.toThrow();
+    } finally {
+      if (renderer) act(() => renderer.unmount());
+      delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
+    }
+  });
 });
+

@@ -7,6 +7,8 @@ import {
   subVec,
   invertQuat,
   multiplyQuat,
+  crossVec,
+  quaternionFromBasis,
   IDENTITY_QUAT,
   LM,
   type CanonicalPose,
@@ -211,24 +213,68 @@ export function calculateBoneRotationsFromCanonical(
     const lArmDir = resolveArmDirection(rawLArmDir);
     const rArmDir = resolveArmDirection(rawRArmDir);
 
-    const lArm = lArmDir ? setFromUnitVectors(lArmRest, lArmDir) : IDENTITY_QUAT;
-    const rArm = rArmDir ? setFromUnitVectors(rArmRest, rArmDir) : IDENTITY_QUAT;
+    /**
+     * Constructs an orthonormal 3D frame for upper arms to constrain both pointing
+     * direction and axial sleeve twist.
+     */
+    function constructArmFrameDelta(
+      armDir: Vec3 | null,
+      restDir: Vec3,
+      side: 'left' | 'right'
+    ): Quaternion {
+      if (!armDir) return IDENTITY_QUAT;
+
+      const isLeft = side === 'left';
+      const refForward: Vec3 = isLeft ? { x: 0, y: 0, z: 1 } : { x: 0, y: 0, z: -1 };
+
+      const xLive = normalizeVec(armDir);
+      const dotForward = xLive.x * refForward.x + xLive.y * refForward.y + xLive.z * refForward.z;
+
+      let yLive: Vec3;
+      let zLive: Vec3;
+
+      if (Math.abs(dotForward) > 0.96) {
+        const refUp: Vec3 = { x: 0, y: 1, z: 0 };
+        const dotUp = xLive.x * refUp.x + xLive.y * refUp.y + xLive.z * refUp.z;
+        yLive = normalizeVec({
+          x: refUp.x - xLive.x * dotUp,
+          y: refUp.y - xLive.y * dotUp,
+          z: refUp.z - xLive.z * dotUp,
+        });
+        zLive = normalizeVec(crossVec(xLive, yLive));
+      } else {
+        zLive = normalizeVec({
+          x: refForward.x - xLive.x * dotForward,
+          y: refForward.y - xLive.y * dotForward,
+          z: refForward.z - xLive.z * dotForward,
+        });
+        yLive = normalizeVec(crossVec(zLive, xLive));
+      }
+
+      const qLive = quaternionFromBasis(xLive, yLive, zLive);
+
+      const xRest = normalizeVec(restDir);
+      const dotRest = xRest.x * refForward.x + xRest.y * refForward.y + xRest.z * refForward.z;
+      const zRest = normalizeVec({
+        x: refForward.x - xRest.x * dotRest,
+        y: refForward.y - xRest.y * dotRest,
+        z: refForward.z - xRest.z * dotRest,
+      });
+      const yRest = normalizeVec(crossVec(zRest, xRest));
+      const qRest = quaternionFromBasis(xRest, yRest, zRest);
+
+      return multiplyQuat(qLive, invertQuat(qRest));
+    }
+
+    const lArm = lArmDir ? constructArmFrameDelta(lArmDir, lArmRest, 'left') : IDENTITY_QUAT;
+    const rArm = rArmDir ? constructArmFrameDelta(rArmDir, rArmRest, 'right') : IDENTITY_QUAT;
     boneRotations['LeftArm'] = lArm;
     boneRotations['RightArm'] = rArm;
 
-    // Shoulder / Clavicle participation (scapulohumeral rhythm: 18% elevation above 30 deg):
-    function computeShoulder(armDelta: Quaternion): Quaternion {
-      const w = Math.min(1, Math.max(-1, Math.abs(armDelta.w)));
-      const armAngle = 2 * Math.acos(w);
-      const ELEVATION_START_RAD = (30 * Math.PI) / 180;
-      if (armAngle <= ELEVATION_START_RAD) {
-        return IDENTITY_QUAT;
-      }
-      const clavicleAngle = (armAngle - ELEVATION_START_RAD) * 0.18;
-      return clampQuatAngle(armDelta, clavicleAngle);
-    }
-    boneRotations['LeftShoulder'] = computeShoulder(lArm);
-    boneRotations['RightShoulder'] = computeShoulder(rArm);
+    // Phase 11 & 12: Clavicles (LeftShoulder / RightShoulder) in Mixamo rigs sit near
+    // the spine centerline and are not driven by uncalibrated arm elevation deltas.
+    // Omit from boneRotations so they remain at their authored bind pose, preventing
+    // sleeve root pinching around the neck and collar collapse.
 
     // Forearms: elbow -> wrist, expressed relative to the upper arm (the parent in the chain).
     const lForeDir = localDir(lE, lW);

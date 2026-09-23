@@ -1160,12 +1160,13 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       if (measuredPixelWidth > 1 && isRoughlyFrontal && wearerWidthM > 0) {
                         const rawDistance = ((wearerWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;
                         if (Number.isFinite(rawDistance) && rawDistance > 0.2 && rawDistance < 3.5) {
+                          const maxDelta = 0.05;
                           const clampedRawDistance = smoothedCameraDistance == null
                             ? rawDistance
-                            : Math.max(smoothedCameraDistance * 0.6, Math.min(smoothedCameraDistance * 1.4, rawDistance));
+                            : Math.max(smoothedCameraDistance * (1 - maxDelta), Math.min(smoothedCameraDistance * (1 + maxDelta), rawDistance));
                           smoothedCameraDistance = smoothedCameraDistance == null
                             ? clampedRawDistance
-                            : smoothedCameraDistance + (clampedRawDistance - smoothedCameraDistance) * 0.15;
+                            : smoothedCameraDistance + (clampedRawDistance - smoothedCameraDistance) * 0.08;
                           camera.position.z = smoothedCameraDistance;
                           camera.updateMatrixWorld(true);
                         }
@@ -1521,54 +1522,118 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 const hasCalibratedRig = boneMap && Object.keys(boneMap).length > 0;
                 const hasLoadedSkeleton = Object.keys(skeletonBones).length > 0;
                 if (hasCalibratedRig && hasLoadedSkeleton && boneRotations) {
-                  for (const [boneName, quat] of Object.entries(boneRotations)) {
-                    // Try the canonical name directly against the loaded skeleton first --
-                    // confirmed live that this specific GLB's bones are already named
-                    // exactly the canonical names (LeftArm, RightForeArm, ...), while the
-                    // stored boneMap's values (e.g. "_left_arm") don't match any bone in
-                    // the file at all. Only fall back to boneMap / the mixamorig heuristic
-                    // when the direct name isn't found, so a wrong-but-truthy boneMap entry
-                    // can't override a name that already resolves correctly.
+                  // Live group-space orientation of any node in the garment hierarchy
+                  const getQuatInGroup = (node) => {
+                    const chain = [];
+                    for (let n = node; n && n !== garmentGroup; n = n.parent) chain.unshift(n);
+                    const q = new THREE.Quaternion();
+                    for (const n of chain) q.multiply(n.quaternion);
+                    return q;
+                  };
+
+                  // Phase 1: Bone Isolation Debug Mode
+                  // Modes: 'ALL', 'BIND_POSE_ONLY', 'SPINE_ONLY', 'SHOULDERS_ONLY', 'UPPER_ARMS_ONLY', 'FOREARMS_ONLY', 'UPPER_ARM_PLUS_FOREARM', 'SHOULDER_PLUS_ARM_PLUS_FOREARM', 'FULL_UPPER_BODY'
+                  const BONE_ISOLATION_MODE = 'ALL';
+
+                  // Apply in parent-to-child chain order for hierarchy consistency
+                  const UPPER_BODY_CHAIN = ['LeftShoulder', 'LeftArm', 'LeftForeArm', 'RightShoulder', 'RightArm', 'RightForeArm'];
+                  const LOWER_BODY_CHAIN = ['Hips', 'LeftUpLeg', 'LeftLeg', 'RightUpLeg', 'RightLeg'];
+                  const traversalList = IS_BOTTOM_GARMENT ? LOWER_BODY_CHAIN : UPPER_BODY_CHAIN;
+
+                  for (const boneName of traversalList) {
+                    const quat = boneRotations[boneName];
                     const targetBoneName = skeletonBones[boneName] ? boneName : (boneMap[boneName] || ('mixamorig' + boneName));
                     const bone = skeletonBones[targetBoneName];
-                    if (bone && quat && !isNaN(quat.x) && !isNaN(quat.y) && !isNaN(quat.z) && !isNaN(quat.w)) {
-                      const isChildBone = (boneName === 'LeftLeg' || boneName === 'RightLeg' || boneName === 'LeftForeArm' || boneName === 'RightForeArm');
+                    if (!bone) continue;
+
+                    // Bone isolation filters
+                    if (BONE_ISOLATION_MODE === 'BIND_POSE_ONLY') {
+                      if (bindQuats[bone.uuid]) bone.quaternion.copy(bindQuats[bone.uuid]);
+                      bone.updateMatrix();
+                      continue;
+                    }
+                    if (BONE_ISOLATION_MODE === 'UPPER_ARMS_ONLY' && !(boneName === 'LeftArm' || boneName === 'RightArm')) {
+                      if (bindQuats[bone.uuid]) bone.quaternion.copy(bindQuats[bone.uuid]);
+                      bone.updateMatrix();
+                      continue;
+                    }
+                    if (BONE_ISOLATION_MODE === 'FOREARMS_ONLY' && !(boneName === 'LeftForeArm' || boneName === 'RightForeArm')) {
+                      if (bindQuats[bone.uuid]) bone.quaternion.copy(bindQuats[bone.uuid]);
+                      bone.updateMatrix();
+                      continue;
+                    }
+                    if (BONE_ISOLATION_MODE === 'UPPER_ARM_PLUS_FOREARM' && !(boneName === 'LeftArm' || boneName === 'RightArm' || boneName === 'LeftForeArm' || boneName === 'RightForeArm')) {
+                      if (bindQuats[bone.uuid]) bone.quaternion.copy(bindQuats[bone.uuid]);
+                      bone.updateMatrix();
+                      continue;
+                    }
+
+                    // Phase 11 & 12: Clavicle Protection. Preserve authored bind pose to eliminate collar/sleeve pinching.
+                    if (boneName === 'LeftShoulder' || boneName === 'RightShoulder') {
+                      if (bindQuats[bone.uuid]) bone.quaternion.copy(bindQuats[bone.uuid]);
+                      bone.updateMatrix();
+                      continue;
+                    }
+
+                    if (quat && !isNaN(quat.x) && !isNaN(quat.y) && !isNaN(quat.z) && !isNaN(quat.w)) {
                       const inputQ = new THREE.Quaternion(quat.x, quat.y, quat.z, quat.w);
-                      const bc = boneCorrection[boneName]; // set for the arm and leg bones (see registerCorrection above)
+                      const bc = boneCorrection[boneName];
 
-                      if (isChildBone && bindQuats[bone.uuid]) {
-                        // Child limb bone (knee / elbow): inputQ is already the parent-relative flexion delta.
-                        // Apply directly relative to the bone's authored bind pose without double-inverting parent prefixes.
-                        bone.quaternion.copy(bindQuats[bone.uuid].clone().multiply(inputQ));
-                      } else if (bc && bc.bindDir && bc.restAxis) {
-                        // Phase 10-14: True rest-pose-relative retargeting.
-                        // Convert incoming canonical retargeting rotation into target direction:
-                        const targetDir = bc.restAxis.clone().applyQuaternion(inputQ).normalize();
-
-                        // Compute rotation delta from the GLB's actual authored bind direction to the target direction:
-                        const delta = new THREE.Quaternion().setFromUnitVectors(bc.bindDir, targetDir);
-
-                        // Convert to parent-local frame: corrected = invert(parentPrefix) * delta * ownPrefix
-                        const corrected = bc.parentPrefix.clone().invert()
-                          .multiply(delta)
-                          .multiply(bc.ownPrefix);
-                        bone.quaternion.copy(corrected);
-                      } else if (bc) {
-                        const corrected = bc.parentPrefix.clone().invert()
-                          .multiply(inputQ)
-                          .multiply(bc.ownPrefix);
-                        bone.quaternion.copy(corrected);
+                      if (IS_BOTTOM_GARMENT) {
+                        // Phase 26: Protect validated lower-body (pants/skirt) retargeting
+                        const isChildBone = (boneName === 'LeftLeg' || boneName === 'RightLeg');
+                        if (isChildBone && bindQuats[bone.uuid]) {
+                          bone.quaternion.copy(bindQuats[bone.uuid].clone().multiply(inputQ));
+                        } else if (bc && bc.bindDir && bc.restAxis) {
+                          const targetDir = bc.restAxis.clone().applyQuaternion(inputQ).normalize();
+                          const delta = new THREE.Quaternion().setFromUnitVectors(bc.bindDir, targetDir);
+                          const corrected = bc.parentPrefix.clone().invert()
+                            .multiply(delta)
+                            .multiply(bc.ownPrefix);
+                          bone.quaternion.copy(corrected);
+                        } else if (bc) {
+                          const corrected = bc.parentPrefix.clone().invert()
+                            .multiply(inputQ)
+                            .multiply(bc.ownPrefix);
+                          bone.quaternion.copy(corrected);
+                        } else {
+                          bone.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+                        }
                       } else {
-                        bone.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+                        // Upper body: Parent-first live world transform propagation
+                        if (boneName === 'LeftArm' || boneName === 'RightArm') {
+                          if (bc && bc.ownPrefix) {
+                            const targetInGroup = inputQ.clone().multiply(bc.ownPrefix);
+                            const liveParentInGroup = getQuatInGroup(bone.parent);
+                            const corrected = liveParentInGroup.clone().invert().multiply(targetInGroup);
+                            bone.quaternion.copy(corrected);
+                          }
+                        } else if (boneName === 'LeftForeArm' || boneName === 'RightForeArm') {
+                          if (bindQuats[bone.uuid]) {
+                            bone.quaternion.copy(bindQuats[bone.uuid].clone().multiply(inputQ));
+                          }
+                        }
                       }
+                      bone.updateMatrix();
+
+                      // Phase 21: Numerical retarget telemetry
                       if (shouldLog && (boneName === 'LeftArm' || boneName === 'RightArm')) {
-                        console.log('[AR-DEBUG-BONE] ' + boneName + ' -> ' + targetBoneName
-                          + ' inputQuat=' + JSON.stringify(quat)
-                          + ' finalLocalQuat=' + JSON.stringify({ x: bone.quaternion.x, y: bone.quaternion.y, z: bone.quaternion.z, w: bone.quaternion.w })
-                          + ' hadBindCorrection=' + !!bc);
+                        const boneWorldPos = new THREE.Vector3();
+                        bone.getWorldPosition(boneWorldPos);
+                        const boneWorldQuat = new THREE.Quaternion();
+                        bone.getWorldQuaternion(boneWorldQuat);
+                        const curArmDir = new THREE.Vector3(boneName === 'LeftArm' ? 1 : -1, 0, 0).applyQuaternion(boneWorldQuat).normalize();
+                        if (AR_DEBUG) {
+                          console.log('[AR-RETARGET-TELEMETRY] bone=' + boneName
+                            + ' worldPos=(' + boneWorldPos.x.toFixed(3) + ',' + boneWorldPos.y.toFixed(3) + ',' + boneWorldPos.z.toFixed(3) + ')'
+                            + ' armDir=(' + curArmDir.x.toFixed(3) + ',' + curArmDir.y.toFixed(3) + ',' + curArmDir.z.toFixed(3) + ')'
+                            + ' localQuat=' + JSON.stringify({ x: +bone.quaternion.x.toFixed(4), y: +bone.quaternion.y.toFixed(4), z: +bone.quaternion.z.toFixed(4), w: +bone.quaternion.w.toFixed(4) }));
+                        }
                       }
                     } else if (shouldLog && (boneName === 'LeftArm' || boneName === 'RightArm')) {
-                      console.log('[AR-DEBUG-BONE] ' + boneName + ' -> ' + targetBoneName + ' SKIPPED: bone=' + !!bone + ' quat=' + JSON.stringify(quat));
+                      if (AR_DEBUG) {
+                        console.log('[AR-DEBUG-BONE] ' + boneName + ' -> ' + targetBoneName + ' SKIPPED: bone=' + !!bone + ' quat=' + JSON.stringify(quat));
+                      }
                     }
                   }
                 } else if (shouldLog) {

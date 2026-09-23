@@ -114,9 +114,15 @@ export function calculateGarmentFit(
 
   const bodyOuterWidthM = isBottomGarment ? bodyOuterHipWidthM : bodyOuterShoulderWidthM;
 
+  // Apparent width in screen pixels with silhouette expansion for lower-body
+  const apparentWidthPx = isBottomGarment
+    ? apparentAnchorWidthPx * 1.78
+    : apparentAnchorWidthPx;
+
   // Foreshortening correction using orientation
-  // During movement or turning, physical body outer width remains stable
+  // During movement or turning, apparent width foreshortens by cos(yaw)
   const cosYaw = Math.max(0.65, Math.abs(Math.cos(pose.orientation.yawRad)));
+  const correctedWidthPx = apparentWidthPx / cosYaw;
   const correctedShoulderWidthPx = (isBottomGarment ? apparentAnchorWidthPx * 1.78 : apparentAnchorWidthPx) / cosYaw;
 
   // 1. Anchoring Logic driven by GarmentFitProfile (2D pixel coordinates for HUD)
@@ -153,8 +159,8 @@ export function calculateGarmentFit(
   // Category-specific clothing ease (8% for bottoms so garment rests naturally over silhouette)
   const garmentEase = isBottomGarment ? 1.08 : 1.0;
 
-  // Horizontal target 3D scale: Body Outer Width / Authored Garment Reference Width
-  const targetScaleX = ((bodyOuterWidthM * garmentEase) / garmentMetricWidthMeters);
+  // Horizontal target 2D/3D scale based on apparent screen width and garment metric width
+  const targetScaleX = ((correctedWidthPx / 100) * garmentEase) / garmentMetricWidthMeters;
 
   // Multi-constraint Vertical Fit / Leg Length scaling for trousers/skirts
   let targetScaleY = isBottomGarment ? 1.0 : targetScaleX;
@@ -192,9 +198,8 @@ export function calculateGarmentFit(
     ? Math.min(1.4, Math.max(0.7, garmentWidthCm / wearerWidthCm))
     : 1;
 
-  // Final safety clamp on target scale factors (prevent runaway scales on noisy frames)
-  const targetScaleFinalX = Math.max(0.65, Math.min(1.45, targetScaleX * fitModifier));
-  const targetScaleFinalY = Math.max(0.65, Math.min(1.45, targetScaleY * fitModifier));
+  const targetScaleFinalX = targetScaleX * fitModifier;
+  const targetScaleFinalY = targetScaleY * fitModifier;
   const targetScaleFinalZ = targetScaleFinalX;
 
 
