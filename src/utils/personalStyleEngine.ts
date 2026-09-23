@@ -230,6 +230,7 @@ export function aggregateStyleDnaLocally(
     const map: Record<string, {
       rawCount: number;
       effectiveSamples: number;
+      decaySum: number;
       weightedSum: number;
       lastSignalAt: string;
     }> = {};
@@ -242,12 +243,14 @@ export function aggregateStyleDnaLocally(
           map[tok] = {
             rawCount: 0,
             effectiveSamples: 0,
+            decaySum: 0,
             weightedSum: 0,
             lastSignalAt: item.event.clientTimestamp,
           };
         }
         map[tok].rawCount += 1;
         map[tok].effectiveSamples += Math.abs(item.weight) * item.decayFactor;
+        map[tok].decaySum += item.decayFactor;
         map[tok].weightedSum += item.weight * item.decayFactor;
         if (new Date(item.event.clientTimestamp).getTime() > new Date(map[tok].lastSignalAt).getTime()) {
           map[tok].lastSignalAt = item.event.clientTimestamp;
@@ -257,8 +260,8 @@ export function aggregateStyleDnaLocally(
 
     const result: Record<string, StyleDimensionAffinity> = {};
     for (const [tok, data] of Object.entries(map)) {
-      const rawScore = data.effectiveSamples > 0
-        ? ((data.weightedSum / data.effectiveSamples) + 1.0) / 2.0
+      const rawScore = data.decaySum > 0
+        ? ((data.weightedSum / data.decaySum) + 1.0) / 2.0
         : 0.50;
       const score = Math.round(Math.min(1.0, Math.max(0.0, rawScore)) * 1000) / 1000;
       const effectiveSampleCount = Math.round(data.effectiveSamples * 1000) / 1000;

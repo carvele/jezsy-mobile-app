@@ -133,6 +133,7 @@ BEGIN
 
   -- 3. Prepare Valid Learned Events with Action Deduplication & Decay
   -- Exclude dont_recommend_item from global learned Style DNA evidence
+  DROP TABLE IF EXISTS temp_valid_learned_events;
   CREATE TEMP TABLE temp_valid_learned_events ON COMMIT DROP AS
   WITH ranked_events AS (
     SELECT 
@@ -140,7 +141,7 @@ BEGIN
       spe.signal_weight,
       spe.payload,
       spe.client_timestamp,
-      (pg_catalog.exp(-0.011552453 * pg_catalog.greatest(0.0, pg_catalog.extract(epoch from (p_as_of - spe.client_timestamp)) / 86400.0))) AS decay_factor,
+      (pg_catalog.exp(-0.011552453 * GREATEST(0.0, EXTRACT(epoch FROM (p_as_of - spe.client_timestamp)) / 86400.0))) AS decay_factor,
       ROW_NUMBER() OVER (
         PARTITION BY spe.user_id, COALESCE(spe.preference_action_id, spe.id) 
         ORDER BY spe.signal_weight DESC, spe.client_timestamp DESC
@@ -170,8 +171,8 @@ BEGIN
       token_name,
       pg_catalog.count(*)::int AS raw_samples,
       pg_catalog.round(pg_catalog.sum(pg_catalog.abs(signal_weight) * decay_factor)::numeric, 3) AS effective_samples,
-      pg_catalog.round(pg_catalog.least(1.000, pg_catalog.greatest(0.000, (
-        (pg_catalog.sum(signal_weight * decay_factor) / pg_catalog.nullif(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
+      pg_catalog.round(LEAST(1.000, GREATEST(0.000, (
+        (pg_catalog.sum(signal_weight * decay_factor) / NULLIF(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
       ))::numeric, 3) AS affinity_score,
       pg_catalog.max(client_timestamp) AS last_signal_at
     FROM palette_tokens
@@ -183,7 +184,7 @@ BEGIN
       'score', affinity_score,
       'rawSampleCount', raw_samples,
       'effectiveSampleCount', effective_samples,
-      'confidence', pg_catalog.least(1.000, pg_catalog.round((effective_samples / 10.0)::numeric, 3)),
+      'confidence', LEAST(1.000, pg_catalog.round((effective_samples / 10.0)::numeric, 3)),
       'lastSignalAt', last_signal_at
     )
   ) INTO v_palette_map FROM palette_agg;
@@ -204,8 +205,8 @@ BEGIN
       token_name,
       pg_catalog.count(*)::int AS raw_samples,
       pg_catalog.round(pg_catalog.sum(pg_catalog.abs(signal_weight) * decay_factor)::numeric, 3) AS effective_samples,
-      pg_catalog.round(pg_catalog.least(1.000, pg_catalog.greatest(0.000, (
-        (pg_catalog.sum(signal_weight * decay_factor) / pg_catalog.nullif(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
+      pg_catalog.round(LEAST(1.000, GREATEST(0.000, (
+        (pg_catalog.sum(signal_weight * decay_factor) / NULLIF(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
       ))::numeric, 3) AS affinity_score,
       pg_catalog.max(client_timestamp) AS last_signal_at
     FROM silhouette_tokens
@@ -217,7 +218,7 @@ BEGIN
       'score', affinity_score,
       'rawSampleCount', raw_samples,
       'effectiveSampleCount', effective_samples,
-      'confidence', pg_catalog.least(1.000, pg_catalog.round((effective_samples / 10.0)::numeric, 3)),
+      'confidence', LEAST(1.000, pg_catalog.round((effective_samples / 10.0)::numeric, 3)),
       'lastSignalAt', last_signal_at
     )
   ) INTO v_silhouette_map FROM silhouette_agg;
@@ -238,8 +239,8 @@ BEGIN
       token_name,
       pg_catalog.count(*)::int AS raw_samples,
       pg_catalog.round(pg_catalog.sum(pg_catalog.abs(signal_weight) * decay_factor)::numeric, 3) AS effective_samples,
-      pg_catalog.round(pg_catalog.least(1.000, pg_catalog.greatest(0.000, (
-        (pg_catalog.sum(signal_weight * decay_factor) / pg_catalog.nullif(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
+      pg_catalog.round(LEAST(1.000, GREATEST(0.000, (
+        (pg_catalog.sum(signal_weight * decay_factor) / NULLIF(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
       ))::numeric, 3) AS affinity_score,
       pg_catalog.max(client_timestamp) AS last_signal_at
     FROM formality_tokens
@@ -251,7 +252,7 @@ BEGIN
       'score', affinity_score,
       'rawSampleCount', raw_samples,
       'effectiveSampleCount', effective_samples,
-      'confidence', pg_catalog.least(1.000, pg_catalog.round((effective_samples / 10.0)::numeric, 3)),
+      'confidence', LEAST(1.000, pg_catalog.round((effective_samples / 10.0)::numeric, 3)),
       'lastSignalAt', last_signal_at
     )
   ) INTO v_formality_map FROM formality_agg;
@@ -272,8 +273,8 @@ BEGIN
       token_name,
       pg_catalog.count(*)::int AS raw_samples,
       pg_catalog.round(pg_catalog.sum(pg_catalog.abs(signal_weight) * decay_factor)::numeric, 3) AS effective_samples,
-      pg_catalog.round(pg_catalog.least(1.000, pg_catalog.greatest(0.000, (
-        (pg_catalog.sum(signal_weight * decay_factor) / pg_catalog.nullif(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
+      pg_catalog.round(LEAST(1.000, GREATEST(0.000, (
+        (pg_catalog.sum(signal_weight * decay_factor) / NULLIF(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
       ))::numeric, 3) AS affinity_score,
       pg_catalog.max(client_timestamp) AS last_signal_at
     FROM accessory_tokens
@@ -285,7 +286,7 @@ BEGIN
       'score', affinity_score,
       'rawSampleCount', raw_samples,
       'effectiveSampleCount', effective_samples,
-      'confidence', pg_catalog.least(1.000, pg_catalog.round((effective_samples / 10.0)::numeric, 3)),
+      'confidence', LEAST(1.000, pg_catalog.round((effective_samples / 10.0)::numeric, 3)),
       'lastSignalAt', last_signal_at
     )
   ) INTO v_accessory_map FROM accessory_agg;
@@ -302,7 +303,7 @@ BEGIN
   FROM temp_valid_learned_events t;
 
   -- Learned Global Confidence reflects only valid post-reset effective evidence
-  v_global_confidence := pg_catalog.least(1.000, pg_catalog.round((v_learned_effective_evidence / 15.0)::numeric, 3));
+  v_global_confidence := LEAST(1.000, pg_catalog.round((v_learned_effective_evidence / 15.0)::numeric, 3));
 
   -- 9. Upsert Materialized Projection
   INSERT INTO public.user_style_profiles (
@@ -417,6 +418,7 @@ BEGIN
   END IF;
 
   -- 4. Process Each Event with Narrow Per-Event Error Trapping
+  <<event_loop>>
   FOR v_event IN SELECT * FROM pg_catalog.jsonb_array_elements(p_events)
   LOOP
     -- Payload byte length check (max 8KB)
@@ -504,7 +506,7 @@ BEGIN
         IF v_key NOT IN ('palette', 'silhouettes', 'formality', 'accessories', 'outfit_id', 'item_ids', 'replaced_slots') THEN
           v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
             pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'unknown_payload_key_' || v_key));
-          GOTO next_event;
+          CONTINUE event_loop;
         END IF;
       END LOOP;
 
@@ -520,7 +522,7 @@ BEGIN
           IF pg_catalog.jsonb_typeof(v_arr_elem) <> 'string' OR pg_catalog.length(v_arr_elem#>>'{}') > 64 THEN
             v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
               pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'invalid_palette_element'));
-            GOTO next_event;
+            CONTINUE event_loop;
           END IF;
         END LOOP;
       END IF;
@@ -536,7 +538,7 @@ BEGIN
           IF pg_catalog.jsonb_typeof(v_arr_elem) <> 'string' OR pg_catalog.length(v_arr_elem#>>'{}') > 64 THEN
             v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
               pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'invalid_silhouette_element'));
-            GOTO next_event;
+            CONTINUE event_loop;
           END IF;
         END LOOP;
       END IF;
@@ -552,7 +554,7 @@ BEGIN
           IF pg_catalog.jsonb_typeof(v_arr_elem) <> 'string' OR v_arr_elem#>>'{}' NOT IN ('casual', 'smart_casual', 'business_casual', 'business_formal', 'black_tie') THEN
             v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
               pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'invalid_formality_element'));
-            GOTO next_event;
+            CONTINUE event_loop;
           END IF;
         END LOOP;
       END IF;
@@ -568,13 +570,13 @@ BEGIN
           IF pg_catalog.jsonb_typeof(v_arr_elem) <> 'string' OR pg_catalog.length(v_arr_elem#>>'{}') > 64 THEN
             v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
               pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'invalid_accessory_element'));
-            GOTO next_event;
+            CONTINUE event_loop;
           END IF;
         END LOOP;
       END IF;
 
-      IF v_event_type = 'save_look' THEN v_server_weight := 0.80;
-      ELSIF v_event_type = 'wear_outfit' THEN v_server_weight := 0.70;
+      IF v_event_type = 'wear_outfit' THEN v_server_weight := 1.00;
+      ELSIF v_event_type = 'save_look' THEN v_server_weight := 0.70;
       ELSE v_server_weight := 0.50; END IF;
       v_sanitized_payload := v_payload;
 
@@ -584,26 +586,26 @@ BEGIN
         IF v_key NOT IN ('feedback_kind', 'palette', 'silhouettes', 'formality', 'accessories') THEN
           v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
             pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'unknown_payload_key_' || v_key));
-          GOTO next_event;
+          CONTINUE event_loop;
         END IF;
       END LOOP;
 
       v_feedback_kind := v_payload->>'feedback_kind';
       IF v_feedback_kind = 'love_look' THEN
-        v_server_weight := 1.00;
+        v_server_weight := 0.80;
         v_sanitized_payload := v_payload;
       ELSIF v_feedback_kind = 'not_my_style' THEN
-        v_server_weight := -0.50;
+        v_server_weight := -0.80;
         v_sanitized_payload := v_payload;
       ELSIF v_feedback_kind = 'too_formal' THEN
-        v_server_weight := -0.40;
+        v_server_weight := -0.80;
         -- Dimension Scoping: Formality feedback affects FORMALITY ONLY
         v_sanitized_payload := pg_catalog.jsonb_build_object(
           'feedback_kind', v_feedback_kind,
           'formality', COALESCE(v_payload->'formality', '[]'::jsonb)
         );
       ELSIF v_feedback_kind = 'too_casual' THEN
-        v_server_weight := -0.40;
+        v_server_weight := -0.80;
         -- Dimension Scoping: Formality feedback affects FORMALITY ONLY
         v_sanitized_payload := pg_catalog.jsonb_build_object(
           'feedback_kind', v_feedback_kind,
@@ -624,7 +626,7 @@ BEGIN
         IF v_key NOT IN ('action', 'setting_key', 'setting_value') THEN
           v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
             pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'unknown_payload_key_' || v_key));
-          GOTO next_event;
+          CONTINUE event_loop;
         END IF;
       END LOOP;
 
@@ -659,7 +661,7 @@ BEGIN
             IF pg_catalog.jsonb_typeof(v_arr_elem) <> 'string' OR pg_catalog.length(v_arr_elem#>>'{}') > 32 THEN
               v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
                 pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'invalid_setting_element_string'));
-              GOTO next_event;
+              CONTINUE event_loop;
             END IF;
           END LOOP;
         ELSIF v_setting_key IN ('avoidedFits', 'preferredFits', 'preferredSilhouettes') THEN
@@ -674,7 +676,7 @@ BEGIN
             IF pg_catalog.jsonb_typeof(v_arr_elem) <> 'string' OR pg_catalog.length(v_arr_elem#>>'{}') > 32 THEN
               v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
                 pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'invalid_setting_element_string'));
-              GOTO next_event;
+              CONTINUE event_loop;
             END IF;
           END LOOP;
         ELSIF v_setting_key = 'maxDailyFormality' THEN
@@ -702,7 +704,7 @@ BEGIN
         IF v_key NOT IN ('reset_scope') THEN
           v_rejected_ids := pg_catalog.array_append(v_rejected_ids, 
             pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'unknown_payload_key_' || v_key));
-          GOTO next_event;
+          CONTINUE event_loop;
         END IF;
       END LOOP;
 
@@ -747,9 +749,6 @@ BEGIN
           pg_catalog.jsonb_build_object('id', v_event_id, 'reason', 'invalid_id'));
       END IF;
     END IF;
-
-    <<next_event>>
-    NULL;
   END LOOP;
 
   -- 6. Trigger Internal Aggregator
