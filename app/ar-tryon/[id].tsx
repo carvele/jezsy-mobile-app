@@ -403,10 +403,13 @@ export default function ARTryOnScreen() {
   const [hasConsented, setHasConsented] = useState<boolean | null>(null);
   const [stageLayout, setStageLayout] = useState<{ width: number; height: number }>({ width: 390, height: 600 });
   const [mode, setMode] = useState<'3d' | '2d'>('3d');
-  // SceneView is the primary renderer on native; Three.js is fallback on error.
-  // Platform.OS === 'web' always falls back because SceneViewScene is .native.tsx only.
+  // Three.js is the default everywhere: it drives the garment's skeleton, so sleeves and
+  // torso follow the body. The SceneView (Filament) renderer moves the garment as one rigid
+  // piece -- bone rotations are never passed to it -- so it is opt-in until that is built:
+  // set EXPO_PUBLIC_AR_RENDERER=sceneview. Platform.OS === 'web' always uses Three.js
+  // because SceneViewScene is .native.tsx only.
   const [rendererMode, setRendererMode] = useState<'filament-sceneview' | 'three' | 'fallback' | 'unavailable'>(
-    Platform.OS !== 'web' ? 'filament-sceneview' : 'three'
+    Platform.OS !== 'web' && process.env.EXPO_PUBLIC_AR_RENDERER === 'sceneview' ? 'filament-sceneview' : 'three'
   );
   const replayActive = false;
   // confirmedRenderer is only set by the onRendererConfirmed callback fired from
