@@ -98,8 +98,7 @@ BEGIN
 
   UPDATE public.wardrobe_items
   SET wear_count = wear_count + 1,
-      last_worn_at = GREATEST(COALESCE(last_worn_at, p_effective_wear_at), p_effective_wear_at),
-      updated_at = pg_catalog.clock_timestamp()
+      last_worn_at = GREATEST(COALESCE(last_worn_at, p_effective_wear_at), p_effective_wear_at)
   WHERE id = p_item_id
     AND user_id = v_user_id
     AND deleted = false
