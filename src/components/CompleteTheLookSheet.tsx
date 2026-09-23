@@ -11,6 +11,7 @@ interface Props {
   productId: string | null;
   visible: boolean;
   onClose: () => void;
+  initialItems?: CompleteTheLookItemType[];
 }
 
 // Stable identity across renders, same reasoning as explore.tsx's own
@@ -25,14 +26,21 @@ const renderBackdrop = (props: React.ComponentProps<typeof BottomSheetBackdrop>)
  * (Curated -> Styled Look Siblings -> Algorithmic) for the current product
  * and renders each result as an actionable CompleteTheLookItem.
  */
-export function CompleteTheLookSheet({ productId, visible, onClose }: Props) {
+export function CompleteTheLookSheet({ productId, visible, onClose, initialItems }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const sheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['75%'], []);
 
-  const [items, setItems] = useState<CompleteTheLookItemType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<CompleteTheLookItemType[]>(initialItems || []);
+  const [loading, setLoading] = useState(!initialItems || initialItems.length === 0);
+
+  useEffect(() => {
+    if (initialItems && initialItems.length > 0) {
+      setItems(initialItems);
+      setLoading(false);
+    }
+  }, [initialItems]);
 
   useEffect(() => {
     if (visible) sheetRef.current?.present();
@@ -41,6 +49,7 @@ export function CompleteTheLookSheet({ productId, visible, onClose }: Props) {
 
   useEffect(() => {
     if (!visible || !productId) return;
+    if (initialItems && initialItems.length > 0) return;
     let active = true;
     setLoading(true);
     getCompleteTheLook(productId, 6)
@@ -51,7 +60,7 @@ export function CompleteTheLookSheet({ productId, visible, onClose }: Props) {
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [visible, productId]);
+  }, [visible, productId, initialItems]);
 
   return (
     <BottomSheetModal
@@ -60,6 +69,7 @@ export function CompleteTheLookSheet({ productId, visible, onClose }: Props) {
       backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: colors.background }}
       handleIndicatorStyle={{ backgroundColor: colors.border }}
+      enableDynamicSizing={false}
       onDismiss={onClose}
     >
       <BottomSheetView style={styles.header}>

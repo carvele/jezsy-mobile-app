@@ -205,5 +205,105 @@ describe('completeTheLook Stylist Engine', () => {
 
       expect(run1.map((r) => r.product.id)).toEqual(run2.map((r) => r.product.id));
     });
+
+    it('classifies luxury jewelry (pearls, rhinestones, brooch) as formal', () => {
+      const pearlNecklace: CatalogItem = {
+        id: 'jewelry-1',
+        name: 'Huge Pearls Necklace',
+        category: 'Jewelry',
+        color: 'White',
+        price: 2500,
+        image_url: 'https://example.com/pearls.jpg',
+      };
+      const rhinestoneEarrings: CatalogItem = {
+        id: 'jewelry-2',
+        name: 'Crystal Rhinestone Chandelier Earrings',
+        category: 'Accessories',
+        color: 'Silver',
+        price: 1800,
+        image_url: 'https://example.com/rhinestone.jpg',
+      };
+
+      expect(classifyOccasion(pearlNecklace)).toBe('formal');
+      expect(classifyOccasion(rhinestoneEarrings)).toBe('formal');
+    });
+
+    it('rejects formal pearl necklace when anchor is activewear', () => {
+      const pearlNecklace: CatalogItem = {
+        id: 'jewelry-1',
+        name: 'Huge Pearls Necklace',
+        category: 'Jewelry',
+        color: 'White',
+        price: 2500,
+        image_url: 'https://example.com/pearls.jpg',
+      };
+      const catalog = [
+        miniSkirtProduct,
+        pearlNecklace,
+      ];
+
+      const recommendations = recommendCompleteTheLook(leggingsProduct, catalog, 4);
+      expect(recommendations.some((r) => r.product.id === pearlNecklace.id)).toBe(false);
+    });
+
+    it('fills up to limit with harmonious secondary accessories when footwear/outerwear are absent', () => {
+      const casualTee: CatalogItem = {
+        id: 'tee-1',
+        name: 'Oversized Cotton Graphic Tee',
+        category: 'Tops',
+        color: 'Black',
+        price: 1200,
+        image_url: 'https://example.com/tee.jpg',
+      };
+      const casualShorts: CatalogItem = {
+        id: 'shorts-1',
+        name: 'Denim Jean Shorts',
+        category: 'Bottoms',
+        color: 'Blue',
+        price: 1800,
+        image_url: 'https://example.com/shorts.jpg',
+      };
+      const sunglasses: CatalogItem = {
+        id: 'acc-1',
+        name: 'Classic Aviator Sunglasses',
+        category: 'Accessories',
+        color: 'Black',
+        price: 900,
+        image_url: 'https://example.com/glasses.jpg',
+      };
+      const canvasTote: CatalogItem = {
+        id: 'bag-2',
+        name: 'Everyday Canvas Tote Bag',
+        category: 'Bags',
+        color: 'Beige',
+        price: 850,
+        image_url: 'https://example.com/tote.jpg',
+      };
+      const baseballCap: CatalogItem = {
+        id: 'acc-2',
+        name: 'Embroidered Cotton Baseball Cap',
+        category: 'Accessories',
+        color: 'Navy',
+        price: 650,
+        image_url: 'https://example.com/cap.jpg',
+      };
+
+      // Catalog has 1 bottom and 3 accessories/bags, but NO footwear and NO outerwear
+      const catalog = [casualShorts, sunglasses, canvasTote, baseballCap];
+
+      const recommendations = recommendCompleteTheLook(casualTee, catalog, 4);
+
+      // Should return up to 4 items (1 bottom + 3 accessory/bag items) instead of starving at 2
+      expect(recommendations.length).toBe(4);
+      expect(recommendations.some((r) => r.product.id === casualShorts.id)).toBe(true);
+      expect(recommendations.some((r) => r.product.id === sunglasses.id)).toBe(true);
+      expect(recommendations.some((r) => r.product.id === canvasTote.id)).toBe(true);
+      expect(recommendations.some((r) => r.product.id === baseballCap.id)).toBe(true);
+
+      // Invariants: only 1 bottom
+      const bottomCount = recommendations.filter((r) => r.slot === 'bottom').length;
+      expect(bottomCount).toBe(1);
+    });
   });
 });
+

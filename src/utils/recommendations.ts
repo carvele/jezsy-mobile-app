@@ -3,7 +3,8 @@
 // (wishlist, recently viewed), which is why scoring lives here as plain
 // arithmetic rather than anything server-side.
 
-const SAME_SUBCATEGORY = 3;
+const SAME_SUBCATEGORY = 10;
+const SAME_PARENT_CATEGORY = 6;
 const AFFINITY_CATEGORY = 2;
 const ON_SALE = 1;
 // Caps at 2.0 for a 5-star item, so rating breaks ties but never outranks
@@ -19,6 +20,7 @@ export type Candidate = {
 export type RecommendationSignals = {
   currentSubCategoryId: string | null;
   affinityCategoryIds: Set<string>;
+  parentSubCategoryIds?: Set<string>;
 };
 
 export function scoreCandidate(product: Candidate, signals: RecommendationSignals): number {
@@ -26,6 +28,8 @@ export function scoreCandidate(product: Candidate, signals: RecommendationSignal
 
   if (signals.currentSubCategoryId && product.category_id === signals.currentSubCategoryId) {
     score += SAME_SUBCATEGORY;
+  } else if (product.category_id && signals.parentSubCategoryIds?.has(product.category_id)) {
+    score += SAME_PARENT_CATEGORY;
   }
   if (product.category_id && signals.affinityCategoryIds.has(product.category_id)) {
     score += AFFINITY_CATEGORY;
