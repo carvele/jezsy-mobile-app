@@ -250,60 +250,61 @@ export function SuggestedOutfitCard({
 
       {/* Independent action row — separately traversable */}
       <View accessible={false} style={atelierStyles.actionRow}>
-        {onPass && (
-          <TouchableOpacity
-            style={[atelierStyles.passBtn, { borderColor: wt.cardBorder }]}
-            onPress={() => { tapLight(); onPass(outfit); }}
-            accessibilityRole="button"
-            accessibilityLabel="Pass on this look"
-          >
-            <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Pass</Text>
-          </TouchableOpacity>
-        )}
+        <View style={atelierStyles.secondaryActionRow}>
+          {onPass && (
+            <TouchableOpacity
+              style={[atelierStyles.passBtn, { borderColor: wt.cardBorder }]}
+              onPress={() => { tapLight(); onPass(outfit); }}
+              accessibilityRole="button"
+              accessibilityLabel="Pass on this look"
+            >
+              <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Pass</Text>
+            </TouchableOpacity>
+          )}
 
-        {onOpenMannequin && (
-          <TouchableOpacity
-            style={[atelierStyles.passBtn, { borderColor: wt.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
-            onPress={() => { tapLight(); onOpenMannequin(outfit); }}
-            accessibilityRole="button"
-            accessibilityLabel="Open this outfit on Mannequin"
-          >
-            <IconSymbol name="sparkles" size={13} color={wt.actionSecondaryText} />
-            <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Mannequin</Text>
-          </TouchableOpacity>
-        )}
+          {onOpenMannequin && (
+            <TouchableOpacity
+              style={[atelierStyles.passBtn, { borderColor: wt.cardBorder }]}
+              onPress={() => { tapLight(); onOpenMannequin(outfit); }}
+              accessibilityRole="button"
+              accessibilityLabel="Open this outfit on Mannequin"
+            >
+              <IconSymbol name="sparkles" size={13} color={wt.actionSecondaryText} />
+              <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]} numberOfLines={1}>Mannequin</Text>
+            </TouchableOpacity>
+          )}
 
-        {onRemix && (
-          <TouchableOpacity
-            style={[atelierStyles.passBtn, { borderColor: wt.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
-            onPress={() => { tapLight(); onRemix(outfit); }}
-            accessibilityRole="button"
-            accessibilityLabel="Remix this outfit"
-          >
-            <IconSymbol name="shuffle" size={13} color={wt.actionSecondaryText} />
-            <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Remix</Text>
-          </TouchableOpacity>
-        )}
+          {onRemix && (
+            <TouchableOpacity
+              style={[atelierStyles.passBtn, { borderColor: wt.cardBorder }]}
+              onPress={() => { tapLight(); onRemix(outfit); }}
+              accessibilityRole="button"
+              accessibilityLabel="Remix this outfit"
+            >
+              <IconSymbol name="shuffle" size={13} color={wt.actionSecondaryText} />
+              <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]} numberOfLines={1}>Remix</Text>
+            </TouchableOpacity>
+          )}
 
-        {onPlanLater && planLaterPayload && (
-          <TouchableOpacity
-            style={[atelierStyles.passBtn, { borderColor: wt.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
-            onPress={() => {
-              tapLight();
-              onPlanLater(planLaterPayload);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Plan this outfit for an upcoming day"
-          >
-            <IconSymbol name="calendar" size={13} color={wt.actionSecondaryText} />
-            <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Plan</Text>
-          </TouchableOpacity>
-        )}
+          {onPlanLater && planLaterPayload && (
+            <TouchableOpacity
+              style={[atelierStyles.passBtn, { borderColor: wt.cardBorder }]}
+              onPress={() => {
+                tapLight();
+                onPlanLater(planLaterPayload);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Plan this outfit for an upcoming day"
+            >
+              <IconSymbol name="calendar" size={13} color={wt.actionSecondaryText} />
+              <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]} numberOfLines={1}>Plan</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <TouchableOpacity
           style={[
             atelierStyles.saveBtn,
-            { flex: 1 },
             alreadySaved
               ? { backgroundColor: wt.actionSecondary, borderWidth: 1, borderColor: wt.cardBorder }
               : { backgroundColor: wt.actionPrimary, opacity: saving ? 0.6 : 1 },
@@ -485,10 +486,15 @@ const atelierStyles = StyleSheet.create({
     flex: 1,
   },
   actionRow: {
-    flexDirection: 'row',
     gap: Spacing.sm,
   },
+  secondaryActionRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    width: '100%',
+  },
   saveBtn: {
+    width: '100%',
     height: WardrobeTokens.actionButtonHeight,
     borderRadius: Radius.pill,
     alignItems: 'center',
@@ -504,15 +510,19 @@ const atelierStyles = StyleSheet.create({
     gap: 6,
   },
   passBtn: {
-    height: 44,
-    paddingHorizontal: Spacing.lg,
+    flex: 1,
+    height: 40,
+    paddingHorizontal: Spacing.xs,
     borderRadius: Radius.pill,
     borderWidth: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
   },
   passBtnText: {
     ...Type.bodyStrong,
+    fontSize: 12,
     fontWeight: '600',
   },
 });

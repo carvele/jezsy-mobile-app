@@ -28,7 +28,7 @@ import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { FadeInView } from '@/src/components/FadeInView';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
 import { tapLight } from '@/src/utils/haptics';
-import { useGridCardWidth, GRID_COLUMN_GAP, GRID_GUTTER } from '@/src/utils/layout';
+import { useWardrobeGridCardWidth, WARDROBE_GRID_COLUMN_GAP, WARDROBE_GRID_GUTTER } from '@/src/utils/layout';
 import { useToast } from '@/src/context/ToastContext';
 import { MannequinView } from '@/src/components/Mannequin/MannequinView';
 import { MannequinOutfitPreview } from '@/src/components/Mannequin/MannequinOutfitPreview';
@@ -62,7 +62,7 @@ type WearFilter = 'all' | 'never' | 'neglected';
 
 export default function WardrobeScreen() {
   const bottomInset = useSharedBottomInset();
-  const { cardWidth, columns } = useGridCardWidth();
+  const { cardWidth, columns } = useWardrobeGridCardWidth();
   const theme = useColorScheme();
   const colors = Colors[theme];
   const wt = WardrobeTokens.theme[theme];
@@ -829,16 +829,17 @@ export default function WardrobeScreen() {
           onRefreshWardrobe={fetchWardrobeData}
           initialLoadOutfitId={params.loadOutfit}
           initialTransientToken={params.transientToken}
+          bottomInset={bottomInset}
         />
       </View>
 
       {activeTab === 'mannequin' ? null : loading ? (
         // A skeleton grid keeps the layout stable while loading instead of
         // collapsing to a centred spinner and then jumping.
-        <ScrollView contentContainerStyle={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.lg }} scrollEnabled={false}>
-          <View style={[styles.skeletonRow, { gap: GRID_COLUMN_GAP }]}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: WARDROBE_GRID_GUTTER, paddingTop: Spacing.lg }} scrollEnabled={false}>
+          <View style={[styles.skeletonRow, { gap: WARDROBE_GRID_COLUMN_GAP }]}>
             <SkeletonList count={6}>
-              <ProductCardSkeleton width={typeof cardWidth === 'number' ? cardWidth : 160} />
+              <ProductCardSkeleton width={typeof cardWidth === 'number' ? cardWidth : 104} />
             </SkeletonList>
           </View>
         </ScrollView>
@@ -849,8 +850,8 @@ export default function WardrobeScreen() {
           keyExtractor={(item) => item.id}
           key={`items-grid-${columns}`}
           numColumns={columns}
-          columnWrapperStyle={[styles.columnWrapper, { gap: GRID_COLUMN_GAP, justifyContent: 'flex-start' }]}
-          contentContainerStyle={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.lg, paddingBottom: bottomInset }}
+          columnWrapperStyle={[styles.columnWrapper, { gap: WARDROBE_GRID_COLUMN_GAP, justifyContent: 'flex-start' }]}
+          contentContainerStyle={{ paddingHorizontal: WARDROBE_GRID_GUTTER, paddingTop: Spacing.lg, paddingBottom: bottomInset }}
           ListHeaderComponent={itemsHeader}
           initialNumToRender={8}
           windowSize={7}
@@ -1271,20 +1272,20 @@ const styles = StyleSheet.create({
   },
   columnWrapper: {
     justifyContent: 'flex-start',
-    gap: GRID_COLUMN_GAP,
+    gap: WARDROBE_GRID_COLUMN_GAP,
     marginBottom: 0,
   },
   skeletonRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
-    gap: GRID_COLUMN_GAP,
+    gap: WARDROBE_GRID_COLUMN_GAP,
   },
   itemCard: {
     borderRadius: Radius.md,
     overflow: 'hidden',
     borderWidth: 1,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.sm,
     ...Elevation.sm,
   },
   imageWrap: {
@@ -1307,10 +1308,10 @@ const styles = StyleSheet.create({
   },
   wearBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    top: 5,
+    left: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: Radius.pill,
   },
   wearBadgeWorn: {
@@ -1319,25 +1320,25 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   wearBadgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.2,
   },
   itemInfo: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    gap: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    gap: 1,
   },
   itemCategory: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
-    lineHeight: 18,
+    lineHeight: 15,
   },
   itemSubLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     textTransform: 'capitalize',
-    lineHeight: 16,
+    lineHeight: 14,
   },
   suggestBlock: {
     marginBottom: Spacing.sm,
