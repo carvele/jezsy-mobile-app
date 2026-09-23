@@ -11,6 +11,8 @@ export interface CameraCalibration {
   videoHeightPx: number;
   wearerShoulderWidthM: number;
   wearerHipWidthM?: number;
+  wearerSkeletalShoulderSpanM?: number;
+  wearerSkeletalHipSpanM?: number;
 }
 
 export interface ResolvedScaleXYZ {

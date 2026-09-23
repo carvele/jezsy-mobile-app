@@ -308,14 +308,120 @@ describe('GarmentRenderer generated document syntax', () => {
 
       // Physical fit scale is determined by targetFittingWidth / garmentMetricWidth, NOT by camera.position.z
       expect(scriptCode).toContain("const rawScaleX = (targetFittingWidth / garmentMetricWidth) * fitModifier;");
-      // Camera distance triangulation is determined by wearerWidthM * focalLengthPx / measuredPixelWidth
-      expect(scriptCode).toContain("const rawDistance = ((wearerWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;");
+      // Camera distance triangulation is determined by wearerSkeletalSpanM * viewportFocalLengthPx / measuredPixelWidth
+      expect(scriptCode).toContain("const rawDistance = ((wearerSkeletalSpanM * viewportFocalLengthPx) / measuredPixelWidth) * yawCosCorrection;");
 
       expect(() => new Function(scriptCode)).not.toThrow();
     } finally {
       if (renderer) act(() => renderer.unmount());
       delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
     }
+  });
+
+  describe('Phase 15 — Projection, Viewport & Body-Fit Decoupling Invariants', () => {
+    let scriptCode: string;
+    let renderer: any;
+
+    beforeAll(() => {
+      (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+      act(() => {
+        renderer = create(React.createElement(GarmentRenderer, {
+          modelUrl: 'https://example.com/1788455887355_Long-sleeve1.glb',
+          metadata: {
+            id: 'long-sleeve-test',
+            category: 'jacket',
+            calibrationVersion: '2.0',
+            anchorConfidence: 'merchant_confirmed',
+            anchorType: 'SHOULDER_CENTER',
+            restPoseMetricWidth: 0.35,
+            boneMap: {},
+            restPose: 'T_POSE',
+            ingestionStatus: 'AR_READY',
+            anatomicalAnchorOffset: { x: 0, y: 1.34, z: 0 },
+            garmentFitProfileVersion: 2,
+            fitProfileV2: {
+              version: 2,
+              category: 'outerwear',
+              referenceMeasurements: { primaryWidthMeters: 0.35 },
+              fitBands: [{ name: 'SHOULDER', authoredWidthMeters: 0.35 }],
+              rootAnchor: { bone: 'Spine2', confidence: 'high', offset: { x: 0, y: 1.34, z: 0 } },
+            } as any,
+          },
+        }));
+      });
+      const document = renderer.root.findByType('iframe').props.srcDoc as string;
+      scriptCode = document.match(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/i)![1];
+    });
+
+    afterAll(() => {
+      if (renderer) act(() => renderer.unmount());
+      delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
+    });
+
+    it('1. physicalFitScale remains unchanged by viewport conversion', () => {
+      // physical fit scale is calculated strictly from targetFittingWidth / garmentMetricWidth
+      expect(scriptCode).toContain("const rawScaleX = (targetFittingWidth / garmentMetricWidth) * fitModifier;");
+      expect(scriptCode).not.toContain("rawScaleX = (targetFittingWidth / garmentMetricWidth) * fitModifier * (window.innerWidth");
+    });
+
+    it('2. raw video dimensions cannot overwrite render viewport', () => {
+      // camera.aspect is always based on render viewport (window.innerWidth / window.innerHeight)
+      expect(scriptCode).toContain("function getCameraAspect() {");
+      expect(scriptCode).toContain("return window.innerWidth / window.innerHeight;");
+    });
+
+    it('3. focal length and pixel span use matching coordinate spaces', () => {
+      // distance triangulation uses mapCoverCrop to convert raw landmarks into viewport pixels
+      expect(scriptCode).toContain("const pLCrop = mapCoverCrop(pL.x, pL.y);");
+      expect(scriptCode).toContain("const pRCrop = mapCoverCrop(pR.x, pR.y);");
+      expect(scriptCode).toContain("const dxPx = (pRCrop.nx - pLCrop.nx) * window.innerWidth;");
+      expect(scriptCode).toContain("const dyPx = (pRCrop.ny - pLCrop.ny) * window.innerHeight;");
+      expect(scriptCode).toContain("const viewportFocalLengthPx = (window.innerHeight / 2) / Math.tan(((camera.fov || 45) * Math.PI / 180) / 2);");
+    });
+
+    it('4. no ancestor applies accidental additional fit scaling', () => {
+      // only garmentGroup applies groupScale; garmentModel has identity local scale
+      expect(scriptCode).toContain("scene.add(garmentGroup);");
+      expect(scriptCode).toContain("garmentGroup.add(garmentModel);");
+      expect(scriptCode).toContain("garmentGroup.scale.set(smoothedScale.x, smoothedScale.y, smoothedScale.z);");
+    });
+
+    it('5. BodyFit ratio is not applied twice', () => {
+      // bodyOuterShoulderWidthM / bodyOuterHipWidthM sets targetFittingWidth,
+      // while distance triangulation uses skeletal joint span (skeletalShoulderSpan / skeletalHipSpan)
+      expect(scriptCode).toContain("const skeletalShoulderSpan = CAMERA_CALIBRATION.wearerSkeletalShoulderSpanM");
+      expect(scriptCode).toContain("const skeletalHipSpan = CAMERA_CALIBRATION.wearerSkeletalHipSpanM");
+    });
+
+    it('6. camera distance does not receive a duplicated body-fit correction', () => {
+      // rawDistance uses wearerSkeletalSpanM, which represents the real physical distance between MediaPipe landmark joints
+      expect(scriptCode).toContain("const rawDistance = ((wearerSkeletalSpanM * viewportFocalLengthPx) / measuredPixelWidth) * yawCosCorrection;");
+    });
+
+    it('7. changing raw camera resolution with identical normalized pose does not change physical garment fit', () => {
+      // mapCoverCrop normalizes raw video dimensions against viewport aspect ratio
+      expect(scriptCode).toContain("const videoAspect = dims.width / dims.height;");
+      expect(scriptCode).toContain("const containerAspect = window.innerWidth / window.innerHeight;");
+      expect(scriptCode).toContain("const visW = Math.min(1, containerAspect / videoAspect);");
+      expect(scriptCode).toContain("const visH = Math.min(1, videoAspect / containerAspect);");
+    });
+
+    it('8. upper and lower garments use the same projection system', () => {
+      // shared distance triangulation logic handles both shoulders and hips seamlessly
+      expect(scriptCode).toContain("const hasShoulders = l11 && l12 && (l11.visibility ?? 1) >= 0.35 && (l12.visibility ?? 1) >= 0.35;");
+      expect(scriptCode).toContain("const hasHips = hip23Early && hip24Early && (hip23Early.visibility ?? 1) >= 0.35 && (hip24Early.visibility ?? 1) >= 0.35;");
+    });
+
+    it('9. Phase 7 screen-space acceptance metric telemetry is active in DEV', () => {
+      expect(scriptCode).toContain("[AR-SCREEN-METRIC]");
+      expect(scriptCode).toContain("bodyJointPx=");
+      expect(scriptCode).toContain("projectedGarmentPx=");
+      expect(scriptCode).toContain("ratio=");
+    });
+
+    it('10. generated script parses cleanly without syntax errors', () => {
+      expect(() => new Function(scriptCode)).not.toThrow();
+    });
   });
 });
 

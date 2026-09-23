@@ -467,7 +467,9 @@ export default function ARTryOnScreen() {
     setArError(msg ? { type: 'AR_LOAD_ERROR', message: msg } : null);
   }, []);
   const arLoadError = arError?.type === 'AR_LOAD_ERROR' ? arError.message : null;
-  const [cameraDimensions, setCameraDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [cameraDimensions, setCameraDimensions] = useState<{ width: number; height: number } | null>(
+    Platform.OS === 'web' ? { width: 640, height: 480 } : null
+  );
   // Fix for #29 in the AR audit plan: <Camera>'s onError used to only console.warn,
   // leaving a permanently black feed with the "AI Body Tracking Active" pill still
   // shown (stale/false) whenever a camera-level error fired -- confirmed live on this
@@ -623,6 +625,12 @@ export default function ARTryOnScreen() {
       sizingMeasurements?.hips,
       sizingMeasurements?.waist
     );
+    const wearerSkeletalShoulderSpanM = sizingMeasurements?.shoulderWidth
+      ? Math.max(0.30, Math.min(0.44, (sizingMeasurements.shoulderWidth / 100) - 0.05))
+      : 0.36;
+    const wearerSkeletalHipSpanM = sizingMeasurements?.hips
+      ? Math.max(0.14, Math.min(0.24, deriveBodyOuterHipWidth(sizingMeasurements.hips) - 0.15))
+      : 0.18;
 
     if (Platform.OS === 'web') {
       const videoWidthPx = stageWidth > 0 ? stageWidth : 720;
@@ -638,6 +646,8 @@ export default function ARTryOnScreen() {
         videoHeightPx,
         wearerShoulderWidthM,
         wearerHipWidthM,
+        wearerSkeletalShoulderSpanM,
+        wearerSkeletalHipSpanM,
       };
     }
 
@@ -666,6 +676,8 @@ export default function ARTryOnScreen() {
       videoHeightPx: rotatedHeight,
       wearerShoulderWidthM,
       wearerHipWidthM,
+      wearerSkeletalShoulderSpanM,
+      wearerSkeletalHipSpanM,
     };
   }, [format, sizingMeasurements, device, stageWidth, stageHeight]);
 

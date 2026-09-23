@@ -340,9 +340,6 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // horizontal FOV derived from verticalFovDeg is actually correct.
           // NOT verified on a physical device -- see docs/ar-tryon-audit-implementation-plan.md.
           function getCameraAspect() {
-            if (CAMERA_CALIBRATION && CAMERA_CALIBRATION.videoWidthPx && CAMERA_CALIBRATION.videoHeightPx) {
-              return CAMERA_CALIBRATION.videoWidthPx / CAMERA_CALIBRATION.videoHeightPx;
-            }
             return window.innerWidth / window.innerHeight;
           }
 
@@ -1161,26 +1158,43 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
 
                       let pL = null;
                       let pR = null;
-                      let wearerWidthM = 0;
+                      let wearerSkeletalSpanM = 0;
 
-                      if (hasShoulders && CAMERA_CALIBRATION.wearerShoulderWidthM > 0) {
+                      // Phase 5 & 11: Distance triangulation MUST calibrate against the physical span of the tracked joints!
+                      // Landmarks 11 & 12 track internal shoulder joints (~0.36m skeletal span).
+                      // Landmarks 23 & 24 track internal femoral head joints (~0.18m skeletal span).
+                      // Outer body widths (0.432m / 0.36m) include lateral soft tissue which landmarks do not span.
+                      const skeletalShoulderSpan = CAMERA_CALIBRATION.wearerSkeletalShoulderSpanM
+                        || (CAMERA_CALIBRATION.wearerShoulderWidthM ? Math.max(0.30, CAMERA_CALIBRATION.wearerShoulderWidthM - 0.07) : 0.36);
+                      const skeletalHipSpan = CAMERA_CALIBRATION.wearerSkeletalHipSpanM
+                        || (CAMERA_CALIBRATION.wearerHipWidthM ? Math.max(0.14, CAMERA_CALIBRATION.wearerHipWidthM - 0.15) : 0.18);
+
+                      if (hasShoulders && skeletalShoulderSpan > 0) {
                         pL = l11;
                         pR = l12;
-                        wearerWidthM = CAMERA_CALIBRATION.wearerShoulderWidthM;
+                        wearerSkeletalSpanM = skeletalShoulderSpan;
                       } else if (hasHips) {
                         pL = hip23Early;
                         pR = hip24Early;
-                        wearerWidthM = CAMERA_CALIBRATION.wearerHipWidthM || (CAMERA_CALIBRATION.wearerShoulderWidthM * 0.9) || 0.36;
+                        wearerSkeletalSpanM = skeletalHipSpan;
                       }
 
-                      if (pL && pR && wearerWidthM > 0) {
-                        const dxPx = (pR.x - pL.x) * CAMERA_CALIBRATION.videoWidthPx;
-                        const dyPx = (pR.y - pL.y) * CAMERA_CALIBRATION.videoHeightPx;
+                      if (pL && pR && wearerSkeletalSpanM > 0) {
+                        // Phase 4, 5, 6: Canonical transform: RAW VIDEO -> DISPLAYED VIDEO RECT -> RENDER VIEWPORT!
+                        // Both pL and pR must pass through mapCoverCrop to convert from raw video [0,1]
+                        // into render viewport [0,1], then multiply by viewport dimensions to get VIEWPORT PIXELS.
+                        const pLCrop = mapCoverCrop(pL.x, pL.y);
+                        const pRCrop = mapCoverCrop(pR.x, pR.y);
+                        const dxPx = (pRCrop.nx - pLCrop.nx) * window.innerWidth;
+                        const dyPx = (pRCrop.ny - pLCrop.ny) * window.innerHeight;
                         const measuredPixelWidth = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
                         const isRoughlyFrontal = Math.abs(dxPx) > (Math.abs(dyPx) * 0.5);
 
+                        // Focal length in viewport pixels (window.innerHeight reference matching camera.fov):
+                        const viewportFocalLengthPx = (window.innerHeight / 2) / Math.tan(((camera.fov || 45) * Math.PI / 180) / 2);
+
                         if (measuredPixelWidth > 1 && isRoughlyFrontal) {
-                          const rawDistance = ((wearerWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;
+                          const rawDistance = ((wearerSkeletalSpanM * viewportFocalLengthPx) / measuredPixelWidth) * yawCosCorrection;
                           if (Number.isFinite(rawDistance) && rawDistance > 0.3 && rawDistance < 3.5) {
                             if (!hasInitialDistanceSample || smoothedCameraDistance == null) {
                               // Phase 6: DIRECT SNAP on first reliable measurement!
@@ -1492,6 +1506,18 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           + ' groupScale=' + garmentGroup.scale.x.toFixed(3)
                           + ' groupPos=(' + garmentGroup.position.x.toFixed(2) + ',' + garmentGroup.position.y.toFixed(2) + ',' + garmentGroup.position.z.toFixed(2) + ')'
                           + ' bones=' + Object.keys(skeletonBones).length);
+                        // Phase 7: Screen-space acceptance metric (DEV-only telemetry)
+                        if (AR_DEBUG && shouldLog && camera.position.z) {
+                          const vpFocal = (window.innerHeight / 2) / Math.tan(((camera.fov || 45) * Math.PI / 180) / 2);
+                          const projGarmentPx = (targetFittingWidth * vpFocal) / camera.position.z;
+                          const bodyJointSpanPx = targetL && targetR ? (targetL.distanceTo(targetR) * vpFocal) / camera.position.z : 0;
+                          console.log('[AR-SCREEN-METRIC] bodyJointPx=' + bodyJointSpanPx.toFixed(1)
+                            + ' projectedGarmentPx=' + projGarmentPx.toFixed(1)
+                            + ' ratio=' + (bodyJointSpanPx > 0 ? (projGarmentPx / bodyJointSpanPx).toFixed(3) : 'n/a')
+                            + ' cameraZ=' + camera.position.z.toFixed(3)
+                            + ' groupScale=' + garmentGroup.scale.x.toFixed(3));
+                        }
+
                         // TEMP DEBUG: the REAL anchor-bone check (corrected version -- the
                         // earlier attempt measured garmentModel's own coordinate origin, not
                         // the anchor bone itself, and reported a misleading number). Spine2
