@@ -14,10 +14,10 @@ import { Spacing } from '@/constants/theme';
  */
 
 /** Page padding on each side of a grid. */
-export const GRID_GUTTER = Spacing.xxxl; // 32
+export const GRID_GUTTER = Spacing.lg; // 16
 
 /** Space between columns. */
-export const GRID_COLUMN_GAP = Spacing.xl; // 20
+export const GRID_COLUMN_GAP = Spacing.md; // 12
 
 /** Usable width for one card in an evenly-divided grid.
  *

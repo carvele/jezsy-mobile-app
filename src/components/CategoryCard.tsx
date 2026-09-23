@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, StyleProp, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing } from '@/constants/theme';
@@ -16,14 +16,23 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_CARD_ASPECT = 1.5;
 
 export type CategoryCardVariant = 'grid' | 'rail';
+export type CategoryCardLayout = 'grid' | 'fill';
 
 type Props = {
   category: { id: string; name: string; image_url?: string | null };
   variant?: CategoryCardVariant;
+  layout?: CategoryCardLayout;
+  style?: StyleProp<ViewStyle>;
   onPress: () => void;
 };
 
-export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
+export function CategoryCard({
+  category,
+  variant = 'grid',
+  layout = 'grid',
+  style,
+  onPress,
+}: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
   const isRail = variant === 'rail';
@@ -37,12 +46,19 @@ export function CategoryCard({ category, variant = 'grid', onPress }: Props) {
       ? { width: cardWidth, height: Math.round(cardWidth / GRID_CARD_ASPECT) }
       : { width: cardWidth, aspectRatio: GRID_CARD_ASPECT };
 
+  const variantStyle = isRail
+    ? styles.cardRail
+    : layout === 'fill'
+    ? [styles.cardFill, { aspectRatio: GRID_CARD_ASPECT }]
+    : [styles.cardGrid, gridStyle];
+
   return (
     <TouchableOpacity
       style={[
         styles.card,
-        isRail ? styles.cardRail : [styles.cardGrid, gridStyle],
+        variantStyle,
         { backgroundColor: colors.imagePlaceholder },
+        style,
       ]}
       onPress={onPress}
       activeOpacity={0.9}
@@ -93,6 +109,11 @@ const styles = StyleSheet.create({
   // portrait posters, ten categories cost roughly three screens of scrolling
   // before any product was visible.
   cardGrid: {},
+  cardFill: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 0,
+  },
   cardRail: { width: SCREEN_WIDTH * 0.42, aspectRatio: 4 / 3 },
   image: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%' },

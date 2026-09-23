@@ -25,6 +25,7 @@ import { CATEGORY_SELECT, WithCategoryEmbed } from '@/src/utils/categoryDisplay'
 import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
 import { ProductCard } from '@/src/components/ProductCard';
 import { CategoryCard } from '@/src/components/CategoryCard';
+import { TwoColumnRow } from '@/src/components/ui/TwoColumnRow';
 import { recordCategoryVisit } from '@/src/utils/categoryAffinity';
 import { ColorOption, DEFAULT_COLOR_OPTIONS, fetchColorOptions } from '@/src/utils/colorOptions';
 import { recommendSize } from '@/src/utils/sizeRecommender';
@@ -35,6 +36,14 @@ import { useToast } from '@/src/context/ToastContext';
 import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour/TourCoachmark';
 import { emitTourEvent } from '@/src/features/systemTour/tourEvents';
 import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
+
+function chunkIntoPairs<T>(items: T[]): T[][] {
+  const pairs: T[][] = [];
+  for (let i = 0; i < items.length; i += 2) {
+    pairs.push(items.slice(i, i + 2));
+  }
+  return pairs;
+}
 
 type Product = Database['public']['Tables']['products']['Row'] & WithCategoryEmbed;
 const PRODUCT_SELECT = `*, ${CATEGORY_SELECT}`;
@@ -1332,8 +1341,13 @@ export default function ExploreScreen() {
             // Search Results Grid with Filter capabilities
             <View style={styles.flexOne}>
               {isSearching ? (
-                <View style={styles.skeletonGrid}>
-                  <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
+                <View style={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.md }}>
+                  {Array.from({ length: 3 }).map((_, rowIndex) => (
+                    <TwoColumnRow key={`search-skel-${rowIndex}`} style={styles.gridRowSpacing}>
+                      <ProductCardSkeleton layout="fill" />
+                      <ProductCardSkeleton layout="fill" />
+                    </TwoColumnRow>
+                  ))}
                 </View>
               ) : searchError ? (
                 <View style={styles.errorContainer}>
@@ -1461,8 +1475,13 @@ export default function ExploreScreen() {
 
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Categories</Text>
               {categoriesLoading ? (
-                <View style={styles.skeletonGrid}>
-                  <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
+                <View>
+                  {Array.from({ length: 3 }).map((_, rowIndex) => (
+                    <TwoColumnRow key={`cat-skel-${rowIndex}`} style={styles.categoryRowSpacing}>
+                      <ProductCardSkeleton layout="fill" />
+                      <ProductCardSkeleton layout="fill" />
+                    </TwoColumnRow>
+                  ))}
                 </View>
               ) : categoriesError ? (
                 <View style={styles.errorContainerSmall}>
@@ -1479,17 +1498,22 @@ export default function ExploreScreen() {
                   </TouchableOpacity>
                 </View>
               ) : (
-                <View style={styles.categoriesGrid}>
-                  {topCategories.map((cat) => (
-                    <CategoryCard
-                      key={cat.id}
-                      category={cat}
-                      variant="grid"
-                      onPress={() => {
-                        recordCategoryVisit(cat.name);
-                        setSelectedCategory(cat.name);
-                      }}
-                    />
+                <View>
+                  {chunkIntoPairs(topCategories).map((pair, rowIndex) => (
+                    <TwoColumnRow key={`cat-row-${rowIndex}`} style={styles.categoryRowSpacing}>
+                      {pair.map((cat) => (
+                        <CategoryCard
+                          key={cat.id}
+                          category={cat}
+                          variant="grid"
+                          layout="fill"
+                          onPress={() => {
+                            recordCategoryVisit(cat.name);
+                            setSelectedCategory(cat.name);
+                          }}
+                        />
+                      ))}
+                    </TwoColumnRow>
                   ))}
                 </View>
               )}
@@ -1509,26 +1533,26 @@ export default function ExploreScreen() {
               }
             >
               <Text style={[styles.welcomeTitle, { color: colors.text }]}>Shop {selectedCategory}</Text>
-              <View style={styles.categoriesGrid}>
-                {/* All items category tile: borrows the parent's
-                    image so the row does not start with a blank tile. */}
-                <CategoryCard
-                  category={{
+              <View>
+                {chunkIntoPairs([
+                  {
                     id: ALL_SUBCATEGORY,
                     name: `All ${selectedCategory}`,
                     image_url: topCategories.find((c) => c.name === selectedCategory)?.image_url ?? null,
-                  }}
-                  variant="grid"
-                  onPress={() => setSelectedSubCategory(ALL_SUBCATEGORY)}
-                />
-
-                {(subCategoriesByParent[selectedCategory] || []).map((subcat) => (
-                  <CategoryCard
-                    key={subcat.id}
-                    category={subcat}
-                    variant="grid"
-                    onPress={() => setSelectedSubCategory(subcat.name)}
-                  />
+                  },
+                  ...(subCategoriesByParent[selectedCategory] || []),
+                ]).map((pair, rowIndex) => (
+                  <TwoColumnRow key={`subcat-row-${rowIndex}`} style={styles.categoryRowSpacing}>
+                    {pair.map((subcat) => (
+                      <CategoryCard
+                        key={subcat.id}
+                        category={subcat}
+                        variant="grid"
+                        layout="fill"
+                        onPress={() => setSelectedSubCategory(subcat.name)}
+                      />
+                    ))}
+                  </TwoColumnRow>
                 ))}
               </View>
             </ScrollView>
@@ -1538,8 +1562,13 @@ export default function ExploreScreen() {
           {((selectedCategory && selectedSubCategory) || showAllProducts) && (
             <View style={styles.flexOne}>
               {loading ? (
-                <View style={styles.skeletonGrid}>
-                  <SkeletonList count={6}><ProductCardSkeleton /></SkeletonList>
+                <View style={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.md }}>
+                  {Array.from({ length: 3 }).map((_, rowIndex) => (
+                    <TwoColumnRow key={`cat-prod-skel-${rowIndex}`} style={styles.gridRowSpacing}>
+                      <ProductCardSkeleton layout="fill" />
+                      <ProductCardSkeleton layout="fill" />
+                    </TwoColumnRow>
+                  ))}
                 </View>
               ) : productsError ? (
                 <View style={styles.errorContainer}>
@@ -2181,6 +2210,12 @@ const styles = StyleSheet.create({
     columnGap: GRID_COLUMN_GAP,
     rowGap: Spacing.lg,
     justifyContent: 'flex-start',
+  },
+  categoryRowSpacing: {
+    marginBottom: Spacing.lg,
+  },
+  gridRowSpacing: {
+    marginBottom: Spacing.xl,
   },
   suggestionsContainer: {
     paddingHorizontal: Spacing.lg,

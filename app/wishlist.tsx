@@ -17,8 +17,9 @@ import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { useGridCardWidth, GRID_COLUMN_GAP, GRID_GUTTER } from '@/src/utils/layout';
 import { ProductCard } from '@/src/components/ProductCard';
+import { TwoColumnRow } from '@/src/components/ui/TwoColumnRow';
 import { BrandEmptyState } from '@/src/components/BrandEmptyState';
-import { ProductCardSkeleton, SkeletonList } from '@/src/components/Skeleton';
+import { ProductCardSkeleton } from '@/src/components/Skeleton';
 import { ErrorRetryState } from '@/src/components/ErrorRetryState';
 import { getWishlistPage, WishlistProduct as Product } from '@/src/services/wishlistService';
 
@@ -28,7 +29,7 @@ export default function WishlistScreen() {
   const { showToast } = useToast();
   const router = useRouter();
   const { user } = useAuth();
-  const { cardWidth, columns } = useGridCardWidth();
+  const { columns } = useGridCardWidth();
 
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,10 +126,13 @@ export default function WishlistScreen() {
       </View>
 
       {loading && !refreshing && items.length === 0 ? (
-        <View style={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: GRID_COLUMN_GAP }}>
-          <SkeletonList count={6}>
-            <ProductCardSkeleton width={typeof cardWidth === 'number' ? cardWidth : 160} />
-          </SkeletonList>
+        <View style={{ paddingHorizontal: GRID_GUTTER, paddingTop: Spacing.md }}>
+          {Array.from({ length: 3 }).map((_, rowIndex) => (
+            <TwoColumnRow key={`wishlist-skel-${rowIndex}`}>
+              <ProductCardSkeleton layout="fill" />
+              <ProductCardSkeleton layout="fill" />
+            </TwoColumnRow>
+          ))}
         </View>
       ) : loadError && items.length === 0 ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: Spacing.xl }}>
