@@ -2711,7 +2711,7 @@ export type Database = {
           {
             foreignKeyName: "reviews_reservation_item_id_fkey"
             columns: ["reservation_item_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "reservation_items"
             referencedColumns: ["id"]
           },
@@ -3012,6 +3012,42 @@ export type Database = {
         }
         Relationships: []
       }
+      style_preference_events: {
+        Row: {
+          client_timestamp: string
+          created_at: string
+          event_schema_version: number
+          event_type: string
+          id: string
+          payload: Json
+          preference_action_id: string | null
+          signal_weight: number
+          user_id: string
+        }
+        Insert: {
+          client_timestamp: string
+          created_at?: string
+          event_schema_version?: number
+          event_type: string
+          id: string
+          payload?: Json
+          preference_action_id?: string | null
+          signal_weight: number
+          user_id: string
+        }
+        Update: {
+          client_timestamp?: string
+          created_at?: string
+          event_schema_version?: number
+          event_type?: string
+          id?: string
+          payload?: Json
+          preference_action_id?: string | null
+          signal_weight?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       suggested_outfits: {
         Row: {
           created_at: string | null
@@ -3148,6 +3184,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_style_profiles: {
+        Row: {
+          accessory_affinities: Json
+          created_at: string
+          event_count: number
+          explicit_preferences: Json
+          formality_affinities: Json
+          global_confidence: number
+          last_event_timestamp: string | null
+          learning_reset_at: string | null
+          palette_affinities: Json
+          projection_computed_at: string
+          schema_version: number
+          silhouette_affinities: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accessory_affinities?: Json
+          created_at?: string
+          event_count?: number
+          explicit_preferences?: Json
+          formality_affinities?: Json
+          global_confidence?: number
+          last_event_timestamp?: string | null
+          learning_reset_at?: string | null
+          palette_affinities?: Json
+          projection_computed_at?: string
+          schema_version?: number
+          silhouette_affinities?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accessory_affinities?: Json
+          created_at?: string
+          event_count?: number
+          explicit_preferences?: Json
+          formality_affinities?: Json
+          global_confidence?: number
+          last_event_timestamp?: string | null
+          learning_reset_at?: string | null
+          palette_affinities?: Json
+          projection_computed_at?: string
+          schema_version?: number
+          silhouette_affinities?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       wardrobe_items: {
         Row: {
@@ -3349,10 +3436,6 @@ export type Database = {
         }
         Returns: Json
       }
-      record_storefront_campaign_event: {
-        Args: { p_announcement_id: string; p_event: string }
-        Returns: undefined
-      }
       activate_staff_account: { Args: never; Returns: Json }
       adjust_inventory_on_hand: {
         Args: { p_delta: number; p_inventory_id: string; p_reason: string }
@@ -3368,6 +3451,10 @@ export type Database = {
         Returns: undefined
       }
       admin_prune_devices: { Args: { _cutoff: string }; Returns: number }
+      aggregate_user_style_dna: {
+        Args: { p_as_of?: string; p_user_id: string }
+        Returns: undefined
+      }
       archive_owner: {
         Args: {
           p_actor_id: string
@@ -3901,6 +3988,16 @@ export type Database = {
         Returns: Json
       }
       process_account_deletion: { Args: { _request_id: string }; Returns: Json }
+      product_search_vector: {
+        Args: {
+          p_category: string
+          p_description: string
+          p_name: string
+          p_sub_category: string
+          p_tags: string[]
+        }
+        Returns: unknown
+      }
       promote_product_complement_suggestion: {
         Args: {
           p_complementary_product_id: string
@@ -3981,6 +4078,11 @@ export type Database = {
         Args: { _client_platform: string; _user_agent?: string }
         Returns: Json
       }
+      record_storefront_campaign_event: {
+        Args: { p_announcement_id: string; p_event: string }
+        Returns: undefined
+      }
+      refresh_style_profile: { Args: { p_force?: boolean }; Returns: Json }
       register_device: {
         Args: { _fingerprint: string; _user_agent?: string }
         Returns: {
@@ -4310,6 +4412,7 @@ export type Database = {
         }
       }
       sweep_pickup_deadlines: { Args: never; Returns: Json }
+      sync_and_aggregate_style_dna: { Args: { p_events: Json }; Returns: Json }
       sync_product_stock: { Args: { p_product_id: string }; Returns: undefined }
       terminate_owner: {
         Args: {
@@ -4513,4 +4616,3 @@ export const Constants = {
     },
   },
 } as const
-
