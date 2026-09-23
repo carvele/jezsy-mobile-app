@@ -633,6 +633,7 @@ export function adaptSavedOutfitToRemix(
 
   const resolvedItems: WardrobeItem[] = [];
   const passthroughItems: WardrobeItem[] = [];
+  const missingItems: { id: string; slot?: string; name?: string }[] = [];
 
   for (const raw of rawItems) {
     const wId = raw.wardrobe_item_id || raw.id;
@@ -647,27 +648,37 @@ export function adaptSavedOutfitToRemix(
         resolvedItems.push(liveItem);
       }
     } else if (raw) {
-      // Unresolved piece (deleted or external product): keep as passthrough
-      passthroughItems.push({
-        id: wId || `unresolved_${Math.random()}`,
-        user_id: '',
-        product_id: raw.product_id || null,
-        image_url: raw.image_url || '',
-        category: raw.slot || raw.category || 'Accessory',
-        sub_category: raw.name || raw.sub_category || 'Item',
-        deleted: false,
-        created_at: '',
-        color_tags: raw.color_tags || [],
-        garment_type: raw.slot || 'accessory',
-        wear_count: 0,
-        last_worn_at: null,
-        description: null,
-        user_notes: null,
-        ai_attributes: null,
-        occasions: [],
-        seasons: [],
-        embedding: null,
-      } as unknown as WardrobeItem);
+      const hasUsableSnapshot = Boolean(raw.image_url || raw.name);
+      if (hasUsableSnapshot) {
+        // Preserved non-editable snapshot (e.g. historical look piece with image or title)
+        passthroughItems.push({
+          id: wId || `snapshot_${Math.random()}`,
+          user_id: '',
+          product_id: raw.product_id || null,
+          image_url: raw.image_url || '',
+          category: raw.slot || raw.category || 'Accessory',
+          sub_category: raw.name || raw.sub_category || 'Preserved Item',
+          deleted: false,
+          created_at: '',
+          color_tags: raw.color_tags || [],
+          garment_type: raw.slot || 'accessory',
+          wear_count: 0,
+          last_worn_at: null,
+          description: null,
+          user_notes: null,
+          ai_attributes: null,
+          occasions: [],
+          seasons: [],
+          embedding: null,
+        } as unknown as WardrobeItem);
+      } else {
+        // Deleted item without usable snapshot: record explicitly, never fabricate WardrobeItem
+        missingItems.push({
+          id: wId || 'unknown_item',
+          slot: raw.slot || undefined,
+          name: raw.name || undefined,
+        });
+      }
     }
   }
 
@@ -720,5 +731,6 @@ export function adaptSavedOutfitToRemix(
     activeCandidate: dummyCandidate,
     isDirty: false,
     error: null,
+    missingItems: missingItems.length > 0 ? missingItems : undefined,
   };
 }

@@ -37,4 +37,5 @@ export interface OutfitRemixState {
   activeCandidate: CandidateOutfit | null;
   isDirty: boolean;
   error?: string | null;
+  missingItems?: { id: string; slot?: string; name?: string }[];
 }

@@ -515,6 +515,22 @@ export function OutfitRemixModal({
                 </View>
               </View>
             )}
+
+            {remixState.missingItems && remixState.missingItems.length > 0 && (
+              <View style={[styles.passthroughSection, { borderColor: wt.cardBorder }]}>
+                <View style={styles.passthroughHeader}>
+                  <IconSymbol name="exclamationmark.triangle.fill" size={14} color={wt.statusConsiderText} />
+                  <Text style={[styles.passthroughTitle, { color: colors.secondaryText }]}>
+                    Missing Wardrobe Pieces
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 12, color: colors.secondaryText, marginTop: 4 }}>
+                  {remixState.missingItems.length === 1
+                    ? '1 piece from this saved look is no longer in your wardrobe.'
+                    : `${remixState.missingItems.length} pieces from this saved look are no longer in your wardrobe.`}
+                </Text>
+              </View>
+            )}
           </ScrollView>
 
           {/* Sticky Actions Footer */}

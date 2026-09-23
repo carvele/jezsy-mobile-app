@@ -848,7 +848,7 @@ describe('Phase E: outfitRemixService (Pure Domain Service)', () => {
   });
 
   // 34. adapt-saved-outfit
-  it('34. adaptSavedOutfitToRemix resolves live items and routes unmatched pieces to passthrough', () => {
+  it('34. adaptSavedOutfitToRemix resolves live items, routes snapshots to passthrough, and tracks missing items', () => {
     const saved = {
       id: 'saved_1',
       name: 'Favorite Summer Look',
@@ -856,7 +856,8 @@ describe('Phase E: outfitRemixService (Pure Domain Service)', () => {
         { id: 'top_1', slot: 'top' },
         { id: 'bottom_1', slot: 'bottom' },
         { id: 'shoes_1', slot: 'shoes' },
-        { id: 'acc_1', slot: 'accessory' },
+        { id: 'acc_1', slot: 'accessory', name: 'Gold Chain', image_url: 'https://example.com/chain.jpg' },
+        { id: 'deleted_item_no_snapshot', slot: 'outerwear' },
       ],
     };
 
@@ -864,8 +865,12 @@ describe('Phase E: outfitRemixService (Pure Domain Service)', () => {
     expect(state.slots.top?.item.id).toBe('top_1');
     expect(state.slots.bottom?.item.id).toBe('bottom_1');
     expect(state.slots.shoes?.item.id).toBe('shoes_1');
-    // acc_1 not in mockWardrobe -> passthroughItems
+    // acc_1 has usable snapshot -> passthroughItems
     expect(state.passthroughItems).toHaveLength(1);
+    expect(state.passthroughItems[0].id).toBe('acc_1');
+    // deleted_item_no_snapshot has no snapshot -> missingItems
+    expect(state.missingItems).toHaveLength(1);
+    expect(state.missingItems![0].id).toBe('deleted_item_no_snapshot');
     expect(state.sourceType).toBe('saved-outfit');
   });
 
