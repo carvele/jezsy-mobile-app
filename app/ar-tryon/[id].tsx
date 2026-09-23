@@ -676,7 +676,12 @@ export default function ARTryOnScreen() {
 
         // Phase 4A/4B: Push 3D transform and skinning data directly to the WebGL prototype
         if (garmentRendererRef.current && garmentMetadata) {
-          const boneRotations = calculateBoneRotationsFromCanonical(canonical, garmentMetadata.restPose, pose.orientation.rollRad);
+          const boneRotations = calculateBoneRotationsFromCanonical(
+            canonical,
+            garmentMetadata.restPose,
+            pose.orientation.rollRad,
+            garmentMetadata.category
+          );
 
           // TEMP DEBUG: throttled torso readout for the live torso-bend test. pitch goes
           // negative when bending forward, roll tracks a sideways lean, yaw a twist; all

@@ -105,7 +105,7 @@ export function calculateGarmentFit(
      // example override if rig provides specific attachment offsets
   }
 
-  // 2. Metric Anthropometric Scaling (Phase 3 -> Phase 6 3D)
+  // 2. Metric Anthropometric Scaling (Phase 3 -> Phase 6 3D -> V2 Fit Bands)
   const wl = pose.worldLandmarks;
   const [aIdx, bIdx] = useHipAnchor ? [23, 24] : [11, 12];
   let userShoulderWidthMeters = 0.4; // fallback for average human
@@ -116,15 +116,23 @@ export function calculateGarmentFit(
     userShoulderWidthMeters = Math.sqrt(dx*dx + dy*dy + dz*dz);
   }
 
-  const garmentMetricWidthMeters = metadata?.restPoseMetricWidth || (isBottomGarment ? 0.34 : (profile?.dimensions?.shoulderWidth || 0.4));
+  // V2 Profile Awareness: Read authored fit bands and coverage profile
+  const v2 = metadata?.fitProfileV2;
+  const hipBand = v2?.fitBands?.find(b => b.name === 'HIP');
+  const waistBand = v2?.fitBands?.find(b => b.name === 'WAIST');
+  const shoulderBand = v2?.fitBands?.find(b => b.name === 'SHOULDER');
+
+  const garmentMetricWidthMeters = isBottomGarment
+    ? (hipBand?.authoredWidthMeters || waistBand?.authoredWidthMeters || metadata?.restPoseMetricWidth || 0.34)
+    : (shoulderBand?.authoredWidthMeters || metadata?.restPoseMetricWidth || (profile?.dimensions?.shoulderWidth || 0.4));
   
-  // Phase 4: Category-specific clothing ease (8% for pants so garment rests naturally over silhouette)
+  // Category-specific clothing ease (8% for bottoms so garment rests naturally over silhouette)
   const garmentEase = isBottomGarment ? 1.08 : 1.0;
 
   // Horizontal target 3D scale
   const targetScaleX = ((correctedWidthPx / 100) * garmentEase) / garmentMetricWidthMeters;
 
-  // Phase 6: Vertical Fit / Leg Length scaling for trousers
+  // Multi-constraint Vertical Fit / Leg Length scaling for trousers/skirts
   let targetScaleY = targetScaleX;
   if (isBottomGarment && L[23] && L[24]) {
     const kneeL = L[25];
@@ -143,7 +151,7 @@ export function calculateGarmentFit(
     }
     if (legCount > 0) {
       legLenPx /= legCount;
-      const authoredLength = profile?.dimensions?.length || 1.0;
+      const authoredLength = v2?.coverageProfile?.authoredLengthMeters || profile?.dimensions?.length || 1.0;
       const rawScaleY = (legLenPx / 100) / authoredLength;
       targetScaleY = Math.max(targetScaleX * 0.85, Math.min(targetScaleX * 1.25, rawScaleY));
     }

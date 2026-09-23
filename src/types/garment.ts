@@ -1,4 +1,5 @@
 import type { Vec3 } from './pose';
+export type { Vec3 };
 
 // 'necklace' | 'bag' | 'earrings' are rigid, boneless accessories -- GarmentRenderer.tsx
 // already has a rigid-only render path (gated on an empty boneMap), and
@@ -48,6 +49,65 @@ export interface GarmentFitProfile {
  * `AR_READY` as proof of calibration precisely because of this. With `DEMO_RIG` the two
  * are distinguishable from the metadata alone, and that rule is retired.
  */
+export type GarmentRegion = 'upper' | 'lower' | 'full';
+
+export type FitBandName = 'WAIST' | 'HIP' | 'UPPER_THIGH' | 'KNEE' | 'HEM' | 'SHOULDER' | 'CHEST';
+
+export interface FitBand {
+  name: FitBandName;
+  heightRatio: number;
+  authoredWidthMeters: number;
+}
+
+export type CoverageExtent = 'crop' | 'regular' | 'longline' | 'shorts' | 'full';
+
+export interface CoverageProfile {
+  extent: CoverageExtent;
+  authoredLengthMeters: number;
+}
+
+export interface SkeletonProfile {
+  requiredBones: string[];
+  optionalBones: string[];
+  unusedBones: string[];
+}
+
+export interface RootAnchorProfile {
+  type: 'WAIST' | 'SHOULDER_CENTER' | 'NECK' | 'PELVIS';
+  offset: Vec3;
+}
+
+export interface ReferenceMeasurements {
+  primaryWidthMeters: number;
+  widthBasis: 'shoulder' | 'waist' | 'hip' | 'chest';
+  totalLengthMeters: number;
+  waistWidthMeters?: number;
+  hipWidthMeters?: number;
+  inseamMeters?: number;
+}
+
+export interface DeformationProfile {
+  supportedMorphs?: string[];
+}
+
+export interface GarmentFitProfileV2 {
+  version: 2;
+  region: GarmentRegion;
+  category: GarmentCategory;
+  rootAnchor: RootAnchorProfile;
+  skeletonProfile: SkeletonProfile;
+  boneMap: Record<string, string>;
+  controlPoints: Record<string, Vec3>;
+  fitBands: FitBand[];
+  coverageProfile: CoverageProfile;
+  referenceMeasurements: ReferenceMeasurements;
+  sizeProfile?: {
+    standardSize?: string;
+    easeCm?: number;
+  };
+  deformationProfile?: DeformationProfile;
+}
+
 export type IngestionStatus =
   | 'AR_READY'
   | 'NEEDS_MERCHANT_MAPPING'
@@ -76,4 +136,8 @@ export interface GarmentMetadata {
   
   // Whether this garment is modeled in T-pose or A-pose
   restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM';
+
+  // V2 Profile additions (backward compatible)
+  garmentFitProfileVersion?: 1 | 2;
+  fitProfileV2?: GarmentFitProfileV2;
 }

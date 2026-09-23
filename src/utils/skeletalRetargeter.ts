@@ -114,23 +114,13 @@ function clampQuatAngle(q: Quaternion, maxAngleRad: number): Quaternion {
 export function calculateBoneRotationsFromCanonical(
   pose: CanonicalPose,
   restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_POSE',
-  // Fix for open item #6 in the AR audit plan. When pose.torso is invalid (hips out
-  // of frame / low visibility, common at try-on framing distance), garmentFitter
-  // rotates the whole garment group by a roll-only fallback quaternion (see its
-  // CANONICAL_Y_UP_ROLL_SIGN * rollRad), but toTorsoLocal used to pass arm-direction
-  // vectors through UNCHANGED for an invalid torso -- so that same roll ended up
-  // baked into both the parent group and these child bone deltas, compounding rather
-  // than just duplicating. Passing the caller's rollRad (Y-down, poseConstructor's
-  // convention -- same value garmentFitter negates into its fallback) lets this
-  // function build the identical fallback quaternion and remove it from arm
-  // directions the same way a valid torso basis already does, so the two owners
-  // (group, bones) agree on who applies roll instead of each assuming the other
-  // isn't. Omit to preserve the exact prior (double-counting) behavior.
-  // NOT verified on a physical device -- see docs/ar-tryon-audit-implementation-plan.md.
-  fallbackRollRad?: number
+  fallbackRollRad?: number,
+  category?: import('../types/garment').GarmentCategory
 ): Record<string, Quaternion> {
   const boneRotations: Record<string, Quaternion> = {};
   const j = pose.joints;
+  const shouldComputeArms = category !== 'pants' && category !== 'skirt';
+  const shouldComputeLegs = category !== 'shirt' && category !== 'jacket';
 
   const CANONICAL_Y_UP_ROLL_SIGN = -1;
   const torsoForRetarget: CanonicalPose['torso'] =
@@ -214,58 +204,62 @@ export function calculateBoneRotationsFromCanonical(
     return normalizeVec(toTorsoLocal(torsoForRetarget, d));
   };
 
-  // Upper arms: shoulder -> elbow. Neutral arms down produce relaxed, symmetric hang.
-  const rawLArmDir = localDir(lS, lE);
-  const rawRArmDir = localDir(rS, rE);
-  const lArmDir = resolveArmDirection(rawLArmDir);
-  const rArmDir = resolveArmDirection(rawRArmDir);
+  if (shouldComputeArms) {
+    // Upper arms: shoulder -> elbow. Neutral arms down produce relaxed, symmetric hang.
+    const rawLArmDir = localDir(lS, lE);
+    const rawRArmDir = localDir(rS, rE);
+    const lArmDir = resolveArmDirection(rawLArmDir);
+    const rArmDir = resolveArmDirection(rawRArmDir);
 
-  const lArm = lArmDir ? setFromUnitVectors(lArmRest, lArmDir) : IDENTITY_QUAT;
-  const rArm = rArmDir ? setFromUnitVectors(rArmRest, rArmDir) : IDENTITY_QUAT;
-  boneRotations['LeftArm'] = lArm;
-  boneRotations['RightArm'] = rArm;
+    const lArm = lArmDir ? setFromUnitVectors(lArmRest, lArmDir) : IDENTITY_QUAT;
+    const rArm = rArmDir ? setFromUnitVectors(rArmRest, rArmDir) : IDENTITY_QUAT;
+    boneRotations['LeftArm'] = lArm;
+    boneRotations['RightArm'] = rArm;
 
-  // Forearms: elbow -> wrist, expressed relative to the upper arm (the parent in the chain).
-  const lForeDir = localDir(lE, lW);
-  const rForeDir = localDir(rE, rW);
+    // Forearms: elbow -> wrist, expressed relative to the upper arm (the parent in the chain).
+    const lForeDir = localDir(lE, lW);
+    const rForeDir = localDir(rE, rW);
 
-  function computeForearm(armDelta: Quaternion, armRest: Vec3, armDir: Vec3 | null, foreDir: Vec3 | null): Quaternion {
-    if (!armDir || !foreDir) return IDENTITY_QUAT;
-    const d = Math.max(-1, Math.min(1, armDir.x * foreDir.x + armDir.y * foreDir.y + armDir.z * foreDir.z));
-    const angle = Math.acos(d);
-    if (angle <= FOREARM_DEADZONE_RAD) {
-      return IDENTITY_QUAT;
+    function computeForearm(armDelta: Quaternion, armRest: Vec3, armDir: Vec3 | null, foreDir: Vec3 | null): Quaternion {
+      if (!armDir || !foreDir) return IDENTITY_QUAT;
+      const d = Math.max(-1, Math.min(1, armDir.x * foreDir.x + armDir.y * foreDir.y + armDir.z * foreDir.z));
+      const angle = Math.acos(d);
+      if (angle <= FOREARM_DEADZONE_RAD) {
+        return IDENTITY_QUAT;
+      }
+      const rawForeDelta = multiplyQuat(invertQuat(armDelta), setFromUnitVectors(armRest, foreDir));
+      return clampQuatAngle(rawForeDelta, MAX_ARM_BEND_RAD);
     }
-    const rawForeDelta = multiplyQuat(invertQuat(armDelta), setFromUnitVectors(armRest, foreDir));
-    return clampQuatAngle(rawForeDelta, MAX_ARM_BEND_RAD);
+
+    boneRotations['LeftForeArm'] = computeForearm(lArm, lArmRest, lArmDir, lForeDir);
+    boneRotations['RightForeArm'] = computeForearm(rArm, rArmRest, rArmDir, rForeDir);
   }
 
-  boneRotations['LeftForeArm'] = computeForearm(lArm, lArmRest, lArmDir, lForeDir);
-  boneRotations['RightForeArm'] = computeForearm(rArm, rArmRest, rArmDir, rForeDir);
+  if (shouldComputeLegs) {
+    // Upper legs: hip -> knee. Rest direction is straight down the torso-local
+    // -Y axis regardless of restPose -- unlike arms, T-pose and A-pose don't
+    // differ in leg stance, both are a neutral standing pose.
+    const legRest: Vec3 = { x: 0, y: -1, z: 0 };
+    // See clampQuatAngle's own comment: hip/knee landmark noise, not real
+    // anatomy, is what actually produces a delta anywhere near this bound.
+    const MAX_LEG_BEND_RAD = (100 * Math.PI) / 180;
+    const lLegDir = localDir(lH, lK);
+    const rLegDir = localDir(rH, rK);
+    const lUpLeg = lLegDir ? clampQuatAngle(setFromUnitVectors(legRest, lLegDir), MAX_LEG_BEND_RAD) : IDENTITY_QUAT;
+    const rUpLeg = rLegDir ? clampQuatAngle(setFromUnitVectors(legRest, rLegDir), MAX_LEG_BEND_RAD) : IDENTITY_QUAT;
+    boneRotations['LeftUpLeg'] = lUpLeg;
+    boneRotations['RightUpLeg'] = rUpLeg;
 
-  // Upper legs: hip -> knee. Rest direction is straight down the torso-local
-  // -Y axis regardless of restPose -- unlike arms, T-pose and A-pose don't
-  // differ in leg stance, both are a neutral standing pose.
-  const legRest: Vec3 = { x: 0, y: -1, z: 0 };
-  // See clampQuatAngle's own comment: hip/knee landmark noise, not real
-  // anatomy, is what actually produces a delta anywhere near this bound.
-  const MAX_LEG_BEND_RAD = (100 * Math.PI) / 180;
-  const lLegDir = localDir(lH, lK);
-  const rLegDir = localDir(rH, rK);
-  const lUpLeg = lLegDir ? clampQuatAngle(setFromUnitVectors(legRest, lLegDir), MAX_LEG_BEND_RAD) : IDENTITY_QUAT;
-  const rUpLeg = rLegDir ? clampQuatAngle(setFromUnitVectors(legRest, rLegDir), MAX_LEG_BEND_RAD) : IDENTITY_QUAT;
-  boneRotations['LeftUpLeg'] = lUpLeg;
-  boneRotations['RightUpLeg'] = rUpLeg;
-
-  // Lower legs: knee -> ankle, expressed relative to the upper leg (the parent in the chain).
-  const lCalfDir = localDir(lK, lA);
-  const rCalfDir = localDir(rK, rA);
-  boneRotations['LeftLeg'] = lCalfDir
-    ? clampQuatAngle(multiplyQuat(invertQuat(lUpLeg), setFromUnitVectors(legRest, lCalfDir)), MAX_LEG_BEND_RAD)
-    : IDENTITY_QUAT;
-  boneRotations['RightLeg'] = rCalfDir
-    ? clampQuatAngle(multiplyQuat(invertQuat(rUpLeg), setFromUnitVectors(legRest, rCalfDir)), MAX_LEG_BEND_RAD)
-    : IDENTITY_QUAT;
+    // Lower legs: knee -> ankle, expressed relative to the upper leg (the parent in the chain).
+    const lCalfDir = localDir(lK, lA);
+    const rCalfDir = localDir(rK, rA);
+    boneRotations['LeftLeg'] = lCalfDir
+      ? clampQuatAngle(multiplyQuat(invertQuat(lUpLeg), setFromUnitVectors(legRest, lCalfDir)), MAX_LEG_BEND_RAD)
+      : IDENTITY_QUAT;
+    boneRotations['RightLeg'] = rCalfDir
+      ? clampQuatAngle(multiplyQuat(invertQuat(rUpLeg), setFromUnitVectors(legRest, rCalfDir)), MAX_LEG_BEND_RAD)
+      : IDENTITY_QUAT;
+  }
 
   return boneRotations;
 }
@@ -278,8 +272,10 @@ export function calculateBoneRotationsFromCanonical(
  */
 export function calculateBoneRotations(
   worldLandmarks: WorldLandmark[],
-  restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_POSE'
+  restPose: 'T_POSE' | 'A_POSE' | 'CUSTOM' = 'T_POSE',
+  fallbackRollRad?: number,
+  category?: import('../types/garment').GarmentCategory
 ): Record<string, Quaternion> {
   if (!worldLandmarks || worldLandmarks.length < 33) return {};
-  return calculateBoneRotationsFromCanonical(normalizePose(worldLandmarks), restPose);
+  return calculateBoneRotationsFromCanonical(normalizePose(worldLandmarks), restPose, fallbackRollRad, category);
 }
