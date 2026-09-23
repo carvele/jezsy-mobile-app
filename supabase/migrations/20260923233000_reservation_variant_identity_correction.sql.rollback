@@ -1,0 +1,6 @@
+-- Rollback: 20260923233000_reservation_variant_identity_correction.sql.rollback
+-- Restores previous definitions of resolve_reservation_item_inventory_variant,
+-- create_reservation_multi, and create_reservation_multi_idempotent.
+
+DROP FUNCTION IF EXISTS public.create_reservation_multi(jsonb, text, text, text, text, uuid, text);
+DROP FUNCTION IF EXISTS public.create_reservation_multi_idempotent(uuid, jsonb, text, text, text, text, uuid, text);

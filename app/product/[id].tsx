@@ -88,6 +88,21 @@ const formatSoldCount = (count: number): string => {
   return count.toLocaleString();
 };
 
+export function resolveSelectedInventoryVariant(
+  variants: ProductVariant[],
+  selectedSize: string | null,
+  selectedColor: string | null,
+): ProductVariant | null {
+  if (!variants || variants.length === 0) return null;
+  const match = variants.find((i) =>
+    (!selectedSize || i.size === selectedSize) &&
+    (!selectedColor || !i.color || i.color.toLowerCase() === selectedColor.toLowerCase())
+  );
+  if (match) return match;
+  if (variants.length === 1) return variants[0];
+  return null;
+}
+
 export default function ProductDetailScreen() {
   const { showToast } = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -448,17 +463,8 @@ export default function ProductDetailScreen() {
     return product.stock ?? null;
   };
 
-  // Canonical inventory variant matching the customer's current size and color selection
-  const selectedVariant = useMemo(() => {
-    if (!inventory || inventory.length === 0) return null;
-    const match = inventory.find((i) =>
-      (!selectedSize || i.size === selectedSize) &&
-      (!selectedColor || !i.color || i.color.toLowerCase() === selectedColor.toLowerCase())
-    );
-    if (match) return match;
-    if (inventory.length === 1) return inventory[0];
-    return null;
-  }, [inventory, selectedSize, selectedColor]);
+  // Canonical inventory variant matching the customer's current size and color selection (pure calculation, no hook)
+  const selectedVariant = resolveSelectedInventoryVariant(inventory, selectedSize, selectedColor);
 
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
   // tracked and out of stock.

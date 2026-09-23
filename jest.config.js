@@ -11,6 +11,7 @@ module.exports = {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json', diagnostics: { warnOnly: true } }],
   },
   moduleNameMapper: {
+    '\\.(png|jpg|jpeg|gif|webp|svg)$': '<rootDir>/src/__mocks__/fileMock.js',
     '^@/(.*)$': '<rootDir>/$1',
     '^react-native-url-polyfill/auto$': '<rootDir>/src/__mocks__/react-native-url-polyfill.js',
     '^react-native-url-polyfill$': '<rootDir>/src/__mocks__/react-native-url-polyfill.js',

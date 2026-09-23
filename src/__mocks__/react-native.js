@@ -50,5 +50,10 @@ module.exports = {
   Alert: {
     alert: jest.fn(),
   },
+  FlatList: 'FlatList',
+  Image: 'Image',
+  Share: {
+    share: jest.fn(() => Promise.resolve()),
+  },
   StatusBar: () => null,
 };

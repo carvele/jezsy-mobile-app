@@ -1,0 +1,22 @@
+diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreensModule.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreensModule.kt
+--- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreensModule.kt
++++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreensModule.kt
+@@ -56,9 +56,15 @@ class ScreensModule(
+ 
+     private fun setupFabric() {
+         val fabricUIManager =
+-            UIManagerHelper.getUIManager(reactContext, UIManagerType.FABRIC) as FabricUIManager
+-        proxy?.apply {
+-            nativeAddMutationsListener(fabricUIManager)
++            UIManagerHelper.getUIManager(
++                reactContext,
++                UIManagerType.FABRIC
++            ) as? FabricUIManager
++
++        if (fabricUIManager != null) {
++            proxy?.apply {
++                nativeAddMutationsListener(fabricUIManager)
++            }
+         }
+     }
+ 
