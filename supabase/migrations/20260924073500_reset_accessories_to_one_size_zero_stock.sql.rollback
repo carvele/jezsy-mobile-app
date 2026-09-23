@@ -1,0 +1,30 @@
+-- Rollback: 20260924073500_reset_accessories_to_one_size_zero_stock.sql.rollback
+-- Restores accessory products and inventory from backup tables
+
+-- 1. Restore products
+UPDATE public.products p
+SET 
+  sizes = b.sizes,
+  stock = b.stock,
+  status = b.status,
+  updated_at = now()
+FROM public._backup_accessory_products_20260924 b
+WHERE p.id = b.id;
+
+-- 2. Restore inventory
+UPDATE public.inventory inv
+SET 
+  size = b.size,
+  available = b.available,
+  total = b.total,
+  reserved = b.reserved,
+  deleted = b.deleted,
+  deleted_at = b.deleted_at,
+  variant_sku = b.variant_sku,
+  updated_at = now()
+FROM public._backup_accessory_inventory_20260924 b
+WHERE inv.id = b.id;
+
+-- 3. Drop backup tables
+DROP TABLE IF EXISTS public._backup_accessory_inventory_20260924;
+DROP TABLE IF EXISTS public._backup_accessory_products_20260924;
