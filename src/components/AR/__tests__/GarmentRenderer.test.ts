@@ -143,6 +143,78 @@ describe('GarmentRenderer generated document syntax', () => {
 
       // Verify the script can be parsed without SyntaxError by the JavaScript engine
       expect(() => new Function(scriptCode)).not.toThrow();
+
+      // Verify safeRestPoseMetricWidth and REST_POSE_METRIC_WIDTH are declared
+      expect(scriptCode).toContain('const REST_POSE_METRIC_WIDTH = 0.35;');
+      expect(scriptCode).toContain('const safeRestPoseMetricWidth = REST_POSE_METRIC_WIDTH;');
+      expect(scriptCode).not.toContain('targetWorldWidth');
+    } finally {
+      if (renderer) act(() => renderer.unmount());
+      delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
+    }
+  });
+
+  it('safely handles V1 top garment metadata without ReferenceError', () => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    let renderer: any;
+    try {
+      act(() => {
+        renderer = create(React.createElement(GarmentRenderer, {
+          modelUrl: 'https://example.com/shirt.glb',
+          metadata: {
+            id: 'shirt-1',
+            category: 'shirt',
+            calibrationVersion: '1.0',
+            anchorConfidence: 'merchant_confirmed',
+            anchorType: 'SHOULDER_CENTER',
+            restPoseMetricWidth: 0.45,
+            boneMap: {},
+            restPose: 'T_POSE',
+            ingestionStatus: 'AR_READY',
+            anatomicalAnchorOffset: { x: 0, y: 1.35, z: 0 },
+          },
+        }));
+      });
+      const document = renderer.root.findByType('iframe').props.srcDoc as string;
+      const scriptMatches = Array.from(document.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi));
+      expect(scriptMatches.length).toBeGreaterThan(0);
+      const scriptCode = scriptMatches[0][1];
+
+      expect(scriptCode).toContain('const REST_POSE_METRIC_WIDTH = 0.45;');
+      expect(scriptCode).toContain('const safeRestPoseMetricWidth = REST_POSE_METRIC_WIDTH;');
+      expect(() => new Function(scriptCode)).not.toThrow();
+    } finally {
+      if (renderer) act(() => renderer.unmount());
+      delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
+    }
+  });
+
+  it('safely handles missing or invalid restPoseMetricWidth with null fallback', () => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    let renderer: any;
+    try {
+      act(() => {
+        renderer = create(React.createElement(GarmentRenderer, {
+          modelUrl: 'https://example.com/uncalibrated.glb',
+          metadata: {
+            id: 'uncalibrated-1',
+            category: 'jacket',
+            calibrationVersion: '1.0',
+            restPoseMetricWidth: NaN,
+            boneMap: {},
+            restPose: 'T_POSE',
+            ingestionStatus: 'PENDING',
+          } as any,
+        }));
+      });
+      const document = renderer.root.findByType('iframe').props.srcDoc as string;
+      const scriptMatches = Array.from(document.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi));
+      expect(scriptMatches.length).toBeGreaterThan(0);
+      const scriptCode = scriptMatches[0][1];
+
+      expect(scriptCode).toContain('const REST_POSE_METRIC_WIDTH = null;');
+      expect(scriptCode).toContain('const safeRestPoseMetricWidth = REST_POSE_METRIC_WIDTH;');
+      expect(() => new Function(scriptCode)).not.toThrow();
     } finally {
       if (renderer) act(() => renderer.unmount());
       delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;

@@ -269,6 +269,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           const GARMENT_CATEGORY = ${metadata ? safeStringify(metadata.category) : 'null'};
           const IS_BOTTOM_GARMENT = ['pants', 'skirt', 'bottoms', 'trousers', 'jeans', 'shorts'].includes(String(GARMENT_CATEGORY || '').toLowerCase());
           const V2_PROFILE = ${metadata?.fitProfileV2 ? safeStringify(metadata.fitProfileV2) : 'null'};
+          const REST_POSE_METRIC_WIDTH = ${safeRestPoseMetricWidth !== undefined ? safeRestPoseMetricWidth : 'null'};
+          const safeRestPoseMetricWidth = REST_POSE_METRIC_WIDTH;
 
           if (AR_DEBUG) {
             console.log('[AR-V2-METADATA-VERIFY]', JSON.stringify({
@@ -1085,10 +1087,10 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     // Fix for #27 in the AR audit plan: this block's similar-triangles
                     // distance formula assumed the measured shoulder pixel width is always
                     // the frontal width, but it foreshortens by cos(yaw) exactly like
-                    // targetWorldWidth below -- so turning away made a constant real distance
+                    // targetFittingWidth below -- so turning away made a constant real distance
                     // read as progressively farther (confirmed live: yaw -49deg -> 1.1-1.2m,
                     // yaw -50 to -68deg -> 1.67-1.72m, frontal baseline ~0.9m, no actual
-                    // movement). Hoisted from its original spot next to targetWorldWidth further
+                    // movement). Hoisted from its original spot next to targetFittingWidth further
                     // down so both foreshortening corrections share one yaw read per frame.
                     //
                     // Fix for #17 in the AR audit plan (2026-09-02, per that day's decision to
@@ -1247,7 +1249,11 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         ? (aggregatedBottomWidth || (V2_PROFILE && V2_PROFILE.referenceMeasurements && (V2_PROFILE.referenceMeasurements.hipWidthMeters || V2_PROFILE.referenceMeasurements.waistWidthMeters || V2_PROFILE.referenceMeasurements.primaryWidthMeters)))
                         : (v2ShoulderBand && v2ShoulderBand.authoredWidthMeters || (V2_PROFILE && V2_PROFILE.referenceMeasurements && V2_PROFILE.referenceMeasurements.primaryWidthMeters));
 
-                      const garmentMetricWidth = v2MetricWidth || (safeRestPoseMetricWidth !== undefined ? safeRestPoseMetricWidth : measuredMeshWidth);
+                      const garmentMetricWidth = (v2MetricWidth && Number.isFinite(v2MetricWidth) && v2MetricWidth > 0)
+                        ? v2MetricWidth
+                        : (REST_POSE_METRIC_WIDTH !== null && Number.isFinite(REST_POSE_METRIC_WIDTH) && REST_POSE_METRIC_WIDTH > 0
+                            ? REST_POSE_METRIC_WIDTH
+                            : (Number.isFinite(measuredMeshWidth) && measuredMeshWidth > 0 ? measuredMeshWidth : 0.4));
                       const fitModifier = FIT_MODIFIER;
 
                       // BodyFitState Semantics & Stability:
@@ -1429,7 +1435,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       if (shouldLog) {
                         if (AR_DEBUG) {
                           console.log('[AR-DEBUG-FRAME] transformValid=' + transformValid
-                            + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
+                            + ' targetFittingWidth=' + targetFittingWidth.toFixed(4)
                             + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
                             + ' exactScale=' + resolvedScale.x.toFixed(4)
                             + ' exactScaleY=' + resolvedScale.y.toFixed(4)
@@ -1447,7 +1453,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                             + ' boneRotations=' + JSON.stringify(boneRotations));
                         }
                         // TEMP DEBUG: remove once blazer visibility is root-caused.
-                        showDebug('valid=' + transformValid + ' width=' + targetWorldWidth.toFixed(3)
+                        showDebug('valid=' + transformValid + ' width=' + targetFittingWidth.toFixed(3)
                           + ' metricW=' + garmentMetricWidth.toFixed(3) + ' scale=' + resolvedScale.x.toFixed(3)
                           + ' groupScale=' + garmentGroup.scale.x.toFixed(3)
                           + ' groupPos=(' + garmentGroup.position.x.toFixed(2) + ',' + garmentGroup.position.y.toFixed(2) + ',' + garmentGroup.position.z.toFixed(2) + ')'
