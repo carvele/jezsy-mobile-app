@@ -29,6 +29,7 @@ interface Props {
   isSaved?: boolean;
   isSaving?: boolean;
   isTransferring?: boolean;
+  onRemix?: (look: StylingOption) => void;
 }
 
 export function StyleAdvisorLookCard({
@@ -37,6 +38,7 @@ export function StyleAdvisorLookCard({
   onSave,
   onOpenMannequin,
   onRefine,
+  onRemix,
   isSaved = false,
   isSaving = false,
   isTransferring = false,
@@ -251,6 +253,28 @@ export function StyleAdvisorLookCard({
             </View>
           )}
         </TouchableOpacity>
+
+        {/* Remix button */}
+        {onRemix && (
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              styles.mannequinBtn,
+              { borderColor: wt.cardBorder, backgroundColor: wt.cardSurfaceSubtle },
+            ]}
+            onPress={() => {
+              tapLight();
+              onRemix(look);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Remix this look"
+          >
+            <View style={styles.btnInnerRow}>
+              <IconSymbol name="shuffle" size={14} color={wt.actionSecondaryText} />
+              <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]}>Remix</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Refine toggle button */}
         {onRefine && (

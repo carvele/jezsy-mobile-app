@@ -39,6 +39,9 @@ import {
 } from '@/src/types/styleAdvisor';
 import { StyleAdvisorLookCard } from '@/src/components/styling/StyleAdvisorLookCard';
 import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
+import { OutfitRemixModal } from '@/src/components/styling/OutfitRemixModal';
+import { adaptStyleAdvisorLookToRemix } from '@/src/services/styling/outfitRemixService';
+import { OutfitRemixState, OutfitRemixResult } from '@/src/types/outfitRemix';
 import { supabase } from '@/src/lib/supabase';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
@@ -81,6 +84,11 @@ export default function StyleAdvisorScreen() {
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [transferringKey, setTransferringKey] = useState<string | null>(null);
+
+  // Outfit Remix state
+  const [remixModalVisible, setRemixModalVisible] = useState(false);
+  const [remixInitialState, setRemixInitialState] = useState<OutfitRemixState | null>(null);
+  const [remixLookIndex, setRemixLookIndex] = useState<number>(-1);
 
   // Load wardrobe & profile
   useEffect(() => {
@@ -341,6 +349,90 @@ export default function StyleAdvisorScreen() {
     [session?.user?.id, transferringKey, router, showToast]
   );
 
+  // Outfit Remix Handlers
+  const handleOpenRemix = useCallback(
+    (look: StylingOption, index: number) => {
+      if (!sessionState) return;
+      const initial = adaptStyleAdvisorLookToRemix(
+        look,
+        items,
+        sessionState.intent,
+        sessionState.lockedWardrobeItemIds
+      );
+      setRemixInitialState(initial);
+      setRemixLookIndex(index);
+      setRemixModalVisible(true);
+    },
+    [sessionState, items]
+  );
+
+  const handleApplyRemix = useCallback(
+    (result: OutfitRemixResult) => {
+      if (!sessionState || remixLookIndex < 0) return;
+      const currentLook = sessionState.options[remixLookIndex];
+      if (!currentLook) return;
+
+      const updatedLook: StylingOption = {
+        ...currentLook,
+        items: result.items,
+        key: result.outfitKey,
+        score: result.score,
+        headline: result.headline,
+        label: result.label,
+        whyThisWorks: result.whyThisWorks,
+      };
+
+      const nextOptions = [...sessionState.options];
+      nextOptions[remixLookIndex] = updatedLook;
+      setSessionState({
+        ...sessionState,
+        options: nextOptions,
+      });
+      showToast('Outfit updated.', 'success');
+    },
+    [sessionState, remixLookIndex, showToast]
+  );
+
+  const handleSaveRemix = useCallback(
+    async (result: OutfitRemixResult) => {
+      if (!sessionState || remixLookIndex < 0) return;
+      const currentLook = sessionState.options[remixLookIndex];
+      const remixedOption: StylingOption = {
+        candidateId: result.outfitKey,
+        items: result.items,
+        key: result.outfitKey,
+        score: result.score,
+        headline: result.headline,
+        label: result.label,
+        whyThisWorks: result.whyThisWorks,
+        intentMatch: currentLook?.intentMatch || 'Remixed match',
+        isAiRanked: false,
+        assessment: currentLook?.assessment || 'Appropriate for this occasion',
+      };
+      await handleSaveLook(remixedOption);
+    },
+    [sessionState, remixLookIndex, handleSaveLook]
+  );
+
+  const handleMannequinRemix = useCallback(
+    async (result: OutfitRemixResult) => {
+      const dummyOption: StylingOption = {
+        candidateId: result.outfitKey,
+        items: result.items,
+        key: result.outfitKey,
+        score: result.score,
+        headline: result.headline,
+        label: result.label,
+        whyThisWorks: result.whyThisWorks,
+        intentMatch: 'Match',
+        isAiRanked: false,
+        assessment: 'Appropriate for this occasion',
+      };
+      await handleOpenInMannequin(dummyOption);
+    },
+    [handleOpenInMannequin]
+  );
+
   const canStyle = (prompt.trim().length > 0 || selectedOccasion !== null || lockedGarment !== null) && items.length > 0;
 
   return (
@@ -599,6 +691,7 @@ export default function StyleAdvisorScreen() {
                   onSave={handleSaveLook}
                   onOpenMannequin={handleOpenInMannequin}
                   onRefine={handleRefine}
+                  onRemix={(look) => handleOpenRemix(look, idx)}
                   isSaved={savedKeys.has(opt.key)}
                   isSaving={savingKey === opt.key}
                   isTransferring={transferringKey === opt.key}
@@ -608,6 +701,17 @@ export default function StyleAdvisorScreen() {
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <OutfitRemixModal
+        visible={remixModalVisible}
+        onClose={() => setRemixModalVisible(false)}
+        initialState={remixInitialState}
+        wardrobe={items}
+        onApply={handleApplyRemix}
+        onSave={handleSaveRemix}
+        onOpenMannequin={handleMannequinRemix}
+        saving={savingKey !== null}
+      />
     </SafeAreaView>
   );
 }

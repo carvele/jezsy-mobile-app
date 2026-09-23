@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { randomUUID } from 'expo-crypto';
 
-export type TransientTransferSource = 'style-advisor' | 'passive-outfits';
+export type TransientTransferSource = 'style-advisor' | 'passive-outfits' | 'saved-outfits';
 
 export interface TransientMannequinPayload {
   version: 1;
@@ -63,7 +63,7 @@ export function isValidPayloadSchema(payload: unknown): payload is TransientMann
   if (typeof p.expiresAt !== 'number' || !Number.isFinite(p.expiresAt)) return false;
   if (p.expiresAt < p.createdAt) return false;
 
-  if (p.source !== 'style-advisor' && p.source !== 'passive-outfits') return false;
+  if (p.source !== 'style-advisor' && p.source !== 'passive-outfits' && p.source !== 'saved-outfits') return false;
 
   return true;
 }

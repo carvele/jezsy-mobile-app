@@ -36,6 +36,9 @@ import { useTourCoachmark, TourCoachmarkBanner } from '@/src/features/systemTour
 import { useSharedBottomInset } from '@/src/hooks/useFloatingTabBarMetrics';
 import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
 import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
+import { OutfitRemixModal } from '@/src/components/styling/OutfitRemixModal';
+import { adaptPassiveOutfitToRemix } from '@/src/services/styling/outfitRemixService';
+import { OutfitRemixState, OutfitRemixResult } from '@/src/types/outfitRemix';
 
 const { width } = Dimensions.get('window');
 const OUTFIT_CARD_WIDTH = width - 40;
@@ -287,6 +290,12 @@ export default function WardrobeScreen() {
   const presentedKeysRef = useRef<Set<string>>(new Set());
   const SUGGESTION_DISPLAY_LIMIT = 3;
 
+  // Outfit Remix state for Suggested for You
+  const [remixModalVisible, setRemixModalVisible] = useState(false);
+  const [remixInitialState, setRemixInitialState] = useState<OutfitRemixState | null>(null);
+  const [remixTargetOutfitKey, setRemixTargetOutfitKey] = useState<string | null>(null);
+  const [remixedDrafts, setRemixedDrafts] = useState<Map<string, GeneratedOutfit>>(new Map());
+
   // Load exposure history from localExposureService (with non-destructive legacy migration)
   useEffect(() => {
     const userId = session?.user?.id;
@@ -322,6 +331,7 @@ export default function WardrobeScreen() {
     const userId = session?.user?.id;
     if (!userId || suggestions.length === 0) return;
     for (const o of suggestions) {
+      if ((o as any).isRemixedDraft) continue; // Phase E: Zero presentation exposure for remixed drafts
       if (!presentedKeysRef.current.has(o.key)) {
         presentedKeysRef.current.add(o.key);
         const itemIds = o.items.map((i) => i.id);
@@ -362,10 +372,14 @@ export default function WardrobeScreen() {
   const handlePassSuggestion = useCallback((outfit: GeneratedOutfit) => {
     const userId = session?.user?.id;
     if (!userId) return;
-    const itemIds = outfit.items.map((i) => i.id);
-    localExposureService.logInteraction(userId, outfit.key, 'passed', itemIds).then(() => {
-      localExposureService.getExposureHistory(userId).then(setExposureHistory).catch(() => {});
-    }).catch(() => {});
+
+    // Phase E: Strictly DO NOT log exposure interaction for remixed drafts
+    if (!(outfit as any).isRemixedDraft) {
+      const itemIds = outfit.items.map((i) => i.id);
+      localExposureService.logInteraction(userId, outfit.key, 'passed', itemIds).then(() => {
+        localExposureService.getExposureHistory(userId).then(setExposureHistory).catch(() => {});
+      }).catch(() => {});
+    }
 
     outfitFeedbackService.logFeedback(
       {
@@ -407,11 +421,13 @@ export default function WardrobeScreen() {
         outfit.items as any
       ).catch(() => {});
 
-      // Record saved interaction in local exposure history for cooldown tracking
-      const itemIds = outfit.items.map((i) => i.id);
-      localExposureService.logInteraction(session.user.id, outfit.key, 'saved', itemIds).then(() => {
-        localExposureService.getExposureHistory(session.user.id).then(setExposureHistory).catch(() => {});
-      }).catch(() => {});
+      // Phase E: Strictly DO NOT log exposure interaction for remixed drafts
+      if (!(outfit as any).isRemixedDraft) {
+        const itemIds = outfit.items.map((i) => i.id);
+        localExposureService.logInteraction(session.user.id, outfit.key, 'saved', itemIds).then(() => {
+          localExposureService.getExposureHistory(session.user.id).then(setExposureHistory).catch(() => {});
+        }).catch(() => {});
+      }
 
       showToast('Outfit saved to your wardrobe.', 'success');
       fetchWardrobeData();
@@ -444,6 +460,65 @@ export default function WardrobeScreen() {
       showToast('Could not open in Mannequin. Please try again.', 'error');
     }
   }, [session?.user?.id, router, showToast]);
+
+  // Outfit Remix Handlers for Suggested for You
+  const handleOpenRemix = useCallback((outfit: GeneratedOutfit) => {
+    const initial = adaptPassiveOutfitToRemix(outfit, items);
+    setRemixInitialState(initial);
+    setRemixTargetOutfitKey(outfit.key);
+    setRemixModalVisible(true);
+  }, [items]);
+
+  const handleApplyRemix = useCallback((result: OutfitRemixResult) => {
+    if (!remixTargetOutfitKey) return;
+    const remixedOutfit: GeneratedOutfit = {
+      key: result.outfitKey,
+      items: result.items as any,
+      score: result.score,
+      label: result.label,
+      headline: result.headline,
+      reason: result.whyThisWorks?.summary || 'Remixed combination',
+      whyThisWorks: result.whyThisWorks as any,
+      isAiRanked: false,
+      assessment: 'Appropriate for this occasion',
+      isRemixedDraft: true,
+    } as any;
+
+    setRemixedDrafts((prev) => new Map(prev).set(remixTargetOutfitKey, remixedOutfit));
+    showToast('Outfit updated in feed.', 'success');
+  }, [remixTargetOutfitKey, showToast]);
+
+  const handleSaveRemix = useCallback((result: OutfitRemixResult) => {
+    const remixedOutfit: GeneratedOutfit = {
+      key: result.outfitKey,
+      items: result.items as any,
+      score: result.score,
+      label: result.label,
+      headline: result.headline,
+      reason: result.whyThisWorks?.summary || 'Remixed combination',
+      whyThisWorks: result.whyThisWorks as any,
+      isAiRanked: false,
+      assessment: 'Appropriate for this occasion',
+      isRemixedDraft: true,
+    } as any;
+    handleSaveSuggestion(remixedOutfit);
+  }, [handleSaveSuggestion]);
+
+  const handleMannequinRemix = useCallback((result: OutfitRemixResult) => {
+    const remixedOutfit: GeneratedOutfit = {
+      key: result.outfitKey,
+      items: result.items as any,
+      score: result.score,
+      label: result.label,
+      headline: result.headline,
+      reason: result.whyThisWorks?.summary || 'Remixed combination',
+      whyThisWorks: result.whyThisWorks as any,
+      isAiRanked: false,
+      assessment: 'Appropriate for this occasion',
+      isRemixedDraft: true,
+    } as any;
+    handleOpenInMannequin(remixedOutfit);
+  }, [handleOpenInMannequin]);
 
   const renderItem = useCallback(({ item, index }: { item: WardrobeItem; index: number }) => {
     // Use the computed effective bucket so a stale garment_type column never shows wrong info.
@@ -865,18 +940,22 @@ export default function WardrobeScreen() {
                 Curated looks composed from your wardrobe and scored for color and style harmony.
               </Text>
               {suggestions.length > 0 ? (
-                suggestions.map((o, i) => (
-                  <FadeInView key={o.key} index={i}>
-                    <SuggestedOutfitCard
-                      outfit={o}
-                      onSave={handleSaveSuggestion}
-                      onPass={handlePassSuggestion}
-                      onOpenMannequin={handleOpenInMannequin}
-                      saving={savingKey === o.key}
-                      variant="atelier"
-                    />
-                  </FadeInView>
-                ))
+                suggestions.map((o, i) => {
+                  const displayOutfit = remixedDrafts.get(o.key) || o;
+                  return (
+                    <FadeInView key={o.key} index={i}>
+                      <SuggestedOutfitCard
+                        outfit={displayOutfit}
+                        onSave={handleSaveSuggestion}
+                        onPass={handlePassSuggestion}
+                        onOpenMannequin={handleOpenInMannequin}
+                        onRemix={handleOpenRemix}
+                        saving={savingKey === o.key}
+                        variant="atelier"
+                      />
+                    </FadeInView>
+                  );
+                })
               ) : (
                 <View style={[styles.exhaustedBox, { backgroundColor: wt.cardSurfaceSubtle, borderColor: wt.cardBorder }]}>
                   <Text style={[styles.exhaustedTitle, { color: colors.text }]}>All Caught Up</Text>
@@ -1032,6 +1111,17 @@ export default function WardrobeScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <OutfitRemixModal
+        visible={remixModalVisible}
+        onClose={() => setRemixModalVisible(false)}
+        initialState={remixInitialState}
+        wardrobe={items}
+        onApply={handleApplyRemix}
+        onSave={handleSaveRemix}
+        onOpenMannequin={handleMannequinRemix}
+        saving={savingKey !== null}
+      />
     </SafeAreaView>
   );
 }

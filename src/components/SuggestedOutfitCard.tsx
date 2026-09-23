@@ -20,6 +20,8 @@ interface Props {
   variant?: 'legacy' | 'atelier';
   /** Optional callback for Open in Mannequin (saved outfits only). */
   onOpenMannequin?: (outfit: any) => void;
+  /** Optional callback for Remixing the outfit. */
+  onRemix?: (outfit: any) => void;
 }
 
 // Status badge colors derived from WardrobeTokens for atelier; legacy uses inline originals.
@@ -88,6 +90,7 @@ export function SuggestedOutfitCard({
   onPass,
   variant = 'legacy',
   onOpenMannequin,
+  onRemix,
 }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -248,6 +251,18 @@ export function SuggestedOutfitCard({
           >
             <IconSymbol name="sparkles" size={13} color={wt.actionSecondaryText} />
             <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Mannequin</Text>
+          </TouchableOpacity>
+        )}
+
+        {onRemix && (
+          <TouchableOpacity
+            style={[atelierStyles.passBtn, { borderColor: wt.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+            onPress={() => { tapLight(); onRemix(outfit); }}
+            accessibilityRole="button"
+            accessibilityLabel="Remix this outfit"
+          >
+            <IconSymbol name="shuffle" size={13} color={wt.actionSecondaryText} />
+            <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Remix</Text>
           </TouchableOpacity>
         )}
 
