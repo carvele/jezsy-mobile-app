@@ -448,6 +448,18 @@ export default function ProductDetailScreen() {
     return product.stock ?? null;
   };
 
+  // Canonical inventory variant matching the customer's current size and color selection
+  const selectedVariant = useMemo(() => {
+    if (!inventory || inventory.length === 0) return null;
+    const match = inventory.find((i) =>
+      (!selectedSize || i.size === selectedSize) &&
+      (!selectedColor || !i.color || i.color.toLowerCase() === selectedColor.toLowerCase())
+    );
+    if (match) return match;
+    if (inventory.length === 1) return inventory[0];
+    return null;
+  }, [inventory, selectedSize, selectedColor]);
+
   // Purchase gating: block Add-to-Bag and Reserve when the chosen size is
   // tracked and out of stock.
   const needsSize = isMultiSize;
@@ -958,11 +970,7 @@ export default function ProductDetailScreen() {
             style={[styles.iconAction, { borderColor: colors.border, opacity: canPurchase ? 1 : 0.4 }]}
             onPress={() => {
               if (product && canPurchase) {
-                const matchingVariant = inventory.find((i) =>
-                  (!selectedSize || i.size === selectedSize) &&
-                  (!selectedColor || !i.color || i.color.toLowerCase() === selectedColor.toLowerCase())
-                );
-                const variantId = matchingVariant?.id || `${product.id}:${selectedSize ?? ''}:${selectedColor ?? ''}`;
+                const variantId = selectedVariant?.id || `${product.id}:${selectedSize ?? ''}:${selectedColor ?? ''}`;
                 addToCart(
                   product,
                   variantId,
@@ -1034,6 +1042,7 @@ export default function ProductDetailScreen() {
                     id: product.id,
                     size: selectedSize || '',
                     color: selectedColor || '',
+                    inventoryId: selectedVariant?.id || '',
                   });
                   setSoftAuthVisible(true);
                   return;
@@ -1050,7 +1059,12 @@ export default function ProductDetailScreen() {
                 }
                 router.push({
                   pathname: "/reserve/[id]",
-                  params: { id: product.id, size: selectedSize || "", color: selectedColor || "" },
+                  params: {
+                    id: product.id,
+                    size: selectedSize || "",
+                    color: selectedColor || "",
+                    inventoryId: selectedVariant?.id || "",
+                  },
                 });
               }}
               disabled={!canPurchase}

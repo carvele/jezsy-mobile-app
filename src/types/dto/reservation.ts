@@ -3,6 +3,7 @@ export interface ReservationItemInput {
   size?: string | null;
   color?: string | null;
   quantity: number;
+  inventory_id?: string | null;
 }
 
 export interface CreateReservationInput {

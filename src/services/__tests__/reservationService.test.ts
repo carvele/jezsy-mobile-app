@@ -58,6 +58,68 @@ describe('reservationService', () => {
       expect(captureSpy).not.toHaveBeenCalled();
     });
 
+    it('successfully reserves an item with canonical inventory_id and preserved size', async () => {
+      (supabase.rpc as jest.Mock).mockResolvedValueOnce({
+        data: {
+          display_id: 'RES-2026-002',
+          rental_price: 99,
+          idempotency_key: '550e8400-e29b-41d4-a716-446655440001',
+          items: [
+            {
+              product_id: 'af0e3580-f2ec-452b-b3fb-2ffda346fba0',
+              size: 'One Size',
+              color: 'Pink',
+              quantity: 1,
+              inventory_id: '1e309178-2afd-42f4-9218-24ad753c1fba',
+            },
+          ],
+        },
+        error: null,
+      });
+
+      const result = await reservationService.reserve({
+        idempotencyKey: '550e8400-e29b-41d4-a716-446655440001',
+        items: [
+          {
+            product_id: 'af0e3580-f2ec-452b-b3fb-2ffda346fba0',
+            size: 'One Size',
+            color: 'Pink',
+            quantity: 1,
+            inventory_id: '1e309178-2afd-42f4-9218-24ad753c1fba',
+          },
+        ],
+        date: null,
+        appointmentTime: null,
+        paymentOption: 'deposit',
+        pickupTermsVersion: 'v2026-09-pickup',
+      });
+
+      expect(supabase.rpc).toHaveBeenCalledWith('create_reservation_multi_idempotent', {
+        _idempotency_key: '550e8400-e29b-41d4-a716-446655440001',
+        _items: [
+          {
+            product_id: 'af0e3580-f2ec-452b-b3fb-2ffda346fba0',
+            size: 'One Size',
+            color: 'Pink',
+            quantity: 1,
+            inventory_id: '1e309178-2afd-42f4-9218-24ad753c1fba',
+          },
+        ],
+        _date: null,
+        _appointment_time: null,
+        _receipt_path: undefined,
+        _payment_option: 'deposit',
+        _customer_id: undefined,
+        _pickup_terms_version: 'v2026-09-pickup',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.display_id).toBe('RES-2026-002');
+        expect(result.data.rental_price).toBe(99);
+      }
+    });
+
     it('maps authentication required error to ERR_AUTH_REQUIRED', async () => {
       (supabase.rpc as jest.Mock).mockResolvedValueOnce({
         data: null,

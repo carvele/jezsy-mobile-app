@@ -40,6 +40,7 @@ type ReservationLine = {
   size?: string;
   color?: string;
   quantity: number;
+  inventoryId?: string;
 };
 
 // The bag reserves everything in it under one appointment, addressed as
@@ -48,8 +49,8 @@ const CART_ROUTE_ID = "cart";
 
 // Strips placeholder/sentinel color and size strings so the inventory variant
 // lookup on the server receives null rather than a value like "Color Default"
-// that has no matching inventory row.
-const SENTINEL_VALUES = new Set(['default', 'color default', 'size default', 'standard', 'one size', 'n/a', '']);
+// that has no matching inventory row. Valid sizes (such as "One Size") are preserved.
+const SENTINEL_VALUES = new Set(['default', 'color default', 'size default', 'standard', 'n/a', '']);
 function normalizeVariantValue(v: string | null | undefined): string | null {
   if (!v) return null;
   return SENTINEL_VALUES.has(v.toLowerCase().trim()) ? null : v.trim();
@@ -57,11 +58,12 @@ function normalizeVariantValue(v: string | null | undefined): string | null {
 
 export default function ReservationScreen() {
   const { showToast } = useToast();
-  const { id, size, color, itemIds } = useLocalSearchParams<{
+  const { id, size, color, itemIds, inventoryId } = useLocalSearchParams<{
     id: string;
     size: string;
     color: string;
     itemIds: string;
+    inventoryId?: string;
   }>();
   const isCartMode = id === CART_ROUTE_ID;
   const { items: cartItems, removeItems } = useCart();
@@ -163,13 +165,26 @@ export default function ReservationScreen() {
     fetchProductAndInventory();
   }, [id, isCartMode, itemIds, cartItems]);
 
-  const resolveVariantForProduct = useCallback((productId: string, rawSize?: string, rawColor?: string) => {
+  const resolveVariantForProduct = useCallback((productId: string, rawSize?: string, rawColor?: string, hintInventoryId?: string) => {
     const invList = inventoryByProduct.get(productId) || [];
     const activeInv = invList.filter((i) => !i.deleted);
+
+    // 0. Explicit inventory ID hint (e.g. passed from product page or cart variantId)
+    if (hintInventoryId) {
+      const match = activeInv.find((i) => i.id === hintInventoryId);
+      if (match) {
+        return {
+          inventoryId: match.id,
+          size: match.size ?? null,
+          color: match.color ?? null,
+        };
+      }
+    }
 
     // 1. 1-of-1 product or single active inventory row: bind directly to its exact DB variant
     if (activeInv.length === 1) {
       return {
+        inventoryId: activeInv[0].id,
         size: activeInv[0].size ?? null,
         color: activeInv[0].color ?? null,
       };
@@ -185,20 +200,23 @@ export default function ReservationScreen() {
           (i.size || '').trim().toLowerCase() === cleanSize &&
           (i.color || '').trim().toLowerCase() === cleanColor
       );
-      if (exact) return { size: exact.size ?? null, color: exact.color ?? null };
+      if (exact) return { inventoryId: exact.id, size: exact.size ?? null, color: exact.color ?? null };
 
       if (cleanSize) {
         const sizeMatch = activeInv.find((i) => (i.size || '').trim().toLowerCase() === cleanSize);
-        if (sizeMatch) return { size: sizeMatch.size ?? null, color: sizeMatch.color ?? null };
+        if (sizeMatch) return { inventoryId: sizeMatch.id, size: sizeMatch.size ?? null, color: sizeMatch.color ?? null };
       }
 
       if (cleanColor) {
         const colorMatch = activeInv.find((i) => (i.color || '').trim().toLowerCase() === cleanColor);
-        if (colorMatch) return { size: colorMatch.size ?? null, color: colorMatch.color ?? null };
+        if (colorMatch) return { inventoryId: colorMatch.id, size: colorMatch.size ?? null, color: colorMatch.color ?? null };
       }
     }
 
+    const isUuid = hintInventoryId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hintInventoryId);
+
     return {
+      inventoryId: isUuid ? hintInventoryId : undefined,
       size: rawSize && rawSize.trim() ? rawSize.trim() : null,
       color: rawColor && rawColor.trim() ? rawColor.trim() : null,
     };
@@ -213,26 +231,28 @@ export default function ReservationScreen() {
       return scopedItems.map((item) => {
         const liveInfo = liveCartPrices.get(item.product.id);
         const effectiveProduct = liveInfo ? { ...item.product, ...liveInfo } : item.product;
-        const resolved = resolveVariantForProduct(item.product.id, item.selectedSize, item.selectedColor);
+        const resolved = resolveVariantForProduct(item.product.id, item.selectedSize, item.selectedColor, item.variantId);
         return {
           key: item.id,
           product: effectiveProduct,
           size: resolved.size ?? undefined,
           color: resolved.color ?? undefined,
           quantity: item.quantity,
+          inventoryId: resolved.inventoryId,
         };
       });
     }
     if (!product) return [];
-    const resolved = resolveVariantForProduct(product.id, size, color);
+    const resolved = resolveVariantForProduct(product.id, size, color, inventoryId);
     return [{
       key: product.id,
       product,
       size: resolved.size ?? undefined,
       color: resolved.color ?? undefined,
       quantity: 1,
+      inventoryId: resolved.inventoryId,
     }];
-  }, [isCartMode, cartItems, product, size, color, itemIds, liveCartPrices, resolveVariantForProduct]);
+  }, [isCartMode, cartItems, product, size, color, itemIds, inventoryId, liveCartPrices, resolveVariantForProduct]);
 
 
   // Gate, not the submit itself: validates preconditions and steps up
@@ -273,6 +293,7 @@ export default function ReservationScreen() {
           size: normalizeVariantValue(line.size),
           color: normalizeVariantValue(line.color),
           quantity: line.quantity,
+          inventory_id: line.inventoryId || null,
         })),
         date: null,
         appointmentTime: null,

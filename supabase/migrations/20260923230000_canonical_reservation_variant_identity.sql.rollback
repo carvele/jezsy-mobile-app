@@ -1,0 +1,38 @@
+-- Rollback: 20260923230000_canonical_reservation_variant_identity.sql.rollback
+-- Restores previous versions of resolve_reservation_item_inventory_variant,
+-- create_reservation_multi, and create_reservation_multi_idempotent.
+
+CREATE OR REPLACE FUNCTION public.resolve_reservation_item_inventory_variant()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_matches uuid[];
+BEGIN
+  SELECT array_agg(i.id ORDER BY i.id)
+  INTO v_matches
+  FROM public.inventory i
+  WHERE i.product_doc_id = NEW.product_id
+    AND coalesce(i.size, '') = coalesce(NEW.size, '')
+    AND coalesce(i.color, '') = coalesce(NEW.color, '')
+    AND coalesce(i.deleted, false) = false;
+
+  IF coalesce(array_length(v_matches, 1), 0) <> 1 THEN
+    RAISE EXCEPTION 'Selected size and color do not identify one active inventory variant.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF NEW.inventory_id IS NOT NULL AND NEW.inventory_id <> v_matches[1] THEN
+    RAISE EXCEPTION 'Reservation inventory variant does not match its product, size, and color.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  NEW.inventory_id := v_matches[1];
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE EXECUTE ON FUNCTION public.resolve_reservation_item_inventory_variant()
+  FROM PUBLIC, anon, authenticated;
