@@ -1,0 +1,33 @@
+-- Rollback for 20260923150000_fix_inventory_cascade_triggers_security_definer.sql
+
+-- 1. Revert cascade_soft_delete_inventory to SECURITY INVOKER and only soft-delete
+CREATE OR REPLACE FUNCTION public.cascade_soft_delete_inventory()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path TO 'public', 'pg_temp'
+AS $$
+BEGIN
+  IF NEW.deleted = true AND OLD.deleted IS DISTINCT FROM true THEN
+    UPDATE public.inventory
+    SET deleted = true,
+        deleted_at = COALESCE(NEW.deleted_at, NOW()),
+        updated_at = NOW()
+    WHERE product_doc_id = NEW.id
+      AND deleted IS DISTINCT FROM true;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_cascade_soft_delete_inventory ON public.products;
+CREATE TRIGGER trg_cascade_soft_delete_inventory
+  AFTER UPDATE OF deleted ON public.products
+  FOR EACH ROW
+  WHEN (NEW.deleted = true)
+  EXECUTE FUNCTION public.cascade_soft_delete_inventory();
+
+-- 2. Revert seed_inventory_for_new_product to SECURITY INVOKER
+ALTER FUNCTION public.seed_inventory_for_new_product()
+  SECURITY INVOKER
+  SET search_path = public, pg_temp;
