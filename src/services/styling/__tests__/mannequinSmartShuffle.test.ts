@@ -3,9 +3,9 @@ import {
   validateAndPartitionPinnedSet,
   buildShuffleIntent,
   selectDiverseCandidate,
-  composeSmartCanvasItems,
   resolveNewItemZIndex,
   SMART_SHUFFLE_SCORING_PROFILE,
+  MAX_SESSION_SHUFFLE_HISTORY,
 } from '../mannequinSmartShuffle';
 import { generateCandidateOutfits } from '../candidateGenerator';
 import { localExposureService } from '../localExposureService';
@@ -306,6 +306,8 @@ describe('Phase C: Mannequin Smart Shuffle Domain Service', () => {
   // Case 11: Session Anti-Repeat Ring Buffer
   // =========================================================================
   test('Case 11: Ring buffer prevents repeating candidate while unseen candidates exist', () => {
+    expect(MAX_SESSION_SHUFFLE_HISTORY).toBe(10);
+
     const c1: any = { key: 'look_1', items: [top1, bottom1] };
     const c2: any = { key: 'look_2', items: [top2, bottom2] };
     const c3: any = { key: 'look_3', items: [top1, bottom2] };
@@ -374,6 +376,7 @@ describe('Phase C: Mannequin Smart Shuffle Domain Service', () => {
       pinnedWardrobeItemIds: new Set(),
       recentKeys: [],
     });
+    expect(result.success).toBe(true);
 
     expect(top1.wear_count).toBe(topBefore.wear_count);
     expect(top1.last_worn_at).toBe(topBefore.last_worn_at);

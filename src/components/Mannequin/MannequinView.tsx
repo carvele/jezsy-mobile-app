@@ -46,7 +46,11 @@ import { MannequinCanvasItem } from './MannequinCanvasItem';
 import { styleProfileService } from '@/src/services/styleProfileService';
 import { updateProfileFromFeedback } from '@/src/utils/personalStyleEngine';
 import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
-import { executeSmartShuffle, SMART_SHUFFLE_SCORING_PROFILE } from '@/src/services/styling/mannequinSmartShuffle';
+import {
+  executeSmartShuffle,
+  SMART_SHUFFLE_SCORING_PROFILE,
+  MAX_SESSION_SHUFFLE_HISTORY,
+} from '@/src/services/styling/mannequinSmartShuffle';
 
 // Enable layout animation for Android (Old Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
@@ -130,7 +134,6 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [pinnedWardrobeItemIds, setPinnedWardrobeItemIds] = useState<Set<string>>(new Set());
   const recentShuffleKeysRef = useRef<string[]>([]);
-  const MAX_SESSION_SHUFFLE_HISTORY = 10;
   const [isDrawerMinimized, setIsDrawerMinimized] = useState<boolean>(false);
   const [canvasBgColor, setCanvasBgColor] = useState<string>(isDark ? '#1A1A1C' : '#FFFFFF');
   const canvasHeightBase = isTablet ? 520 : CANVAS_HEIGHT;
@@ -803,7 +806,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                   styles.layerBtn,
                   {
                     backgroundColor: pinnedWardrobeItemIds.has(activeSelectedItem.wardrobe_item_id)
-                      ? (isDark ? 'rgba(201,169,110,0.25)' : 'rgba(138,109,59,0.18)')
+                      ? wt.accentGoldSubtle
                       : colors.surface,
                   },
                 ]}
@@ -820,7 +823,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                   size={12}
                   color={
                     pinnedWardrobeItemIds.has(activeSelectedItem.wardrobe_item_id)
-                      ? (isDark ? '#C9A96E' : '#8A6D3B')
+                      ? wt.actionPrimary
                       : colors.text
                   }
                 />
@@ -976,7 +979,7 @@ export function MannequinView({ wardrobeItems, onRefreshWardrobe, initialLoadOut
                     {ci.name || ci.garment_type}
                   </Text>
                   {isPinned && (
-                    <IconSymbol name="pin.fill" size={10} color={isDark ? '#C9A96E' : '#8A6D3B'} />
+                    <IconSymbol name="pin.fill" size={10} color={wt.actionPrimary} />
                   )}
                   <TouchableOpacity
                     style={styles.selectedPieceRemove}

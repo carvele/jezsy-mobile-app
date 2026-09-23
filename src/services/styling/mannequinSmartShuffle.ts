@@ -326,6 +326,12 @@ export function composeSmartCanvasItems(
 export const SMART_SHUFFLE_SCORING_PROFILE: ScoringProfile = 'intent-driven';
 
 /**
+ * Capacity of the in-session Smart Shuffle ring buffer.
+ * Bounded to 10 entries per the frozen Phase C technical architecture.
+ */
+export const MAX_SESSION_SHUFFLE_HISTORY = 10;
+
+/**
  * Master Smart Shuffle execution pipeline.
  */
 export function executeSmartShuffle(input: SmartShuffleInput): SmartShuffleOutcome {
