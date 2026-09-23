@@ -266,10 +266,22 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           // Baked in directly (not delivered by message like the values above): a
           // garment's category never changes mid-session for a given GLB, so there's
           // no async-value-arrives-after-mount race to avoid here. Drives which body
-          // landmarks this scene anchors/scales the garment against -- hips for
           const GARMENT_CATEGORY = ${metadata ? safeStringify(metadata.category) : 'null'};
-          const IS_BOTTOM_GARMENT = GARMENT_CATEGORY === 'pants' || GARMENT_CATEGORY === 'skirt';
+          const IS_BOTTOM_GARMENT = ['pants', 'skirt', 'bottoms', 'trousers', 'jeans', 'shorts'].includes(String(GARMENT_CATEGORY || '').toLowerCase());
           const V2_PROFILE = ${metadata?.fitProfileV2 ? safeStringify(metadata.fitProfileV2) : 'null'};
+
+          if (AR_DEBUG) {
+            console.log('[AR-V2-METADATA-VERIFY]', JSON.stringify({
+              garmentFitProfileVersion: ${metadata?.garmentFitProfileVersion ? metadata.garmentFitProfileVersion : (metadata?.fitProfileV2 ? 2 : 1)},
+              region: V2_PROFILE ? V2_PROFILE.region : (IS_BOTTOM_GARMENT ? 'lower' : 'upper'),
+              category: GARMENT_CATEGORY,
+              rootAnchor: V2_PROFILE ? V2_PROFILE.rootAnchor : { type: IS_BOTTOM_GARMENT ? 'WAIST' : 'SHOULDER_CENTER' },
+              referenceMeasurements: V2_PROFILE ? V2_PROFILE.referenceMeasurements : null,
+              fitBands: V2_PROFILE ? V2_PROFILE.fitBands : null,
+              coverageProfile: V2_PROFILE ? V2_PROFILE.coverageProfile : null,
+              boneMap: ${metadata?.boneMap ? safeStringify(metadata.boneMap) : 'null'}
+            }));
+          }
 
           // Same reasoning and same fix as CAMERA_CALIBRATION above, for the same root
           // cause: fitModifier is ALSO computed from the async Supabase sizing profile
@@ -835,10 +847,56 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
               const registerCorrection = (canonical) => {
                 const bone = skeletonBones[resolveBindBoneName(canonical)];
                 if (!bone) return;
+
+                // Derive the canonical limb's default rest axis and child bone
+                let childCanonical = null;
+                const defaultRestAxis = new THREE.Vector3(1, 0, 0);
+
+                if (canonical === 'LeftArm') {
+                  childCanonical = 'LeftForeArm';
+                  defaultRestAxis.set(1, 0, 0);
+                } else if (canonical === 'RightArm') {
+                  childCanonical = 'RightForeArm';
+                  defaultRestAxis.set(-1, 0, 0);
+                } else if (canonical === 'LeftForeArm') {
+                  childCanonical = 'LeftHand';
+                  defaultRestAxis.set(1, 0, 0);
+                } else if (canonical === 'RightForeArm') {
+                  childCanonical = 'RightHand';
+                  defaultRestAxis.set(-1, 0, 0);
+                } else if (canonical === 'LeftUpLeg') {
+                  childCanonical = 'LeftLeg';
+                  defaultRestAxis.set(0, -1, 0);
+                } else if (canonical === 'RightUpLeg') {
+                  childCanonical = 'RightLeg';
+                  defaultRestAxis.set(0, -1, 0);
+                } else if (canonical === 'LeftLeg') {
+                  childCanonical = 'LeftFoot';
+                  defaultRestAxis.set(0, -1, 0);
+                } else if (canonical === 'RightLeg') {
+                  childCanonical = 'RightFoot';
+                  defaultRestAxis.set(0, -1, 0);
+                }
+
+                const childBone = childCanonical ? skeletonBones[resolveBindBoneName(childCanonical)] : null;
+                const limbAxis = (childBone && childBone.position.lengthSq() > 1e-4)
+                  ? childBone.position.clone().normalize()
+                  : defaultRestAxis.clone();
+
+                const ownPrefix = bindPrefix(bone);
+                const parentPrefix = bindPrefix(bone.parent);
+                const bindDir = limbAxis.clone().applyQuaternion(ownPrefix).normalize();
+
                 boneCorrection[canonical] = {
-                  parentPrefix: bindPrefix(bone.parent),
-                  ownPrefix: bindPrefix(bone),
+                  parentPrefix: parentPrefix,
+                  ownPrefix: ownPrefix,
+                  bindDir: bindDir,
+                  restAxis: defaultRestAxis.clone(),
                 };
+
+                if (AR_DEBUG && (canonical === 'LeftArm' || canonical === 'RightArm')) {
+                  console.log('[AR-RETARGET-BIND] ' + canonical + ' bindDir=(' + bindDir.x.toFixed(3) + ',' + bindDir.y.toFixed(3) + ',' + bindDir.z.toFixed(3) + ') restAxis=(' + defaultRestAxis.x + ',' + defaultRestAxis.y + ',' + defaultRestAxis.z + ')');
+                }
               };
               // Leg bones registered unconditionally alongside the arms: a garment
               // whose skeleton has no LeftUpLeg/RightUpLeg (every existing
@@ -1052,34 +1110,24 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     // handler, since single-frame landmark jitter would otherwise make the
                     // camera (and therefore the whole scene) visibly judder in depth.
                     if (CAMERA_CALIBRATION) {
-                      // True 2D pixel separation (not just the X component). Using only
-                      // Math.abs(l12.x - l11.x) collapsed toward zero whenever the wearer
-                      // was turned or had an arm raised near the shoulder line -- confirmed
-                      // live: a frame with l11.y=0.672/l12.y=0.114 (near-vertical shoulder
-                      // line) produced a near-zero horizontal width and a bogus ~7m distance.
-                      const dxPx = (l12.x - l11.x) * CAMERA_CALIBRATION.videoWidthPx;
-                      const dyPx = (l12.y - l11.y) * CAMERA_CALIBRATION.videoHeightPx;
+                      // True 2D pixel separation (not just the X component).
+                      // For bottoms, anchor on hip landmarks (23 and 24) using wearer hip joint span
+                      const hip23Early = normalizedLandmarks[23];
+                      const hip24Early = normalizedLandmarks[24];
+                      const useHipTriangulation = IS_BOTTOM_GARMENT && hip23Early && hip24Early;
+                      const pL = useHipTriangulation ? hip23Early : l11;
+                      const pR = useHipTriangulation ? hip24Early : l12;
+                      const wearerWidthM = useHipTriangulation
+                        ? (CAMERA_CALIBRATION.wearerHipWidthM || (CAMERA_CALIBRATION.wearerShoulderWidthM * 0.9) || 0.36)
+                        : CAMERA_CALIBRATION.wearerShoulderWidthM;
+
+                      const dxPx = (pR.x - pL.x) * CAMERA_CALIBRATION.videoWidthPx;
+                      const dyPx = (pR.y - pL.y) * CAMERA_CALIBRATION.videoHeightPx;
                       const measuredPixelWidth = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
-                      // Reject frames where the shoulder line is more vertical than
-                      // horizontal -- not a genuine frontal shoulder-width read (occlusion,
-                      // profile turn, raised arm), so triangulating from it is meaningless.
-                      const isRoughlyFrontal = Math.abs(dxPx) > Math.abs(dyPx);
-                      if (measuredPixelWidth > 1 && isRoughlyFrontal) {
-                        // measuredPixelWidth foreshortens by cos(yaw) at a fixed real distance,
-                        // which the naive formula misreads as farther away the more the wearer
-                        // turns -- correct back out by the same yawCosCorrection used for
-                        // targetWorldWidth below, so a real distance change is what moves this,
-                        // not yaw alone.
-                        const rawDistance = ((CAMERA_CALIBRATION.wearerShoulderWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;
-                        // Realistic handheld-phone try-on range, not the theoretical camera
-                        // range -- the old [0.05, 20]m bound let a bad bootstrap frame (e.g.
-                        // 19m) seed smoothedCameraDistance, and the per-frame clamp below then
-                        // trapped it near that bad anchor since it can only move +/-40%/frame.
-                        if (Number.isFinite(rawDistance) && rawDistance > 0.2 && rawDistance < 2.5) {
-                          // Clamp how far a single frame can pull the smoothed distance so one
-                          // noisy/occluded frame that still passed the checks above can't yank
-                          // the camera around; a genuine distance change still converges over
-                          // a handful of frames.
+                      const isRoughlyFrontal = Math.abs(dxPx) > (Math.abs(dyPx) * 0.6);
+                      if (measuredPixelWidth > 1 && isRoughlyFrontal && wearerWidthM > 0) {
+                        const rawDistance = ((wearerWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;
+                        if (Number.isFinite(rawDistance) && rawDistance > 0.2 && rawDistance < 3.5) {
                           const clampedRawDistance = smoothedCameraDistance == null
                             ? rawDistance
                             : Math.max(smoothedCameraDistance * 0.6, Math.min(smoothedCameraDistance * 1.4, rawDistance));
@@ -1160,20 +1208,36 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       // V2 Profile Awareness: Read authored fit bands and coverage profile
                       const v2HipBand = V2_PROFILE && V2_PROFILE.fitBands ? V2_PROFILE.fitBands.find(function(b) { return b.name === 'HIP'; }) : null;
                       const v2WaistBand = V2_PROFILE && V2_PROFILE.fitBands ? V2_PROFILE.fitBands.find(function(b) { return b.name === 'WAIST'; }) : null;
+                      const v2ThighBand = V2_PROFILE && V2_PROFILE.fitBands ? V2_PROFILE.fitBands.find(function(b) { return b.name === 'UPPER_THIGH'; }) : null;
                       const v2ShoulderBand = V2_PROFILE && V2_PROFILE.fitBands ? V2_PROFILE.fitBands.find(function(b) { return b.name === 'SHOULDER'; }) : null;
+
+                      let aggregatedBottomWidth = null;
+                      if (IS_BOTTOM_GARMENT) {
+                        if (v2HipBand && v2HipBand.authoredWidthMeters) {
+                          if (v2WaistBand && v2WaistBand.authoredWidthMeters) {
+                            aggregatedBottomWidth = (v2HipBand.authoredWidthMeters * 0.65) + (v2WaistBand.authoredWidthMeters * 0.35);
+                          } else {
+                            aggregatedBottomWidth = v2HipBand.authoredWidthMeters;
+                          }
+                        } else if (v2WaistBand && v2WaistBand.authoredWidthMeters) {
+                          aggregatedBottomWidth = v2WaistBand.authoredWidthMeters;
+                        }
+                      }
+
                       const v2MetricWidth = IS_BOTTOM_GARMENT
-                        ? (v2HipBand && v2HipBand.authoredWidthMeters || v2WaistBand && v2WaistBand.authoredWidthMeters)
-                        : (v2ShoulderBand && v2ShoulderBand.authoredWidthMeters);
+                        ? (aggregatedBottomWidth || (V2_PROFILE && V2_PROFILE.referenceMeasurements && (V2_PROFILE.referenceMeasurements.hipWidthMeters || V2_PROFILE.referenceMeasurements.waistWidthMeters || V2_PROFILE.referenceMeasurements.primaryWidthMeters)))
+                        : (v2ShoulderBand && v2ShoulderBand.authoredWidthMeters || (V2_PROFILE && V2_PROFILE.referenceMeasurements && V2_PROFILE.referenceMeasurements.primaryWidthMeters));
 
                       // Trust an admin-calibrated width outright; fall back to this mesh's own
                       // measured bounding-box width only when no calibration exists at all.
                       const garmentMetricWidth = v2MetricWidth || ${safeRestPoseMetricWidth !== undefined ? safeRestPoseMetricWidth : 'measuredMeshWidth'};
                       const fitModifier = FIT_MODIFIER;
-                      const exactScaleX = (targetWorldWidth / garmentMetricWidth) * fitModifier;
+                      const rawScaleX = (targetWorldWidth / garmentMetricWidth) * fitModifier;
+                      const exactScaleX = Number.isFinite(rawScaleX) && rawScaleX > 0 ? rawScaleX : 1.0;
                       const exactScaleZ = exactScaleX;
-                      let exactScaleY = exactScaleX;
+                      let exactScaleY = IS_BOTTOM_GARMENT ? fitModifier : exactScaleX;
 
-                      // Phase 6: Vertical Fit / Leg Length scaling for trousers/pants
+                      // Phase 6 & 7: Vertical Fit / Leg Length scaling for trousers/pants
                       if (IS_BOTTOM_GARMENT && normalizedLandmarks[25] && normalizedLandmarks[27] && normalizedLandmarks[26] && normalizedLandmarks[28]) {
                         const kneeL = unprojectToZ0(mapCoverCrop(normalizedLandmarks[25].x, normalizedLandmarks[25].y).nx, mapCoverCrop(normalizedLandmarks[25].x, normalizedLandmarks[25].y).ny);
                         const ankleL = unprojectToZ0(mapCoverCrop(normalizedLandmarks[27].x, normalizedLandmarks[27].y).nx, mapCoverCrop(normalizedLandmarks[27].x, normalizedLandmarks[27].y).ny);
@@ -1193,13 +1257,22 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         if (count > 0 && authoredHeight > 0) {
                           legLen /= count;
                           const rawScaleY = (legLen / authoredHeight) * fitModifier;
-                          // Bound Y-scaling within 15% under to 25% over X-scale to prevent skinny/wide distortion
-                          exactScaleY = Math.max(exactScaleX * 0.85, Math.min(exactScaleX * 1.25, rawScaleY));
+                          // Bound Y-scaling within 20% under to 25% over X-scale
+                          exactScaleY = Math.max(exactScaleX * 0.80, Math.min(exactScaleX * 1.25, rawScaleY));
                         }
                       }
 
+                      const resolvedScale = {
+                        x: Number.isFinite(exactScaleX) && exactScaleX > 0 ? exactScaleX : 1.0,
+                        y: Number.isFinite(exactScaleY) && exactScaleY > 0 ? exactScaleY : 1.0,
+                        z: Number.isFinite(exactScaleZ) && exactScaleZ > 0 ? exactScaleZ : 1.0,
+                      };
+
                       // NaN Protection: Don't update transform if values are corrupted (e.g. before WebView layout)
-                      const transformValid = !isNaN(exactScaleX) && isFinite(exactScaleX) && exactScaleX > 0 && !isNaN(targetPos.x) && hipAnchorConfident;
+                      const transformValid = Number.isFinite(resolvedScale.x) && resolvedScale.x > 0
+                        && Number.isFinite(resolvedScale.y) && resolvedScale.y > 0
+                        && Number.isFinite(resolvedScale.z) && resolvedScale.z > 0
+                        && !isNaN(targetPos.x) && hipAnchorConfident;
                       const rotValid = Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w);
                       if (!rotValid && shouldLog) {
                         console.warn('[AR-DEBUG-BONE] non-finite orientation3D this frame, holding last good rotation: ' + JSON.stringify(rot));
@@ -1210,16 +1283,16 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         const targetQuat = rotValid ? new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w) : null;
                         if (!smoothedPos) {
                           smoothedPos = targetPos.clone();
-                          smoothedScale = { x: exactScaleX, y: exactScaleY, z: exactScaleZ };
+                          smoothedScale = { x: resolvedScale.x, y: resolvedScale.y, z: resolvedScale.z };
                           if (targetQuat) smoothedQuat = targetQuat.clone();
                         } else {
                           smoothedPos.lerp(targetPos, smoothing);
                           if (typeof smoothedScale === 'number') {
                             smoothedScale = { x: smoothedScale, y: smoothedScale, z: smoothedScale };
                           }
-                          smoothedScale.x += (exactScaleX - smoothedScale.x) * smoothing;
-                          smoothedScale.y += (exactScaleY - smoothedScale.y) * smoothing;
-                          smoothedScale.z += (exactScaleZ - smoothedScale.z) * smoothing;
+                          smoothedScale.x += (resolvedScale.x - smoothedScale.x) * smoothing;
+                          smoothedScale.y += (resolvedScale.y - smoothedScale.y) * smoothing;
+                          smoothedScale.z += (resolvedScale.z - smoothedScale.z) * smoothing;
                           if (targetQuat) smoothedQuat.slerp(targetQuat, smoothing);
                         }
                         garmentGroup.position.copy(smoothedPos);
@@ -1234,8 +1307,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                             yawCosCorrection: +yawCosCorrection.toFixed(3),
                             distance: camera.position.z ? +camera.position.z.toFixed(2) : null,
                             sizeFitModifier: +fitModifier.toFixed(3),
-                            targetScaleX: +exactScaleX.toFixed(3),
-                            targetScaleY: +exactScaleY.toFixed(3),
+                            targetScaleX: +resolvedScale.x.toFixed(3),
+                            targetScaleY: +resolvedScale.y.toFixed(3),
                             pelvisCenter: targetPos ? { x: +targetPos.x.toFixed(3), y: +targetPos.y.toFixed(3), z: +targetPos.z.toFixed(3) } : null,
                             trackingConfidence: hipAnchorConfident ? 1.0 : 0.0
                           }));
@@ -1303,7 +1376,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                           console.log('[AR-DEBUG-FRAME] transformValid=' + transformValid
                             + ' targetWorldWidth=' + targetWorldWidth.toFixed(4)
                             + ' garmentMetricWidth=' + garmentMetricWidth.toFixed(4)
-                            + ' exactScale=' + exactScale.toFixed(4)
+                            + ' exactScale=' + resolvedScale.x.toFixed(4)
+                            + ' exactScaleY=' + resolvedScale.y.toFixed(4)
                             + ' yawCosCorrection=' + yawCosCorrection.toFixed(4)
                             + ' smoothedCosYaw=' + (smoothedCosYaw != null ? smoothedCosYaw.toFixed(4) : 'n/a')
                             + ' calibrated=' + !!CAMERA_CALIBRATION
@@ -1319,7 +1393,7 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                         }
                         // TEMP DEBUG: remove once blazer visibility is root-caused.
                         showDebug('valid=' + transformValid + ' width=' + targetWorldWidth.toFixed(3)
-                          + ' metricW=' + garmentMetricWidth.toFixed(3) + ' scale=' + exactScale.toFixed(3)
+                          + ' metricW=' + garmentMetricWidth.toFixed(3) + ' scale=' + resolvedScale.x.toFixed(3)
                           + ' groupScale=' + garmentGroup.scale.x.toFixed(3)
                           + ' groupPos=(' + garmentGroup.position.x.toFixed(2) + ',' + garmentGroup.position.y.toFixed(2) + ',' + garmentGroup.position.z.toFixed(2) + ')'
                           + ' bones=' + Object.keys(skeletonBones).length);
@@ -1345,7 +1419,23 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       }
                       showDebug('unprojection FAILED (likely NaN camera/vector math)');
                     }
-                  } catch(e) { console.error('Projection Math Error', e); showDebug('Projection Math Error: ' + e.message); }
+                  } catch(e) {
+                    if (AR_DEBUG) {
+                      console.error('[AR-V2-DIAGNOSTIC] Projection Math Error:', {
+                        profileVersion: V2_PROFILE ? (V2_PROFILE.version || 2) : 1,
+                        category: GARMENT_CATEGORY,
+                        fitMode: IS_BOTTOM_GARMENT ? 'LOWER_BODY_V2' : 'UPPER_BODY',
+                        scaleX: typeof resolvedScale !== 'undefined' ? resolvedScale.x : null,
+                        scaleY: typeof resolvedScale !== 'undefined' ? resolvedScale.y : null,
+                        scaleZ: typeof resolvedScale !== 'undefined' ? resolvedScale.z : null,
+                        fallbackReason: e && e.message ? e.message : String(e),
+                        stack: e && e.stack ? e.stack : null
+                      });
+                    } else {
+                      console.error('Projection Math Error', e);
+                    }
+                    showDebug('Projection Math Error: ' + (e && e.message ? e.message : e));
+                  }
                 } else {
                   // Fallback
                   if (AR_DEBUG && shouldLog) {
@@ -1357,7 +1447,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   if (Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z) && Number.isFinite(rot.w)) {
                     garmentGroup.quaternion.set(rot.x, rot.y, rot.z, rot.w);
                   }
-                  garmentGroup.scale.set(scl, scl, scl);
+                  const safeFallbackScale = Number.isFinite(scl) && scl > 0 ? scl : 1.0;
+                  garmentGroup.scale.set(safeFallbackScale, safeFallbackScale, safeFallbackScale);
                 }
 
                 // 2. Mesh Skinning / Rig Retargeting
@@ -1381,11 +1472,21 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     const bone = skeletonBones[targetBoneName];
                     if (bone && quat && !isNaN(quat.x) && !isNaN(quat.y) && !isNaN(quat.z) && !isNaN(quat.w)) {
                       const bc = boneCorrection[boneName]; // set for the arm and leg bones (see registerCorrection above)
-                      if (bc) {
-                        // corrected = invert(parentBindPrefix) * delta * ownBindPrefix -- see
-                        // the capture comment above for the full derivation. Verified: an
-                        // identity delta correctly returns this bone to its own bind pose,
-                        // unlike the earlier one-sided version.
+                      if (bc && bc.bindDir && bc.restAxis) {
+                        // Phase 10-14: True rest-pose-relative retargeting.
+                        // Convert incoming canonical retargeting rotation into target direction:
+                        const inputQ = new THREE.Quaternion(quat.x, quat.y, quat.z, quat.w);
+                        const targetDir = bc.restAxis.clone().applyQuaternion(inputQ).normalize();
+
+                        // Compute rotation delta from the GLB's actual authored bind direction to the target direction:
+                        const delta = new THREE.Quaternion().setFromUnitVectors(bc.bindDir, targetDir);
+
+                        // Convert to parent-local frame: corrected = invert(parentPrefix) * delta * ownPrefix
+                        const corrected = bc.parentPrefix.clone().invert()
+                          .multiply(delta)
+                          .multiply(bc.ownPrefix);
+                        bone.quaternion.copy(corrected);
+                      } else if (bc) {
                         const corrected = bc.parentPrefix.clone().invert()
                           .multiply(new THREE.Quaternion(quat.x, quat.y, quat.z, quat.w))
                           .multiply(bc.ownPrefix);

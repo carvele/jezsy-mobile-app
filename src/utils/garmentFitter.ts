@@ -54,7 +54,9 @@ export function calculateGarmentFit(
   // the exact prior shoulder-anchored behavior unchanged. Falls back to
   // shoulders if a hip landmark is unexpectedly missing, same fail-safe
   // posture as the rest of this function.
-  const isBottomGarment = metadata?.category === 'pants' || metadata?.category === 'skirt';
+  const isBottomGarment = ['pants', 'skirt', 'bottoms', 'trousers', 'jeans', 'shorts'].includes(
+    String(metadata?.category || '').toLowerCase()
+  );
 
   // Use the canonical stage-mapped landmarks for 2D UI positioning only
   const L = pose.stageLandmarks || (pose as any).landmarks || pose.normalizedLandmarks;
@@ -133,7 +135,7 @@ export function calculateGarmentFit(
   const targetScaleX = ((correctedWidthPx / 100) * garmentEase) / garmentMetricWidthMeters;
 
   // Multi-constraint Vertical Fit / Leg Length scaling for trousers/skirts
-  let targetScaleY = targetScaleX;
+  let targetScaleY = isBottomGarment ? 1.0 : targetScaleX;
   if (isBottomGarment && L[23] && L[24]) {
     const kneeL = L[25];
     const ankleL = L[27];
@@ -153,7 +155,7 @@ export function calculateGarmentFit(
       legLenPx /= legCount;
       const authoredLength = v2?.coverageProfile?.authoredLengthMeters || profile?.dimensions?.length || 1.0;
       const rawScaleY = (legLenPx / 100) / authoredLength;
-      targetScaleY = Math.max(targetScaleX * 0.85, Math.min(targetScaleX * 1.25, rawScaleY));
+      targetScaleY = Math.max(targetScaleX * 0.80, Math.min(targetScaleX * 1.25, rawScaleY));
     }
   }
 

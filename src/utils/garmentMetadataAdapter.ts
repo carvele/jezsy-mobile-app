@@ -47,18 +47,34 @@ export interface AdaptedGarmentMetadata {
   rawStatus?: string;
 }
 
+const CANONICAL_BONE_NAMES = new Set([
+  'Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head',
+  'LeftShoulder', 'RightShoulder', 'LeftArm', 'RightArm',
+  'LeftForeArm', 'RightForeArm', 'LeftHand', 'RightHand',
+  'LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg', 'LeftFoot', 'RightFoot'
+]);
+
 /**
- * Inverts the stored bone map into the direction the runtime actually queries:
- * `boneMap[canonicalName] -> glbBoneName`.
+ * Normalizes bone map into the canonical -> glbBoneName format required by runtime.
+ * Handles both V1 DB format (glbBoneName -> canonical) and V2 format (canonical -> glbBoneName).
  */
 export function invertBoneMap(rawBoneMap: unknown): Record<string, string> {
-  const inverted: Record<string, string> = {};
+  const result: Record<string, string> = {};
   if (rawBoneMap && typeof rawBoneMap === 'object') {
-    for (const [glbBoneName, canonicalName] of Object.entries(rawBoneMap as Record<string, unknown>)) {
-      if (typeof canonicalName === 'string') inverted[canonicalName] = glbBoneName;
+    for (const [key, val] of Object.entries(rawBoneMap as Record<string, unknown>)) {
+      if (typeof key !== 'string' || typeof val !== 'string') continue;
+      if (CANONICAL_BONE_NAMES.has(key)) {
+        // Already canonicalKey -> glbBoneName
+        result[key] = val;
+      } else if (CANONICAL_BONE_NAMES.has(val)) {
+        // glbBoneName -> canonicalKey: invert
+        result[val] = key;
+      } else {
+        result[key] = val;
+      }
     }
   }
-  return inverted;
+  return result;
 }
 
 /**
@@ -66,8 +82,9 @@ export function invertBoneMap(rawBoneMap: unknown): Record<string, string> {
  * not judge whether the values are sane (see `adaptGarmentMetadata`).
  */
 export function mapRawGarmentMetadata(raw: any): GarmentMetadata {
-  const isBottom = raw.category === 'pants' || raw.category === 'skirt';
-  const isDress = raw.category === 'dress';
+  const cat = String(raw.category || '').toLowerCase();
+  const isBottom = ['pants', 'skirt', 'bottoms', 'trousers', 'jeans', 'shorts'].includes(cat);
+  const isDress = cat === 'dress';
   const region = isDress ? 'full' : isBottom ? 'lower' : 'upper';
   const primaryW = Number(raw.rest_pose_metric_width) || (isBottom ? 0.34 : 0.4);
   const anchorOffset = raw.anatomical_anchor_offset || { x: 0, y: isBottom ? 0.9 : 0.5, z: 0 };
@@ -135,7 +152,7 @@ export function mapRawGarmentMetadata(raw: any): GarmentMetadata {
     anchorConfidence: raw.anchor_confidence,
     anchorType: rootType,
     restPoseMetricWidth: primaryW,
-    boneMap: invertBoneMap(raw.bone_map),
+    boneMap: invertBoneMap(raw.bone_map || (fitProfileV2 && fitProfileV2.boneMap)),
     restPose: raw.rest_pose,
     garmentFitProfileVersion: fitProfileVersion,
     fitProfileV2,
