@@ -1,0 +1,363 @@
+-- =============================================================================
+-- Migration Rollback: 20260923175027_prevent_postgrest_40001_retry_loops.sql.rollback
+--
+-- Safety Contract:
+-- Never restore SQLSTATE 40001 / serialization_failure for application-level
+-- optimistic concurrency checks. PT409 is a permanent compatibility contract.
+-- =============================================================================
+
+-- Re-assert canonical PT409 definitions to guarantee 40001 is NEVER reintroduced.
+
+-- 1. transition_reservation_status
+CREATE OR REPLACE FUNCTION public.transition_reservation_status(
+  _reservation_id uuid,
+  _expected_status text,
+  _next_status text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor         uuid := auth.uid();
+  v_actor_name    text;
+  v_res           public.reservations%rowtype;
+  v_old           text;
+  v_next          text;
+  v_stored_next   text;
+  v_pickup_ready  timestamptz;
+  v_pickup_dl     timestamptz;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+
+  v_old  := lower(trim(coalesce(v_res.status, '')));
+  v_next := lower(trim(coalesce(_next_status, '')));
+
+  IF v_old <> lower(trim(coalesce(_expected_status, ''))) THEN
+    RAISE EXCEPTION 'Reservation changed since it was loaded. Refresh and try again.' USING ERRCODE = 'PT409';
+  END IF;
+  IF v_old IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be changed.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_old IN ('pending', 'request approval') AND v_next IN ('to pay', 'confirmed') THEN
+    v_stored_next := 'To Pay';
+  ELSIF v_old IN ('to pay', 'confirmed', 'approved') AND v_next = 'preparing' THEN
+    IF lower(coalesce(v_res.payment_status, '')) <> 'paid' THEN
+      RAISE EXCEPTION 'Payment must be confirmed before preparation starts.' USING ERRCODE = 'check_violation';
+    END IF;
+    v_stored_next := 'Preparing';
+  ELSIF v_old = 'preparing' AND v_next IN ('ready', 'to pickup') THEN
+    v_stored_next := 'Ready';
+    v_pickup_ready := now();
+    v_pickup_dl    := public.compute_pickup_deadline(v_pickup_ready);
+  ELSE
+    RAISE EXCEPTION 'Unsupported reservation transition from % to %.', v_res.status, _next_status USING ERRCODE = 'check_violation';
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  UPDATE public.reservations
+  SET status          = v_stored_next,
+      confirmed_by_id   = CASE WHEN v_stored_next = 'To Pay' THEN v_actor ELSE confirmed_by_id END,
+      confirmed_by_name = CASE WHEN v_stored_next = 'To Pay' THEN coalesce(v_actor_name, 'Owner') ELSE confirmed_by_name END,
+      confirmed_at      = CASE WHEN v_stored_next = 'To Pay' THEN now() ELSE confirmed_at END,
+      assigned_staff_id = CASE WHEN v_stored_next = 'Preparing' THEN v_actor ELSE assigned_staff_id END,
+      countdown         = CASE WHEN v_stored_next = 'Preparing' THEN false ELSE countdown END,
+      pickup_ready_at   = CASE WHEN v_stored_next = 'Ready' THEN v_pickup_ready ELSE pickup_ready_at END,
+      pickup_deadline_at = CASE WHEN v_stored_next = 'Ready' THEN v_pickup_dl ELSE pickup_deadline_at END,
+      updated_at        = now()
+  WHERE id = _reservation_id
+  RETURNING * INTO v_res;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Changed reservation status',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'previous_status',   _expected_status,
+      'new_status',        v_stored_next,
+      'pickup_ready_at',   v_res.pickup_ready_at,
+      'pickup_deadline_at', v_res.pickup_deadline_at
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'reservation_id',    _reservation_id,
+    'status',            v_res.status,
+    'pickup_ready_at',   v_res.pickup_ready_at,
+    'pickup_deadline_at', v_res.pickup_deadline_at
+  );
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.transition_reservation_status(uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.transition_reservation_status(uuid, text, text) TO authenticated;
+
+
+-- 2. reschedule_reservation_as_manager
+CREATE OR REPLACE FUNCTION public.reschedule_reservation_as_manager(
+  _reservation_id uuid,
+  _expected_status text,
+  _new_date date,
+  _new_appointment_time time without time zone,
+  _reason text DEFAULT NULL::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor_id        uuid;
+  v_reservation     public.reservations%rowtype;
+  v_new_appointment timestamptz;
+  v_old_date_key    text;
+  v_new_date_key    text;
+BEGIN
+  v_actor_id := auth.uid();
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation operation requires staff, admin, or owner authorization.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF _new_date IS NULL THEN
+    RAISE EXCEPTION 'New date is required.';
+  END IF;
+  IF _new_appointment_time IS NULL THEN
+    RAISE EXCEPTION 'New appointment time is required.';
+  END IF;
+
+  SELECT * INTO v_reservation
+  FROM public.reservations
+  WHERE id = _reservation_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found.' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF lower(coalesce(v_reservation.status, '')) <> lower(coalesce(_expected_status, '')) THEN
+    RAISE EXCEPTION 'Reservation status has changed. Expected "%" but found "%".',
+      _expected_status, v_reservation.status
+      USING ERRCODE = 'PT409';
+  END IF;
+
+  IF lower(coalesce(v_reservation.status, '')) IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'Cannot reschedule a % reservation.', v_reservation.status
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  v_new_appointment := (_new_date + _new_appointment_time)
+    AT TIME ZONE 'Asia/Manila';
+
+  v_new_date_key := 'reservation-capacity:' || _new_date::text;
+  v_old_date_key := 'reservation-capacity:'
+    || coalesce(
+         (v_reservation.date AT TIME ZONE 'Asia/Manila')::date,
+         _new_date
+       )::text;
+
+  IF v_old_date_key <> v_new_date_key THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(least(v_old_date_key, v_new_date_key), 0)
+    );
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(greatest(v_old_date_key, v_new_date_key), 0)
+    );
+  ELSE
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(v_new_date_key, 0)
+    );
+  END IF;
+
+  PERFORM public.assert_bookable_slot(
+    _date               => _new_date,
+    _appointment        => v_new_appointment,
+    _check_capacity     => true,
+    _exclude_reservation => _reservation_id
+  );
+
+  UPDATE public.reservations
+  SET
+    date             = (_new_date || ' 00:00:00 Asia/Manila')::timestamptz,
+    appointment_time = v_new_appointment,
+    countdown        = true,
+    reschedule_requested_at = NULL,
+    payment_due_at   = CASE
+      WHEN lower(coalesce(status, '')) = 'to pay'
+       AND lower(coalesce(payment_status, '')) = 'pending'
+      THEN least(
+        now() + interval '24 hours',
+        v_new_appointment - interval '1 hour'
+      )
+      ELSE payment_due_at
+    END,
+    updated_at       = now()
+  WHERE id = _reservation_id;
+
+  INSERT INTO public.logs (
+    user_id, action, target_type, target_id, details
+  ) VALUES (
+    v_actor_id,
+    'Rescheduled reservation as manager',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'display_id',          v_reservation.display_id,
+      'previous_date',       (v_reservation.date AT TIME ZONE 'Asia/Manila')::date,
+      'previous_time',       (v_reservation.appointment_time AT TIME ZONE 'Asia/Manila')::time,
+      'new_date',            _new_date,
+      'new_appointment_time', _new_appointment_time,
+      'reason',              _reason
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'reservation_id',    _reservation_id,
+    'date',              _new_date,
+    'appointment_time',  _new_appointment_time
+  );
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.reschedule_reservation_as_manager(uuid, text, date, time without time zone, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reschedule_reservation_as_manager(uuid, text, date, time without time zone, text) TO authenticated;
+
+
+-- 3. cancel_reservation_as_manager
+CREATE OR REPLACE FUNCTION public.cancel_reservation_as_manager(
+  _reservation_id uuid,
+  _expected_status text,
+  _reason text DEFAULT 'Cancelled by owner'::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_actor_name text;
+  v_res public.reservations%rowtype;
+  v_next_payment_status text;
+BEGIN
+  IF v_actor IS NULL OR NOT public.can_operate_reservations() THEN
+    RAISE EXCEPTION 'Reservation management access required.' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT * INTO v_res
+  FROM public.reservations
+  WHERE id = _reservation_id AND coalesce(deleted, false) = false
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reservation not found or deleted.';
+  END IF;
+  IF lower(trim(coalesce(v_res.status, ''))) <> lower(trim(coalesce(_expected_status, ''))) THEN
+    RAISE EXCEPTION 'Reservation changed since it was loaded. Refresh and try again.'
+      USING ERRCODE = 'PT409';
+  END IF;
+  IF lower(coalesce(v_res.status, '')) IN ('cancelled', 'completed') THEN
+    RAISE EXCEPTION 'A terminal reservation cannot be cancelled.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF lower(coalesce(v_res.payment_status, '')) = 'refunded' THEN
+    v_next_payment_status := 'Refunded';
+  ELSIF lower(coalesce(v_res.payment_status, '')) = 'refund required' THEN
+    v_next_payment_status := 'Refund Required';
+  ELSIF lower(coalesce(v_res.payment_status, '')) = 'paid'
+     OR EXISTS (
+       SELECT 1 FROM public.payments p
+       WHERE p.reservation_id = _reservation_id
+         AND p.status = 'paid'
+         AND p.refund_disbursed_at IS NULL
+     ) THEN
+    v_next_payment_status := 'Refund Required';
+    UPDATE public.payments
+    SET requires_refund = true,
+        refund_required_at = coalesce(refund_required_at, now()),
+        updated_at = now()
+    WHERE reservation_id = _reservation_id
+      AND status = 'paid'
+      AND refund_disbursed_at IS NULL;
+  ELSIF EXISTS (
+       SELECT 1 FROM public.payments p
+       WHERE p.reservation_id = _reservation_id
+         AND p.status IN ('awaiting_payment', 'processing')
+     ) THEN
+    RAISE EXCEPTION 'Payment is currently in progress. Wait for completion or expire the session before cancelling.'
+      USING ERRCODE = 'check_violation';
+  ELSE
+    v_next_payment_status := 'Cancelled';
+    IF v_res.deposit_submission_id IS NOT NULL THEN
+      UPDATE public.manual_payment_submissions
+      SET status = 'rejected',
+          rejection_reason = 'reservation_cancelled',
+          staff_note = left(coalesce(nullif(trim(_reason), ''), 'Reservation cancelled by staff'), 500),
+          reviewed_by = v_actor,
+          reviewed_by_name = coalesce(v_actor_name, 'Staff'),
+          reviewed_at = now(),
+          updated_at = now()
+      WHERE id = v_res.deposit_submission_id
+        AND status = 'submitted';
+    END IF;
+  END IF;
+
+  SELECT coalesce(nullif(trim(concat_ws(' ', first_name, last_name)), ''), 'Owner')
+  INTO v_actor_name
+  FROM public.profiles
+  WHERE id = v_actor AND deleted = false AND is_blocked = false;
+
+  UPDATE public.reservations
+  SET status = 'Cancelled',
+      payment_status = v_next_payment_status,
+      countdown = false,
+      cancellation_reason = left(coalesce(nullif(trim(_reason), ''), 'Cancelled by owner'), 500),
+      updated_at = now()
+  WHERE id = _reservation_id
+  RETURNING * INTO v_res;
+
+  INSERT INTO public.logs (user_id, user_name, action, target_type, target_id, details)
+  VALUES (
+    v_actor,
+    coalesce(v_actor_name, 'Owner'),
+    'Cancelled reservation',
+    'reservation',
+    _reservation_id::text,
+    jsonb_build_object(
+      'previous_status', _expected_status,
+      'payment_status', v_res.payment_status,
+      'reason', v_res.cancellation_reason
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'reservation_id', v_res.id,
+    'status', v_res.status,
+    'payment_status', v_res.payment_status
+  );
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.cancel_reservation_as_manager(uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cancel_reservation_as_manager(uuid, text, text) TO authenticated;
