@@ -731,6 +731,19 @@ export default function WardrobeScreen() {
         <Text style={[styles.headerTitle, { color: colors.tint }]}>Digital Wardrobe</Text>
         
         <View style={styles.headerRightActions}>
+          {/* Planner Calendar Button */}
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+            onPress={() => {
+              tapLight();
+              router.push('/planner' as any);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Open Outfit Planner"
+          >
+            <IconSymbol name="calendar" size={18} color={colors.tint} />
+          </TouchableOpacity>
+
           {/* Add (+) Button */}
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.tint }]}
@@ -776,6 +789,7 @@ export default function WardrobeScreen() {
                   setActiveTab(tabItem.key);
                 }}
                 accessibilityRole="tab"
+                accessibilityLabel={`${tabItem.label} tab`}
                 accessibilityState={{ selected: isSelected }}
               >
                 <View style={styles.tabInner}>
@@ -878,6 +892,28 @@ export default function WardrobeScreen() {
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} colors={[colors.tint]} />
             }
           >
+            {/* Outfit Planner Banner */}
+            <TouchableOpacity
+              style={[styles.plannerBanner, { backgroundColor: wt.cardSurface, borderColor: wt.cardBorder }]}
+              onPress={() => {
+                tapLight();
+                router.push('/planner' as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Outfit Planner — Schedule your week, plan upcoming looks"
+            >
+              <View style={[styles.plannerBannerIcon, { backgroundColor: colors.glass }]}>
+                <IconSymbol name="calendar" size={20} color={colors.tint} />
+              </View>
+              <View style={styles.plannerBannerContent}>
+                <Text style={[styles.plannerBannerTitle, { color: colors.text }]}>Outfit Planner</Text>
+                <Text style={[styles.plannerBannerSubtitle, { color: colors.secondaryText }]}>
+                  Schedule your week, plan upcoming looks.
+                </Text>
+              </View>
+              <IconSymbol name="chevron.right" size={16} color={colors.secondaryText} />
+            </TouchableOpacity>
+
             {/* 1. Creation Fork at the TOP */}
             <View style={styles.createOutfitRowTop}>
               <TouchableOpacity
@@ -1391,6 +1427,34 @@ const styles = StyleSheet.create({
   },
   outfitMoreText: {
     fontWeight: '700',
+  },
+  plannerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  plannerBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plannerBannerContent: {
+    flex: 1,
+  },
+  plannerBannerTitle: {
+    ...Type.bodyStrong,
+    fontSize: 14,
+  },
+  plannerBannerSubtitle: {
+    ...Type.caption,
+    fontSize: 12,
+    marginTop: 2,
   },
   createOutfitBtn: {
     flexDirection: 'row',

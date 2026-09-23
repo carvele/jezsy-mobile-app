@@ -42,6 +42,8 @@ const MAPPING = {
   'bag.fill': 'shopping-bag',
   'bag.badge.plus': 'add-shopping-cart',
   'tag.fill': 'local-offer',
+  'bookmark': 'bookmark',
+  'bookmark.fill': 'bookmark',
 
   // Media & Camera
   'camera': 'camera-alt',

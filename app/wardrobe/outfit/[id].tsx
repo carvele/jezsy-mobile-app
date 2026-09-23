@@ -30,6 +30,9 @@ import { outfitService } from '@/src/services';
 import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
 import { resolveEffectiveGarmentBucket } from '@/src/utils/garmentSemanticClassifier';
 import { WardrobeItem } from '@/src/services/wardrobeService';
+import { PlanOutfitModal } from '@/src/components/planner/PlanOutfitModal';
+import { buildPlannerItemSnapshots } from '@/src/utils/plannerSnapshotAdapter';
+import { PlanLaterPayload } from '@/src/types/planner';
 
 type SavedOutfit = Database['public']['Tables']['saved_outfits']['Row'];
 type OutfitSlotItem = {
@@ -86,6 +89,22 @@ export default function OutfitDetailScreen() {
   const [remixModalVisible, setRemixModalVisible] = useState(false);
   const [remixInitialState, setRemixInitialState] = useState<OutfitRemixState | null>(null);
   const [isSavingRemix, setIsSavingRemix] = useState(false);
+
+  // Planner Plan Later state
+  const [planLaterPayload, setPlanLaterPayload] = useState<PlanLaterPayload | null>(null);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  const handlePlanLater = useCallback((item: SavedOutfit) => {
+    const rawItems = Array.isArray(item.items) ? (item.items as any[]) : [];
+    const snapshots = buildPlannerItemSnapshots(rawItems, { authoritativeInventory: wardrobe });
+    setPlanLaterPayload({
+      items: snapshots,
+      sourceType: 'saved_outfit',
+      sourceRefId: item.id,
+      name: item.name || 'Saved Outfit',
+    });
+    setIsPlanModalOpen(true);
+  }, [wardrobe]);
 
   const fetchOutfits = useCallback(async () => {
     if (!session?.user?.id) return;
@@ -390,6 +409,17 @@ export default function OutfitDetailScreen() {
 
           {/* Action CTAs */}
           <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={[styles.remixBtn, { backgroundColor: colors.tint, borderColor: colors.tint }]}
+              onPress={() => handlePlanLater(item)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Plan Later — Schedule this outfit in your planner"
+            >
+              <IconSymbol name="calendar" size={18} color={colors.onTint} />
+              <Text style={[styles.remixBtnText, { color: colors.onTint }]}>Plan Later</Text>
+            </TouchableOpacity>
+
             <PrimaryButton
               label="Log Outfit Wear"
               onPress={() => handleLogWear(item)}
@@ -533,6 +563,16 @@ export default function OutfitDetailScreen() {
         onSave={handleSaveRemixAsNew}
         onOpenMannequin={handleMannequinRemix}
         saving={isSavingRemix}
+      />
+
+      <PlanOutfitModal
+        visible={isPlanModalOpen}
+        payload={planLaterPayload}
+        authoritativeInventory={wardrobe}
+        onClose={() => setIsPlanModalOpen(false)}
+        onSuccess={() => {
+          showToast('Outfit scheduled in planner!');
+        }}
       />
     </SafeAreaView>
   );

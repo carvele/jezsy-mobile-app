@@ -30,6 +30,7 @@ interface Props {
   isSaving?: boolean;
   isTransferring?: boolean;
   onRemix?: (look: StylingOption) => void;
+  onPlan?: (look: StylingOption) => void;
 }
 
 export function StyleAdvisorLookCard({
@@ -39,6 +40,7 @@ export function StyleAdvisorLookCard({
   onOpenMannequin,
   onRefine,
   onRemix,
+  onPlan,
   isSaved = false,
   isSaving = false,
   isTransferring = false,
@@ -272,6 +274,28 @@ export function StyleAdvisorLookCard({
             <View style={styles.btnInnerRow}>
               <IconSymbol name="shuffle" size={14} color={wt.actionSecondaryText} />
               <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]}>Remix</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Plan button */}
+        {onPlan && (
+          <TouchableOpacity
+            style={[
+              styles.actionBtn,
+              styles.mannequinBtn,
+              { borderColor: wt.cardBorder, backgroundColor: wt.cardSurfaceSubtle },
+            ]}
+            onPress={() => {
+              tapLight();
+              onPlan(look);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Plan this look for an upcoming day"
+          >
+            <View style={styles.btnInnerRow}>
+              <IconSymbol name="calendar" size={14} color={wt.actionSecondaryText} />
+              <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]}>Plan</Text>
             </View>
           </TouchableOpacity>
         )}

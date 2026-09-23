@@ -19,6 +19,14 @@ export type PlannedOutfitSourceType =
   | 'capsule'
   | 'trip';
 
+export interface PlanLaterPayload {
+  items: PlannedOutfitItemSnapshot[];
+  sourceType: PlannedOutfitSourceType;
+  sourceRefId?: string | null;
+  occasion?: string | null;
+  name?: string | null;
+}
+
 export interface PlannedOutfitItemSnapshot {
   id: string;
   name: string;

@@ -8,6 +8,8 @@ import { GeneratedOutfit } from '@/src/utils/outfitGenerator';
 import { tapMedium, tapLight } from '@/src/utils/haptics';
 import { DeterministicFlatLayCanvas } from '@/src/components/styling/DeterministicFlatLayCanvas';
 
+import { PlanLaterPayload } from '@/src/types/planner';
+
 interface Props {
   outfit: GeneratedOutfit | any;
   onSave: (outfit: any) => void;
@@ -22,6 +24,9 @@ interface Props {
   onOpenMannequin?: (outfit: any) => void;
   /** Optional callback for Remixing the outfit. */
   onRemix?: (outfit: any) => void;
+  /** Optional callback for Plan Later: rendered ONLY when caller provides a truthful existing source type */
+  onPlanLater?: (payload: PlanLaterPayload) => void;
+  planLaterPayload?: PlanLaterPayload;
 }
 
 // Status badge colors derived from WardrobeTokens for atelier; legacy uses inline originals.
@@ -91,6 +96,8 @@ export function SuggestedOutfitCard({
   variant = 'legacy',
   onOpenMannequin,
   onRemix,
+  onPlanLater,
+  planLaterPayload,
 }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -158,6 +165,18 @@ export function SuggestedOutfitCard({
             >
               <IconSymbol name="sparkles" size={13} color={colors.secondaryText} />
               <Text style={[styles.passBtnText, { color: colors.secondaryText }]}>Mannequin</Text>
+            </TouchableOpacity>
+          )}
+
+          {onPlanLater && planLaterPayload && (
+            <TouchableOpacity
+              style={[styles.passBtn, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+              onPress={() => { tapLight(); onPlanLater(planLaterPayload); }}
+              accessibilityRole="button"
+              accessibilityLabel="Plan this outfit for an upcoming day"
+            >
+              <IconSymbol name="calendar" size={13} color={colors.secondaryText} />
+              <Text style={[styles.passBtnText, { color: colors.secondaryText }]}>Plan</Text>
             </TouchableOpacity>
           )}
 
@@ -263,6 +282,21 @@ export function SuggestedOutfitCard({
           >
             <IconSymbol name="shuffle" size={13} color={wt.actionSecondaryText} />
             <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Remix</Text>
+          </TouchableOpacity>
+        )}
+
+        {onPlanLater && planLaterPayload && (
+          <TouchableOpacity
+            style={[atelierStyles.passBtn, { borderColor: wt.cardBorder, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+            onPress={() => {
+              tapLight();
+              onPlanLater(planLaterPayload);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Plan this outfit for an upcoming day"
+          >
+            <IconSymbol name="calendar" size={13} color={wt.actionSecondaryText} />
+            <Text style={[atelierStyles.passBtnText, { color: wt.actionSecondaryText }]}>Plan</Text>
           </TouchableOpacity>
         )}
 

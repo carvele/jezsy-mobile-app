@@ -52,6 +52,9 @@ import {
   MAX_SESSION_SHUFFLE_HISTORY,
 } from '@/src/services/styling/mannequinSmartShuffle';
 import { transientMannequinService } from '@/src/services/styling/transientMannequinService';
+import { PlanOutfitModal } from '@/src/components/planner/PlanOutfitModal';
+import { buildPlannerItemSnapshots } from '@/src/utils/plannerSnapshotAdapter';
+import { PlanLaterPayload } from '@/src/types/planner';
 
 // Enable layout animation for Android (Old Architecture only)
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental && !(globalThis as any).nativeFabricUIManager) {
@@ -170,6 +173,25 @@ export function MannequinView({
 
   // Save Modal State
   const [saveModalVisible, setSaveModalVisible] = useState(false);
+
+  // Planner Plan Later State
+  const [planLaterPayload, setPlanLaterPayload] = useState<PlanLaterPayload | null>(null);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  const handleOpenPlanLater = useCallback(() => {
+    if (canvasItems.length === 0) return;
+    const snapshots = buildPlannerItemSnapshots(canvasItems, { authoritativeInventory: wardrobeItems });
+    if (snapshots.length === 0) {
+      showToast('No valid wardrobe items found on mannequin.', 'info');
+      return;
+    }
+    setPlanLaterPayload({
+      items: snapshots,
+      sourceType: 'mannequin',
+      name: 'Mannequin Styled Look',
+    });
+    setIsPlanModalOpen(true);
+  }, [canvasItems, wardrobeItems, showToast]);
   const [lookName, setLookName] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -698,6 +720,24 @@ export function MannequinView({
         >
           <IconSymbol name="ellipsis" size={14} color={colors.text} />
           <Text style={[styles.toolBtnText, { color: colors.text }]}>More</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.moreBtn,
+            {
+              backgroundColor: wt.cardSurface,
+              borderColor: wt.cardBorder,
+              opacity: canvasItems.length === 0 ? 0.4 : 1,
+            },
+          ]}
+          onPress={handleOpenPlanLater}
+          disabled={canvasItems.length === 0}
+          accessibilityRole="button"
+          accessibilityLabel="Plan Look — Schedule this look in your planner"
+        >
+          <IconSymbol name="calendar" size={13} color={colors.tint} />
+          <Text style={[styles.toolBtnText, { color: colors.text }]}>Plan</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1403,6 +1443,16 @@ export function MannequinView({
           </TouchableOpacity>
         </Modal>
       )}
+
+      <PlanOutfitModal
+        visible={isPlanModalOpen}
+        payload={planLaterPayload}
+        authoritativeInventory={wardrobeItems}
+        onClose={() => setIsPlanModalOpen(false)}
+        onSuccess={() => {
+          showToast('Outfit scheduled in planner!');
+        }}
+      />
     </ScrollView>
   );
 }

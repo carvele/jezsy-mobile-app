@@ -151,4 +151,61 @@ describe('SuggestedOutfitCard Component (Phase B)', () => {
     const texts = instance.findAllByType('Text' as any).map((t) => t.props.children);
     expect(texts).toContain('Saved');
   });
+
+  it('renders Plan Look CTA only when caller supplies a truthful planLaterPayload', () => {
+    const onPlanLater = jest.fn();
+    const truthfulPayload = {
+      items: [
+        { id: '1', name: 'Shirt', category: 'Tops' },
+        { id: '2', name: 'Trousers', category: 'Bottoms' },
+      ],
+      sourceType: 'saved_outfit' as const,
+      sourceRefId: 'saved_123',
+    };
+
+    let root: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      root = ReactTestRenderer.create(
+        React.createElement(SuggestedOutfitCard, {
+          outfit: mockOutfit,
+          onSave: jest.fn(),
+          onPlanLater,
+          planLaterPayload: truthfulPayload,
+          variant: 'atelier',
+        })
+      );
+    });
+
+    const instance = root!.root;
+    const planBtn = instance.find(
+      (node) => node.props && node.props.accessibilityLabel === 'Plan this outfit for an upcoming day'
+    );
+    expect(planBtn).toBeDefined();
+
+    ReactTestRenderer.act(() => {
+      planBtn.props.onPress();
+    });
+    expect(onPlanLater).toHaveBeenCalledWith(truthfulPayload);
+  });
+
+  it('strictly hides Plan Look CTA when planLaterPayload is omitted (no fabricated provenance)', () => {
+    let root: ReactTestRenderer.ReactTestRenderer;
+    ReactTestRenderer.act(() => {
+      root = ReactTestRenderer.create(
+        React.createElement(SuggestedOutfitCard, {
+          outfit: mockOutfit,
+          onSave: jest.fn(),
+          onPlanLater: jest.fn(),
+          planLaterPayload: undefined, // no truthful source payload
+          variant: 'atelier',
+        })
+      );
+    });
+
+    const instance = root!.root;
+    const planBtn = instance.findAll(
+      (node) => node.props && node.props.accessibilityLabel === 'Plan this outfit for an upcoming day'
+    );
+    expect(planBtn).toHaveLength(0);
+  });
 });

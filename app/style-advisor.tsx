@@ -43,6 +43,9 @@ import { OutfitRemixModal } from '@/src/components/styling/OutfitRemixModal';
 import { adaptStyleAdvisorLookToRemix } from '@/src/services/styling/outfitRemixService';
 import { OutfitRemixState, OutfitRemixResult } from '@/src/types/outfitRemix';
 import { supabase } from '@/src/lib/supabase';
+import { PlanOutfitModal } from '@/src/components/planner/PlanOutfitModal';
+import { buildPlannerItemSnapshots } from '@/src/utils/plannerSnapshotAdapter';
+import { PlanLaterPayload } from '@/src/types/planner';
 
 type WardrobeItem = Database['public']['Tables']['wardrobe_items']['Row'];
 
@@ -89,6 +92,24 @@ export default function StyleAdvisorScreen() {
   const [remixModalVisible, setRemixModalVisible] = useState(false);
   const [remixInitialState, setRemixInitialState] = useState<OutfitRemixState | null>(null);
   const [remixLookIndex, setRemixLookIndex] = useState<number>(-1);
+
+  // Planner Plan Later state
+  const [planLaterPayload, setPlanLaterPayload] = useState<PlanLaterPayload | null>(null);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+
+  const handlePlanLook = useCallback(
+    (look: StylingOption) => {
+      const snapshots = buildPlannerItemSnapshots(look.items, { authoritativeInventory: items });
+      setPlanLaterPayload({
+        items: snapshots,
+        sourceType: 'style_advisor',
+        occasion: look.whyThisWorks?.occasion || sessionState?.intent?.selectedOccasion || undefined,
+        name: 'Style Advisor Look',
+      });
+      setIsPlanModalOpen(true);
+    },
+    [items, sessionState]
+  );
 
   // Load wardrobe & profile
   useEffect(() => {
@@ -692,6 +713,7 @@ export default function StyleAdvisorScreen() {
                   onOpenMannequin={handleOpenInMannequin}
                   onRefine={handleRefine}
                   onRemix={(look) => handleOpenRemix(look, idx)}
+                  onPlan={handlePlanLook}
                   isSaved={savedKeys.has(opt.key)}
                   isSaving={savingKey === opt.key}
                   isTransferring={transferringKey === opt.key}
@@ -711,6 +733,16 @@ export default function StyleAdvisorScreen() {
         onSave={handleSaveRemix}
         onOpenMannequin={handleMannequinRemix}
         saving={savingKey !== null}
+      />
+
+      <PlanOutfitModal
+        visible={isPlanModalOpen}
+        payload={planLaterPayload}
+        authoritativeInventory={items}
+        onClose={() => setIsPlanModalOpen(false)}
+        onSuccess={() => {
+          showToast('Outfit scheduled in planner!');
+        }}
       />
     </SafeAreaView>
   );
