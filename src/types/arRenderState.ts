@@ -7,6 +7,13 @@ export interface CameraCalibration {
   videoWidthPx: number;
   videoHeightPx: number;
   wearerShoulderWidthM: number;
+  wearerHipWidthM?: number;
+}
+
+export interface ResolvedScaleXYZ {
+  x: number;
+  y: number;
+  z: number;
 }
 
 /**

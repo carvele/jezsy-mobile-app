@@ -544,7 +544,9 @@ export default function ARTryOnScreen() {
   // scale. Matches the anchor this AR overlay already uses for bottoms (see
   // garmentFitter.ts/GarmentRenderer.tsx's own category branch) and the "Hips:
   // Roomy/Fitted" label already surfaced from the same measurement pair below.
-  const isBottomGarment = garmentMetadata?.category === 'pants' || garmentMetadata?.category === 'skirt';
+  const isBottomGarment = ['pants', 'skirt', 'bottoms', 'trousers', 'jeans', 'shorts'].includes(
+    String(garmentMetadata?.category || '').toLowerCase()
+  );
   const fitModifier = useMemo(() => {
     const wearerCm = isBottomGarment ? sizingMeasurements?.hips : sizingMeasurements?.shoulderWidth;
     const garmentCm = recommendedSize && product?.measurements
@@ -554,39 +556,40 @@ export default function ARTryOnScreen() {
     return Math.min(1.4, Math.max(0.7, garmentCm / wearerCm));
   }, [sizingMeasurements, recommendedSize, product?.measurements, isBottomGarment]);
 
-  // Phase 3: real camera calibration (native only -- see GarmentRenderer.tsx and
-  // the AR Implementation Plan). vision-camera's format.fieldOfView is the
-  // *diagonal* FOV in both its Android (sensor-diagonal-derived) and iOS
-  // (AVCaptureDevice.videoFieldOfView, Apple-documented as diagonal)
-  // implementations, confirmed by reading both native source files rather than
-  // assumed -- horizontal/vertical FOV are NOT the same value and using the
-  // wrong one would silently miscalibrate every downstream measurement.
-  // focalLengthPx is derived once from the diagonal relationship and serves
-  // both the render camera's vertical FOV and the real-distance triangulation
-  // GarmentRenderer performs every frame; without a real wearer measurement to
-  // triangulate against, calibration data is withheld entirely and
-  // GarmentRenderer falls back to its existing uncalibrated behavior.
+  // Phase 3: real camera calibration.
+  // On web, derives from stage viewport dimensions with standard 45deg vertical FOV.
+  // On native, vision-camera format.fieldOfView is the diagonal FOV.
   const cameraCalibration = useMemo(() => {
-    if (Platform.OS === 'web' || !format || !format.fieldOfView) return undefined;
     const wearerShoulderWidthM = sizingMeasurements?.shoulderWidth
       ? sizingMeasurements.shoulderWidth / 100
-      : undefined;
+      : 0.40;
+    const wearerHipWidthM = sizingMeasurements?.hips
+      ? sizingMeasurements.hips / 285 // approximate internal joint span in meters
+      : 0.36;
+
+    if (Platform.OS === 'web') {
+      const videoWidthPx = stageWidth > 0 ? stageWidth : 720;
+      const videoHeightPx = stageHeight > 0 ? stageHeight : 1280;
+      const verticalFovDeg = 45;
+      const verticalFovRad = (verticalFovDeg * Math.PI) / 180;
+      const focalLengthPx = (videoHeightPx / 2) / Math.tan(verticalFovRad / 2);
+
+      return {
+        focalLengthPx,
+        verticalFovDeg,
+        videoWidthPx,
+        videoHeightPx,
+        wearerShoulderWidthM,
+        wearerHipWidthM,
+      };
+    }
+
+    if (!format || !format.fieldOfView) return undefined;
     if (!wearerShoulderWidthM || wearerShoulderWidthM <= 0) return undefined;
 
     const { videoWidth, videoHeight, fieldOfView } = format;
     if (!videoWidth || !videoHeight) return undefined;
 
-    // format.videoWidth/videoHeight describe the raw SENSOR buffer (e.g. 1280x720,
-    // landscape), but forceOutputOrientation: device.sensorOrientation (see
-    // usePoseDetection below) tells MediaPipe to rotate that buffer to upright before
-    // running pose detection -- confirmed live via the sensor-orientation fix earlier
-    // this session. On a landscape-mounted sensor (the common case), that rotation is
-    // 90deg, so the landmarks GarmentRenderer receives are normalized against the
-    // ROTATED (e.g. 720x1280, portrait) frame, not the raw sensor dimensions. Using
-    // the unswapped sensor dimensions here would transpose the pixel-space triangulation
-    // (dx measured against the wrong axis's pixel count) and also compute verticalFovDeg
-    // from the wrong "height". Only a 90/270deg mount needs the swap; portrait and
-    // upside-down sensors already match the rotated frame's own dimensions.
     const isRotated90 = device?.sensorOrientation === 'landscape-left' || device?.sensorOrientation === 'landscape-right';
     const rotatedWidth = isRotated90 ? videoHeight : videoWidth;
     const rotatedHeight = isRotated90 ? videoWidth : videoHeight;
@@ -605,8 +608,9 @@ export default function ARTryOnScreen() {
       videoWidthPx: rotatedWidth,
       videoHeightPx: rotatedHeight,
       wearerShoulderWidthM,
+      wearerHipWidthM,
     };
-  }, [format, sizingMeasurements, device]);
+  }, [format, sizingMeasurements, device, stageWidth, stageHeight]);
 
   const handlePoseResults = useCallback(
     (poseFrame: PoseFrame) => {
