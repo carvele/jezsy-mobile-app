@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -62,6 +62,15 @@ export function OutfitRemixModal({
 
   const [remixState, setRemixState] = useState<OutfitRemixState | null>(initialState);
   const [swappingSlot, setSwappingSlot] = useState<OutfitRemixSlotType | null>(null);
+  const [isShuffling, setIsShuffling] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (visible && initialState) {
@@ -104,10 +113,30 @@ export function OutfitRemixModal({
   };
 
   const handleShuffleUnlocked = () => {
+    if (isShuffling) return;
     tapMedium();
-    const next = shuffleUnlockedSlots(remixState, wardrobe);
-    setRemixState(next);
-    setSwappingSlot(null);
+    setIsShuffling(true);
+
+    const performShuffle = () => {
+      if (!isMountedRef.current) return;
+      try {
+        const next = shuffleUnlockedSlots(remixState, wardrobe);
+        if (isMountedRef.current) {
+          setRemixState(next);
+          setSwappingSlot(null);
+        }
+      } finally {
+        if (isMountedRef.current) {
+          setIsShuffling(false);
+        }
+      }
+    };
+
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(performShuffle);
+    } else {
+      performShuffle();
+    }
   };
 
   const handleAddOuterwear = () => {
@@ -538,13 +567,27 @@ export function OutfitRemixModal({
             {/* Top row: Shuffle, Mannequin, Save */}
             <View style={styles.secondaryActionsRow}>
               <TouchableOpacity
-                style={[styles.secBtn, { borderColor: wt.cardBorder, backgroundColor: wt.cardSurfaceSubtle }]}
+                style={[
+                  styles.secBtn,
+                  {
+                    borderColor: wt.cardBorder,
+                    backgroundColor: wt.cardSurfaceSubtle,
+                    opacity: isShuffling ? 0.7 : 1,
+                  },
+                ]}
                 onPress={handleShuffleUnlocked}
+                disabled={isShuffling}
                 accessibilityRole="button"
                 accessibilityLabel="Shuffle all unlocked slots"
               >
-                <IconSymbol name="shuffle" size={14} color={wt.actionSecondaryText} />
-                <Text style={[styles.secBtnText, { color: wt.actionSecondaryText }]}>Shuffle Unlocked</Text>
+                {isShuffling ? (
+                  <ActivityIndicator size="small" color={wt.actionSecondaryText} />
+                ) : (
+                  <>
+                    <IconSymbol name="shuffle" size={14} color={wt.actionSecondaryText} />
+                    <Text style={[styles.secBtnText, { color: wt.actionSecondaryText }]}>Shuffle Unlocked</Text>
+                  </>
+                )}
               </TouchableOpacity>
 
               {onOpenMannequin && (
