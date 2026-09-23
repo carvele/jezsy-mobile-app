@@ -37,7 +37,6 @@ module.exports = {
   },
   View: 'View',
   Text: 'Text',
-  Image: 'Image',
   TouchableOpacity: 'TouchableOpacity',
   TextInput: 'TextInput',
   Modal: 'Modal',
@@ -48,18 +47,13 @@ module.exports = {
   Dimensions: {
     get: jest.fn(() => ({ width: 375, height: 812 })),
   },
-  FlatList: 'FlatList',
-  UIManager: {
-    setLayoutAnimationEnabledExperimental: jest.fn(),
-  },
-  LayoutAnimation: {
-    configureNext: jest.fn(),
-    Presets: {
-      easeInEaseOut: {},
-    },
-  },
   Alert: {
     alert: jest.fn(),
+  },
+  FlatList: 'FlatList',
+  Image: 'Image',
+  Share: {
+    share: jest.fn(() => Promise.resolve()),
   },
   StatusBar: () => null,
 };
