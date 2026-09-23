@@ -84,4 +84,50 @@ describe('analyze-wardrobe-image', () => {
     expect(await response.json()).toEqual({ success: false, reason: 'TAGGING_PROVIDER_REJECTED' });
     expect(d.log).toHaveBeenCalledWith('provider error', expect.objectContaining({ status: 404, message: 'models/gemini-2.5-flash not found' }));
   });
+
+  test('falls back to secondary model when primary model returns 404', async () => {
+    let callCount = 0;
+    const d = deps({
+      env: (key) => (key === 'GEMINI_TAGGING_API_KEY' ? 'tagging-key' : key === 'GEMINI_TAGGING_MODEL' ? 'gemini-1.5-flash' : undefined),
+      fetchImpl: jest.fn(async (url: string) => {
+        callCount++;
+        if (url.includes('gemini-1.5-flash')) {
+          return { ok: false, status: 404, text: async () => 'models/gemini-1.5-flash is not found' };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [{
+              content: {
+                parts: [{
+                  text: JSON.stringify({
+                    category: 'Top',
+                    subCategory: 'T-Shirt',
+                    primaryColor: 'White',
+                    colorTags: ['White'],
+                    pattern: 'solid',
+                    material: 'cotton',
+                    fit: 'regular',
+                    lengthType: 'regular',
+                    sleeveType: 'short',
+                    neckline: 'crew',
+                    silhouette: 'straight',
+                    confidence: 0.95,
+                  }),
+                }],
+              },
+            }],
+          }),
+        };
+      }) as any,
+    });
+    const response = await createHandler(d)(request({ mimeType: 'image/jpeg', imageBase64: 'aGVsbG8=' }, auth));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.suggestion.category).toBe('Top');
+    expect(callCount).toBe(2);
+    expect(d.log).toHaveBeenCalledWith('provider fallback succeeded', expect.objectContaining({ requestedModel: 'gemini-1.5-flash', activeModel: 'gemini-2.5-flash' }));
+  });
 });
