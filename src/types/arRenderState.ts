@@ -1,5 +1,8 @@
 import type { Vec3, Quaternion, SegmentationFrame } from './pose';
 import type { GarmentMetadata } from './garment';
+import type { BodyFitState } from '../utils/bodyFitEstimator';
+
+export type { BodyFitState };
 
 export interface CameraCalibration {
   focalLengthPx: number;
@@ -30,6 +33,7 @@ export interface GarmentRenderState {
   fitModifier?: number;
   cameraCalibration?: CameraCalibration;
   cameraDimensions?: { width: number; height: number };
+  bodyFitState?: BodyFitState;
 }
 
 /**
@@ -46,7 +50,8 @@ export interface GarmentRendererRef {
     boneRotations?: Record<string, Quaternion>,
     segmentation?: SegmentationFrame,
     normalizedLandmarks?: any[],
-    worldLandmarks?: any[]
+    worldLandmarks?: any[],
+    bodyFitState?: BodyFitState
   ) => void;
 }
 

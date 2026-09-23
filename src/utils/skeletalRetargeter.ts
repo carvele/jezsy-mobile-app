@@ -216,6 +216,20 @@ export function calculateBoneRotationsFromCanonical(
     boneRotations['LeftArm'] = lArm;
     boneRotations['RightArm'] = rArm;
 
+    // Shoulder / Clavicle participation (scapulohumeral rhythm: 18% elevation above 30 deg):
+    function computeShoulder(armDelta: Quaternion): Quaternion {
+      const w = Math.min(1, Math.max(-1, Math.abs(armDelta.w)));
+      const armAngle = 2 * Math.acos(w);
+      const ELEVATION_START_RAD = (30 * Math.PI) / 180;
+      if (armAngle <= ELEVATION_START_RAD) {
+        return IDENTITY_QUAT;
+      }
+      const clavicleAngle = (armAngle - ELEVATION_START_RAD) * 0.18;
+      return clampQuatAngle(armDelta, clavicleAngle);
+    }
+    boneRotations['LeftShoulder'] = computeShoulder(lArm);
+    boneRotations['RightShoulder'] = computeShoulder(rArm);
+
     // Forearms: elbow -> wrist, expressed relative to the upper arm (the parent in the chain).
     const lForeDir = localDir(lE, lW);
     const rForeDir = localDir(rE, rW);
@@ -240,9 +254,10 @@ export function calculateBoneRotationsFromCanonical(
     // -Y axis regardless of restPose -- unlike arms, T-pose and A-pose don't
     // differ in leg stance, both are a neutral standing pose.
     const legRest: Vec3 = { x: 0, y: -1, z: 0 };
-    // See clampQuatAngle's own comment: hip/knee landmark noise, not real
-    // anatomy, is what actually produces a delta anywhere near this bound.
     const MAX_LEG_BEND_RAD = (100 * Math.PI) / 180;
+    const KNEE_DEADZONE_RAD = (8.0 * Math.PI) / 180;
+    const MAX_KNEE_BEND_RAD = (130 * Math.PI) / 180;
+
     const lLegDir = localDir(lH, lK);
     const rLegDir = localDir(rH, rK);
     const lUpLeg = lLegDir ? clampQuatAngle(setFromUnitVectors(legRest, lLegDir), MAX_LEG_BEND_RAD) : IDENTITY_QUAT;
@@ -251,14 +266,25 @@ export function calculateBoneRotationsFromCanonical(
     boneRotations['RightUpLeg'] = rUpLeg;
 
     // Lower legs: knee -> ankle, expressed relative to the upper leg (the parent in the chain).
+    // When the knee is extended (standing or straight leg raise), thigh and calf directions are
+    // parallel -> returns IDENTITY_QUAT so the lower leg cleanly follows the upper leg without
+    // bending backward or forming horizontal distortion segments.
     const lCalfDir = localDir(lK, lA);
     const rCalfDir = localDir(rK, rA);
-    boneRotations['LeftLeg'] = lCalfDir
-      ? clampQuatAngle(multiplyQuat(invertQuat(lUpLeg), setFromUnitVectors(legRest, lCalfDir)), MAX_LEG_BEND_RAD)
-      : IDENTITY_QUAT;
-    boneRotations['RightLeg'] = rCalfDir
-      ? clampQuatAngle(multiplyQuat(invertQuat(rUpLeg), setFromUnitVectors(legRest, rCalfDir)), MAX_LEG_BEND_RAD)
-      : IDENTITY_QUAT;
+
+    function computeKnee(upLegDelta: Quaternion, thighDir: Vec3 | null, calfDir: Vec3 | null): Quaternion {
+      if (!thighDir || !calfDir) return IDENTITY_QUAT;
+      const dot = Math.max(-1, Math.min(1, thighDir.x * calfDir.x + thighDir.y * calfDir.y + thighDir.z * calfDir.z));
+      const angle = Math.acos(dot);
+      if (angle <= KNEE_DEADZONE_RAD) {
+        return IDENTITY_QUAT;
+      }
+      const rawKneeDelta = multiplyQuat(invertQuat(upLegDelta), setFromUnitVectors(legRest, calfDir));
+      return clampQuatAngle(rawKneeDelta, MAX_KNEE_BEND_RAD);
+    }
+
+    boneRotations['LeftLeg'] = computeKnee(lUpLeg, lLegDir, lCalfDir);
+    boneRotations['RightLeg'] = computeKnee(rUpLeg, rLegDir, rCalfDir);
   }
 
   return boneRotations;
