@@ -530,29 +530,29 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     expect(res.score).toBeGreaterThanOrEqual(70 + EXPLICIT_PREFERRED_FIT_BOOST);
   });
 
-  // 18. Explainer grounding: dimension explanation is omitted when effective evidence < 1.5
-  it('Scenario 18: explainer grounding: dimension explanation is omitted when effective evidence < 1.5', () => {
+  // 18. Explainer grounding: dimension explanation is omitted when effective samples < 5
+  it('Scenario 18: explainer grounding: dimension explanation is omitted when effective samples < 5', () => {
     const affinity: StyleDimensionAffinity = {
       score: 0.8,
-      affinityScore: 6.0,
+      affinityScore: 0.8,
       confidence: 0.8,
-      effectiveEvidence: 1.0,
-      effectiveSampleCount: 1.0,
-      rawSampleCount: 1,
+      effectiveEvidence: 4.5,
+      effectiveSampleCount: 4.5,
+      rawSampleCount: 5,
       lastSignalAt: new Date().toISOString(),
     };
     expect(isDimensionGrounded(affinity)).toBe(false);
   });
 
-  // 19. Explainer grounding: dimension explanation is included when effective evidence >= 1.5 and affinity >= 2.0
-  it('Scenario 19: explainer grounding: dimension explanation is included when effective evidence >= 1.5 and affinity >= 2.0', () => {
+  // 19. Explainer grounding: dimension explanation is included when effective samples >= 5, confidence >= 0.50, and score >= 0.70
+  it('Scenario 19: explainer grounding: dimension explanation is included when effective samples >= 5, confidence >= 0.50, and score >= 0.70', () => {
     const affinity: StyleDimensionAffinity = {
-      score: 0.8,
-      affinityScore: 6.0,
-      confidence: 0.8,
-      effectiveEvidence: 2.5,
-      effectiveSampleCount: 2.5,
-      rawSampleCount: 3,
+      score: 0.80,
+      affinityScore: 0.80,
+      confidence: 0.60,
+      effectiveEvidence: 5.5,
+      effectiveSampleCount: 5.5,
+      rawSampleCount: 6,
       lastSignalAt: new Date().toISOString(),
     };
     expect(isDimensionGrounded(affinity)).toBe(true);
@@ -845,9 +845,11 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
   });
 
   // 29. Stale profile refresh
-  it('Scenario 29: stale profile refresh: cached profile older than 24 hours triggers background refresh from server', async () => {
+  // 29. Stale profile refresh
+  it('Scenario 29: stale profile refresh: cached profile older than 7 days triggers background refresh without client user_id', async () => {
     const userId = 'user-test-29';
-    const oldTimestamp = new Date(Date.now() - 25 * 3600000).toISOString();
+    // 8 days old is stale (> 7 days)
+    const oldTimestamp = new Date(Date.now() - 8 * 24 * 3600000).toISOString();
     mockStore[`@jezsy:style_dna_profile:${userId}`] = JSON.stringify({
       userId,
       schemaVersion: 1,
@@ -885,11 +887,12 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     });
 
     await styleDnaSyncManager.flushQueue(userId);
-    expect(supabase.rpc).toHaveBeenCalledWith('refresh_style_profile', expect.objectContaining({ p_user_id: userId }));
+    // Verified: refresh_style_profile called with { p_force: false } without supplying client user_id
+    expect(supabase.rpc).toHaveBeenCalledWith('refresh_style_profile', { p_force: false });
   });
 
-  // 30. Qualitative maturity: 0 events -> Learning your style
-  it('Scenario 30: qualitative maturity: 0 events -> Learning your style (Level 0)', () => {
+  // 30. Qualitative maturity: globalConfidence < 0.30 -> Learning your style
+  it('Scenario 30: qualitative maturity: globalConfidence < 0.30 -> Learning your style (Level 0)', () => {
     const profile: StyleDnaProfile = {
       userId: 'user-test-30',
       schemaVersion: 1,
@@ -898,8 +901,8 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
       formalityAffinities: {},
       accessoryAffinities: {},
       explicitPreferences: {},
-      globalConfidence: 0.0,
-      eventCount: 0,
+      globalConfidence: 0.25,
+      eventCount: 3,
       lastEventTimestamp: null,
       learningResetAt: null,
       projectionComputedAt: new Date().toISOString(),
@@ -908,10 +911,14 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     const maturity = getQualitativeStyleMaturity(profile);
     expect(maturity.level).toBe(0);
     expect(maturity.label).toBe('Learning your style');
+    expect(maturity.stage).toBe('learning');
+
+    // Boundary check: exactly 0.299 is still Learning your style
+    expect(getQualitativeStyleMaturity(0.299).label).toBe('Learning your style');
   });
 
-  // 31. Qualitative maturity: 1-4 events -> Getting to know your style
-  it('Scenario 31: qualitative maturity: 1-4 events -> Getting to know your style (Level 1)', () => {
+  // 31. Qualitative maturity: 0.30 <= globalConfidence < 0.70 -> Getting to know your style
+  it('Scenario 31: qualitative maturity: 0.30 <= globalConfidence < 0.70 -> Getting to know your style (Level 1)', () => {
     const profile: StyleDnaProfile = {
       userId: 'user-test-31',
       schemaVersion: 1,
@@ -920,8 +927,8 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
       formalityAffinities: {},
       accessoryAffinities: {},
       explicitPreferences: {},
-      globalConfidence: 0.3,
-      eventCount: 3,
+      globalConfidence: 0.45,
+      eventCount: 5,
       lastEventTimestamp: null,
       learningResetAt: null,
       projectionComputedAt: new Date().toISOString(),
@@ -930,10 +937,15 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     const maturity = getQualitativeStyleMaturity(profile);
     expect(maturity.level).toBe(1);
     expect(maturity.label).toBe('Getting to know your style');
+    expect(maturity.stage).toBe('developing');
+
+    // Boundary checks: 0.30 and 0.699
+    expect(getQualitativeStyleMaturity(0.30).label).toBe('Getting to know your style');
+    expect(getQualitativeStyleMaturity(0.699).label).toBe('Getting to know your style');
   });
 
-  // 32. Qualitative maturity: 5+ events -> Style profile established
-  it('Scenario 32: qualitative maturity: 5+ events -> Style profile established (Level 2)', () => {
+  // 32. Qualitative maturity: globalConfidence >= 0.70 -> Style profile established
+  it('Scenario 32: qualitative maturity: globalConfidence >= 0.70 -> Style profile established (Level 2)', () => {
     const profile: StyleDnaProfile = {
       userId: 'user-test-32',
       schemaVersion: 1,
@@ -942,8 +954,8 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
       formalityAffinities: {},
       accessoryAffinities: {},
       explicitPreferences: {},
-      globalConfidence: 0.8,
-      eventCount: 7,
+      globalConfidence: 0.75,
+      eventCount: 15,
       lastEventTimestamp: null,
       learningResetAt: null,
       projectionComputedAt: new Date().toISOString(),
@@ -952,10 +964,56 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     const maturity = getQualitativeStyleMaturity(profile);
     expect(maturity.level).toBe(2);
     expect(maturity.label).toBe('Style profile established');
+    expect(maturity.stage).toBe('established');
+
+    // Boundary check: exactly 0.70
+    expect(getQualitativeStyleMaturity(0.70).label).toBe('Style profile established');
   });
 
-  // 33. Grounded explainer integration
-  it('Scenario 33: grounded explainer integration: candidate outfits reflect learned style in grounded reason tokens', () => {
+  // 33. Grounded explainer integration with strict frozen threshold checks
+  it('Scenario 33: grounded explainer integration: requires effectiveSampleCount >= 5, confidence >= 0.50, and score >= 0.70', () => {
+    // Test boundary conditions for isDimensionGrounded
+    expect(isDimensionGrounded(null)).toBe(false);
+    expect(isDimensionGrounded(undefined)).toBe(false);
+
+    // Failing effectiveSampleCount (< 5)
+    expect(isDimensionGrounded({
+      score: 0.85,
+      confidence: 0.70,
+      effectiveSampleCount: 4.9,
+      rawSampleCount: 5,
+      lastSignalAt: new Date().toISOString(),
+    })).toBe(false);
+
+    // Failing confidence (< 0.50)
+    expect(isDimensionGrounded({
+      score: 0.85,
+      confidence: 0.49,
+      effectiveSampleCount: 6.0,
+      rawSampleCount: 6,
+      lastSignalAt: new Date().toISOString(),
+    })).toBe(false);
+
+    // Failing affinity score (< 0.70)
+    expect(isDimensionGrounded({
+      score: 0.69,
+      confidence: 0.60,
+      effectiveSampleCount: 6.0,
+      rawSampleCount: 6,
+      lastSignalAt: new Date().toISOString(),
+    })).toBe(false);
+
+    // Passing all three frozen requirements
+    const groundedAffinity = {
+      score: 0.80,
+      affinityScore: 0.80,
+      confidence: 0.60,
+      effectiveSampleCount: 6.0,
+      rawSampleCount: 6,
+      lastSignalAt: new Date().toISOString(),
+    };
+    expect(isDimensionGrounded(groundedAffinity)).toBe(true);
+
     const candidate: CandidateOutfit = {
       candidateId: 'cand-1',
       items: [
@@ -981,14 +1039,14 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
         userId: 'user-test-33',
         schemaVersion: 1,
         paletteAffinities: {
-          Navy: { score: 0.8, affinityScore: 4.5, confidence: 0.8, effectiveEvidence: 3.0, effectiveSampleCount: 3.0, rawSampleCount: 3, lastSignalAt: new Date().toISOString() },
+          Navy: groundedAffinity,
         },
         silhouetteAffinities: {},
         formalityAffinities: {},
         accessoryAffinities: {},
         explicitPreferences: {},
         globalConfidence: 0.8,
-        eventCount: 5,
+        eventCount: 8,
         lastEventTimestamp: null,
         learningResetAt: null,
         projectionComputedAt: new Date().toISOString(),
@@ -997,7 +1055,7 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
 
     const explanation = generateGroundedExplanation(candidate, intent, userProfile as any);
     expect(explanation.headline).toBeDefined();
-    // Explanation should ground the preferred palette since effective evidence >= 1.5
+    // Explanation grounds the preferred palette because all frozen thresholds are met
     expect(explanation.whyThisWorks.palette).toContain('Navy');
   });
 
@@ -1049,5 +1107,76 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     const topCandidate = candidates[0];
     const topHasNavy = topCandidate.items.some((i) => i.id === 'navy-top');
     expect(topHasNavy).toBe(true);
+  });
+
+  // 36. Explicit session intent supremacy over persistent user exclusions
+  it('Scenario 36: explicit session intent overrides persistent user exclusion when explicitly requested', () => {
+    const yellowTop = makeMockItem('yellow-top', { color_tags: ['Yellow'], category: 'Top' });
+    const blueBot = makeMockItem('blue-bot', { color_tags: ['Blue'], category: 'Bottom' });
+
+    const profile: StyleDnaProfile = {
+      userId: 'user-test-36',
+      schemaVersion: 1,
+      paletteAffinities: {},
+      silhouetteAffinities: {},
+      formalityAffinities: {},
+      accessoryAffinities: {},
+      explicitPreferences: {
+        avoidedColors: ['Yellow'],
+      },
+      globalConfidence: 0.5,
+      eventCount: 5,
+      lastEventTimestamp: null,
+      learningResetAt: null,
+      projectionComputedAt: new Date().toISOString(),
+    };
+
+    // When NOT requested in session intent, Yellow receives penalty
+    const resultWithoutIntent = computePersonalAffinity([yellowTop, blueBot], profile, null, { rawPrompt: 'casual' });
+    expect(resultWithoutIntent.negativeSignals).toContain('Matches explicit color dislike: Yellow');
+
+    // When explicitly pinned in session intent via mustUseItemIds, penalty is overridden
+    const resultWithPinnedIntent = computePersonalAffinity([yellowTop, blueBot], profile, null, {
+      rawPrompt: 'casual',
+      mustUseItemIds: ['yellow-top'],
+    });
+    expect(resultWithPinnedIntent.negativeSignals).not.toContain('Matches explicit color dislike: Yellow');
+
+    // When explicitly mentioned in session prompt, penalty is also overridden
+    const resultWithPromptIntent = computePersonalAffinity([yellowTop, blueBot], profile, null, {
+      rawPrompt: 'wear my yellow top today',
+    });
+    expect(resultWithPromptIntent.negativeSignals).not.toContain('Matches explicit color dislike: Yellow');
+
+    // Delta is bounded to LEARNED_STYLE_MAX_DELTA (15)
+    expect(Math.abs(resultWithPromptIntent.learnedDnaDelta || 0)).toBeLessThanOrEqual(LEARNED_STYLE_MAX_DELTA);
+  });
+
+  // 37. Freshness threshold: does NOT refresh when younger than 7 days
+  it('Scenario 37: freshness threshold: cached profile younger than 7 days does NOT trigger background refresh', async () => {
+    const userId = 'user-test-37';
+    // 3 days old is fresh (< 7 days)
+    const freshTimestamp = new Date(Date.now() - 3 * 24 * 3600000).toISOString();
+    mockStore[`@jezsy:style_dna_profile:${userId}`] = JSON.stringify({
+      userId,
+      schemaVersion: 1,
+      paletteAffinities: {},
+      silhouetteAffinities: {},
+      formalityAffinities: {},
+      accessoryAffinities: {},
+      explicitPreferences: {},
+      globalConfidence: 0.5,
+      eventCount: 1,
+      lastEventTimestamp: null,
+      learningResetAt: null,
+      projectionComputedAt: freshTimestamp,
+    });
+    mockStore[`@jezsy:style_events_queue:${userId}`] = '[]';
+    await styleDnaSyncManager.setActiveUser(userId);
+
+    (supabase.rpc as jest.Mock).mockClear();
+
+    await styleDnaSyncManager.flushQueue(userId);
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 });

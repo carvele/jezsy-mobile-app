@@ -47,7 +47,11 @@ export const DEFAULT_STYLE_PROFILE: Omit<UserStyleProfileDto, 'userId'> = {
 };
 
 /**
- * Maps a numeric confidence score or StyleDnaProfile to human-readable qualitative UX badges.
+ * Maps global confidence or StyleDnaProfile to human-readable qualitative maturity states.
+ * Frozen requirements:
+ *   globalConfidence < 0.30            → "Learning your style"
+ *   0.30 <= globalConfidence < 0.70    → "Getting to know your style"
+ *   globalConfidence >= 0.70           → "Style profile established"
  */
 export function getQualitativeStyleMaturity(input: number | StyleDnaProfile): {
   level: number;
@@ -56,10 +60,9 @@ export function getQualitativeStyleMaturity(input: number | StyleDnaProfile): {
   stage: 'learning' | 'developing' | 'established';
   explanation: string;
 } {
-  const count = typeof input === 'number' ? Math.round(input * 10) : input.eventCount;
   const conf = typeof input === 'number' ? input : input.globalConfidence;
 
-  if (count === 0 || conf < 0.20) {
+  if (conf < 0.30) {
     return {
       level: 0,
       label: 'Learning your style',
@@ -68,7 +71,7 @@ export function getQualitativeStyleMaturity(input: number | StyleDnaProfile): {
       explanation: 'We are learning your preferences as you save, remix, and wear outfits.',
     };
   }
-  if (count < 5 || conf < 0.60) {
+  if (conf < 0.70) {
     return {
       level: 1,
       label: 'Getting to know your style',
@@ -88,12 +91,17 @@ export function getQualitativeStyleMaturity(input: number | StyleDnaProfile): {
 
 /**
  * Checks if a Style DNA dimension meets the grounded evidence threshold for user-facing claims.
+ * Frozen requirements:
+ *   dimension.effectiveSampleCount >= 5
+ *   dimension.confidence >= 0.50
+ *   affinityScore >= 0.70
  */
 export function isDimensionGrounded(affinity?: StyleDimensionAffinity | null): boolean {
   if (!affinity) return false;
-  const evidence = affinity.effectiveEvidence ?? affinity.effectiveSampleCount ?? 0;
-  const score = affinity.affinityScore ?? ((affinity.score - 0.5) * 20);
-  return evidence >= 1.5 && (score >= 2.0 || affinity.score >= 0.60);
+  const effectiveSamples = affinity.effectiveSampleCount ?? affinity.effectiveEvidence ?? 0;
+  const confidence = affinity.confidence ?? 0;
+  const score = affinity.affinityScore ?? affinity.score ?? 0;
+  return effectiveSamples >= 5 && confidence >= 0.50 && score >= 0.70;
 }
 
 /**
@@ -328,13 +336,20 @@ export function computePersonalAffinity(
   items: WardrobeItem[],
   profile?: UserStyleProfileDto | StyleDnaProfile | null,
   targetOccasion?: string | null,
-  explicitIntent?: { rawPrompt?: string; selectedOccasion?: string | null }
+  explicitIntent?: { rawPrompt?: string; selectedOccasion?: string | null; mustUseItemIds?: string[] }
 ): PersonalAffinityResult {
   const dna: StyleDnaProfile | undefined =
     (profile as UserStyleProfileDto)?.styleDna ||
     ((profile as any)?.paletteAffinities ? (profile as StyleDnaProfile) : undefined);
 
-  if (!profile || ((profile as UserStyleProfileDto).feedbackCount === 0 && !dna)) {
+  const hasDnaEvidence = !!(dna && (dna.eventCount > 0 || (dna.globalConfidence ?? 0) > 0));
+  const hasLegacyFeedback = ((profile as UserStyleProfileDto)?.feedbackCount ?? 0) > 0;
+  const hasExplicitPrefs = !!(
+    profile?.explicitPreferences &&
+    Object.values(profile.explicitPreferences).some((v) => (Array.isArray(v) ? v.length > 0 : !!v))
+  );
+
+  if (!profile || (!hasDnaEvidence && !hasLegacyFeedback && !hasExplicitPrefs)) {
     return {
       score: 75,
       positiveSignals: ['Neutral profile baseline'],
@@ -357,11 +372,16 @@ export function computePersonalAffinity(
 
   // 1. Explicit Exclusions (Hard Constraints) & Preferred (Deterministic Boosts)
   for (const item of items) {
+    const isItemExplicitlyPinned = explicitIntent?.mustUseItemIds?.includes(item.id);
     const itemColors: string[] = Array.isArray(item.color_tags) ? item.color_tags : [];
     for (const c of itemColors) {
+      const isColorExplicitlyRequested = isItemExplicitlyPinned ||
+        (explicitIntent?.rawPrompt && explicitIntent.rawPrompt.toLowerCase().includes(c.toLowerCase()));
       if (avoidedColors.includes(c)) {
-        affinityPoints -= EXPLICIT_DISLIKED_COLOR_PENALTY;
-        negativeSignals.push(`Matches explicit color dislike: ${c}`);
+        if (!isColorExplicitlyRequested) {
+          affinityPoints -= EXPLICIT_DISLIKED_COLOR_PENALTY;
+          negativeSignals.push(`Matches explicit color dislike: ${c}`);
+        }
       }
       if (preferredColors.includes(c)) {
         affinityPoints += EXPLICIT_PREFERRED_COLOR_BOOST;
@@ -375,9 +395,13 @@ export function computePersonalAffinity(
     }
     const fit = (item as any).fit || (item as any).ai_attributes?.fit;
     if (fit) {
+      const isFitExplicitlyRequested = isItemExplicitlyPinned ||
+        (explicitIntent?.rawPrompt && explicitIntent.rawPrompt.toLowerCase().includes(fit.toLowerCase()));
       if (avoidedFits.includes(fit)) {
-        affinityPoints -= EXPLICIT_DISLIKED_FIT_PENALTY;
-        negativeSignals.push(`Features avoided fit: ${fit}`);
+        if (!isFitExplicitlyRequested) {
+          affinityPoints -= EXPLICIT_DISLIKED_FIT_PENALTY;
+          negativeSignals.push(`Features avoided fit: ${fit}`);
+        }
       }
       if (preferredFits.includes(fit)) {
         affinityPoints += EXPLICIT_PREFERRED_FIT_BOOST;

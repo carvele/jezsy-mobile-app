@@ -3936,13 +3936,11 @@ export type Database = {
       sync_and_aggregate_style_dna: {
         Args: {
           p_events: Json
-          p_as_of?: string
         }
         Returns: Json
       }
       refresh_style_profile: {
         Args: {
-          p_user_id?: string
           p_force?: boolean
         }
         Returns: Json

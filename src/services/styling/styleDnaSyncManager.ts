@@ -387,19 +387,18 @@ class StyleDnaSyncManager {
   }
 
   /**
-   * Refreshes the profile if stale (> 24 hours) even if zero new events were emitted.
+   * Refreshes the profile if stale (> 7 days) even if zero new events were emitted.
    */
   private async checkAndRefreshStaleProfile(userId: string): Promise<void> {
     const profile = await this.getProfile(userId);
     if (!profile.projectionComputedAt) return;
 
     const computedTime = new Date(profile.projectionComputedAt).getTime();
-    const isStale = Date.now() - computedTime > 24 * 3600000;
+    const isStale = Date.now() - computedTime > 7 * 24 * 3600000;
 
     if (isStale) {
       try {
         const { data, error } = await supabase.rpc('refresh_style_profile' as any, {
-          p_user_id: userId,
           p_force: false,
         });
         if (!error && data) {

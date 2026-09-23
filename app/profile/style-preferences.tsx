@@ -168,14 +168,8 @@ export default function StylePreferencesScreen() {
             {maturity.explanation}
           </Text>
 
-          {profile.eventCount > 0 && (
+          {profile.eventCount > 0 && (topLearnedPalettes.length > 0 || topLearnedSilhouettes.length > 0) && (
             <View style={[styles.statsContainer, { borderTopColor: colors.border }]}>
-              <View style={styles.statBox}>
-                <Text style={[styles.statValue, { color: colors.text }]}>
-                  {Math.round(profile.globalConfidence * 100)}%
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.secondaryText }]}>DNA Confidence</Text>
-              </View>
               {topLearnedPalettes.length > 0 && (
                 <View style={styles.statBox}>
                   <Text style={[styles.statValue, { color: colors.tint }]} numberOfLines={1}>
