@@ -2,6 +2,7 @@ import type { BodyPose, GarmentFitState } from '../types/pose';
 import type { GarmentFitProfile } from '../types/garment';
 import { normalizePose, IDENTITY_QUAT, type CanonicalPose } from './poseNormalizer';
 import type { UserMeasurements } from './sizeRecommender';
+import { deriveBodyOuterHipWidth, deriveBodyOuterShoulderWidth } from './bodyFitEstimator';
 
 /**
  * Calculates the garment's target transformation and scale state (GarmentFitState) 
@@ -85,19 +86,38 @@ export function calculateGarmentFit(
   // Calculate apparent 2D pixel width of the anchor pair (shoulders, or hips for bottoms)
   const apparentAnchorWidthPx = Math.abs(leftAnchorPoint.x - rightAnchorPoint.x);
 
-  // Lower-body silhouette expansion: MediaPipe landmarks 23 and 24 represent internal femoral
-  // head joint centers (~18-20cm on human adults). The outer hip silhouette spans ~1.78x this
-  // joint distance (~33-36cm), matching authored pants waistband boundaries.
-  const HIP_TO_SILHOUETTE_RATIO = 1.78;
-  const apparentWidthPx = isBottomGarment
-    ? apparentAnchorWidthPx * HIP_TO_SILHOUETTE_RATIO
-    : apparentAnchorWidthPx;
+  // 2. Metric Anthropometric Scaling (Phase 3 -> Phase 6 3D -> V2 Fit Bands)
+  const wl = pose.worldLandmarks;
+  const [aIdx, bIdx] = useHipAnchor ? [23, 24] : [11, 12];
+  let skeletalJointSpanM = 0.4;
+  if (wl && wl[aIdx] && wl[bIdx]) {
+    const dx = wl[bIdx].x - wl[aIdx].x;
+    const dy = wl[bIdx].y - wl[aIdx].y;
+    const dz = wl[bIdx].z - wl[aIdx].z;
+    skeletalJointSpanM = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  }
+
+  // Derive body outer physical width using strict typed semantics and source priority
+  const bodyOuterHipWidthM = deriveBodyOuterHipWidth({
+    userMeasurements,
+    sizingMeasurements: userMeasurements ? { hips: userMeasurements.hips, waist: userMeasurements.waist, shoulderWidth: userMeasurements.shoulderWidth } : null,
+    skeletalHipSpanM: isBottomGarment ? skeletalJointSpanM : null,
+    skeletalShoulderSpanM: isBottomGarment ? null : skeletalJointSpanM,
+    yawRad: pose.orientation.yawRad,
+    confidence: pose.confidence
+  });
+
+  const bodyOuterShoulderWidthM = deriveBodyOuterShoulderWidth({
+    userMeasurements,
+    skeletalShoulderSpanM: isBottomGarment ? null : skeletalJointSpanM,
+  });
+
+  const bodyOuterWidthM = isBottomGarment ? bodyOuterHipWidthM : bodyOuterShoulderWidthM;
 
   // Foreshortening correction using orientation
-  // Orientation was established robustly in BodyCoordinateFrame
+  // During movement or turning, physical body outer width remains stable
   const cosYaw = Math.max(0.65, Math.abs(Math.cos(pose.orientation.yawRad)));
-  const correctedWidthPx = apparentWidthPx / cosYaw;
-  const correctedShoulderWidthPx = (isBottomGarment ? apparentAnchorWidthPx : apparentWidthPx) / cosYaw;
+  const correctedShoulderWidthPx = (isBottomGarment ? apparentAnchorWidthPx * 1.78 : apparentAnchorWidthPx) / cosYaw;
 
   // 1. Anchoring Logic driven by GarmentFitProfile (2D pixel coordinates for HUD)
   let anchorX = bagAnchorPoint ? bagAnchorPoint.x : (leftAnchorPoint.x + rightAnchorPoint.x) / 2;
@@ -107,32 +127,34 @@ export function calculateGarmentFit(
      // example override if rig provides specific attachment offsets
   }
 
-  // 2. Metric Anthropometric Scaling (Phase 3 -> Phase 6 3D -> V2 Fit Bands)
-  const wl = pose.worldLandmarks;
-  const [aIdx, bIdx] = useHipAnchor ? [23, 24] : [11, 12];
-  let userShoulderWidthMeters = 0.4; // fallback for average human
-  if (wl && wl[aIdx] && wl[bIdx]) {
-    const dx = wl[bIdx].x - wl[aIdx].x;
-    const dy = wl[bIdx].y - wl[aIdx].y;
-    const dz = wl[bIdx].z - wl[aIdx].z;
-    userShoulderWidthMeters = Math.sqrt(dx*dx + dy*dy + dz*dz);
-  }
-
   // V2 Profile Awareness: Read authored fit bands and coverage profile
   const v2 = metadata?.fitProfileV2;
   const hipBand = v2?.fitBands?.find(b => b.name === 'HIP');
   const waistBand = v2?.fitBands?.find(b => b.name === 'WAIST');
   const shoulderBand = v2?.fitBands?.find(b => b.name === 'SHOULDER');
 
+  let aggregatedBottomWidth = null;
+  if (isBottomGarment) {
+    if (hipBand && hipBand.authoredWidthMeters) {
+      if (waistBand && waistBand.authoredWidthMeters) {
+        aggregatedBottomWidth = (hipBand.authoredWidthMeters * 0.65) + (waistBand.authoredWidthMeters * 0.35);
+      } else {
+        aggregatedBottomWidth = hipBand.authoredWidthMeters;
+      }
+    } else if (waistBand && waistBand.authoredWidthMeters) {
+      aggregatedBottomWidth = waistBand.authoredWidthMeters;
+    }
+  }
+
   const garmentMetricWidthMeters = isBottomGarment
-    ? (hipBand?.authoredWidthMeters || waistBand?.authoredWidthMeters || metadata?.restPoseMetricWidth || 0.34)
+    ? (aggregatedBottomWidth || hipBand?.authoredWidthMeters || waistBand?.authoredWidthMeters || metadata?.restPoseMetricWidth || 0.34)
     : (shoulderBand?.authoredWidthMeters || metadata?.restPoseMetricWidth || (profile?.dimensions?.shoulderWidth || 0.4));
   
   // Category-specific clothing ease (8% for bottoms so garment rests naturally over silhouette)
   const garmentEase = isBottomGarment ? 1.08 : 1.0;
 
-  // Horizontal target 3D scale
-  const targetScaleX = ((correctedWidthPx / 100) * garmentEase) / garmentMetricWidthMeters;
+  // Horizontal target 3D scale: Body Outer Width / Authored Garment Reference Width
+  const targetScaleX = ((bodyOuterWidthM * garmentEase) / garmentMetricWidthMeters);
 
   // Multi-constraint Vertical Fit / Leg Length scaling for trousers/skirts
   let targetScaleY = isBottomGarment ? 1.0 : targetScaleX;
@@ -161,17 +183,18 @@ export function calculateGarmentFit(
 
   // Phase B2: real-measurement fit modifier, matching hips for bottoms
   const wearerWidthCm = isBottomGarment
-    ? (userMeasurements?.hips ? userMeasurements.hips / 2.85 : (userShoulderWidthMeters * HIP_TO_SILHOUETTE_RATIO * 100))
-    : (userMeasurements?.shoulderWidth ?? (userShoulderWidthMeters > 0 ? userShoulderWidthMeters * 100 : null));
+    ? (userMeasurements?.hips ? (userMeasurements.hips / 2.735) : (bodyOuterHipWidthM * 100))
+    : (userMeasurements?.shoulderWidth ?? (bodyOuterShoulderWidthM * 100));
   const garmentWidthCm = isBottomGarment
-    ? (garmentSizeMeasurements?.hips ? garmentSizeMeasurements.hips / 2.85 : (garmentSizeMeasurements?.shoulderWidth ?? null))
+    ? (garmentSizeMeasurements?.hips ? (garmentSizeMeasurements.hips / 2.735) : (garmentSizeMeasurements?.shoulderWidth ?? null))
     : (garmentSizeMeasurements?.shoulderWidth ?? null);
   const fitModifier = wearerWidthCm && garmentWidthCm && wearerWidthCm > 0
     ? Math.min(1.4, Math.max(0.7, garmentWidthCm / wearerWidthCm))
     : 1;
 
-  const targetScaleFinalX = targetScaleX * fitModifier;
-  const targetScaleFinalY = targetScaleY * fitModifier;
+  // Final safety clamp on target scale factors (prevent runaway scales on noisy frames)
+  const targetScaleFinalX = Math.max(0.65, Math.min(1.45, targetScaleX * fitModifier));
+  const targetScaleFinalY = Math.max(0.65, Math.min(1.45, targetScaleY * fitModifier));
   const targetScaleFinalZ = targetScaleFinalX;
 
 

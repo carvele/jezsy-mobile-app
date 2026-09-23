@@ -30,6 +30,12 @@ import { calculateGarmentFit } from '@/src/utils/garmentFitter';
 import { calculateBoneRotationsFromCanonical } from '@/src/utils/skeletalRetargeter';
 import { normalizePose, torsoEulerDegrees } from '@/src/utils/poseNormalizer';
 import { adaptGarmentMetadata } from '@/src/utils/garmentMetadataAdapter';
+import {
+  estimateBodyFitState,
+  deriveBodyOuterHipWidth,
+  deriveBodyOuterShoulderWidth,
+  type BodyFitState,
+} from '@/src/utils/bodyFitEstimator';
 import type { GarmentFitProfile } from '@/src/types/garment';
 import {
   useSharedValue,
@@ -461,6 +467,7 @@ export default function ARTryOnScreen() {
   const transportRateCountRef = React.useRef(0);
   const transportRateWindowStartRef = React.useRef(0);
   const garmentRendererRef = React.useRef<GarmentRendererRef>(null);
+  const bodyFitStateRef = React.useRef<BodyFitState | null>(null);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const stageWidth = stageLayout.width || Math.min(winWidth || 390, 480);
@@ -560,12 +567,14 @@ export default function ARTryOnScreen() {
   // On web, derives from stage viewport dimensions with standard 45deg vertical FOV.
   // On native, vision-camera format.fieldOfView is the diagonal FOV.
   const cameraCalibration = useMemo(() => {
-    const wearerShoulderWidthM = sizingMeasurements?.shoulderWidth
-      ? sizingMeasurements.shoulderWidth / 100
-      : 0.40;
-    const wearerHipWidthM = sizingMeasurements?.hips
-      ? sizingMeasurements.hips / 285 // approximate internal joint span in meters
-      : 0.36;
+    const wearerShoulderWidthM = deriveBodyOuterShoulderWidth(
+      sizingMeasurements?.shoulderWidth,
+      sizingMeasurements?.bust
+    );
+    const wearerHipWidthM = deriveBodyOuterHipWidth(
+      sizingMeasurements?.hips,
+      sizingMeasurements?.waist
+    );
 
     if (Platform.OS === 'web') {
       const videoWidthPx = stageWidth > 0 ? stageWidth : 720;
@@ -717,6 +726,15 @@ export default function ARTryOnScreen() {
             transportRateWindowStartRef.current = rateNow;
           }
 
+          const liveBodyFit = estimateBodyFitState({
+            userMeasurements: sizingMeasurements ?? undefined,
+            skeletalLandmarks: (worldLandmarks && worldLandmarks.length >= 33) ? worldLandmarks : landmarks,
+            torsoYawRad: pose.orientation.yawRad,
+            trackingConfidence: pose.trackingState === 'GOOD_FIT' ? 0.9 : 0.4,
+            priorState: bodyFitStateRef.current ?? undefined,
+          });
+          bodyFitStateRef.current = liveBodyFit;
+
           garmentRendererRef.current.updateTransform(
             { x: fitState.anchor.x, y: fitState.anchor.y, z: fitState.anchor.z },
             fitState.orientation3D,
@@ -724,7 +742,8 @@ export default function ARTryOnScreen() {
             boneRotations,
             segmentation,
             landmarks,
-            worldLandmarks
+            worldLandmarks,
+            liveBodyFit
           );
         }
       }
