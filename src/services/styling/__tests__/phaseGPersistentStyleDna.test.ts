@@ -122,7 +122,7 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
   });
 
   // 2. Weight assignment
-  it('Scenario 2: weight assignment: wear_outfit=1.00, save_look=0.70, remix_commit=0.50, explicit_feedback=0.80, dont_recommend_item=0.00', () => {
+  it('Scenario 2: weight assignment: love_look=1.00, save_look=0.80, wear_outfit=0.70, remix_commit=0.50, not_my_style=-0.50, too_formal=-0.40, dont_recommend_item=0.00', () => {
     const userId = 'user-test-2';
     const now = new Date();
     const events: StylePreferenceEvent[] = [
@@ -134,10 +134,12 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     ];
 
     const profile = aggregateStyleDnaLocally(userId, events, now);
+    expect(profile.paletteAffinities['Black'].score).toBeCloseTo(0.85, 2);
+    expect(profile.paletteAffinities['White'].score).toBeCloseTo(0.90, 2);
+    expect(profile.paletteAffinities['Beige'].score).toBeCloseTo(0.75, 2);
+    expect(profile.formalityAffinities['formal'].score).toBeCloseTo(0.30, 2);
     expect(profile.paletteAffinities['Black'].effectiveEvidence).toBeCloseTo(1.0, 1);
-    expect(profile.paletteAffinities['White'].effectiveEvidence).toBeCloseTo(0.7, 1);
-    expect(profile.paletteAffinities['Beige'].effectiveEvidence).toBeCloseTo(0.5, 1);
-    expect(profile.formalityAffinities['formal'].effectiveEvidence).toBeCloseTo(0.8, 1);
+    expect(profile.paletteAffinities['White'].effectiveEvidence).toBeCloseTo(1.0, 1);
     // Red must NOT have learned evidence because dont_recommend_item has weight 0.00
     expect(profile.paletteAffinities['Red']).toBeUndefined();
   });
@@ -192,8 +194,9 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     ];
 
     const profile = aggregateStyleDnaLocally(userId, events, fiveMinutesLater);
-    // Should take the save_look weight (0.70) rather than summing both (0.50 + 0.70 = 1.20)
-    expect(profile.paletteAffinities['Burgundy'].effectiveEvidence).toBeCloseTo(0.7, 1);
+    // Should take the save_look weight (0.80) rather than summing both (0.50 + 0.80 = 1.30)
+    expect(profile.paletteAffinities['Burgundy'].effectiveEvidence).toBeCloseTo(1.0, 1);
+    expect(profile.paletteAffinities['Burgundy'].score).toBeCloseTo(0.90, 2);
   });
 
   // 5. 60-day half-life decay
@@ -320,8 +323,10 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     ];
 
     const profile = aggregateStyleDnaLocally(userId, events, now);
-    // 1.0 + 1.0 + 0.7 = 2.7
-    expect(profile.silhouetteAffinities['Relaxed'].effectiveEvidence).toBeCloseTo(2.7, 1);
+    // 3 events with decay=1.0 -> effectiveEvidence = sum(decayFactor) = 3.0
+    expect(profile.silhouetteAffinities['Relaxed'].effectiveEvidence).toBeCloseTo(3.0, 1);
+    // weightedSum = 0.70 + 0.70 + 0.80 = 2.20 -> score = ((2.20 / 3.0) + 1.0) / 2.0 = 0.867
+    expect(profile.silhouetteAffinities['Relaxed'].score).toBeCloseTo(0.867, 2);
   });
 
   // 10. Confidence sigmoid
@@ -1179,4 +1184,176 @@ describe('Phase G: Persistent Style DNA Test Suite (35 Scenarios)', () => {
     await styleDnaSyncManager.flushQueue(userId);
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
+
+  // 38. PostgreSQL Runtime Golden-Vector Parity
+  it('Scenario 38: PostgreSQL Runtime Golden-Vector Parity (<= 0.001 tolerance across all dimensions, confidence, reset cutoff, and action dedup)', () => {
+    const userId = '11111111-1111-4111-8111-111111111111';
+    const asOf = new Date('2026-09-23T16:00:00Z');
+
+    const events: StylePreferenceEvent[] = [
+      // Event A: 100 days old (before reset, must be ignored)
+      {
+        id: 'a0000000-0000-4000-8000-000000000001',
+        userId,
+        eventSchemaVersion: 1,
+        eventType: 'wear_outfit',
+        clientTimestamp: '2026-06-15T16:00:00Z',
+        createdAt: '2026-06-15T16:00:00Z',
+        payload: { palette: ['IgnoredRed'] },
+      },
+      // Event B: Reset event at 50 days old
+      {
+        id: 'a0000000-0000-4000-8000-000000000002',
+        userId,
+        eventSchemaVersion: 1,
+        eventType: 'reset_learned_preferences',
+        clientTimestamp: '2026-08-04T16:00:00Z',
+        createdAt: '2026-08-04T16:00:00Z',
+        payload: { reset_scope: 'learned_only' },
+      },
+      // Event C: 30 days old
+      {
+        id: 'a0000000-0000-4000-8000-000000000003',
+        userId,
+        eventSchemaVersion: 1,
+        eventType: 'wear_outfit',
+        clientTimestamp: '2026-08-24T16:00:00Z',
+        createdAt: '2026-08-24T16:00:00Z',
+        payload: {
+          palette: ['Navy'],
+          silhouettes: ['Tailored'],
+          formality: ['business_casual'],
+          accessories: ['LeatherBelt'],
+        },
+      },
+      // Event D: 10 days old (remix_commit) with action_id
+      {
+        id: 'a0000000-0000-4000-8000-000000000004',
+        userId,
+        eventSchemaVersion: 1,
+        eventType: 'remix_commit',
+        preferenceActionId: 'eeeeeeee-1111-4111-8111-111111111111',
+        clientTimestamp: '2026-09-13T16:00:00Z',
+        createdAt: '2026-09-13T16:00:00Z',
+        payload: {
+          palette: ['Navy', 'White'],
+          silhouettes: ['Relaxed'],
+          formality: ['smart_casual'],
+          accessories: ['SilverWatch'],
+        },
+      },
+      // Event E: 10 days old, 5 min later (save_look) with same action_id (must win over Event D)
+      {
+        id: 'a0000000-0000-4000-8000-000000000005',
+        userId,
+        eventSchemaVersion: 1,
+        eventType: 'save_look',
+        preferenceActionId: 'eeeeeeee-1111-4111-8111-111111111111',
+        clientTimestamp: '2026-09-13T16:05:00Z',
+        createdAt: '2026-09-13T16:05:00Z',
+        payload: {
+          palette: ['Navy', 'White'],
+          silhouettes: ['Relaxed'],
+          formality: ['smart_casual'],
+          accessories: ['SilverWatch'],
+        },
+      },
+      // Event F: 2 days old (too_formal feedback, dimension scoped)
+      {
+        id: 'a0000000-0000-4000-8000-000000000006',
+        userId,
+        eventSchemaVersion: 1,
+        eventType: 'explicit_feedback',
+        clientTimestamp: '2026-09-21T16:00:00Z',
+        createdAt: '2026-09-21T16:00:00Z',
+        payload: {
+          feedback_kind: 'too_formal',
+          formality: ['business_formal'],
+          palette: ['Navy'],
+        },
+      },
+      // Event G: Fresh (0 days old)
+      {
+        id: 'a0000000-0000-4000-8000-000000000007',
+        userId,
+        eventSchemaVersion: 1,
+        eventType: 'save_look',
+        clientTimestamp: '2026-09-23T16:00:00Z',
+        createdAt: '2026-09-23T16:00:00Z',
+        payload: {
+          palette: ['White'],
+          accessories: ['LeatherBelt'],
+        },
+      },
+      // Event H: Explicit setting
+      {
+        id: 'a0000000-0000-4000-8000-000000000008',
+        userId,
+        eventSchemaVersion: 1,
+        eventType: 'explicit_setting',
+        clientTimestamp: '2026-09-23T16:00:00Z',
+        createdAt: '2026-09-23T16:00:00Z',
+        payload: {
+          action: 'set',
+          setting_key: 'avoidedColors',
+          setting_value: ['NeonYellow'],
+        },
+      },
+    ];
+
+    const tsProfile = aggregateStyleDnaLocally(userId, events, asOf);
+
+    // Exact PostgreSQL runtime values from disposable DB:
+    // Palette: Navy
+    expect(tsProfile.paletteAffinities['Navy'].score).toBeCloseTo(0.878, 3);
+    expect(tsProfile.paletteAffinities['Navy'].effectiveEvidence).toBeCloseTo(1.598, 3);
+    expect(tsProfile.paletteAffinities['Navy'].confidence).toBeCloseTo(0.160, 3);
+    expect(tsProfile.paletteAffinities['Navy'].rawSampleCount).toBe(2);
+
+    // Palette: White
+    expect(tsProfile.paletteAffinities['White'].score).toBeCloseTo(0.900, 3);
+    expect(tsProfile.paletteAffinities['White'].effectiveEvidence).toBeCloseTo(1.891, 3);
+    expect(tsProfile.paletteAffinities['White'].confidence).toBeCloseTo(0.189, 3);
+    expect(tsProfile.paletteAffinities['White'].rawSampleCount).toBe(2);
+
+    // Reset Cutoff: IgnoredRed must not be present
+    expect(tsProfile.paletteAffinities['IgnoredRed']).toBeUndefined();
+
+    // Silhouettes: Relaxed
+    expect(tsProfile.silhouetteAffinities['Relaxed'].score).toBeCloseTo(0.900, 3);
+    expect(tsProfile.silhouetteAffinities['Relaxed'].effectiveEvidence).toBeCloseTo(0.891, 3);
+    expect(tsProfile.silhouetteAffinities['Relaxed'].confidence).toBeCloseTo(0.089, 3);
+    expect(tsProfile.silhouetteAffinities['Relaxed'].rawSampleCount).toBe(1);
+
+    // Silhouettes: Tailored
+    expect(tsProfile.silhouetteAffinities['Tailored'].score).toBeCloseTo(0.850, 3);
+    expect(tsProfile.silhouetteAffinities['Tailored'].effectiveEvidence).toBeCloseTo(0.707, 3);
+    expect(tsProfile.silhouetteAffinities['Tailored'].confidence).toBeCloseTo(0.071, 3);
+    expect(tsProfile.silhouetteAffinities['Tailored'].rawSampleCount).toBe(1);
+
+    // Formality: business_casual
+    expect(tsProfile.formalityAffinities['business_casual'].score).toBeCloseTo(0.850, 3);
+    expect(tsProfile.formalityAffinities['business_casual'].effectiveEvidence).toBeCloseTo(0.707, 3);
+
+    // Formality: business_formal (too_formal feedback)
+    expect(tsProfile.formalityAffinities['business_formal'].score).toBeCloseTo(0.300, 3);
+    expect(tsProfile.formalityAffinities['business_formal'].effectiveEvidence).toBeCloseTo(0.977, 3);
+
+    // Formality: smart_casual
+    expect(tsProfile.formalityAffinities['smart_casual'].score).toBeCloseTo(0.900, 3);
+    expect(tsProfile.formalityAffinities['smart_casual'].effectiveEvidence).toBeCloseTo(0.891, 3);
+
+    // Accessories: LeatherBelt
+    expect(tsProfile.accessoryAffinities['LeatherBelt'].score).toBeCloseTo(0.879, 3);
+    expect(tsProfile.accessoryAffinities['LeatherBelt'].effectiveEvidence).toBeCloseTo(1.707, 3);
+    expect(tsProfile.accessoryAffinities['LeatherBelt'].confidence).toBeCloseTo(0.171, 3);
+
+    // Accessories: SilverWatch
+    expect(tsProfile.accessoryAffinities['SilverWatch'].score).toBeCloseTo(0.900, 3);
+    expect(tsProfile.accessoryAffinities['SilverWatch'].effectiveEvidence).toBeCloseTo(0.891, 3);
+
+    // Global Confidence
+    expect(tsProfile.globalConfidence).toBeCloseTo(0.238, 3);
+  });
 });
+

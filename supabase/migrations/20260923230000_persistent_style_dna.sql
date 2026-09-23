@@ -170,7 +170,7 @@ BEGIN
     SELECT 
       token_name,
       pg_catalog.count(*)::int AS raw_samples,
-      pg_catalog.round(pg_catalog.sum(pg_catalog.abs(signal_weight) * decay_factor)::numeric, 3) AS effective_samples,
+      pg_catalog.round(pg_catalog.sum(decay_factor)::numeric, 3) AS effective_samples,
       pg_catalog.round(LEAST(1.000, GREATEST(0.000, (
         (pg_catalog.sum(signal_weight * decay_factor) / NULLIF(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
       ))::numeric, 3) AS affinity_score,
@@ -204,7 +204,7 @@ BEGIN
     SELECT 
       token_name,
       pg_catalog.count(*)::int AS raw_samples,
-      pg_catalog.round(pg_catalog.sum(pg_catalog.abs(signal_weight) * decay_factor)::numeric, 3) AS effective_samples,
+      pg_catalog.round(pg_catalog.sum(decay_factor)::numeric, 3) AS effective_samples,
       pg_catalog.round(LEAST(1.000, GREATEST(0.000, (
         (pg_catalog.sum(signal_weight * decay_factor) / NULLIF(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
       ))::numeric, 3) AS affinity_score,
@@ -238,7 +238,7 @@ BEGIN
     SELECT 
       token_name,
       pg_catalog.count(*)::int AS raw_samples,
-      pg_catalog.round(pg_catalog.sum(pg_catalog.abs(signal_weight) * decay_factor)::numeric, 3) AS effective_samples,
+      pg_catalog.round(pg_catalog.sum(decay_factor)::numeric, 3) AS effective_samples,
       pg_catalog.round(LEAST(1.000, GREATEST(0.000, (
         (pg_catalog.sum(signal_weight * decay_factor) / NULLIF(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
       ))::numeric, 3) AS affinity_score,
@@ -272,7 +272,7 @@ BEGIN
     SELECT 
       token_name,
       pg_catalog.count(*)::int AS raw_samples,
-      pg_catalog.round(pg_catalog.sum(pg_catalog.abs(signal_weight) * decay_factor)::numeric, 3) AS effective_samples,
+      pg_catalog.round(pg_catalog.sum(decay_factor)::numeric, 3) AS effective_samples,
       pg_catalog.round(LEAST(1.000, GREATEST(0.000, (
         (pg_catalog.sum(signal_weight * decay_factor) / NULLIF(pg_catalog.sum(decay_factor), 0)) + 1.0) / 2.0
       ))::numeric, 3) AS affinity_score,
@@ -575,8 +575,8 @@ BEGIN
         END LOOP;
       END IF;
 
-      IF v_event_type = 'wear_outfit' THEN v_server_weight := 1.00;
-      ELSIF v_event_type = 'save_look' THEN v_server_weight := 0.70;
+      IF v_event_type = 'save_look' THEN v_server_weight := 0.80;
+      ELSIF v_event_type = 'wear_outfit' THEN v_server_weight := 0.70;
       ELSE v_server_weight := 0.50; END IF;
       v_sanitized_payload := v_payload;
 
@@ -592,20 +592,20 @@ BEGIN
 
       v_feedback_kind := v_payload->>'feedback_kind';
       IF v_feedback_kind = 'love_look' THEN
-        v_server_weight := 0.80;
+        v_server_weight := 1.00;
         v_sanitized_payload := v_payload;
       ELSIF v_feedback_kind = 'not_my_style' THEN
-        v_server_weight := -0.80;
+        v_server_weight := -0.50;
         v_sanitized_payload := v_payload;
       ELSIF v_feedback_kind = 'too_formal' THEN
-        v_server_weight := -0.80;
+        v_server_weight := -0.40;
         -- Dimension Scoping: Formality feedback affects FORMALITY ONLY
         v_sanitized_payload := pg_catalog.jsonb_build_object(
           'feedback_kind', v_feedback_kind,
           'formality', COALESCE(v_payload->'formality', '[]'::jsonb)
         );
       ELSIF v_feedback_kind = 'too_casual' THEN
-        v_server_weight := -0.80;
+        v_server_weight := -0.40;
         -- Dimension Scoping: Formality feedback affects FORMALITY ONLY
         v_sanitized_payload := pg_catalog.jsonb_build_object(
           'feedback_kind', v_feedback_kind,
