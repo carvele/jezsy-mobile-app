@@ -492,40 +492,70 @@ export async function getActiveRefundRequest(reservationId: string) {
   }
 }
 
-/**
- * Voluntary customer cancellation for a Ready reservation before the pickup deadline.
- * All settled payments are forfeited; no refund is created. Backend enforces eligibility.
- */
-export async function cancelReservationAfterReady(
+export type ChangeRequest = Database['public']['Tables']['reservation_change_requests']['Row'];
+
+/** Latest customer change request (any status) for one reservation, or null. */
+export async function getLatestChangeRequest(reservationId: string): Promise<ChangeRequest | null> {
+  const { data, error } = await supabase
+    .from('reservation_change_requests')
+    .select('*')
+    .eq('reservation_id', reservationId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return data;
+}
+
+async function runChangeRequestCommand(
+  operation: string,
+  call: () => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>,
   reservationId: string
-): Promise<DomainResult<{ reservation_id: string; total_forfeited_centavos: number }>> {
+): Promise<DomainResult<{ request_id: string }>> {
   try {
-    const { data, error } = await supabase.rpc('cancel_reservation_after_ready', {
-      _reservation_id: reservationId,
-    });
+    const { data, error } = await call();
     if (error) {
       const domainError = new DomainError({
-        code: 'CANCEL_AFTER_READY_FAILED',
+        code: 'CHANGE_REQUEST_FAILED',
         message: error.message,
         domain: 'reservation',
-        context: { operation: 'cancelReservationAfterReady', reservationId },
+        context: { operation, reservationId },
         cause: error,
       });
-      errorReporting.capture(domainError, { domain: 'reservation', operation: 'cancelReservationAfterReady' });
+      errorReporting.capture(domainError, { domain: 'reservation', operation });
       return domainFail(domainError);
     }
-    return domainOk(data as { reservation_id: string; total_forfeited_centavos: number });
+    return domainOk(data as { request_id: string });
   } catch (err: any) {
-    const domainError = new DomainError({
-      code: 'CANCEL_AFTER_READY_EXCEPTION',
-      message: err?.message || 'Failed to cancel reservation.',
+    return domainFail(new DomainError({
+      code: 'CHANGE_REQUEST_EXCEPTION',
+      message: err?.message || 'Could not send your request.',
       domain: 'reservation',
-      context: { operation: 'cancelReservationAfterReady', reservationId },
+      context: { operation, reservationId },
       cause: err,
-    });
-    errorReporting.capture(domainError, { domain: 'reservation', operation: 'cancelReservationAfterReady' });
-    return domainFail(domainError);
+    }));
   }
+}
+
+/** Asks the boutique to move a pre-Ready scheduled appointment; nothing moves until staff approve. */
+export function requestRescheduleV2(reservationId: string, newDate: string, newTime: string, reason: string) {
+  return runChangeRequestCommand('requestRescheduleV2', () => supabase.rpc('request_reschedule_v2', {
+    _reservation_id: reservationId,
+    _new_date: newDate,
+    _new_time: newTime,
+    _reason: reason,
+  }), reservationId);
+}
+
+/**
+ * Asks the boutique to cancel a Ready order. Nothing is cancelled or forfeited
+ * until staff approve; approval applies the customer-fault forfeiture policy.
+ */
+export function requestReadyCancellation(reservationId: string, reason: string) {
+  return runChangeRequestCommand('requestReadyCancellation', () => supabase.rpc('request_ready_cancellation', {
+    _reservation_id: reservationId,
+    _reason: reason,
+  }), reservationId);
 }
 
 export const reservationService = {
@@ -535,7 +565,9 @@ export const reservationService = {
   getMyUnratedItems,
   reserve,
   cancelCustomerReservation,
-  cancelReservationAfterReady,
+  requestRescheduleV2,
+  requestReadyCancellation,
+  getLatestChangeRequest,
   requestCustomerRefund,
   getActiveRefundRequest,
 };

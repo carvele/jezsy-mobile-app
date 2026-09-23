@@ -95,7 +95,7 @@ export const filterLabel = (filter: StatusFilter): string => FILTER_LABEL[filter
 const BADGE_LABEL: Record<Exclude<StatusFilter, 'all' | 'returnRefund'>, string> = {
   toPay: 'To pay',
   preparing: 'Preparing your item',
-  ready: 'Ready to collect',
+  ready: 'Ready for pickup',
   unclaimed: 'Unclaimed',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -113,12 +113,72 @@ export const isAwaitingPayment = (status: string | null): boolean =>
   statusBucket(status) === 'toPay';
 
 /**
- * Reschedulable states, matching what request_reschedule actually accepts
- * server-side (confirmed/approved/to pay/preparing/to pickup/fitting/ready)
- * -- kept in sync so this never offers a button the server then rejects.
+ * Pre-Ready states, matching request_reschedule_v2 server-side (To Pay /
+ * Preparing). Once Ready, pickup extension is the only date-change workflow.
  */
 export const canReschedule = (status: string | null): boolean =>
-  ['toPay', 'preparing', 'ready'].includes(statusBucket(status));
+  ['toPay', 'preparing'].includes(statusBucket(status));
+
+/** Completed, Cancelled and Unclaimed never show live request cards or controls. */
+export const isTerminalStatus = (status: string | null): boolean =>
+  ['completed', 'cancelled', 'unclaimed'].includes((status || '').trim().toLowerCase());
+
+export interface ReservationPaymentInput {
+  status: string | null;
+  payment_status?: string | null;
+  rental_price?: number | null;
+  deposit?: number | null;
+  balance_settled_at?: string | null;
+  balance_payment_status?: string | null;
+}
+
+export type PaymentPresentationKey =
+  | 'unpaid'
+  | 'underReview'
+  | 'balanceDue'
+  | 'balanceUnderReview'
+  | 'balanceRejected'
+  | 'paidInFull'
+  | 'refunded'
+  | 'refundRequired'
+  | 'cancelled';
+
+export interface PaymentPresentation {
+  key: PaymentPresentationKey;
+  label: string;
+  balanceDue: number;
+  /** Ready and nothing left to settle: the only state that reads "Ready to collect". */
+  readyToCollect: boolean;
+}
+
+/**
+ * Financial dimension of a reservation, kept separate from its operational
+ * status. payment_status 'Paid' only means the initial payment cleared; the
+ * remaining balance is settled via balance_settled_at / balance_payment_status.
+ */
+export function getReservationPaymentPresentation(r: ReservationPaymentInput): PaymentPresentation {
+  const payment = (r.payment_status || '').trim().toLowerCase();
+  const balanceStatus = (r.balance_payment_status || '').trim().toLowerCase();
+  const rawBalance = Math.max(0, Number(r.rental_price || 0) - Number(r.deposit || 0));
+  const balanceSettled = rawBalance <= 0 || Boolean(r.balance_settled_at) || balanceStatus === 'paid';
+  const bucket = statusBucket(r.status);
+  const make = (key: PaymentPresentationKey, label: string, balanceDue = 0): PaymentPresentation => ({
+    key,
+    label,
+    balanceDue,
+    readyToCollect: bucket === 'ready' && key === 'paidInFull',
+  });
+
+  if (payment === 'refunded') return make('refunded', 'Refunded');
+  if (payment === 'refund required') return make('refundRequired', 'Refund in progress');
+  if (payment === 'cancelled' || bucket === 'cancelled') return make('cancelled', 'Cancelled');
+  if (payment === 'submitted' || payment === 'processing') return make('underReview', 'Payment under review');
+  if (payment !== 'paid') return make('unpaid', 'Unpaid');
+  if (balanceSettled) return make('paidInFull', 'Paid in full');
+  if (balanceStatus === 'submitted') return make('balanceUnderReview', 'Balance payment under review', rawBalance);
+  if (balanceStatus === 'rejected') return make('balanceRejected', 'Balance proof needs attention', rawBalance);
+  return make('balanceDue', `Balance due ₱${rawBalance.toFixed(2)}`, rawBalance);
+}
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -266,7 +326,7 @@ export function getCustomerReservationDisplayState(
   // 3. Preparing / Ready / To Pickup
   if (bucket === 'ready') {
     return {
-      label: 'Ready to collect',
+      label: 'Ready for pickup',
       bucket: 'ready',
       filterBucket: 'ready',
       badgeColorType: 'ready',

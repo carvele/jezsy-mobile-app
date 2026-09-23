@@ -1,6 +1,13 @@
 import { passwordPolicyError, translatePasswordServerError } from './passwordPolicy';
 import { isInStock } from './stock';
-import { statusBucket, statusLabel, isAwaitingPayment, canReschedule } from './reservationStatus';
+import {
+  statusBucket,
+  statusLabel,
+  isAwaitingPayment,
+  canReschedule,
+  isTerminalStatus,
+  getReservationPaymentPresentation,
+} from './reservationStatus';
 
 describe('passwordPolicy Utility', () => {
   test('validates minimum length', () => {
@@ -63,7 +70,7 @@ describe('reservationStatus Utility', () => {
   test('returns human readable badge labels', () => {
     expect(statusLabel('Pending')).toBe('To pay');
     expect(statusLabel('confirmed')).toBe('To pay');
-    expect(statusLabel('to pickup')).toBe('Ready to collect');
+    expect(statusLabel('to pickup')).toBe('Ready for pickup');
   });
 
   test('correctly evaluates payment awaiting state', () => {
@@ -74,7 +81,42 @@ describe('reservationStatus Utility', () => {
   test('evaluates reschedule permission correctly', () => {
     expect(canReschedule('Pending')).toBe(true);
     expect(canReschedule('confirmed')).toBe(true);
+    expect(canReschedule('Preparing')).toBe(true);
+    expect(canReschedule('Ready')).toBe(false);
+    expect(canReschedule('To Pickup')).toBe(false);
     expect(canReschedule('completed')).toBe(false);
     expect(canReschedule('cancelled')).toBe(false);
+  });
+
+  test('terminal statuses never carry live requests', () => {
+    expect(isTerminalStatus('Completed')).toBe(true);
+    expect(isTerminalStatus('Cancelled')).toBe(true);
+    expect(isTerminalStatus('Unclaimed')).toBe(true);
+    expect(isTerminalStatus('Ready')).toBe(false);
+  });
+
+  test('Ready + deposit only shows balance due, not paid in full', () => {
+    const p = getReservationPaymentPresentation({ status: 'Ready', payment_status: 'Paid', rental_price: 1999, deposit: 999.5 });
+    expect(p.key).toBe('balanceDue');
+    expect(p.label).toBe('Balance due ₱999.50');
+    expect(p.readyToCollect).toBe(false);
+  });
+
+  test('Ready + balance receipt submitted shows review state', () => {
+    const p = getReservationPaymentPresentation({
+      status: 'Ready', payment_status: 'Paid', rental_price: 200, deposit: 100, balance_payment_status: 'submitted',
+    });
+    expect(p.key).toBe('balanceUnderReview');
+    expect(p.readyToCollect).toBe(false);
+  });
+
+  test('Ready + settled balance is ready to collect', () => {
+    const settled = getReservationPaymentPresentation({
+      status: 'Ready', payment_status: 'Paid', rental_price: 200, deposit: 100, balance_settled_at: '2026-09-24T02:00:00Z',
+    });
+    const full = getReservationPaymentPresentation({ status: 'Ready', payment_status: 'Paid', rental_price: 200, deposit: 200 });
+    expect(settled.key).toBe('paidInFull');
+    expect(settled.readyToCollect).toBe(true);
+    expect(full.readyToCollect).toBe(true);
   });
 });

@@ -1,0 +1,12 @@
+-- Removes the change-request objects only. Reverting assert_bookable_slot, cancel_reservation_as_manager
+-- and the other replaced functions requires re-applying their previous definitions from earlier migrations.
+DROP TRIGGER IF EXISTS trg_supersede_change_requests_on_terminal ON public.reservations;
+DROP TRIGGER IF EXISTS trg_close_pending_extension_on_terminal ON public.reservations;
+DROP FUNCTION IF EXISTS public.request_reschedule_v2(uuid, date, time, text);
+DROP FUNCTION IF EXISTS public.request_ready_cancellation(uuid, text);
+DROP FUNCTION IF EXISTS public.resolve_reschedule_request_v2(uuid, boolean, text);
+DROP FUNCTION IF EXISTS public.resolve_ready_cancellation_request(uuid, boolean, text);
+DROP FUNCTION IF EXISTS public.preview_reservation_cancellation(uuid);
+DROP FUNCTION IF EXISTS public.has_pending_blocking_reservation_change(uuid);
+DROP FUNCTION IF EXISTS public.assert_reservation_command_rate(text, uuid);
+DROP TABLE IF EXISTS public.reservation_change_requests;

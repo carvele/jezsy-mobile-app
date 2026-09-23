@@ -12,7 +12,9 @@ import {
   statusBucket,
   canReschedule,
   isReturnEligible,
+  isTerminalStatus,
   getCustomerReservationDisplayState,
+  getReservationPaymentPresentation,
   type CustomerBadgeColorType,
 } from '@/src/utils/reservationStatus';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -37,7 +39,14 @@ import { startReservationPayment, submitReservationBalanceReceipt } from '@/src/
 import { uploadPaymentReceipt } from '@/src/lib/receipts';
 import { useAuth } from '@/src/context/AuthContext';
 import { getReturnRequestWindowDays } from '@/src/services/settingsService';
-import { cancelCustomerReservation, cancelReservationAfterReady, getActiveRefundRequest } from '@/src/services/reservationService';
+import {
+  cancelCustomerReservation,
+  getActiveRefundRequest,
+  getLatestChangeRequest,
+  requestReadyCancellation,
+  requestRescheduleV2,
+  type ChangeRequest,
+} from '@/src/services/reservationService';
 import { ReturnRefundModal } from '@/src/components/reservations/ReturnRefundModal';
 import type { PaymentPurpose } from '@/src/utils/reservationPayment';
 
@@ -167,7 +176,11 @@ export default function ReservationDetailScreen() {
   const [refundRequest, setRefundRequest] = useState<any>(null);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [cancellingReservation, setCancellingReservation] = useState(false);
-  const [cancellingAfterReady, setCancellingAfterReady] = useState(false);
+  const [changeRequest, setChangeRequest] = useState<ChangeRequest | null>(null);
+  const [rescheduleReason, setRescheduleReason] = useState('');
+  const [cancelRequestVisible, setCancelRequestVisible] = useState(false);
+  const [cancelRequestReason, setCancelRequestReason] = useState('');
+  const [submittingCancelRequest, setSubmittingCancelRequest] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     const { data, error } = await supabase
@@ -188,7 +201,7 @@ export default function ReservationDetailScreen() {
     if (!id) return;
     setLoading(true);
     try {
-      const [resResult, itemsResult, refundReq, paymentsResult] = await Promise.all([
+      const [resResult, itemsResult, refundReq, paymentsResult, latestRequest] = await Promise.all([
         supabase.from('reservations').select('*').eq('id', id).single(),
         supabase
           .from('reservation_items')
@@ -201,11 +214,13 @@ export default function ReservationDetailScreen() {
           .select('*')
           .eq('reservation_id', id)
           .order('created_at', { ascending: false }),
+        getLatestChangeRequest(id),
       ]);
 
       if (resResult.error) throw resResult.error;
       setReservation(resResult.data);
       setRefundRequest(refundReq);
+      setChangeRequest(latestRequest);
       setPayments(paymentsResult.data ?? []);
 
       if (itemsResult.error) throw itemsResult.error;
@@ -216,6 +231,7 @@ export default function ReservationDetailScreen() {
       setItems([]);
       setRefundRequest(null);
       setPayments([]);
+      setChangeRequest(null);
     } finally {
       setLoading(false);
     }
@@ -282,7 +298,11 @@ export default function ReservationDetailScreen() {
           .on(
             'postgres_changes',
             { event: 'UPDATE', schema: 'public', table: 'reservations', filter: `id=eq.${id}` },
-            (payload) => setReservation(payload.new as Reservation),
+            (payload) => {
+              // Read-only refresh: request commands touch the row, so re-read the request too.
+              setReservation(payload.new as Reservation);
+              void getLatestChangeRequest(id).then(setChangeRequest);
+            },
           )
           .subscribe();
         settingsChannel = supabase
@@ -346,34 +366,25 @@ export default function ReservationDetailScreen() {
     );
   }, [fetchReservation, reservation, showToast]);
 
-  const handleCancelAfterReady = useCallback(() => {
-    if (!reservation) return;
-    showAlert(
-      'Cancel & Forfeit Payment',
-      'You are about to voluntarily cancel a Ready reservation.\n\nAll amounts you have paid will be retained by the boutique — no refund will be issued. The item will be released from your reservation.',
-      [
-        { text: 'Keep Reservation', style: 'cancel' },
-        {
-          text: 'Cancel & Forfeit',
-          style: 'destructive',
-          onPress: async () => {
-            setCancellingAfterReady(true);
-            try {
-              const res = await cancelReservationAfterReady(reservation.id);
-              if (res.ok) {
-                showToast('Reservation cancelled. All payments forfeited.', 'success');
-                await fetchReservation();
-              } else {
-                showToast(res.error?.message || 'Could not cancel. Please try again.', 'error');
-              }
-            } finally {
-              setCancellingAfterReady(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [fetchReservation, reservation, showToast]);
+  // Creates a request only; nothing is cancelled or forfeited until staff approve.
+  const handleSubmitCancelRequest = async () => {
+    const reason = cancelRequestReason.trim();
+    if (!reservation || !reason || submittingCancelRequest) return;
+    setSubmittingCancelRequest(true);
+    try {
+      const res = await requestReadyCancellation(reservation.id, reason);
+      if (!res.ok) {
+        showToast(res.error?.message || 'Could not send your request. Please try again.', 'error');
+        return;
+      }
+      setCancelRequestVisible(false);
+      setCancelRequestReason('');
+      showToast('Cancellation requested. The boutique will review it.', 'success');
+      await fetchReservation();
+    } finally {
+      setSubmittingCancelRequest(false);
+    }
+  };
 
   const handleAskAboutReservation = async () => {
     const conv = await getOrCreateConversation();
@@ -390,29 +401,26 @@ export default function ReservationDetailScreen() {
   };
 
   const handleReschedule = async () => {
-    if (!rescheduleSlot) {
-      showToast('Please choose a new appointment time.', 'info');
+    const reason = rescheduleReason.trim();
+    if (!id || !rescheduleSlot || !reason || submitting) {
+      showToast('Choose a new time and tell the boutique why.', 'info');
       return;
     }
     setSubmitting(true);
     try {
-      // A request, not a change. The booking only moves once staff accept, so
-      // nobody arrives to a day that shifted under them. request_reschedule
-      // still checks the slot now rather than at approval, so asking for a
-      // closed day is refused immediately.
-      const { error } = await supabase.rpc('request_reschedule', {
-        _reservation_id: id,
-        _date: formatManilaDate(rescheduleDate),
-        _appointment_time: rescheduleSlot,
-      });
-      if (error) throw error;
+      // A request, not a change: the booking only moves once staff approve.
+      // The server still validates the slot now, so a past, closed or full
+      // time is refused immediately.
+      const res = await requestRescheduleV2(id, formatManilaDate(rescheduleDate), rescheduleSlot, reason);
+      if (!res.ok) {
+        showToast(res.error?.message || 'Could not send your request. Please try again.', 'error');
+        return;
+      }
       setShowReschedule(false);
       setRescheduleSlot(undefined);
+      setRescheduleReason('');
       await fetchReservation();
       showToast('Request sent. We will confirm once it has been reviewed.', 'success');
-    } catch (err: any) {
-      console.error('[handleReschedule] Reschedule request failed:', err);
-      showToast('Could not send your request. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -697,14 +705,26 @@ export default function ReservationDetailScreen() {
   // could not move the appointment even though staff could.
   // Rescheduling applies strictly to legacy reservations with a scheduled date;
   // new pickup-window reservations have no appointment and use 1-day extensions instead.
-  const canRescheduleNow =
-    canReschedule(reservation.status) &&
-    !isReservationCancelled &&
-    Boolean(reservation.date);
+  // Terminal reservations never show a live request, whatever older rows say.
+  const isTerminal = isTerminalStatus(reservation.status);
+  const pendingRequest = !isTerminal && changeRequest?.status === 'pending' ? changeRequest : null;
   // One outstanding request at a time. While it is pending the live booking is
   // still the one to show, so the proposal appears beside it rather than
   // replacing it -- the customer has not moved anything yet.
-  const reschedulePending = Boolean(reservation.reschedule_requested_at);
+  const reschedulePending = pendingRequest?.request_type === 'reschedule';
+  const cancellationPending = pendingRequest?.request_type === 'cancel_ready';
+  const declinedCancellation =
+    !isTerminal && changeRequest?.request_type === 'cancel_ready' && changeRequest.status === 'denied'
+      ? changeRequest
+      : null;
+
+  // Pre-Ready legacy reservations with a real appointment only; phase-2
+  // pickup-window orders and Ready orders use pickup extension instead.
+  const canRescheduleNow =
+    canReschedule(reservation.status) &&
+    !isReservationCancelled &&
+    Boolean(reservation.date && reservation.appointment_time) &&
+    !pendingRequest;
 
   const isDeadlineFuture = reservation?.pickup_deadline_at
     ? new Date(reservation.pickup_deadline_at).getTime() > Date.now()
@@ -712,12 +732,23 @@ export default function ReservationDetailScreen() {
 
   const canRequestExtension =
     reservationState === 'ready' &&
+    !isTerminal &&
     Boolean(reservation?.pickup_deadline_at) &&
     isDeadlineFuture &&
     !reservation?.extension_requested_at &&
     !reservation?.extension_status;
 
-  const extensionStatus = (reservation?.extension_status || '').toLowerCase();
+  const canRequestCancellation = reservationState === 'ready' && !isTerminal && isDeadlineFuture && !pendingRequest;
+
+  const extensionStatus = isTerminal ? '' : (reservation?.extension_status || '').toLowerCase();
+  const paymentPresentation = getReservationPaymentPresentation(reservation);
+  const cancellationSource = (() => {
+    const reason = (reservation.cancellation_reason || '').trim();
+    if (!isReservationCancelled || !reason) return null;
+    if (/^cancelled at your request/i.test(reason) || /^cancelled by customer/i.test(reason)) return 'Cancelled at your request';
+    if (/^auto-cancelled/i.test(reason) || reason === 'Pickup deadline expired') return 'Cancelled automatically';
+    return 'Cancelled by boutique';
+  })();
 
   const awaitingPayment = Boolean(displayState.showToPayAction) && !isReservationCancelled;
   const receiptUnderReview = paymentState === 'submitted' || displayState.badgeColorType === 'paymentUnderReview';
@@ -737,15 +768,7 @@ export default function ReservationDetailScreen() {
         : paymentState === 'refund required'
           ? 'Refund Required'
           : 'Cancelled')
-    : isBalanceSettled
-      ? 'Paid in full'
-      : paymentState === 'paid'
-        ? (isBalanceUnderReview
-            ? 'Deposit verified · Balance proof under review'
-            : isBalanceRejected
-              ? 'Deposit verified · Balance proof needs attention'
-              : (balanceDue > 0 ? 'Reservation payment received' : 'Paid in full'))
-        : reservation.payment_status || 'Pending';
+    : paymentPresentation.label;
 
   // Falls back to the reservation's own denormalised product columns if the
   // lines could not be read, so the screen still shows the item rather than
@@ -782,11 +805,39 @@ export default function ReservationDetailScreen() {
         <Text style={[styles.displayId, { color: colors.secondaryText, marginBottom: 16, fontSize: 16 }]}>
           {reservation.display_id || 'Available after confirmation'}
         </Text>
-        <View style={{ alignSelf: 'flex-start', marginBottom: Spacing.xl }}>
+        <View style={{ alignSelf: 'flex-start', marginBottom: Spacing.xl, gap: 6 }}>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '20', borderColor: statusColor }]}>
             <Text style={[styles.statusText, { color: statusColor, fontSize: 13, fontWeight: '700' }]}>{displayState.label}</Text>
           </View>
+          {/* Operational and financial state are separate: Ready can still owe a balance. */}
+          {reservationState === 'ready' && !isTerminal && (
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: '700',
+                color: paymentPresentation.readyToCollect ? colors.success : colors.warning,
+              }}
+            >
+              {paymentPresentation.readyToCollect
+                ? 'Paid in full · Ready to collect'
+                : paymentPresentation.key === 'balanceDue'
+                  ? `${paymentPresentation.label} · Complete your remaining payment before collection.`
+                  : paymentPresentation.label}
+            </Text>
+          )}
         </View>
+
+        {cancellationSource && (
+          <View style={[styles.extensionBanner, { backgroundColor: colors.error + '12', borderColor: colors.error, marginBottom: Spacing.lg }]}>
+            <IconSymbol name="xmark.circle" size={16} color={colors.error} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.extensionBannerTitle, { color: colors.error }]}>{cancellationSource}</Text>
+              <Text style={[styles.extensionBannerText, { color: colors.text }]}>
+                Reason: {(reservation.cancellation_reason || '').replace(/^Cancelled at your request:\s*/i, '')}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {Boolean((reservation as any).confirmed_by_name) && (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: Spacing.xs, marginBottom: Spacing.md }}>
@@ -843,7 +894,9 @@ export default function ReservationDetailScreen() {
                 )}
                 <Text style={[styles.pickupRef, { color: colors.onTint }]}>{reservation.display_id || 'Booking reference pending'}</Text>
                 <Text style={[styles.pickupHint, { color: colors.onTint }]}>
-                  Show this code at the boutique to collect your item. Bring a valid ID and your remaining balance.
+                  {paymentPresentation.readyToCollect
+                    ? 'Show this code at the boutique to collect your item. Bring a valid ID.'
+                    : 'Show this code at the boutique to collect your item. Bring a valid ID and settle your remaining balance before collection.'}
                 </Text>
               </>
             )}
@@ -877,7 +930,7 @@ export default function ReservationDetailScreen() {
                 </View>
               </View>
             </>
-          ) : reservation.pickup_deadline_at ? (
+          ) : reservation.pickup_deadline_at && !isReservationCancelled ? (
             <>
               <View style={styles.sectionHeaderRow}>
                 <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>
@@ -906,16 +959,21 @@ export default function ReservationDetailScreen() {
               </View>
 
               {/* Extension CTA (when eligible) */}
-              {canRequestExtension && (
-                <TouchableOpacity
-                  style={[styles.extensionCtaBtn, { borderColor: colors.tint }]}
-                  onPress={() => setExtensionModalVisible(true)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Request pickup extension"
-                >
-                  <IconSymbol name="calendar" size={16} color={colors.tint} />
-                  <Text style={[styles.extensionCtaBtnText, { color: colors.tint }]}>Request 1-Day Extension</Text>
-                </TouchableOpacity>
+              {canRequestExtension && !pendingRequest && (
+                <>
+                  <Text style={{ color: colors.secondaryText, fontSize: 13, marginTop: Spacing.md }}>
+                    Need more time to collect?
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.extensionCtaBtn, { borderColor: colors.tint }]}
+                    onPress={() => setExtensionModalVisible(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Request pickup extension"
+                  >
+                    <IconSymbol name="calendar" size={16} color={colors.tint} />
+                    <Text style={[styles.extensionCtaBtnText, { color: colors.tint }]}>Request pickup extension</Text>
+                  </TouchableOpacity>
+                </>
               )}
 
               {/* Extension Status Banners */}
@@ -1007,16 +1065,15 @@ export default function ReservationDetailScreen() {
                 </View>
               </View>
 
-              {reschedulePending && (
+              {reschedulePending && pendingRequest?.requested_for && (
                 <View style={[styles.pendingRequest, { borderColor: colors.border }]}>
                   <IconSymbol name="clock.arrow.circlepath" size={16} color={colors.warning} />
                   <Text style={[styles.pendingRequestText, { color: colors.secondaryText }]}>
-                    You asked to move this to{' '}
+                    Reschedule requested to{' '}
                     <Text style={{ color: colors.text, fontWeight: '700' }}>
-                      {formatManilaDate(new Date(reservation.reschedule_requested_date as string))} at{' '}
-                      {formatTimeLabel(reservation.reschedule_requested_at_time)}
+                      {formatPHDate(pendingRequest.requested_for, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                     </Text>
-                    . The time above still stands until the shop confirms.
+                    . Waiting for boutique review — the time above still stands until then.
                   </Text>
                 </View>
               )}
@@ -1046,6 +1103,18 @@ export default function ReservationDetailScreen() {
                   </ScrollView>
                   <Text style={[styles.rescheduleLabel, { color: colors.secondaryText }]}>Select a new time</Text>
                   <TimeSlotPicker selectedDate={rescheduleDate} selectedSlot={rescheduleSlot} onSelectSlot={setRescheduleSlot} />
+                  <Text style={[styles.rescheduleLabel, { color: colors.secondaryText, marginTop: Spacing.lg }]}>Reason for the change *</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, textAlignVertical: 'top', color: colors.text, minHeight: 72 }}
+                    multiline
+                    maxLength={500}
+                    placeholder="e.g. I have an exam in the morning."
+                    placeholderTextColor={colors.secondaryText}
+                    value={rescheduleReason}
+                    onChangeText={setRescheduleReason}
+                    editable={!submitting}
+                    accessibilityLabel="Reason for the reschedule request"
+                  />
                   <View style={styles.rescheduleActions}>
                     <TouchableOpacity
                       style={[styles.rescheduleCancel, { borderColor: colors.border }]}
@@ -1057,12 +1126,12 @@ export default function ReservationDetailScreen() {
                       <Text style={{ color: colors.text, fontWeight: '600' }}>Cancel</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.rescheduleConfirm, { backgroundColor: (!rescheduleSlot || submitting) ? colors.border : colors.tint }]}
+                      style={[styles.rescheduleConfirm, { backgroundColor: (!rescheduleSlot || !rescheduleReason.trim() || submitting) ? colors.border : colors.tint }]}
                       onPress={handleReschedule}
-                      disabled={!rescheduleSlot || submitting}
+                      disabled={!rescheduleSlot || !rescheduleReason.trim() || submitting}
                       accessibilityRole="button"
                       accessibilityLabel="Confirm new appointment"
-                      accessibilityState={{ disabled: !rescheduleSlot || submitting }}
+                      accessibilityState={{ disabled: !rescheduleSlot || !rescheduleReason.trim() || submitting }}
                     >
                       {submitting ? <ActivityIndicator color={colors.background} /> : <Text style={{ fontWeight: '700' }}>Confirm</Text>}
                     </TouchableOpacity>
@@ -1073,27 +1142,49 @@ export default function ReservationDetailScreen() {
           )}
         </View>
 
-        {/* Voluntary forfeiture cancellation: only shown while Ready and deadline is still future. */}
-        {reservationState === 'ready' && isDeadlineFuture && (
+        {/* Pending customer request: waiting on boutique review. */}
+        {cancellationPending && pendingRequest && (
+          <View style={[styles.extensionBanner, { backgroundColor: colors.warning + '15', borderColor: colors.warning, marginBottom: Spacing.lg }]}>
+            <IconSymbol name="clock.fill" size={16} color={colors.warning} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.extensionBannerTitle, { color: colors.warning }]}>Cancellation requested</Text>
+              <Text style={[styles.extensionBannerText, { color: colors.text }]}>
+                Waiting for boutique review. Your order stays ready for pickup until then.
+              </Text>
+              <Text style={[styles.extensionBannerReason, { color: colors.secondaryText }]}>Reason: {pendingRequest.reason}</Text>
+            </View>
+          </View>
+        )}
+
+        {declinedCancellation && (
+          <View style={[styles.extensionBanner, { backgroundColor: colors.info + '12', borderColor: colors.info, marginBottom: Spacing.lg }]}>
+            <IconSymbol name="clock.fill" size={16} color={colors.info} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.extensionBannerTitle, { color: colors.info }]}>Cancellation not approved</Text>
+              <Text style={[styles.extensionBannerText, { color: colors.text }]}>
+                Your order is still ready for pickup.
+                {declinedCancellation.resolution_notes ? ` Note: ${declinedCancellation.resolution_notes}` : ''}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Ready orders: cancellation is a request; staff decide and forfeiture applies only on approval. */}
+        {canRequestCancellation && (
           <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.secondaryText, marginBottom: Spacing.xs }]}>
               Need to cancel?
             </Text>
             <Text style={[styles.rowText, { color: colors.secondaryText, marginBottom: Spacing.md }]}>
-              You may cancel this reservation before the pickup deadline. All amounts you have paid will be forfeited — no refund will be issued.
+              You can ask the boutique to cancel this order. If they approve, all amounts you have paid are forfeited and no refund is issued. Nothing changes until they review your request.
             </Text>
             <TouchableOpacity
-              style={[styles.paySecondary, { borderColor: colors.error, opacity: cancellingAfterReady ? 0.6 : 1 }]}
-              onPress={handleCancelAfterReady}
-              disabled={cancellingAfterReady}
+              style={[styles.paySecondary, { borderColor: colors.error }]}
+              onPress={() => setCancelRequestVisible(true)}
               accessibilityRole="button"
-              accessibilityLabel="Cancel reservation and forfeit payment"
+              accessibilityLabel="Request cancellation"
             >
-              {cancellingAfterReady ? (
-                <ActivityIndicator color={colors.error} />
-              ) : (
-                <Text style={[styles.paySecondaryText, { color: colors.error }]}>Cancel & Forfeit Payment</Text>
-              )}
+              <Text style={[styles.paySecondaryText, { color: colors.error }]}>Request cancellation</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1891,6 +1982,39 @@ export default function ReservationDetailScreen() {
             )}
           </View>
         )}
+        <Modal visible={cancelRequestVisible} transparent animationType="fade" onRequestClose={() => !submittingCancelRequest && setCancelRequestVisible(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: colors.background, padding: 20, borderRadius: 12, width: '100%', maxWidth: 400 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: colors.text }}>Request cancellation</Text>
+              <Text style={{ fontSize: 14, color: colors.secondaryText, marginBottom: 12 }}>
+                Tell the boutique why. If approved, everything you have paid is forfeited and no refund is issued.
+              </Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 16, textAlignVertical: 'top', color: colors.text, minHeight: 72 }}
+                multiline
+                maxLength={500}
+                placeholder="Reason for cancelling..."
+                placeholderTextColor={colors.secondaryText}
+                value={cancelRequestReason}
+                onChangeText={setCancelRequestReason}
+                editable={!submittingCancelRequest}
+                accessibilityLabel="Reason for the cancellation request"
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
+                <TouchableOpacity onPress={() => setCancelRequestVisible(false)} disabled={submittingCancelRequest} style={{ padding: 10 }}>
+                  <Text style={{ color: colors.secondaryText, fontWeight: 'bold' }}>Keep order</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSubmitCancelRequest}
+                  disabled={submittingCancelRequest || !cancelRequestReason.trim()}
+                  style={{ backgroundColor: colors.error, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, opacity: (!cancelRequestReason.trim() || submittingCancelRequest) ? 0.5 : 1 }}
+                >
+                  <Text style={{ color: colors.onTint, fontWeight: 'bold' }}>{submittingCancelRequest ? 'Sending...' : 'Send request'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
         <Modal visible={extensionModalVisible} transparent animationType="fade" onRequestClose={() => setExtensionModalVisible(false)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
             <View style={{ backgroundColor: colors.background, padding: 20, borderRadius: 12, width: '100%', maxWidth: 400 }}>
