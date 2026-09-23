@@ -69,6 +69,7 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost, onCameraDimensio
   const occlusionCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const trackerRef = React.useRef<WebPoseTracker | null>(null);
   const animFrameRef = React.useRef<number | null>(null);
+  const rvfcRef = React.useRef<number | null>(null);
   const onPoseResultsRef = React.useRef(onPoseResults);
   const onTrackingLostRef = React.useRef(onTrackingLost);
   const onCameraDimensionsRef = React.useRef(onCameraDimensions);
@@ -129,40 +130,83 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost, onCameraDimensio
         }
         if (!ready) return;
 
-        // Continuous pose detection loop with ~20 FPS inference budget
+        // Continuous pose detection loop synchronized with camera video frames
         let isProcessing = false;
         let lastInferenceTime = 0;
         let lastVideoTime = -1;
         let lastPoseTime = performance.now();
 
+        // DEV [AR-PERF] instrumentation
+        let perfWindowStart = performance.now();
+        let videoFrameCount = 0;
+        let poseReqCount = 0;
+        let poseResultCount = 0;
+        let inferenceDurations: number[] = [];
+
         const filter = new PoseLandmarkFilter(1.2, 0.015, 1.0);
 
-        function detectLoop() {
+        function scheduleNextTick() {
+          if (!isMounted) return;
+          const video = videoRef.current;
+          if (video && typeof (video as any).requestVideoFrameCallback === 'function') {
+            rvfcRef.current = (video as any).requestVideoFrameCallback(detectTick);
+          } else {
+            animFrameRef.current = requestAnimationFrame(detectTick);
+          }
+        }
+
+        function detectTick() {
           if (!isMounted) return;
           const now = performance.now();
           const video = videoRef.current;
+          videoFrameCount++;
+
+          // 1-second rolling performance report
+          const elapsed = now - perfWindowStart;
+          if (elapsed >= 1000) {
+            if (typeof __DEV__ !== 'undefined' && __DEV__) {
+              const vFPS = ((videoFrameCount / elapsed) * 1000).toFixed(1);
+              const pReq = ((poseReqCount / elapsed) * 1000).toFixed(1);
+              const pRes = ((poseResultCount / elapsed) * 1000).toFixed(1);
+              const sorted = [...inferenceDurations].sort((a, b) => a - b);
+              const p50 = sorted.length ? sorted[Math.floor(sorted.length * 0.5)].toFixed(1) : '0';
+              const p95 = sorted.length ? sorted[Math.floor(sorted.length * 0.95)].toFixed(1) : '0';
+              console.log(`[AR-PERF] videoFPS=${vFPS} poseReq=${pReq} poseResult=${pRes} inferenceP50=${p50}ms inferenceP95=${p95}ms`);
+            }
+            perfWindowStart = now;
+            videoFrameCount = 0;
+            poseReqCount = 0;
+            poseResultCount = 0;
+            inferenceDurations = [];
+          }
+
+          const hasRVFC = video && typeof (video as any).requestVideoFrameCallback === 'function';
 
           if (
-            now - lastInferenceTime >= 48 &&
             video &&
             video.readyState >= 2 &&
-            !isProcessing
+            !isProcessing &&
+            (now - lastInferenceTime >= 30) // Cap to ~33 FPS max, permitting responsive 15-25 FPS throughput
           ) {
-            // If the camera has not presented a new frame yet, wait for the next tick
-            // without falsely reporting tracking loss.
-            if (video.currentTime === lastVideoTime) {
-              animFrameRef.current = requestAnimationFrame(detectLoop);
+            // For environments without RVFC, guard against inferring the exact same video frame repeatedly
+            if (!hasRVFC && video.currentTime === lastVideoTime) {
+              scheduleNextTick();
               return;
             }
             lastVideoTime = video.currentTime;
             isProcessing = true;
             lastInferenceTime = now;
+            poseReqCount++;
+            const t0 = performance.now();
             try {
               const detectResult = tracker.detect(video, now);
+              const infDuration = performance.now() - t0;
+              inferenceDurations.push(infDuration);
               const canvas = occlusionCanvasRef.current;
 
               if (detectResult) {
                 lastPoseTime = now;
+                poseResultCount++;
                 const rawLandmarks = detectResult.landmarks;
                 const worldLandmarks = detectResult.worldLandmarks;
                 const landmarks = filter.filterLandmarks(rawLandmarks, now);
@@ -171,7 +215,7 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost, onCameraDimensio
                     normalizedLandmarks: landmarks,
                     worldLandmarks: worldLandmarks as any,
                     segmentation: detectResult.segmentation,
-                    timestamp: now
+                    timestamp: now,
                   });
                 }
               } else {
@@ -179,7 +223,6 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost, onCameraDimensio
                 if (now - lastPoseTime >= 750) {
                   filter.reset();
                   onTrackingLostRef.current?.();
-                  // Tracking lost: clear occlusion canvas immediately to prevent stale cutouts
                   if (canvas) {
                     const ctx = canvas.getContext('2d');
                     ctx?.clearRect(0, 0, canvas.width, canvas.height);
@@ -195,10 +238,11 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost, onCameraDimensio
               isProcessing = false;
             }
           }
-          animFrameRef.current = requestAnimationFrame(detectLoop);
+
+          scheduleNextTick();
         }
 
-        animFrameRef.current = requestAnimationFrame(detectLoop);
+        scheduleNextTick();
       } catch (err) {
         console.warn('Webcam or Tracker init failed:', err);
       }
@@ -210,6 +254,9 @@ function WebCameraFeed({ active, onPoseResults, onTrackingLost, onCameraDimensio
       isMounted = false;
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
+      }
+      if (rvfcRef.current && videoRef.current && typeof (videoRef.current as any).cancelVideoFrameCallback === 'function') {
+        (videoRef.current as any).cancelVideoFrameCallback(rvfcRef.current);
       }
       if (stream) {
         stream.getTracks().forEach((t) => t.stop());
@@ -468,6 +515,7 @@ export default function ARTryOnScreen() {
   const transportRateWindowStartRef = React.useRef(0);
   const garmentRendererRef = React.useRef<GarmentRendererRef>(null);
   const bodyFitStateRef = React.useRef<BodyFitState | null>(null);
+  const lastAppliedPoseTimestampRef = React.useRef(0);
 
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const stageWidth = stageLayout.width || Math.min(winWidth || 390, 480);
@@ -624,6 +672,12 @@ export default function ARTryOnScreen() {
   const handlePoseResults = useCallback(
     (poseFrame: PoseFrame) => {
       if (!isTrackingSessionActive()) return;
+      if (poseFrame.timestamp && poseFrame.timestamp <= lastAppliedPoseTimestampRef.current) {
+        return; // Phase 8: Drop stale or out-of-order pose frame
+      }
+      if (poseFrame.timestamp) {
+        lastAppliedPoseTimestampRef.current = poseFrame.timestamp;
+      }
       const { normalizedLandmarks: landmarks, worldLandmarks, segmentation } = poseFrame;
       if (!landmarks || landmarks.length < 33) {
         handleTrackingLost();

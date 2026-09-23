@@ -247,8 +247,9 @@ describe('GarmentRenderer generated document syntax', () => {
       expect(scriptMatches.length).toBeGreaterThan(0);
       const scriptCode = scriptMatches[0][1];
 
-      // Verifies isolation mode configuration is available
+      // Verifies isolation mode configurations are available
       expect(scriptCode).toContain("const BONE_ISOLATION_MODE = 'ALL';");
+      expect(scriptCode).toContain("const RUNTIME_ISOLATION_MODE = 'MODE_E_FULL';");
 
       // Verifies clavicle preservation (Mixamo clavicle bones LeftShoulder/RightShoulder kept at authored bind pose)
       expect(scriptCode).toContain("if (boneName === 'LeftShoulder' || boneName === 'RightShoulder')");
@@ -258,11 +259,58 @@ describe('GarmentRenderer generated document syntax', () => {
       expect(scriptCode).toContain("const corrected = liveParentInGroup.clone().invert().multiply(targetInGroup);");
       expect(scriptCode).toContain("bone.quaternion.copy(corrected);");
 
-      // Verifies damped camera distance triangulation for root stability
-      expect(scriptCode).toContain("const maxDelta = 0.05;");
-      expect(scriptCode).toContain("camera.position.z = smoothedCameraDistance;");
+      // Verifies instant depth snap on first reliable measurement (eliminating 30s visual shrink)
+      expect(scriptCode).toContain("smoothedCameraDistance = rawDistance;");
+      expect(scriptCode).toContain("hasInitialDistanceSample = true;");
+
+      // Verifies responsive frame tracking and frame-rate-independent temporal response
+      expect(scriptCode).toContain("smoothedCameraDistance += clampedDiff * 0.35;");
+      expect(scriptCode).toContain("const alpha = Math.min(1.0, 1 - Math.exp(-dtSec / 0.065));");
 
       // JavaScript engine parses without syntax error
+      expect(() => new Function(scriptCode)).not.toThrow();
+    } finally {
+      if (renderer) act(() => renderer.unmount());
+      delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;
+    }
+  });
+
+  it('guarantees physical fit scale and camera projection distance are completely decoupled', () => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+    let renderer: any;
+    try {
+      act(() => {
+        renderer = create(React.createElement(GarmentRenderer, {
+          modelUrl: 'https://example.com/pants.glb',
+          metadata: {
+            id: 'pants-test',
+            category: 'pants',
+            calibrationVersion: '2.0',
+            anchorConfidence: 'merchant_confirmed',
+            anchorType: 'HIP',
+            restPoseMetricWidth: 0.35,
+            boneMap: {},
+            restPose: 'T_POSE',
+            ingestionStatus: 'AR_READY',
+            anatomicalAnchorOffset: { x: 0, y: 0.95, z: 0 },
+            garmentFitProfileVersion: 2,
+            fitProfileV2: {
+              version: 2,
+              category: 'pants',
+              fitBands: [{ name: 'HIP', authoredWidthMeters: 0.35 }],
+              rootAnchor: { bone: 'Hips', confidence: 'high', offset: { x: 0, y: 0.95, z: 0 } },
+            } as any,
+          },
+        }));
+      });
+      const document = renderer.root.findByType('iframe').props.srcDoc as string;
+      const scriptCode = document.match(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/i)![1];
+
+      // Physical fit scale is determined by targetFittingWidth / garmentMetricWidth, NOT by camera.position.z
+      expect(scriptCode).toContain("const rawScaleX = (targetFittingWidth / garmentMetricWidth) * fitModifier;");
+      // Camera distance triangulation is determined by wearerWidthM * focalLengthPx / measuredPixelWidth
+      expect(scriptCode).toContain("const rawDistance = ((wearerWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;");
+
       expect(() => new Function(scriptCode)).not.toThrow();
     } finally {
       if (renderer) act(() => renderer.unmount());

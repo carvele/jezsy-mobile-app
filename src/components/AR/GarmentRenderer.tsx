@@ -229,6 +229,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
           let loggedPosedBBox = false;
           let smoothedPos = null, smoothedScale = null, smoothedQuat = null;
           let smoothedCameraDistance = null;
+          let hasInitialDistanceSample = false;
+          let lastTransformTime = 0;
           let bindQuats = {};
           let liveBodyFitState = null;
           let lastLoggedBodyFitKey = '';
@@ -1017,10 +1019,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                   // full fix -- real triangulation is still the only accurate source -- but
                   // this seeds a plausible handheld-selfie distance as soon as calibration
                   // itself arrives, so the worst case is "roughly right" instead of "5m off".
-                  if (smoothedCameraDistance == null) {
-                    smoothedCameraDistance = 0.6;
-                    camera.position.z = smoothedCameraDistance;
-                  }
+                  // Phase 6: Do not pre-seed a fictitious 0.6m distance that forces garments to start 2.5x too big!
+                  // The first reliable distance triangulation sample in UPDATE_TRANSFORM snaps camera.position.z directly.
                   camera.updateProjectionMatrix();
                 }
                 showDebug('camera calibration applied: calibrated=' + !!CAMERA_CALIBRATION
@@ -1047,6 +1047,14 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 if (bodyFitState) {
                   liveBodyFitState = bodyFitState;
                 }
+
+                // Phase 3: Runtime Pipeline Diagnostic Isolation Modes (DEV)
+                // Modes: 'MODE_E_FULL' (default), 'MODE_A_STATIC', 'MODE_B_PROJECTION_ONLY', 'MODE_C_POSE_ONLY', 'MODE_D_BODY_FIT_ONLY'
+                const RUNTIME_ISOLATION_MODE = 'MODE_E_FULL';
+                if (RUNTIME_ISOLATION_MODE === 'MODE_A_STATIC') {
+                  return; // Mode A: Static GLB rendered without body tracking
+                }
+
                 debugFrameCount++;
                 const shouldLog = (debugFrameCount % 20 === 0);
 
@@ -1142,33 +1150,54 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                     // handler, since single-frame landmark jitter would otherwise make the
                     // camera (and therefore the whole scene) visibly judder in depth.
                     if (CAMERA_CALIBRATION) {
-                      // True 2D pixel separation (not just the X component).
-                      // For bottoms, anchor on hip landmarks (23 and 24) using wearer hip joint span
+                      // Shared, category-neutral distance triangulation:
+                      // Person-to-camera distance is invariant across all garments.
+                      // Shoulders (11 and 12) provide the primary anchor;
+                      // hips (23 and 24) provide fallback when shoulders are outside the camera frame.
+                      const hasShoulders = l11 && l12 && (l11.visibility ?? 1) >= 0.35 && (l12.visibility ?? 1) >= 0.35;
                       const hip23Early = normalizedLandmarks[23];
                       const hip24Early = normalizedLandmarks[24];
-                      const useHipTriangulation = IS_BOTTOM_GARMENT && hip23Early && hip24Early;
-                      const pL = useHipTriangulation ? hip23Early : l11;
-                      const pR = useHipTriangulation ? hip24Early : l12;
-                      const wearerWidthM = useHipTriangulation
-                        ? (CAMERA_CALIBRATION.wearerHipWidthM || (CAMERA_CALIBRATION.wearerShoulderWidthM * 0.9) || 0.36)
-                        : CAMERA_CALIBRATION.wearerShoulderWidthM;
+                      const hasHips = hip23Early && hip24Early && (hip23Early.visibility ?? 1) >= 0.35 && (hip24Early.visibility ?? 1) >= 0.35;
 
-                      const dxPx = (pR.x - pL.x) * CAMERA_CALIBRATION.videoWidthPx;
-                      const dyPx = (pR.y - pL.y) * CAMERA_CALIBRATION.videoHeightPx;
-                      const measuredPixelWidth = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
-                      const isRoughlyFrontal = Math.abs(dxPx) > (Math.abs(dyPx) * 0.6);
-                      if (measuredPixelWidth > 1 && isRoughlyFrontal && wearerWidthM > 0) {
-                        const rawDistance = ((wearerWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;
-                        if (Number.isFinite(rawDistance) && rawDistance > 0.2 && rawDistance < 3.5) {
-                          const maxDelta = 0.05;
-                          const clampedRawDistance = smoothedCameraDistance == null
-                            ? rawDistance
-                            : Math.max(smoothedCameraDistance * (1 - maxDelta), Math.min(smoothedCameraDistance * (1 + maxDelta), rawDistance));
-                          smoothedCameraDistance = smoothedCameraDistance == null
-                            ? clampedRawDistance
-                            : smoothedCameraDistance + (clampedRawDistance - smoothedCameraDistance) * 0.08;
-                          camera.position.z = smoothedCameraDistance;
-                          camera.updateMatrixWorld(true);
+                      let pL = null;
+                      let pR = null;
+                      let wearerWidthM = 0;
+
+                      if (hasShoulders && CAMERA_CALIBRATION.wearerShoulderWidthM > 0) {
+                        pL = l11;
+                        pR = l12;
+                        wearerWidthM = CAMERA_CALIBRATION.wearerShoulderWidthM;
+                      } else if (hasHips) {
+                        pL = hip23Early;
+                        pR = hip24Early;
+                        wearerWidthM = CAMERA_CALIBRATION.wearerHipWidthM || (CAMERA_CALIBRATION.wearerShoulderWidthM * 0.9) || 0.36;
+                      }
+
+                      if (pL && pR && wearerWidthM > 0) {
+                        const dxPx = (pR.x - pL.x) * CAMERA_CALIBRATION.videoWidthPx;
+                        const dyPx = (pR.y - pL.y) * CAMERA_CALIBRATION.videoHeightPx;
+                        const measuredPixelWidth = Math.sqrt(dxPx * dxPx + dyPx * dyPx);
+                        const isRoughlyFrontal = Math.abs(dxPx) > (Math.abs(dyPx) * 0.5);
+
+                        if (measuredPixelWidth > 1 && isRoughlyFrontal) {
+                          const rawDistance = ((wearerWidthM * CAMERA_CALIBRATION.focalLengthPx) / measuredPixelWidth) * yawCosCorrection;
+                          if (Number.isFinite(rawDistance) && rawDistance > 0.3 && rawDistance < 3.5) {
+                            if (!hasInitialDistanceSample || smoothedCameraDistance == null) {
+                              // Phase 6: DIRECT SNAP on first reliable measurement!
+                              // Eliminates the 30-second huge-to-small shrinking animation.
+                              smoothedCameraDistance = rawDistance;
+                              hasInitialDistanceSample = true;
+                              camera.position.z = smoothedCameraDistance;
+                              camera.updateMatrixWorld(true);
+                            } else {
+                              // Phase 13: Responsive frame tracking for moving closer/farther
+                              const distDiff = rawDistance - smoothedCameraDistance;
+                              const clampedDiff = Math.max(-0.25, Math.min(0.25, distDiff));
+                              smoothedCameraDistance += clampedDiff * 0.35;
+                              camera.position.z = smoothedCameraDistance;
+                              camera.updateMatrixWorld(true);
+                            }
+                          }
                         }
                       }
                     }
@@ -1341,21 +1370,25 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                       }
 
                       if (transformValid) {
-                        const smoothing = 0.25; // higher = follows new frames faster
+                        const nowMs = performance.now();
+                        const dtSec = lastTransformTime ? Math.min(0.1, (nowMs - lastTransformTime) / 1000) : 0.033;
+                        lastTransformTime = nowMs;
+                        // Phase 13: Frame-rate-independent temporal response (~65ms half-life)
+                        const alpha = Math.min(1.0, 1 - Math.exp(-dtSec / 0.065));
                         const targetQuat = rotValid ? new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w) : null;
                         if (!smoothedPos) {
                           smoothedPos = targetPos.clone();
                           smoothedScale = { x: resolvedScale.x, y: resolvedScale.y, z: resolvedScale.z };
                           if (targetQuat) smoothedQuat = targetQuat.clone();
                         } else {
-                          smoothedPos.lerp(targetPos, smoothing);
+                          smoothedPos.lerp(targetPos, alpha);
                           if (typeof smoothedScale === 'number') {
                             smoothedScale = { x: smoothedScale, y: smoothedScale, z: smoothedScale };
                           }
-                          smoothedScale.x += (resolvedScale.x - smoothedScale.x) * smoothing;
-                          smoothedScale.y += (resolvedScale.y - smoothedScale.y) * smoothing;
-                          smoothedScale.z += (resolvedScale.z - smoothedScale.z) * smoothing;
-                          if (targetQuat) smoothedQuat.slerp(targetQuat, smoothing);
+                          smoothedScale.x += (resolvedScale.x - smoothedScale.x) * alpha;
+                          smoothedScale.y += (resolvedScale.y - smoothedScale.y) * alpha;
+                          smoothedScale.z += (resolvedScale.z - smoothedScale.z) * alpha;
+                          if (targetQuat) smoothedQuat.slerp(targetQuat, alpha);
                         }
                         garmentGroup.position.copy(smoothedPos);
                         garmentGroup.scale.set(smoothedScale.x, smoothedScale.y, smoothedScale.z);
@@ -1521,7 +1554,8 @@ export const GarmentRenderer = forwardRef<GarmentRendererRef, GarmentRendererPro
                 const boneMap = ${metadata ? safeStringify(metadata.boneMap) : 'null'};
                 const hasCalibratedRig = boneMap && Object.keys(boneMap).length > 0;
                 const hasLoadedSkeleton = Object.keys(skeletonBones).length > 0;
-                if (hasCalibratedRig && hasLoadedSkeleton && boneRotations) {
+                const shouldRetargetBones = RUNTIME_ISOLATION_MODE !== 'MODE_B_PROJECTION_ONLY' && RUNTIME_ISOLATION_MODE !== 'MODE_D_BODY_FIT_ONLY';
+                if (shouldRetargetBones && hasCalibratedRig && hasLoadedSkeleton && boneRotations) {
                   // Live group-space orientation of any node in the garment hierarchy
                   const getQuatInGroup = (node) => {
                     const chain = [];
