@@ -105,6 +105,7 @@ interface Props {
   initialLoadOutfitId?: string;
   /** A transient token from style-advisor or passive-outfits to load ephemeral look onto canvas. */
   initialTransientToken?: string;
+  bottomInset?: number;
 }
 
 export function MannequinView({
@@ -113,6 +114,7 @@ export function MannequinView({
   onRefreshWardrobe,
   initialLoadOutfitId,
   initialTransientToken,
+  bottomInset = 0,
 }: Props) {
   const theme = useColorScheme();
   const colors = Colors[theme];
@@ -129,7 +131,8 @@ export function MannequinView({
   const effectiveWidth = Math.min(viewportWidth, maxContentWidth);
   const MAX_CANVAS_WIDTH = 440;
   const canvasWidth = Math.min(effectiveWidth - Spacing.lg * 2, MAX_CANVAS_WIDTH);
-  const garmentCardWidth = (effectiveWidth - Spacing.lg * 2 - Spacing.sm * (GARMENT_GRID_COLUMNS - 1)) / GARMENT_GRID_COLUMNS;
+  const yogaSlack = Platform.OS === 'web' || Platform.OS === 'android' ? 0.5 : 0;
+  const garmentCardWidth = Math.floor((effectiveWidth - Spacing.lg * 2 - Spacing.sm * (GARMENT_GRID_COLUMNS - 1)) / GARMENT_GRID_COLUMNS) - yogaSlack;
   const moreMenuLeft = Math.max(Spacing.lg, (viewportWidth - maxContentWidth) / 2 + Spacing.lg);
 
   const canvasRef = useRef<View>(null);
@@ -705,7 +708,7 @@ export function MannequinView({
       style={styles.container}
       contentContainerStyle={[
         styles.contentContainer,
-        { paddingBottom: TAB_BAR_CLEARANCE },
+        { paddingBottom: Math.max(bottomInset, TAB_BAR_CLEARANCE) },
       ]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
@@ -1184,20 +1187,12 @@ export function MannequinView({
                 </TouchableOpacity>
               </View>
             ) : (
-              <FlatList
-                data={filteredItems}
-                keyExtractor={(item) => item.id}
-                numColumns={GARMENT_GRID_COLUMNS}
-                // This list scrolls with the page (below), not on its own --
-                // the point of the grid is that the whole drawer moves as one
-                // vertical scroll instead of a separate side-scroll region.
-                scrollEnabled={false}
-                columnWrapperStyle={styles.garmentGridRow}
-                contentContainerStyle={styles.garmentScroll}
-                renderItem={({ item }) => {
+              <View style={styles.garmentGrid}>
+                {filteredItems.map((item) => {
                   const onCanvas = activeOnCanvasIds.has(item.id);
                   return (
                     <TouchableOpacity
+                      key={item.id}
                       style={[
                         styles.garmentCard,
                         { width: garmentCardWidth, backgroundColor: colors.card, borderColor: onCanvas ? colors.tint : colors.border },
@@ -1221,8 +1216,8 @@ export function MannequinView({
                       )}
                     </TouchableOpacity>
                   );
-                }}
-              />
+                })}
+              </View>
             )}
           </View>
         )}
@@ -1836,14 +1831,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  garmentScroll: {
+  garmentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
     paddingBottom: Spacing.sm,
-  },
-  garmentGridRow: {
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
   },
   garmentCard: {
     width: GARMENT_CARD_WIDTH_FALLBACK,

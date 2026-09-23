@@ -643,7 +643,7 @@ export function OutfitRemixModal({
 
             {/* Flat Lay Visual Canvas */}
             <View style={[styles.canvasWrapper, { borderColor: wt.cardBorder, backgroundColor: wt.cardSurface }]}>
-              <DeterministicFlatLayCanvas items={previewItems} height={200} />
+              <DeterministicFlatLayCanvas items={previewItems} height={225} />
             </View>
 
             {/* Base Structure Switcher Bar */}

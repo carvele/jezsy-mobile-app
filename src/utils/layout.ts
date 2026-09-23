@@ -60,3 +60,36 @@ export function useGridCardWidth(): { cardWidth: DimensionValue; columns: number
 
   return { cardWidth, columns };
 }
+
+/** Page padding on each side of the wardrobe garments grid. */
+export const WARDROBE_GRID_GUTTER = Spacing.md; // 16
+
+/** Space between columns in the wardrobe garments grid. */
+export const WARDROBE_GRID_COLUMN_GAP = Spacing.sm; // 8
+
+/** Usable width for one card in the 3-column wardrobe garments grid. */
+export function useWardrobeGridCardWidth(): { cardWidth: DimensionValue; columns: number } {
+  const { width } = useWindowDimensions();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isWeb = Platform.OS === 'web';
+  const webClientWidth =
+    isWeb && typeof document !== 'undefined' && document.documentElement?.clientWidth
+      ? document.documentElement.clientWidth
+      : null;
+
+  const effectiveWidth = mounted ? (webClientWidth || width) : 400;
+
+  // Phones get 3 cols to maximize screen space; tablets/web scale up
+  const columns = effectiveWidth > 1200 ? 6 : effectiveWidth > 900 ? 5 : effectiveWidth > 600 ? 4 : 3;
+
+  const contentWidth = effectiveWidth - WARDROBE_GRID_GUTTER * 2 - WARDROBE_GRID_COLUMN_GAP * (columns - 1);
+  const yogaSlack = Platform.OS === 'android' ? 1 : 0.5;
+  const cardWidth: DimensionValue = Math.floor(contentWidth / columns) - yogaSlack;
+
+  return { cardWidth, columns };
+}

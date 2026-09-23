@@ -15,13 +15,13 @@ interface SlotAnchor {
 }
 
 const SLOT_ANCHORS: Record<SlotName, SlotAnchor> = {
-  top:         { x: 0.50, y: 0.25, scale: 1.00, maxDim: 140, zIndex: 2 },
-  outerwear:   { x: 0.28, y: 0.20, scale: 1.10, maxDim: 155, zIndex: 3 },
-  bottom:      { x: 0.52, y: 0.60, scale: 1.00, maxDim: 140, zIndex: 1 },
-  dress:       { x: 0.50, y: 0.45, scale: 1.25, maxDim: 170, zIndex: 2 },
-  shoes:       { x: 0.25, y: 0.85, scale: 0.70, maxDim: 90,  zIndex: 2 },
-  accessory1:  { x: 0.78, y: 0.80, scale: 0.65, maxDim: 80,  zIndex: 4 },
-  accessory2:  { x: 0.80, y: 0.15, scale: 0.60, maxDim: 75,  zIndex: 4 },
+  top:         { x: 0.50, y: 0.30, scale: 1.00, maxDim: 135, zIndex: 2 },
+  outerwear:   { x: 0.30, y: 0.28, scale: 1.05, maxDim: 145, zIndex: 3 },
+  bottom:      { x: 0.52, y: 0.62, scale: 1.00, maxDim: 135, zIndex: 1 },
+  dress:       { x: 0.50, y: 0.48, scale: 1.15, maxDim: 160, zIndex: 2 },
+  shoes:       { x: 0.28, y: 0.82, scale: 0.70, maxDim: 85,  zIndex: 2 },
+  accessory1:  { x: 0.76, y: 0.78, scale: 0.65, maxDim: 75,  zIndex: 4 },
+  accessory2:  { x: 0.78, y: 0.22, scale: 0.60, maxDim: 70,  zIndex: 4 },
 };
 
 function resolveItemSlot(item: FlatLayItem): SlotName | null {
@@ -177,15 +177,18 @@ export function DeterministicFlatLayCanvas({ items, height }: DeterministicFlatL
     <View style={[styles.canvas, { height: canvasHeight }]}>
       {result.assigned.map(({ item, slot }) => {
         const anchor = SLOT_ANCHORS[slot];
-        const dim = anchor.maxDim * anchor.scale;
+        const scaleFactor = Math.min(1.0, Math.max(0.65, canvasHeight / 300));
+        const dim = Math.round(anchor.maxDim * anchor.scale * scaleFactor);
+        const rawTop = anchor.y * canvasHeight - dim / 2;
+        const safeTop = Math.max(6, Math.min(canvasHeight - dim - 6, rawTop));
         return (
           <View
             key={item.id}
             style={[
               styles.slotItem,
               {
-                left: anchor.x * 100 + '%' as any,
-                top: anchor.y * canvasHeight - dim / 2,
+                left: `${anchor.x * 100}%` as any,
+                top: safeTop,
                 width: dim,
                 height: dim,
                 zIndex: anchor.zIndex,
