@@ -1,0 +1,1 @@
+GRANT INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.product_variants TO anon, authenticated;

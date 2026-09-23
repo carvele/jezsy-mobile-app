@@ -41,7 +41,7 @@ module.exports = {
     },
     android: {
       package: "com.jezsy.mobileapp",
-      versionCode: 2,
+      versionCode: 3,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       adaptiveIcon: {
         backgroundColor: "#E6F4FE",
