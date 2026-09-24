@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Share } from 'react-native';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Share, Modal, ActivityIndicator, Animated, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -100,6 +100,19 @@ export default function ProfileScreen() {
 
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const guestFadeAnim = useRef(new Animated.Value(user ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (!user) {
+      Animated.timing(guestFadeAnim, {
+        toValue: 1,
+        duration: 280,
+        useNativeDriver: Platform.OS !== 'web',
+      }).start();
+    } else {
+      guestFadeAnim.setValue(0);
+    }
+  }, [user, guestFadeAnim]);
 
   const handleSignOutPress = () => {
     setShowSignOutModal(true);
@@ -108,10 +121,11 @@ export default function ProfileScreen() {
   const handleConfirmSignOut = async () => {
     if (isSigningOut) return;
     setIsSigningOut(true);
+    setShowSignOutModal(false);
     try {
-      setShowSignOutModal(false);
-      await signOut();
-      showToast('You have been signed out successfully.', 'success');
+      const minDelay = new Promise((resolve) => setTimeout(resolve, 800));
+      await Promise.all([signOut(), minDelay]);
+      showToast('You have been signed out. Enjoy browsing as a guest!', 'info');
     } catch (error: any) {
       console.error('Error signing out:', error);
       showToast('Could not sign you out. Please try again.', 'error');
@@ -119,6 +133,30 @@ export default function ProfileScreen() {
       setIsSigningOut(false);
     }
   };
+
+  const renderSigningOutModal = () => (
+    <Modal
+      visible={isSigningOut}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={() => {}}
+    >
+      <View style={styles.signingOutBackdrop}>
+        <View style={[styles.signingOutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.signingOutIconContainer, { backgroundColor: colors.tint + '15' }]}>
+            <ActivityIndicator size="small" color={colors.tint} />
+          </View>
+          <Text style={[Type.subtitle, styles.signingOutTitle, { color: colors.text }]}>
+            Signing Out
+          </Text>
+          <Text style={[Type.body, styles.signingOutMessage, { color: colors.secondaryText }]}>
+            Safely closing your session...
+          </Text>
+        </View>
+      </View>
+    </Modal>
+  );
 
 
   const renderSettingItem = (icon: any, title: string, subtitle?: string, onPress?: () => void) => (
@@ -143,128 +181,153 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}>
-          <View style={styles.header}>
-            <Text style={[styles.headerTitle, { color: colors.tint }]}>Profile</Text>
-          </View>
-
-          {/* Guest Hero Card */}
-          <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', padding: Spacing.xl }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md }}>
-              <View style={[styles.avatar, { backgroundColor: colors.tint + '20' }]}>
-                <IconSymbol name="person.fill" size={32} color={colors.tint} />
-              </View>
-              <View style={styles.profileInfo}>
-                <Text style={[styles.profileName, { color: colors.text, marginBottom: 2 }]}>
-                  Welcome to JezSy
-                </Text>
-                <Text style={[styles.profileEmail, { color: colors.secondaryText }]}>
-                  Guest Shopper
-                </Text>
-              </View>
+        <Animated.View style={{ flex: 1, opacity: guestFadeAnim }}>
+          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomInset }]}>
+            <View style={styles.header}>
+              <Text style={[styles.headerTitle, { color: colors.tint }]}>Profile</Text>
             </View>
 
-            <Text style={[Type.body, { color: colors.secondaryText, marginBottom: Spacing.lg, lineHeight: 20 }]}>
-              Sign in or create an account to unlock boutique reservations, digital wardrobe management, and personalized fit styling.
-            </Text>
+            {/* Guest Hero Card */}
+            <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', padding: Spacing.xl }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md }}>
+                <View style={[styles.avatar, { backgroundColor: colors.tint + '20' }]}>
+                  <IconSymbol name="person.fill" size={32} color={colors.tint} />
+                </View>
+                <View style={styles.profileInfo}>
+                  <Text style={[styles.profileName, { color: colors.text, marginBottom: 2 }]}>
+                    Welcome to JezSy
+                  </Text>
+                  <Text style={[styles.profileEmail, { color: colors.secondaryText }]}>
+                    Guest Shopper
+                  </Text>
+                </View>
+              </View>
 
-            <TouchableOpacity
-              style={{
-                backgroundColor: colors.tint,
-                paddingVertical: 12,
-                borderRadius: Radius.pill,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              onPress={() => router.push('/(auth)/welcome')}
-              accessibilityRole="button"
-              accessibilityLabel="Sign in or register"
-            >
-              <Text style={{ color: colors.onTint, fontWeight: '600', fontSize: 15 }}>
-                Sign In / Register
+              <Text style={[Type.body, { color: colors.secondaryText, marginBottom: Spacing.lg, lineHeight: 20 }]}>
+                Sign in or create an account to unlock boutique reservations, digital wardrobe management, and personalized fit styling.
               </Text>
-            </TouchableOpacity>
-          </View>
 
-          {/* Shopping (Available in Guest Mode) */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Shopping</Text>
-            <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
-              {renderSettingItem(
-                'bag.fill',
-                'My Bag',
-                `${itemCount} item${itemCount !== 1 ? 's' : ''} in bag`,
-                () => router.push('/cart'),
-              )}
-              {renderSettingItem(
-                'heart.fill',
-                'Wishlist',
-                'Sign in to view your saved favorites',
-                () => router.push('/(auth)/welcome'),
-              )}
+              <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: colors.tint,
+                    paddingVertical: 12,
+                    borderRadius: Radius.pill,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => router.push('/(auth)/welcome')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Sign in or register"
+                >
+                  <Text style={{ color: colors.onTint, fontWeight: '600', fontSize: 14 }}>
+                    Sign In / Register
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: colors.card,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    paddingVertical: 12,
+                    borderRadius: Radius.pill,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => router.replace('/(tabs)')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue browsing storefront"
+                >
+                  <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>
+                    Browse Store
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
 
-          {/* Member Privileges */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Member Privileges</Text>
-            <View style={[styles.settingsGroup, { backgroundColor: colors.surface, padding: Spacing.lg, gap: Spacing.md }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
-                <IconSymbol name="calendar" size={20} color={colors.tint} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[Type.subtitle, { color: colors.text, fontSize: 14 }]}>Boutique Reservations</Text>
-                  <Text style={[Type.caption, { color: colors.secondaryText }]}>Reserve garments and pick up your order in-store.</Text>
+            {/* Shopping (Available in Guest Mode) */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Shopping</Text>
+              <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
+                {renderSettingItem(
+                  'bag.fill',
+                  'My Bag',
+                  `${itemCount} item${itemCount !== 1 ? 's' : ''} in bag`,
+                  () => router.push('/cart'),
+                )}
+                {renderSettingItem(
+                  'heart.fill',
+                  'Wishlist',
+                  'Sign in to view your saved favorites',
+                  () => router.push('/(auth)/welcome'),
+                )}
+              </View>
+            </View>
+
+            {/* Member Privileges */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Member Privileges</Text>
+              <View style={[styles.settingsGroup, { backgroundColor: colors.surface, padding: Spacing.lg, gap: Spacing.md }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+                  <IconSymbol name="calendar" size={20} color={colors.tint} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[Type.subtitle, { color: colors.text, fontSize: 14 }]}>Boutique Reservations</Text>
+                    <Text style={[Type.caption, { color: colors.secondaryText }]}>Reserve garments and pick up your order in-store.</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
+                  <IconSymbol name="cube.transparent" size={20} color={colors.tint} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[Type.subtitle, { color: colors.text, fontSize: 14 }]}>Digital Wardrobe & AI Stylist</Text>
+                    <Text style={[Type.caption, { color: colors.secondaryText }]}>Digitize your closet and get automated outfit combinations.</Text>
+                  </View>
                 </View>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.md }}>
-                <IconSymbol name="cube.transparent" size={20} color={colors.tint} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[Type.subtitle, { color: colors.text, fontSize: 14 }]}>Digital Wardrobe & AI Stylist</Text>
-                  <Text style={[Type.caption, { color: colors.secondaryText }]}>Digitize your closet and get automated outfit combinations.</Text>
-                </View>
+            </View>
+
+            {/* App Preferences */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>App Preferences</Text>
+              <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
+                {renderSettingItem(
+                  'moon.fill',
+                  'Appearance',
+                  'Light, dark, or match device',
+                  () => router.push('/profile/appearance' as any),
+                )}
               </View>
             </View>
-          </View>
 
-          {/* App Preferences */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>App Preferences</Text>
-            <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
-              {renderSettingItem(
-                'moon.fill',
-                'Appearance',
-                'Light, dark, or match device',
-                () => router.push('/profile/appearance' as any),
-              )}
+            {/* Support & About */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Support & About</Text>
+              <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
+                {renderSettingItem(
+                  'sparkles',
+                  'App Tour & Feature Guide',
+                  'Digital wardrobe, AR try-on, and AI styling overview',
+                  () => setShowTour(true),
+                )}
+                {renderSettingItem(
+                  'questionmark.circle',
+                  'Help & FAQ',
+                  'Orders, pickup, payments, & returns',
+                  () => router.push('/profile/faq' as any),
+                )}
+                {renderSettingItem(
+                  'cube.fill',
+                  'Credits & Licenses',
+                  '3D model attribution',
+                  () => router.push('/profile/credits' as any),
+                )}
+              </View>
             </View>
-          </View>
-
-          {/* Support & About */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Support & About</Text>
-            <View style={[styles.settingsGroup, { backgroundColor: colors.surface }]}>
-              {renderSettingItem(
-                'sparkles',
-                'App Tour & Feature Guide',
-                'Digital wardrobe, AR try-on, and AI styling overview',
-                () => setShowTour(true),
-              )}
-              {renderSettingItem(
-                'questionmark.circle',
-                'Help & FAQ',
-                'Orders, pickup, payments, & returns',
-                () => router.push('/profile/faq' as any),
-              )}
-              {renderSettingItem(
-                'cube.fill',
-                'Credits & Licenses',
-                '3D model attribution',
-                () => router.push('/profile/credits' as any),
-              )}
-            </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </Animated.View>
         <SystemTourModal visible={showTour} onClose={() => setShowTour(false)} isReplay={true} />
+        {renderSigningOutModal()}
       </SafeAreaView>
     );
   }
@@ -528,17 +591,24 @@ export default function ProfileScreen() {
       <ConfirmModal
         visible={showSignOutModal}
         title="Sign Out"
-        message="Are you sure you want to sign out of your account?"
+        message="Are you sure you want to sign out?"
+        consequences={[
+          'Your active reservations and digital wardrobe remain safely saved.',
+          'You can continue browsing the boutique collections as a guest.',
+        ]}
         confirmLabel="Sign Out"
         cancelLabel="Cancel"
         isDestructive={true}
         severity="LOW"
         isLoading={isSigningOut}
-        onCancel={() => setShowSignOutModal(false)}
+        onCancel={() => {
+          if (!isSigningOut) setShowSignOutModal(false);
+        }}
         onConfirm={handleConfirmSignOut}
       />
 
       <SystemTourModal visible={showTour} onClose={() => setShowTour(false)} isReplay={true} />
+      {renderSigningOutModal()}
     </SafeAreaView>
   );
 }
@@ -673,6 +743,46 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     ...Type.bodyLargeStrong,
+  },
+  signingOutBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  signingOutCard: {
+    width: '100%',
+    maxWidth: 300,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  signingOutIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.pill,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  signingOutTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  signingOutMessage: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
 
