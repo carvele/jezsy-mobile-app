@@ -1316,28 +1316,9 @@ export default function ExploreScreen() {
 
       {/* Main Body Layout */}
       {isSearchActive ? (
-        // Search Results & Suggestions Mode
+        // Search Results Mode
         <View style={styles.flexOne}>
-          {searchQuery.trim().length === 0 ? (
-            // Idle / Search Focused suggestions: Uniqlo Minimal Aesthetic
-            <View style={styles.suggestionsContainer}>
-              <Text style={[styles.sectionTitle, { color: colors.text, marginTop: Spacing.md }]}>Suggested Searches</Text>
-              <View style={styles.tagsContainer}>
-                {['Summer Dress', 'Denim Jacket', 'Vintage', 'Minimalist', 'Streetwear'].map((tag, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.tag, { backgroundColor: colors.card, borderColor: colors.border }]}
-                    onPress={() => setSearchQuery(tag)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Search for ${tag}`}
-                  >
-                    <IconSymbol name="magnifyingglass" size={12} color={colors.secondaryText} style={styles.tagIcon} />
-                    <Text style={[styles.tagText, { color: colors.secondaryText }]}>{tag}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ) : (
+          {searchQuery.trim().length === 0 ? null : (
             // Search Results Grid with Filter capabilities
             <View style={styles.flexOne}>
               {isSearching ? (
@@ -2216,30 +2197,6 @@ const styles = StyleSheet.create({
   },
   gridRowSpacing: {
     marginBottom: Spacing.xl,
-  },
-  suggestionsContainer: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  tagIcon: {
-    marginRight: 6,
-  },
-  tagText: {
-    fontSize: 14,
-    fontWeight: '500',
   },
   gridHeader: {
     flexDirection: 'row',
