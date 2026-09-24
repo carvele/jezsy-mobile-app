@@ -12,6 +12,7 @@ import {
   getTodayCalendarDate,
   formatDayDisplay,
   formatSlotLabel,
+  isPastCalendarDate,
 } from '../plannerDateTime';
 
 describe('plannerDateTime utility', () => {
@@ -172,5 +173,22 @@ describe('plannerDateTime utility', () => {
       expect(formatSlotLabel('evening')).toBe('Evening');
       expect(formatSlotLabel('workout')).toBe('Workout');
     });
+  });
+});
+
+describe('isPastCalendarDate', () => {
+  it('is true only for days strictly before today', () => {
+    expect(isPastCalendarDate('2026-09-23', '2026-09-24')).toBe(true);
+    expect(isPastCalendarDate('2026-09-01', '2026-09-24')).toBe(true);
+    expect(isPastCalendarDate('2025-12-31', '2026-01-01')).toBe(true);
+    expect(isPastCalendarDate('2026-09-24', '2026-09-24')).toBe(false);
+    expect(isPastCalendarDate('2026-09-25', '2026-09-24')).toBe(false);
+    expect(isPastCalendarDate('2027-01-01', '2026-12-31')).toBe(false);
+  });
+
+  it('never treats malformed input as past', () => {
+    expect(isPastCalendarDate('not-a-date', '2026-09-24')).toBe(false);
+    expect(isPastCalendarDate('2026-09-01', '')).toBe(false);
+    expect(isPastCalendarDate('2026-13-40', '2026-09-24')).toBe(false);
   });
 });

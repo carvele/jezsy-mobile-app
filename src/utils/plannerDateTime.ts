@@ -102,6 +102,14 @@ export function isValidCalendarDate(dateStr: string): boolean {
 }
 
 /**
+ * True when `dateStr` is strictly before `todayDateStr`. Both are YYYY-MM-DD, which sorts chronologically
+ * as plain strings, so no Date object (and no timezone) is involved.
+ */
+export function isPastCalendarDate(dateStr: string, todayDateStr: string): boolean {
+  return isValidCalendarDate(dateStr) && isValidCalendarDate(todayDateStr) && dateStr < todayDateStr;
+}
+
+/**
  * Adds or subtracts calendar days using component arithmetic.
  */
 export function addCalendarDays(dateStr: string, days: number): string {

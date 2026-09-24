@@ -16,6 +16,7 @@ import {
   getDaysInMonth,
   getDayOfWeek,
   formatDayDisplay,
+  isPastCalendarDate,
 } from '@/src/utils/plannerDateTime';
 import { getPlannedOutfitsRange } from '@/src/services/plannerService';
 import { PlannedOutfit } from '@/src/types/planner';
@@ -26,6 +27,8 @@ export interface PlannerCalendarModalProps {
   todayDate: string; // YYYY-MM-DD
   onClose: () => void;
   onSelectDate: (dateStr: string) => void;
+  /** Scheduling pickers set this so days before today cannot be chosen; the browsing planner leaves it off. */
+  disablePastDates?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -41,6 +44,7 @@ export const PlannerCalendarModal: React.FC<PlannerCalendarModalProps> = ({
   todayDate,
   onClose,
   onSelectDate,
+  disablePastDates = false,
 }) => {
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme];
@@ -116,7 +120,22 @@ export const PlannerCalendarModal: React.FC<PlannerCalendarModalProps> = ({
     return map;
   }, [monthPlans]);
 
+  // With past dates disabled there is nothing to pick before the current month.
+  const todayParts = React.useMemo(() => {
+    try {
+      return parseCalendarDate(todayDate);
+    } catch {
+      return null;
+    }
+  }, [todayDate]);
+  const canGoPrev =
+    !disablePastDates ||
+    !todayParts ||
+    activeYear > todayParts.year ||
+    (activeYear === todayParts.year && activeMonth > todayParts.month);
+
   const handlePrevMonth = () => {
+    if (!canGoPrev) return;
     if (activeMonth === 1) {
       setActiveMonth(12);
       setActiveYear((y) => y - 1);
@@ -173,7 +192,9 @@ export const PlannerCalendarModal: React.FC<PlannerCalendarModalProps> = ({
                 accessibilityRole="button"
                 accessibilityLabel="Previous month"
                 onPress={handlePrevMonth}
-                style={styles.navButton}
+                disabled={!canGoPrev}
+                accessibilityState={{ disabled: !canGoPrev }}
+                style={[styles.navButton, !canGoPrev && { opacity: 0.3 }]}
                 hitSlop={8}
               >
                 <IconSymbol name="chevron.left" size={20} color={theme.text} />
@@ -222,6 +243,7 @@ export const PlannerCalendarModal: React.FC<PlannerCalendarModalProps> = ({
 
                 const isSelected = cell.dateStr === selectedDate;
                 const isToday = cell.dateStr === todayDate;
+                const isPast = disablePastDates && isPastCalendarDate(cell.dateStr, todayDate);
                 const counts = plansByDate.get(cell.dateStr) || { planned: 0, unconfirmed: 0 };
                 const dayDisplay = formatDayDisplay(cell.dateStr, todayDate);
 
@@ -230,6 +252,8 @@ export const PlannerCalendarModal: React.FC<PlannerCalendarModalProps> = ({
                 if (counts.planned > 0) details.push(`${counts.planned} scheduled`);
                 if (counts.unconfirmed > 0) details.push(`${counts.unconfirmed} needs attention`);
 
+                if (isPast) details.push('Past date, unavailable');
+
                 const a11yLabel = `${dayDisplay.fullDate}. ${details.join(', ')}.`;
 
                 return (
@@ -237,13 +261,15 @@ export const PlannerCalendarModal: React.FC<PlannerCalendarModalProps> = ({
                     key={cell.dateStr}
                     accessibilityRole="button"
                     accessibilityLabel={a11yLabel}
-                    accessibilityState={{ selected: isSelected }}
+                    accessibilityState={{ selected: isSelected, disabled: isPast }}
+                    disabled={isPast}
                     onPress={() => {
                       onSelectDate(cell.dateStr!);
                       onClose();
                     }}
                     style={[
                       styles.gridDayCell,
+                      isPast && { opacity: 0.35 },
                       isSelected && [styles.selectedGridCell, { backgroundColor: theme.tint }],
                       !isSelected && isToday && [styles.todayGridCell, { borderColor: theme.tint }],
                     ]}

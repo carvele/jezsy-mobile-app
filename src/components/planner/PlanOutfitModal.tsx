@@ -26,6 +26,7 @@ import {
   formatDayDisplay,
   formatSlotLabel,
   resolveDeviceTimezone,
+  isPastCalendarDate,
 } from '@/src/utils/plannerDateTime';
 import { validateSavedOutfitAvailability } from '@/src/utils/plannerSnapshotAdapter';
 import { createPlannedOutfit } from '@/src/services/plannerService';
@@ -112,6 +113,12 @@ export const PlanOutfitModal: React.FC<PlanOutfitModalProps> = ({
 
   const handleSubmit = async () => {
     if (!preflightCheck.isValid) return;
+
+    // Belt and braces with the calendar: a past date can still arrive through stale state.
+    if (isPastCalendarDate(selectedDate, todayDateStr)) {
+      setErrorMessage('Pick today or a future date for this outfit.');
+      return;
+    }
 
     // Check timezone validity: do not silently persist UTC
     const planTimezone = resolvedTz || 'Asia/Manila';
@@ -406,6 +413,7 @@ export const PlanOutfitModal: React.FC<PlanOutfitModalProps> = ({
         visible={isDatePickerOpen}
         selectedDate={selectedDate}
         todayDate={todayDateStr}
+        disablePastDates
         onClose={() => setIsDatePickerOpen(false)}
         onSelectDate={(newDate) => {
           setSelectedDate(newDate);

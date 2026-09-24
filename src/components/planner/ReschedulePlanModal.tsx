@@ -17,6 +17,7 @@ import {
   formatDayDisplay,
   formatSlotLabel,
   resolveDeviceTimezone,
+  isPastCalendarDate,
 } from '@/src/utils/plannerDateTime';
 import { reschedulePlannedOutfit } from '@/src/services/plannerService';
 import { PlannerCalendarModal } from './PlannerCalendarModal';
@@ -75,6 +76,11 @@ export const ReschedulePlanModal: React.FC<ReschedulePlanModalProps> = ({
   const dayDisplay = formatDayDisplay(selectedDate, todayDateStr);
 
   const handleSubmit = async () => {
+    // Moving a plan to a day that has already passed is never valid; leaving its own date untouched is.
+    if (selectedDate !== plan.planned_date && isPastCalendarDate(selectedDate, todayDateStr)) {
+      setErrorMessage('Pick today or a future date.');
+      return;
+    }
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -289,6 +295,7 @@ export const ReschedulePlanModal: React.FC<ReschedulePlanModalProps> = ({
         visible={isDatePickerOpen}
         selectedDate={selectedDate}
         todayDate={todayDateStr}
+        disablePastDates
         onClose={() => setIsDatePickerOpen(false)}
         onSelectDate={(newDate) => {
           setSelectedDate(newDate);
