@@ -545,7 +545,7 @@ export default function MeasurementsScreen() {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           
           {scanConfidence && (
             <View style={[styles.infoCard, { backgroundColor: 'rgba(0,255,0,0.1)', borderColor: colors.success, borderWidth: 1 }]}>
@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  content: { padding: Spacing.xl },
+  content: { padding: Spacing.xl, paddingBottom: 64 },
   infoCard: {
     flexDirection: 'row',
     padding: Spacing.lg,

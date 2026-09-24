@@ -8,6 +8,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -86,7 +87,12 @@ export default function ResetPasswordScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
       >
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={[styles.title, { color: colors.text }]}>Set a new password</Text>
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
             Choose a new password for your account.
@@ -164,7 +170,7 @@ export default function ResetPasswordScreen() {
               Cancel and sign out
             </Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -174,12 +180,13 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
   content: {
-    flex: 1,
+    flexGrow: 1,
     width: '100%',
     maxWidth: 440,
     alignSelf: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.xl,
   },
   title: {
     // 26 has no slot; headline is 24/800, the same weight two points down.

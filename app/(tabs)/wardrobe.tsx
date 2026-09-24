@@ -857,6 +857,7 @@ export default function WardrobeScreen() {
           windowSize={7}
           removeClippedSubviews
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           onEndReached={loadMoreItems}
           onEndReachedThreshold={0.4}
           ListFooterComponent={

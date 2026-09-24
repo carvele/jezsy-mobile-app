@@ -219,7 +219,7 @@ export default function AccountSettingsScreen() {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           {/* ─── Connected Accounts Section (Informational / Read-Only) ─── */}
           <View style={[styles.section, { borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Connected Accounts</Text>
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: Spacing.sm },
   headerTitle: { ...Type.subtitle },
-  content: { padding: Spacing.xl },
+  content: { padding: Spacing.xl, paddingBottom: 48 },
   section: {
     paddingBottom: Spacing.xxl,
     marginBottom: Spacing.xxl,

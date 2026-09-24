@@ -842,7 +842,7 @@ export default function ChatScreen() {
 
       <KeyboardAvoidingView
         style={styles.container}
-        behavior="padding"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {initialLoading ? (
@@ -861,6 +861,8 @@ export default function ChatScreen() {
             data={messages}
             keyExtractor={(item) => item.id}
             renderItem={renderMessage}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           // Product lookups land after the messages themselves, and that
           // resolution does not touch `data` -- without this the rows keep
           // rendering the fallback chip.

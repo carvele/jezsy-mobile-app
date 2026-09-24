@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
@@ -67,7 +67,12 @@ export default function CreateCapsuleScreen() {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <View style={styles.form}>
+        <ScrollView
+          contentContainerStyle={styles.form}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.formRow}>
             <Text style={[styles.label, { color: colors.text }]}>Name</Text>
             <TextInput keyboardAppearance={theme}
@@ -110,7 +115,7 @@ export default function CreateCapsuleScreen() {
           >
             {saving ? <ActivityIndicator color={colors.onTint} /> : <Text style={[styles.saveButtonText, { color: colors.onTint }]}>Create Collection</Text>}
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
