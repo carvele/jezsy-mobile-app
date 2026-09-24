@@ -1,0 +1,19 @@
+-- Rollback: 20260924061500_update_legal_documents_v2.sql.rollback
+-- Re-activate v1.0.0 of privacy and v1.1.0 of terms, and deactivate v2.0.0
+
+DO $$
+BEGIN
+  -- Deactivate v2.0.0
+  UPDATE public.legal_documents
+  SET is_active = false
+  WHERE version = '2.0.0' AND document_type IN ('privacy', 'terms');
+
+  -- Re-activate previous versions
+  UPDATE public.legal_documents
+  SET is_active = true
+  WHERE document_type = 'privacy' AND version = '1.0.0';
+
+  UPDATE public.legal_documents
+  SET is_active = true
+  WHERE document_type = 'terms' AND version = '1.1.0';
+END $$;
