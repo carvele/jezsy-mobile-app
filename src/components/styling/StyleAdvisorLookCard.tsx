@@ -225,7 +225,7 @@ export function StyleAdvisorLookCard({
           ) : (
             <View style={styles.btnInnerRow}>
               <IconSymbol name="heart" size={14} color={wt.actionPrimaryText} />
-              <Text style={[styles.saveBtnText, { color: wt.actionPrimaryText }]}>Save Look</Text>
+              <Text style={[styles.saveBtnText, { color: wt.actionPrimaryText }]} numberOfLines={1}>Save Look</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -251,7 +251,7 @@ export function StyleAdvisorLookCard({
           ) : (
             <View style={styles.btnInnerRow}>
               <IconSymbol name="sparkles" size={14} color={wt.actionSecondaryText} />
-              <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]}>Mannequin</Text>
+              <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Mannequin</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -273,7 +273,7 @@ export function StyleAdvisorLookCard({
           >
             <View style={styles.btnInnerRow}>
               <IconSymbol name="shuffle" size={14} color={wt.actionSecondaryText} />
-              <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]}>Remix</Text>
+              <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Remix</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -295,7 +295,7 @@ export function StyleAdvisorLookCard({
           >
             <View style={styles.btnInnerRow}>
               <IconSymbol name="calendar" size={14} color={wt.actionSecondaryText} />
-              <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]}>Plan</Text>
+              <Text style={[styles.mannequinBtnText, { color: wt.actionSecondaryText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Plan</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -313,7 +313,7 @@ export function StyleAdvisorLookCard({
             accessibilityLabel="Refine session options"
           >
             <View style={styles.btnInnerRow}>
-              <Text style={[styles.refineToggleText, { color: wt.actionSecondaryText }]}>Refine</Text>
+              <Text style={[styles.refineToggleText, { color: wt.actionSecondaryText }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Refine</Text>
               <IconSymbol
                 name={showRefineMenu ? 'chevron.up' : 'chevron.down'}
                 size={12}
@@ -454,6 +454,7 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: Spacing.sm,
   },
@@ -462,24 +463,33 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.sm,
   },
+  // Five buttons cannot share one phone-width row without labels breaking mid-word, so the primary
+  // action takes the first line and the secondary actions share the second.
   saveBtn: {
-    flex: 1.2,
+    flexBasis: '100%',
   },
   mannequinBtn: {
-    flex: 1.1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
     borderWidth: 1,
   },
   refineToggleBtn: {
-    flex: 0.9,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
     borderWidth: 1,
   },
   btnInnerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
+    maxWidth: '100%',
   },
   saveBtnText: {
     ...Type.bodyStrong,
