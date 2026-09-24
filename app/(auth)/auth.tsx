@@ -486,6 +486,7 @@ export default function AuthScreen() {
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 64 }]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
           {/* Account-creation step indicator: only for the signup -> otp_verify

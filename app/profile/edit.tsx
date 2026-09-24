@@ -171,7 +171,7 @@ export default function EditProfileScreen() {
       </View>
 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <Text style={[styles.sectionLabel, { color: colors.secondaryText }]}>Name</Text>
           <View style={styles.row}>
             <View style={[styles.fieldGroup, { flex: 1 }]}>

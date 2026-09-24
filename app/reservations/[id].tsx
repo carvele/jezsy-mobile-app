@@ -798,7 +798,8 @@ export default function ReservationDetailScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <Text style={{ fontSize: 30, fontWeight: '800', color: colors.text, marginBottom: 4 }}>Your reservation</Text>
         <Text style={{ color: colors.secondaryText, fontSize: 12, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 8 }}>
           Booking reference
@@ -2049,6 +2050,7 @@ export default function ReservationDetailScreen() {
           </KeyboardAvoidingView>
         </Modal>
       </ScrollView>
+    </KeyboardAvoidingView>
 
       <ReturnRefundModal
         visible={showRefundModal}

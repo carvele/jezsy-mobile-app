@@ -1373,6 +1373,8 @@ export default function ExploreScreen() {
                   numColumns={columns}
                   columnWrapperStyle={styles.productRow}
                   contentContainerStyle={[styles.productList, { paddingBottom: exploreBottomInset }]}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
                   ListHeaderComponent={
                     <View style={{ backgroundColor: colors.background }}>
                       {renderGridHeader(

@@ -390,7 +390,12 @@ export default function ProfileSetupScreen() {
 
     // ── Slide 2: Personal Info ─────────────────────────────────
     (
-      <ScrollView key="personal_info" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        key="personal_info"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Mobile number</Text>
@@ -485,7 +490,12 @@ export default function ProfileSetupScreen() {
 
     // ── Slide 3: Address ───────────────────────────────────────
     (
-      <ScrollView key="address" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        key="address"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <View style={styles.fields}>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.secondaryText }]}>Street address</Text>
