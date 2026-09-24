@@ -574,7 +574,7 @@ export default function ProductDetailScreen() {
               <IconSymbol name="paperplane.fill" size={22} color="#FFF" />
             </BlurView>
           </TouchableOpacity>
-          {product.model_3d_url && (
+          {!!product.model_3d_url && (
             <TouchableOpacity
               style={[styles.arButton, { backgroundColor: "rgba(201,169,110,0.9)" }]}
               onPress={() => router.push({
@@ -730,7 +730,7 @@ export default function ProductDetailScreen() {
                       — select one
                     </Text>
                   )}
-                  {recommendedSize && (
+                  {!!recommendedSize && (
                     <View style={[styles.recBadge, { backgroundColor: colors.tint + "18", borderColor: colors.tint + "45" }]}>
                       <IconSymbol name="sparkles" size={11} color={colors.tint} />
                       <Text style={[styles.recText, { color: colors.tint }]}>Recommended: {recommendedSize.toUpperCase()}</Text>
@@ -903,7 +903,7 @@ export default function ProductDetailScreen() {
             >
               {product.description || "No description available for this premium piece."}
             </Text>
-            {product.description && product.description.length > 100 && (
+            {!!product.description && product.description.length > 100 && (
               <TouchableOpacity
                 onPress={() => setDescExpanded(!descExpanded)}
                 style={{ marginTop: 8 }}

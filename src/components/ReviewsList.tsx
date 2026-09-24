@@ -266,7 +266,7 @@ export function ReviewsList({ productId, productName, onStatsLoaded }: ReviewsLi
                   )}
                 </View>
 
-                {review.comment && <Text style={[styles.comment, { color: colors.text }]}>{review.comment}</Text>}
+                {!!review.comment && <Text style={[styles.comment, { color: colors.text }]}>{review.comment}</Text>}
 
                 {review.images && review.images.length > 0 && (
                   <ScrollView
@@ -281,7 +281,7 @@ export function ReviewsList({ productId, productName, onStatsLoaded }: ReviewsLi
                   </ScrollView>
                 )}
 
-                {review.admin_reply && (
+                {!!review.admin_reply && (
                   <View style={{ marginTop: Spacing.md, padding: Spacing.md, backgroundColor: colors.card, borderRadius: Radius.sm }}>
                     <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 4 }}>
                       Response from JezSy Collection
