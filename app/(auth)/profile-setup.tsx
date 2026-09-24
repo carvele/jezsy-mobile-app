@@ -11,6 +11,7 @@ import {
   StatusBar,
   ScrollView,
   useWindowDimensions,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 import { PrimaryButton } from '@/src/components/PrimaryButton';
 import { useToast } from '@/src/context/ToastContext';
+import { showAlert } from '@/src/utils/alert';
 import {
   mapAuthErrorMessage,
   isPhoneUniqueConflict,
@@ -70,7 +72,7 @@ export default function ProfileSetupScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const isNarrow = windowWidth < 400;
   const reduceMotion = useReduceMotion();
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, signOut } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -264,9 +266,45 @@ export default function ProfileSetupScreen() {
   };
 
   const back = () => {
-    if (step === 0) router.back();
-    else transitionTo(step - 1);
+    if (step === 0) {
+      showAlert(
+        'Exit Profile Setup?',
+        'Do you want to exit? You will be signed out and can finish setting up your profile next time you sign in.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Exit',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await signOut?.();
+              } catch (e) {
+                console.warn('Sign out error on profile setup exit:', e);
+              }
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(auth)/welcome' as any);
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      transitionTo(step - 1);
+    }
   };
+
+  // Hardware back button support on Android
+  useEffect(() => {
+    if (!BackHandler?.addEventListener) return;
+    const onBackPress = () => {
+      back();
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub?.remove?.();
+  }, [step]);
 
   const handleSubmit = async () => {
     if (!user || loading) return;
@@ -578,7 +616,7 @@ export default function ProfileSetupScreen() {
             style={styles.backBtn}
             onPress={back}
             activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             accessibilityHint={step === 0 ? 'Exits profile setup' : 'Returns to previous step'}
@@ -774,6 +812,8 @@ const styles = StyleSheet.create({
   topBar: {
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.sm,
+    zIndex: 10,
+    elevation: 10,
   },
   topBarRow: {
     flexDirection: 'row',
@@ -788,6 +828,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: -2,
     marginLeft: -Spacing.xs,
+    zIndex: 20,
+    elevation: 20,
   },
   stepperContainer: {
     flex: 1,
