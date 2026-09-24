@@ -7,6 +7,8 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
@@ -105,7 +107,10 @@ export const EditPlanMetadataModal: React.FC<EditPlanMetadataModalProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.modalOverlay}
+      >
         <View style={[styles.sheetCard, { backgroundColor: theme.surface, borderColor: theme.hairline }]}>
           {/* Header */}
           <View style={styles.headerRow}>
@@ -192,7 +197,7 @@ export const EditPlanMetadataModal: React.FC<EditPlanMetadataModalProps> = ({
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -210,6 +215,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
     paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.lg,
+    flexShrink: 1,
   },
   headerRow: {
     flexDirection: 'row',

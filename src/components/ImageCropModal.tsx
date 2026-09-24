@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Modal, View, StyleSheet, TouchableOpacity, Text, Dimensions, ActivityIndicator, Image as RNImage } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -9,6 +9,7 @@ import Animated, {
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Colors, Spacing, Type } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const FRAME_W = SCREEN_W - Spacing.xl * 2;
@@ -34,10 +35,13 @@ export function ImageCropModal({ visible, uri, initialSize, onCancel, onConfirm 
   const theme = useColorScheme();
   const colors = Colors[theme];
 
+  const [currentUri, setCurrentUri] = useState<string | null>(uri);
   const [imgSize, setImgSize] = useState<{ width: number; height: number } | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [statusText, setStatusText] = useState('Cropping...');
 
   React.useEffect(() => {
+    setCurrentUri(uri);
     if (!uri) {
       setImgSize(null);
       return;
@@ -153,14 +157,41 @@ export function ImageCropModal({ visible, uri, initialSize, onCancel, onConfirm 
     setImgSize(null);
   }, [scale, translateX, translateY, savedScale, savedTranslateX, savedTranslateY]);
 
+  const handleRotate = useCallback(async () => {
+    if (!currentUri || !imgSize || processing) return;
+    setProcessing(true);
+    setStatusText('Rotating...');
+    try {
+      const result = await ImageManipulator.manipulateAsync(
+        currentUri,
+        [{ rotate: 90 }],
+        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      setCurrentUri(result.uri);
+      setImgSize({ width: imgSize.height, height: imgSize.width });
+      scale.value = 1;
+      translateX.value = 0;
+      translateY.value = 0;
+      savedScale.value = 1;
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    } catch (e) {
+      console.error('Error rotating image:', e);
+    } finally {
+      setProcessing(false);
+      setStatusText('Cropping...');
+    }
+  }, [currentUri, imgSize, processing, scale, translateX, translateY, savedScale, savedTranslateX, savedTranslateY]);
+
   const handleCancel = useCallback(() => {
     reset();
     onCancel();
   }, [reset, onCancel]);
 
   const handleConfirm = useCallback(async () => {
-    if (!uri || !imgSize || !base) return;
+    if (!currentUri || !imgSize || !base) return;
     setProcessing(true);
+    setStatusText('Cropping...');
     try {
       const totalScale = (base.width / imgSize.width) * scale.value;
       const imageTopLeftX = (FRAME_W - base.width * scale.value) / 2 + translateX.value;
@@ -172,7 +203,7 @@ export function ImageCropModal({ visible, uri, initialSize, onCancel, onConfirm 
       const cropHeight = clamp(FRAME_H / totalScale, 1, imgSize.height - originY);
 
       const result = await ImageManipulator.manipulateAsync(
-        uri,
+        currentUri,
         [{ crop: { originX, originY, width: cropWidth, height: cropHeight } }],
         { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
       );
@@ -184,92 +215,110 @@ export function ImageCropModal({ visible, uri, initialSize, onCancel, onConfirm 
       // Fall back to the uncropped photo rather than trapping the user with
       // no way to proceed.
       reset();
-      onConfirm(uri);
+      onConfirm(currentUri || uri || '');
     } finally {
       setProcessing(false);
     }
-  }, [uri, imgSize, base, scale, translateX, translateY, clamp, reset, onConfirm]);
+  }, [currentUri, uri, imgSize, base, scale, translateX, translateY, clamp, reset, onConfirm]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleCancel} statusBarTranslucent>
-      <SafeAreaView style={[styles.container, { backgroundColor: 'black' }]} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleCancel} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel">
-            <Text style={styles.headerBtnText}>Cancel</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Adjust Photo</Text>
-          <TouchableOpacity
-            onPress={handleConfirm}
-            style={styles.headerBtn}
-            disabled={!imgSize || processing}
-            accessibilityRole="button"
-            accessibilityLabel="Use Photo"
-          >
-            <Text style={[styles.headerBtnText, styles.confirmText, (!imgSize || processing) && { opacity: 0.4 }]}>
-              Use Photo
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.frameOuter}>
-          <View style={[styles.frame, { width: FRAME_W, height: FRAME_H }]}>
-            {uri && (
-              <GestureDetector gesture={composedGesture}>
-                <Animated.View style={StyleSheet.absoluteFill}>
-                  {base && (
-                    <Animated.Image
-                      source={{ uri }}
-                      style={[
-                        {
-                          width: base.width,
-                          height: base.height,
-                          position: 'absolute',
-                          left: (FRAME_W - base.width) / 2,
-                          top: (FRAME_H - base.height) / 2,
-                        },
-                        animatedStyle,
-                      ]}
-                      resizeMode="cover"
-                    />
-                  )}
-                </Animated.View>
-              </GestureDetector>
-            )}
-            {!imgSize && uri && (
-              <RNImage
-                source={{ uri }}
-                style={{ width: 0, height: 0, position: 'absolute', opacity: 0 }}
-                onLoad={(e: any) => {
-                  const source = e?.nativeEvent?.source;
-                  const target = e?.nativeEvent?.target || e?.target;
-                  const w = source?.width ?? target?.naturalWidth ?? target?.width ?? e?.nativeEvent?.width;
-                  const h = source?.height ?? target?.naturalHeight ?? target?.height ?? e?.nativeEvent?.height;
-                  if (w && h) setImgSize((prev) => prev ?? { width: w, height: h });
-                }}
-              />
-            )}
-            {!imgSize && (
-              <View style={styles.loadingOverlay}>
-                <ActivityIndicator color={colors.tint} size="large" />
-              </View>
-            )}
-            <View style={[styles.frameBorder, { pointerEvents: 'none' }]} />
+      <GestureHandlerRootView style={styles.rootGestureView}>
+        <SafeAreaView style={[styles.container, { backgroundColor: 'black' }]} edges={['top', 'bottom']}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleCancel} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel">
+              <Text style={styles.headerBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Adjust Photo</Text>
+            <TouchableOpacity
+              onPress={handleConfirm}
+              style={styles.headerBtn}
+              disabled={!imgSize || processing}
+              accessibilityRole="button"
+              accessibilityLabel="Use Photo"
+            >
+              <Text style={[styles.headerBtnText, styles.confirmText, (!imgSize || processing) && { opacity: 0.4 }]}>
+                Use Photo
+              </Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.hint}>Pinch to zoom, drag to reposition</Text>
-        </View>
 
-        {processing && (
-          <View style={styles.processingOverlay}>
-            <ActivityIndicator color="#fff" size="large" />
-            <Text style={styles.processingText}>Cropping...</Text>
+          <View style={styles.frameOuter}>
+            <View style={[styles.frame, { width: FRAME_W, height: FRAME_H }]}>
+              {currentUri && (
+                <GestureDetector gesture={composedGesture}>
+                  <Animated.View style={StyleSheet.absoluteFill}>
+                    {base && (
+                      <Animated.Image
+                        source={{ uri: currentUri }}
+                        style={[
+                          {
+                            width: base.width,
+                            height: base.height,
+                            position: 'absolute',
+                            left: (FRAME_W - base.width) / 2,
+                            top: (FRAME_H - base.height) / 2,
+                          },
+                          animatedStyle,
+                        ]}
+                        resizeMode="cover"
+                      />
+                    )}
+                  </Animated.View>
+                </GestureDetector>
+              )}
+              {!imgSize && currentUri && (
+                <RNImage
+                  source={{ uri: currentUri }}
+                  style={{ width: 0, height: 0, position: 'absolute', opacity: 0 }}
+                  onLoad={(e: any) => {
+                    const source = e?.nativeEvent?.source;
+                    const target = e?.nativeEvent?.target || e?.target;
+                    const w = source?.width ?? target?.naturalWidth ?? target?.width ?? e?.nativeEvent?.width;
+                    const h = source?.height ?? target?.naturalHeight ?? target?.height ?? e?.nativeEvent?.height;
+                    if (w && h) setImgSize((prev) => prev ?? { width: w, height: h });
+                  }}
+                />
+              )}
+              {!imgSize && (
+                <View style={styles.loadingOverlay}>
+                  <ActivityIndicator color={colors.tint} size="large" />
+                </View>
+              )}
+              <View pointerEvents="none" style={styles.frameBorder} />
+            </View>
+            <Text style={styles.hint}>Pinch to zoom, drag to reposition</Text>
+            <View style={styles.controlsRow}>
+              <TouchableOpacity
+                onPress={handleRotate}
+                disabled={!imgSize || processing}
+                style={[styles.rotateBtn, (!imgSize || processing) && { opacity: 0.5 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Rotate image 90 degrees"
+              >
+                <IconSymbol name="arrow.clockwise" size={16} color="white" />
+                <Text style={styles.rotateBtnText}>Rotate 90°</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
-      </SafeAreaView>
+
+          {processing && (
+            <View style={styles.processingOverlay}>
+              <ActivityIndicator color="#fff" size="large" />
+              <Text style={styles.processingText}>{statusText}</Text>
+            </View>
+          )}
+        </SafeAreaView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  rootGestureView: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
   container: { flex: 1 },
   header: {
     flexDirection: 'row',
@@ -321,6 +370,28 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     marginTop: Spacing.lg,
     ...Type.caption,
+  },
+  controlsRow: {
+    marginTop: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rotateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  rotateBtnText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
   },
   processingOverlay: {
     ...StyleSheet.absoluteFill,

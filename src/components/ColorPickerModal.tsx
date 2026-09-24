@@ -6,7 +6,9 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  StyleSheet
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { ColorDetailItem, ColorRole } from '../types/dto/aiAttributes';
 
@@ -68,7 +70,10 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
         <View style={styles.container}>
           <Text style={styles.title}>Add Another Color</Text>
 
@@ -150,7 +155,7 @@ export const ColorPickerModal: React.FC<ColorPickerModalProps> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -166,7 +171,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    maxHeight: '80%'
+    maxHeight: '80%',
+    flexShrink: 1,
   },
   title: {
     fontSize: 20,

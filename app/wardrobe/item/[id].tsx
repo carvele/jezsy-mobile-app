@@ -648,7 +648,7 @@ export default function WardrobeItemDetailScreen() {
         onRequestClose={() => !editSaving && setEditModalVisible(false)}
       >
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <View style={styles.modalHeader}>
               <TouchableOpacity
                 onPress={() => setEditModalVisible(false)}
@@ -675,7 +675,12 @@ export default function WardrobeItemDetailScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              contentContainerStyle={styles.modalContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               {/* Category */}
               <View style={styles.formRow}>
                 <Text style={[styles.formLabel, { color: colors.text }]}>Category</Text>

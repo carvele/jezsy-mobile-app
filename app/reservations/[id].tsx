@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Modal, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Modal, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, Link, useFocusEffect } from 'expo-router';
@@ -1983,8 +1983,11 @@ export default function ReservationDetailScreen() {
           </View>
         )}
         <Modal visible={cancelRequestVisible} transparent animationType="fade" onRequestClose={() => !submittingCancelRequest && setCancelRequestVisible(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-            <View style={{ backgroundColor: colors.background, padding: 20, borderRadius: 12, width: '100%', maxWidth: 400 }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+          >
+            <View style={{ backgroundColor: colors.background, padding: 20, borderRadius: 12, width: '100%', maxWidth: 400, flexShrink: 1 }}>
               <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: colors.text }}>Request cancellation</Text>
               <Text style={{ fontSize: 14, color: colors.secondaryText, marginBottom: 12 }}>
                 Tell the boutique why. If approved, everything you have paid is forfeited and no refund is issued.
@@ -2013,11 +2016,14 @@ export default function ReservationDetailScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
         <Modal visible={extensionModalVisible} transparent animationType="fade" onRequestClose={() => setExtensionModalVisible(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-            <View style={{ backgroundColor: colors.background, padding: 20, borderRadius: 12, width: '100%', maxWidth: 400 }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+          >
+            <View style={{ backgroundColor: colors.background, padding: 20, borderRadius: 12, width: '100%', maxWidth: 400, flexShrink: 1 }}>
               <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: colors.text }}>Request Extension</Text>
               <Text style={{ fontSize: 14, color: colors.secondaryText, marginBottom: 12 }}>Please provide a reason for the extension request. Staff will review this.</Text>
               <TextInput
@@ -2039,7 +2045,7 @@ export default function ReservationDetailScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
       </ScrollView>
 

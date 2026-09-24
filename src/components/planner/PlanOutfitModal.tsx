@@ -9,6 +9,8 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Spacing, Radius, Type } from '@/constants/theme';
@@ -174,7 +176,10 @@ export const PlanOutfitModal: React.FC<PlanOutfitModalProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.modalOverlay}
+      >
         <View style={[styles.sheetCard, { backgroundColor: theme.surface, borderColor: theme.hairline }]}>
           {/* Header */}
           <View style={styles.headerRow}>
@@ -195,7 +200,12 @@ export const PlanOutfitModal: React.FC<PlanOutfitModalProps> = ({
             </Pressable>
           </View>
 
-          <ScrollView style={styles.contentScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.contentScroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             {/* Preflight Warning if pieces are unavailable */}
             {!preflightCheck.isValid && (
               <View testID="preflight-error-banner" style={[styles.warningBox, { backgroundColor: theme.glass, borderColor: theme.error }]}>
@@ -390,7 +400,7 @@ export const PlanOutfitModal: React.FC<PlanOutfitModalProps> = ({
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
 
       <PlannerCalendarModal
         visible={isDatePickerOpen}
@@ -414,6 +424,7 @@ const styles = StyleSheet.create({
   },
   sheetCard: {
     maxHeight: '90%',
+    flexShrink: 1,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
     borderTopWidth: 1,

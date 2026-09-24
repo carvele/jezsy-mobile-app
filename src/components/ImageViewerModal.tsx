@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, Modal, TouchableOpacity, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
@@ -93,27 +93,33 @@ export function ImageViewerModal({ visible, uri, onClose }: ImageViewerModalProp
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <View style={styles.container}>
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={handleClose}
-          accessibilityRole="button"
-          accessibilityLabel="Close image viewer"
-        >
-          <IconSymbol name="xmark" size={24} color="#FFF" />
-        </TouchableOpacity>
+      <GestureHandlerRootView style={styles.rootGestureView}>
+        <View style={styles.container}>
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={handleClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close image viewer"
+          >
+            <IconSymbol name="xmark" size={24} color="#FFF" />
+          </TouchableOpacity>
 
-        <GestureDetector gesture={composed}>
-          <Animated.View style={[styles.imageWrap, animatedStyle]}>
-            <Image source={{ uri }} style={styles.image} contentFit="contain" />
-          </Animated.View>
-        </GestureDetector>
-      </View>
+          <GestureDetector gesture={composed}>
+            <Animated.View style={[styles.imageWrap, animatedStyle]}>
+              <Image source={{ uri }} style={styles.image} contentFit="contain" />
+            </Animated.View>
+          </GestureDetector>
+        </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  rootGestureView: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
   container: {
     flex: 1,
     backgroundColor: 'black',
