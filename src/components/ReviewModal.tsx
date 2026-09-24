@@ -117,7 +117,7 @@ export function ReviewModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
         <View style={[styles.modalContent, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Write a Review</Text>
@@ -126,7 +126,12 @@ export function ReviewModal({
             </TouchableOpacity>
           </View>
           
-          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.body}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             {productName && (
               <Text style={[styles.productNameTitle, { color: colors.text }]} numberOfLines={1}>
                 {productName}
@@ -233,6 +238,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderRightWidth: 1,
     maxHeight: Dimensions.get('window').height * 0.85,
+    flexShrink: 1,
   },
   header: {
     flexDirection: 'row',

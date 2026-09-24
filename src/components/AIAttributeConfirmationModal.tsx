@@ -6,7 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  StyleSheet
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { ColorDetailItem, GarmentAnalysisResult, UserCorrections } from '../types/dto/aiAttributes';
 import { ColorPickerModal } from './ColorPickerModal';
@@ -166,7 +168,10 @@ export const AIAttributeConfirmationModal: React.FC<AIAttributeConfirmationModal
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
@@ -184,7 +189,12 @@ export const AIAttributeConfirmationModal: React.FC<AIAttributeConfirmationModal
             </View>
           </View>
 
-          <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.scrollArea}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             {/* Classification */}
             <Text style={styles.sectionTitle}>Garment Classification</Text>
             <View style={styles.inputGroup}>
@@ -337,7 +347,7 @@ export const AIAttributeConfirmationModal: React.FC<AIAttributeConfirmationModal
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
 
       <ColorPickerModal
         visible={colorPickerVisible}
@@ -363,6 +373,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     maxHeight: '90%',
+    flexShrink: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 28
@@ -403,7 +414,8 @@ const styles = StyleSheet.create({
     color: '#E6C687'
   },
   scrollArea: {
-    maxHeight: 500
+    maxHeight: 500,
+    flexShrink: 1,
   },
   sectionTitle: {
     fontSize: 14,

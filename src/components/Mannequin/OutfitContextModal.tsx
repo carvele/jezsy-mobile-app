@@ -58,11 +58,18 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleCancel}>
-      <View style={styles.overlay}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.kavWrapper}
-        >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={handleCancel}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss modal"
+        />
+        <View style={styles.kavWrapper}>
           <View style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
             {/* Header */}
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -80,6 +87,7 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             >
               {/* Primary field: Where are you wearing this outfit? */}
               <View style={styles.formRow}>
@@ -166,8 +174,8 @@ export function OutfitContextModal({ visible, loading = false, onConfirm, onCanc
               </View>
             </SafeAreaView>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -178,11 +186,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
+  backdrop: {
+    ...StyleSheet.absoluteFill,
+  },
   kavWrapper: {
     width: '100%',
     // Center and cap on desktop/tablet.
     maxWidth: Platform.OS === 'web' ? 600 : undefined,
     alignSelf: Platform.OS === 'web' ? 'center' as const : undefined,
+    flexShrink: 1,
   },
   sheet: {
     borderTopLeftRadius: 24,
@@ -192,6 +204,7 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     maxHeight: SCREEN_HEIGHT * 0.85,
     overflow: 'hidden',
+    flexShrink: 1,
   },
   header: {
     flexDirection: 'row',
@@ -221,6 +234,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     maxHeight: SCREEN_HEIGHT * 0.55,
+    flexShrink: 1,
   },
   scrollContent: {
     paddingHorizontal: Spacing.xl,

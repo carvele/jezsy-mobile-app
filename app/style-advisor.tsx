@@ -478,13 +478,14 @@ export default function StyleAdvisorScreen() {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: Math.max(bottomInset, Spacing.xxxl) }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {/* ── Natural Language Primary Input Box ── */}
           <View style={[styles.promptBox, { backgroundColor: wt.cardSurface, borderColor: wt.cardBorder }]}>

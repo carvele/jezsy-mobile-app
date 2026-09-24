@@ -9,6 +9,7 @@ import {
   FlatList,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
   ActivityIndicator,
   Alert,
   Dimensions,
@@ -1225,8 +1226,11 @@ export function MannequinView({
 
       {/* ── Save Modal ── */}
       {saveModalVisible && (
-      <Modal visible={saveModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal visible={saveModalVisible} transparent animationType="fade" onRequestClose={() => !saving && setSaveModalVisible(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.modalTitle, { color: colors.text }]}>Save Look</Text>
             <Text style={[styles.modalSub, { color: colors.secondaryText }]}>
@@ -1261,7 +1265,7 @@ export function MannequinView({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       )}
 

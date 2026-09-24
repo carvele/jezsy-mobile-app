@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Modal, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, Modal, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Colors, Spacing, Type, Radius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -74,7 +74,10 @@ export function ConfirmModal({
         if (!isLoading) onCancel();
       }}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
         <View style={[styles.content, { backgroundColor: colors.background, borderColor: colors.border }]}>
           {effectiveSeverity === 'HIGH' && (
             <View style={[styles.severityBadge, { backgroundColor: colors.error + '20', borderColor: colors.error }]}>
@@ -162,7 +165,7 @@ export function ConfirmModal({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -181,6 +184,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: Spacing.xxl,
     borderWidth: 1,
+    flexShrink: 1,
   },
   severityBadge: {
     alignSelf: 'center',

@@ -145,7 +145,7 @@ export function ReturnRefundModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalOverlay}
       >
         <View
@@ -167,7 +167,12 @@ export function ReturnRefundModal({
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.body}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             <Text style={[styles.sectionLabel, { color: colors.text }]}>Reason for Return</Text>
             <View style={styles.reasonsContainer}>
               {REASON_OPTIONS.map((reason) => {
@@ -305,6 +310,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
     maxHeight: '90%',
+    flexShrink: 1,
     borderWidth: 1,
     borderBottomWidth: 0,
   },
