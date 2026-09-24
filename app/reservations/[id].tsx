@@ -736,7 +736,8 @@ export default function ReservationDetailScreen() {
     Boolean(reservation?.pickup_deadline_at) &&
     isDeadlineFuture &&
     !reservation?.extension_requested_at &&
-    !reservation?.extension_status;
+    !reservation?.extension_status &&
+    balanceDue > 0;
 
   const canRequestCancellation = reservationState === 'ready' && !isTerminal && isDeadlineFuture && !pendingRequest;
 

@@ -54,6 +54,15 @@ const PRODUCT_ROW_INSET = 4;
 // Semantic sentinel for all-subcategory browsing decoupled from display copy.
 export const ALL_SUBCATEGORY = '__all__';
 
+export const isAllSubCategory = (subCategory: string | null, parentCategory?: string | null): boolean => {
+  if (!subCategory) return false;
+  return (
+    subCategory === ALL_SUBCATEGORY ||
+    subCategory === 'View All' ||
+    (parentCategory != null && subCategory === `All ${parentCategory}`)
+  );
+};
+
 const matchesSearchText = (product: Product, query: string) => {
   const terms = query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
@@ -410,8 +419,9 @@ export default function ExploreScreen() {
     setIsSearching(true);
     setSearchError(null);
     try {
+      const isAllSub = isAllSubCategory(selectedSubCategory, selectedCategory);
       const categoryIds = selectedCategory
-        ? selectedSubCategory && selectedSubCategory !== ALL_SUBCATEGORY && selectedSubCategory !== 'View All'
+        ? selectedSubCategory && !isAllSub
           ? [subCategoryIdByName[selectedCategory]?.[selectedSubCategory]].filter(Boolean)
           : (subCategoriesByParent[selectedCategory] || []).map((subcategory) => subcategory.id)
         : null;
@@ -450,7 +460,7 @@ export default function ExploreScreen() {
           .eq('visibility', 'public');
 
         fbQuery = fbQuery.ilike('name', `%${safeText}%`);
-        if (selectedCategory && selectedSubCategory && selectedSubCategory !== ALL_SUBCATEGORY && selectedSubCategory !== 'View All') {
+        if (selectedCategory && selectedSubCategory && !isAllSub) {
           const subCategoryId = subCategoryIdByName[selectedCategory]?.[selectedSubCategory];
           if (subCategoryId) {
             fbQuery = fbQuery.or(`category_id.eq.${subCategoryId},and(category_id.is.null,sub_category.eq.${selectedSubCategory},category.eq.${selectedCategory})`);
@@ -521,7 +531,7 @@ export default function ExploreScreen() {
     if (showAllProducts) {
       // null = all products
     } else if (selectedCategory && selectedSubCategory) {
-      if (selectedSubCategory === ALL_SUBCATEGORY || selectedSubCategory === 'View All') {
+      if (isAllSubCategory(selectedSubCategory, selectedCategory)) {
         const subIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
         if (subIds.length > 0) {
           query = query.or(`category_id.in.(${subIds.join(',')}),and(category_id.is.null,category.eq.${selectedCategory})`);
@@ -573,7 +583,7 @@ export default function ExploreScreen() {
       // null = no category constraint; RPC returns all public products.
       categoryIds = null;
     } else if (selectedCategory && selectedSubCategory) {
-      if (selectedSubCategory === ALL_SUBCATEGORY || selectedSubCategory === 'View All') {
+      if (isAllSubCategory(selectedSubCategory, selectedCategory)) {
         categoryIds = (subCategoriesByParent[selectedCategory] || []).map((s) => s.id);
       } else {
         const subId = subCategoryIdByName[selectedCategory]?.[selectedSubCategory];
@@ -1012,7 +1022,7 @@ export default function ExploreScreen() {
     }
 
     if (selectedSubCategory) {
-      const isAllSub = selectedSubCategory === ALL_SUBCATEGORY || selectedSubCategory === 'View All';
+      const isAllSub = isAllSubCategory(selectedSubCategory, selectedCategory);
       const subcatLabel = isAllSub ? 'All' : selectedSubCategory;
       breadcrumbItems.push(
         <Text key="sep2" style={[styles.breadcrumbSeparator, { color: colors.secondaryText }]}> &gt; </Text>,
@@ -1130,18 +1140,23 @@ export default function ExploreScreen() {
 
         {activeSubs.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS === 'web'} contentContainerStyle={styles.subCategorySwitcherRow}>
-            <TouchableOpacity
-              style={[styles.subCategoryChip, selectedSubCategory === ALL_SUBCATEGORY && { borderColor: colors.tint }]}
-              onPress={() => setSelectedSubCategory(ALL_SUBCATEGORY)}
-              accessibilityRole="button"
-              accessibilityLabel={`All ${selectedCategory}`}
-            >
-              <Text style={[styles.subCategoryChipText, { color: selectedSubCategory === ALL_SUBCATEGORY ? colors.tint : colors.secondaryText }]}>
-                All
-              </Text>
-            </TouchableOpacity>
+            {(() => {
+              const isAllSelected = isAllSubCategory(selectedSubCategory, selectedCategory);
+              return (
+                <TouchableOpacity
+                  style={[styles.subCategoryChip, isAllSelected && { borderColor: colors.tint }]}
+                  onPress={() => setSelectedSubCategory(ALL_SUBCATEGORY)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`All ${selectedCategory}`}
+                >
+                  <Text style={[styles.subCategoryChipText, { color: isAllSelected ? colors.tint : colors.secondaryText }]}>
+                    All
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
             {activeSubs.map((subcat) => {
-              const isActive = selectedSubCategory === subcat.name;
+              const isActive = !isAllSubCategory(selectedSubCategory, selectedCategory) && selectedSubCategory === subcat.name;
               return (
                 <TouchableOpacity
                   key={subcat.id}
@@ -1530,7 +1545,7 @@ export default function ExploreScreen() {
                         category={subcat}
                         variant="grid"
                         layout="fill"
-                        onPress={() => setSelectedSubCategory(subcat.name)}
+                        onPress={() => setSelectedSubCategory(subcat.id === ALL_SUBCATEGORY ? ALL_SUBCATEGORY : subcat.name)}
                       />
                     ))}
                   </TwoColumnRow>
