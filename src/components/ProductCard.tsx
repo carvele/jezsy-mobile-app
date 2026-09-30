@@ -47,7 +47,7 @@ export function ProductCard({
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { cardWidth } = useGridCardWidth();
 
-  const onSale = !!(product.on_sale && product.sale_price);
+  const onSale = !!(product.on_sale && product.sale_price) || !!(Array.isArray(product.tags) && product.tags.includes('Sale') && product.sale_price);
   const price = onSale ? product.sale_price : product.price || 0;
   const saved = isInWishlist(product.id);
   const isNew = isNewArrival(product);

@@ -642,7 +642,7 @@ export default function HomeScreen() {
                         />
                         {/* Sale takes priority over newness; AR lives separately below. */}
                         <View style={{ position: 'absolute', top: 10, left: 10, zIndex: 10 }}>
-                          {(item.on_sale || item.sale_price) ? (
+                          {(item.on_sale || item.sale_price || (Array.isArray(item.tags) && item.tags.includes('Sale'))) ? (
                             <View style={{ backgroundColor: colors.notification, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 }}>
                               <Text style={{ color: colors.onNotification, fontSize: 10, fontWeight: '800' }}>
                                 {item.discount_percentage ? `-${item.discount_percentage}%` : 'SALE'}

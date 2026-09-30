@@ -648,7 +648,7 @@ export default function ProductDetailScreen() {
           )}
 
           <View style={styles.priceRow}>
-            {product.on_sale && product.sale_price ? (
+            {(product.on_sale && product.sale_price) || (Array.isArray((product as any).tags) && (product as any).tags.includes('Sale') && product.sale_price) ? (
               <>
                 <Text style={[styles.priceSale, { color: colors.tint }]}>₱{(product.sale_price || 0).toFixed(2)}</Text>
                 <Text style={[styles.priceOriginal, { color: colors.secondaryText }]}>₱{(product.price || 0).toFixed(2)}</Text>
