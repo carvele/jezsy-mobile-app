@@ -592,39 +592,31 @@ export default function AuthScreen() {
 
                 {/* Progressive Password Requirements */}
                 {password.length > 0 && (
-                  areAllPasswordRequirementsMet(password) ? (
-                    <View style={styles.matchRow} accessibilityRole="summary" accessibilityLabel="Password meets all requirements">
-                      <Check size={13} color={Colors.dark.tint} />
-                      <Text style={[styles.matchText, { color: Colors.dark.tint }]}>Password meets all requirements</Text>
-                    </View>
-                  ) : (
-                    <View
-                      style={styles.pillsContainer}
-                      accessibilityRole="summary"
-                      accessibilityLabel="Password requirements"
-                    >
-                      {evaluatePasswordRequirements(password).map((req: PasswordRequirementCheck) => (
-                        <View
-                          key={req.id}
-                          style={[
-                            styles.pillBadge,
-                            req.met ? styles.pillBadgeMet : styles.pillBadgeUnmet,
-                          ]}
-                          accessibilityLabel={`${req.label}: ${req.met ? 'satisfied' : 'not met'}`}
-                        >
-                          {req.met ? (
-                            <Check size={11} color={Colors.dark.tint} style={styles.pillIcon} />
-                          ) : (
-                            <Circle size={6} color="rgba(255, 255, 255, 0.35)" style={styles.pillDot} />
-                          )}
-                          <Text style={[styles.pillText, req.met ? styles.pillTextMet : styles.pillTextUnmet]}>
-                            {req.shortLabel}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )
+                  <View
+                    style={styles.requirementsBox}
+                    accessibilityRole="summary"
+                    accessibilityLabel="Password requirements"
+                  >
+                    <Text style={styles.requirementsTitle}>Password must:</Text>
+                    {evaluatePasswordRequirements(password).map((req: PasswordRequirementCheck) => (
+                      <View
+                        key={req.id}
+                        style={styles.requirementRow}
+                        accessibilityLabel={`${req.label}: ${req.met ? "satisfied" : "not met"}`}
+                      >
+                        {req.met ? (
+                          <Check size={14} color="#4CAF50" style={styles.reqIcon} />
+                        ) : (
+                          <Circle size={14} color="rgba(255,80,80,0.85)" style={styles.reqIcon} />
+                        )}
+                        <Text style={[styles.requirementText, req.met ? styles.requirementTextMet : styles.requirementTextUnmet]}>
+                          {req.label}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                 )}
+
 
 
                 {/* 6. Confirm Password */}
@@ -1289,48 +1281,42 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Progressive Password Requirements Pills
-  pillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: -4,
-    marginBottom: Spacing.xs,
-    paddingLeft: 2,
-  },
-  pillBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.sm,
+  // Progressive Password Requirements Checklist
+  requirementsBox: {
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    borderRadius: Radius.md,
     borderWidth: 1,
-    gap: 4,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 4,
+    marginBottom: Spacing.xs,
+    gap: 8,
   },
-  pillBadgeUnmet: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+  requirementsTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.85)",
+    letterSpacing: 0.3,
+    marginBottom: 2,
   },
-  pillBadgeMet: {
-    backgroundColor: 'rgba(201, 169, 110, 0.12)',
-    borderColor: 'rgba(201, 169, 110, 0.35)',
+  requirementRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  pillIcon: {
-    marginRight: 1,
+  reqIcon: {
+    flexShrink: 0,
   },
-  pillDot: {
-    marginHorizontal: 2,
+  requirementText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
-  pillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+  requirementTextUnmet: {
+    color: "rgba(255, 80, 80, 0.9)",
   },
-  pillTextUnmet: {
-    color: 'rgba(255, 255, 255, 0.5)',
-  },
-  pillTextMet: {
-    color: Colors.dark.tint,
+  requirementTextMet: {
+    color: "#4CAF50",
   },
 
   // Passwords Match
