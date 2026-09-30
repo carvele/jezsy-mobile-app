@@ -1,6 +1,7 @@
 import { supabase } from '@/src/lib/supabase';
 import { OffsetPageResult } from '@/src/types/pagination';
 import { Database } from '@/src/types/database.types';
+import { isContentModerationError, getContentModerationMessage } from '@/src/utils/contentModeration';
 import { StatusFilter, statusBucket } from '@/src/utils/reservationStatus';
 import { CreateReservationInput, ReservationResult } from '@/src/types/dto/reservation';
 import {
@@ -383,9 +384,10 @@ export async function cancelCustomerReservation(
       _reason: reason,
     });
     if (error) {
+      const isMod = isContentModerationError(error);
       const domainError = new DomainError({
-        code: 'CANCEL_RESERVATION_FAILED',
-        message: error.message,
+        code: isMod ? 'PT422' : 'CANCEL_RESERVATION_FAILED',
+        message: isMod ? getContentModerationMessage(error, 'submitting') : error.message,
         domain: 'reservation',
         context: {
           operation: 'cancelCustomerReservation',
@@ -436,9 +438,10 @@ export async function requestCustomerRefund(
       _photo_path: photoPath || undefined,
     });
     if (error) {
+      const isMod = isContentModerationError(error);
       const domainError = new DomainError({
-        code: 'REQUEST_REFUND_FAILED',
-        message: error.message,
+        code: isMod ? 'PT422' : 'REQUEST_REFUND_FAILED',
+        message: isMod ? getContentModerationMessage(error, 'submitting') : error.message,
         domain: 'reservation',
         context: {
           operation: 'requestCustomerRefund',
@@ -515,9 +518,10 @@ async function runChangeRequestCommand(
   try {
     const { data, error } = await call();
     if (error) {
+      const isMod = isContentModerationError(error);
       const domainError = new DomainError({
-        code: 'CHANGE_REQUEST_FAILED',
-        message: error.message,
+        code: isMod ? 'PT422' : 'CHANGE_REQUEST_FAILED',
+        message: isMod ? getContentModerationMessage(error, 'submitting') : error.message,
         domain: 'reservation',
         context: { operation, reservationId },
         cause: error,

@@ -25,6 +25,7 @@ import { useTypingIndicator } from '@/src/hooks/useTypingIndicator';
 import { ErrorRetryState } from '@/src/components/ErrorRetryState';
 import { ChatStarterChips } from '@/src/components/ChatStarterChips';
 import { resolveOutgoingText } from '@/src/utils/chatSend';
+import { isContentModerationError, getContentModerationMessage } from '@/src/utils/contentModeration';
 
 import { useReduceMotion } from '@/src/hooks/useReduceMotion';
 
@@ -410,10 +411,21 @@ export default function ChatScreen() {
     setEditingId(null);
     setInputText('');
 
-    const result = await editMessage(editingId, nextText);
-    if (!result) {
+    try {
+      const result = await editMessage(editingId, nextText);
+      if (!result) {
+        setMessages(prev => prev.map(m => (m.id === editingId ? (target ?? m) : m)));
+        showToast('Could not edit that message.', 'error');
+      }
+    } catch (err: any) {
       setMessages(prev => prev.map(m => (m.id === editingId ? (target ?? m) : m)));
-      showToast('Could not edit that message.', 'error');
+      if (isContentModerationError(err)) {
+        setInputText(nextText);
+        setEditingId(editingId);
+        showToast(getContentModerationMessage(err, 'sending'), 'error');
+      } else {
+        showToast(err?.message || 'Could not edit that message.', 'error');
+      }
     }
   };
 
@@ -445,16 +457,26 @@ export default function ChatScreen() {
     };
     setMessages(prev => [...prev, tempMsg as MessageRow]);
 
-    const result = await sendMessage(conversationId, textToSend, undefined, contextToSend ?? undefined);
-    if (!result) {
-      // Keep the failed message on screen rather than deleting it and pushing
-      // the text back into the input: silently vanishing reads as "the app ate
-      // my message", and there is nothing left to retry from.
-      setMessages(prev => prev.map(m => (m.id === tempMsg.id ? { ...m, _status: 'failed' } : m)));
-    } else {
-      // Replace temp message with real one; context has now been attached.
-      setMessages(prev => prev.map(m => m.id === tempMsg.id ? result : m));
-      if (contextToSend) setPendingContext(null);
+    try {
+      const result = await sendMessage(conversationId, textToSend, undefined, contextToSend ?? undefined);
+      if (!result) {
+        setMessages(prev => prev.map(m => (m.id === tempMsg.id ? { ...m, _status: 'failed' } : m)));
+      } else {
+        // Replace temp message with real one; context has now been attached.
+        setMessages(prev => prev.map(m => m.id === tempMsg.id ? result : m));
+        if (contextToSend) setPendingContext(null);
+      }
+    } catch (err: any) {
+      if (isContentModerationError(err)) {
+        // Authoritative moderation rejection: do not store, do not keep failed bubble
+        setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+        // Preserve user's typed draft in the text input box
+        setInputText(textToSend);
+        showToast(getContentModerationMessage(err, 'sending'), 'error');
+      } else {
+        setMessages(prev => prev.map(m => (m.id === tempMsg.id ? { ...m, _status: 'failed' } : m)));
+        showToast(err?.message || 'Failed to send message.', 'error');
+      }
     }
   };
 
@@ -520,11 +542,21 @@ export default function ChatScreen() {
     const context = msg.context_label
       ? { label: msg.context_label, type: msg.context_type, ref: msg.context_ref }
       : undefined;
-    const result = await sendMessage(conversationId, msg.text, undefined, context);
-
-    setMessages(prev =>
-      prev.map(m => (m.id === msg.id ? (result ?? { ...m, _status: 'failed' }) : m)),
-    );
+    try {
+      const result = await sendMessage(conversationId, msg.text, undefined, context);
+      setMessages(prev =>
+        prev.map(m => (m.id === msg.id ? (result ?? { ...m, _status: 'failed' }) : m)),
+      );
+    } catch (err: any) {
+      if (isContentModerationError(err)) {
+        setMessages(prev => prev.filter(m => m.id !== msg.id));
+        setInputText(msg.text);
+        showToast(getContentModerationMessage(err, 'sending'), 'error');
+      } else {
+        setMessages(prev => prev.map(m => (m.id === msg.id ? { ...m, _status: 'failed' } : m)));
+        showToast(err?.message || 'Failed to send message.', 'error');
+      }
+    }
   };
 
   // Only the newest of your own messages carries a status, as in most chat

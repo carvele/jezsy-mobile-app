@@ -11,6 +11,7 @@ import { reviewService } from '@/src/services';
 import { useAuth } from '@/src/context/AuthContext';
 import { useToast } from '@/src/context/ToastContext';
 import { resolveImageFileInfo } from '@/src/utils/imageUpload';
+import { isContentModerationError, getContentModerationMessage } from '@/src/utils/contentModeration';
 
 const MAX_REVIEW_IMAGES = 4;
 
@@ -106,7 +107,11 @@ export function ReviewModal({
       onClose();
     } catch (err: any) {
       console.error('Error submitting review:', err);
-      showToast(err.message || 'Failed to submit review.', 'error');
+      if (isContentModerationError(err)) {
+        showToast(getContentModerationMessage(err, 'submitting'), 'error');
+      } else {
+        showToast(err?.message || 'Failed to submit review.', 'error');
+      }
     } finally {
       isSubmittingRef.current = false;
       setSubmitting(false);

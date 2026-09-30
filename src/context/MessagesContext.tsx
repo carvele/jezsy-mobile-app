@@ -166,7 +166,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       return message;
     } catch (error) {
       console.error('Error sending message:', error);
-      return null;
+      throw error;
     }
   }, [session?.user.id, profile?.role, profile?.first_name, profile?.last_name]);
 
@@ -189,7 +189,7 @@ export const MessagesProvider = ({ children }: { children: ReactNode }) => {
       return data;
     } catch (error) {
       console.error('Error editing message:', error);
-      return null;
+      throw error;
     }
   }, [session?.user.id]);
 

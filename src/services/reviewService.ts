@@ -7,6 +7,7 @@ import {
   ReviewFilterFacets,
 } from '@/src/types/dto/review';
 import { Database } from '@/src/types/database.types';
+import { isContentModerationError, getContentModerationMessage } from '@/src/utils/contentModeration';
 import {
   DomainError,
   DomainResult,
@@ -45,9 +46,10 @@ export const reviewService = {
 
       return domainOk(data as ReviewRow);
     } catch (err: any) {
+      const isMod = isContentModerationError(err);
       const domainError = new DomainError({
-        code: err?.code || 'ERR_REVIEW_SUBMIT_FAILED',
-        message: err?.message || 'Failed to submit review',
+        code: isMod ? 'PT422' : (err?.code || 'ERR_REVIEW_SUBMIT_FAILED'),
+        message: isMod ? getContentModerationMessage(err, 'submitting') : (err?.message || 'Failed to submit review'),
         domain: 'review',
         context: {
           operation: 'submitReview',
